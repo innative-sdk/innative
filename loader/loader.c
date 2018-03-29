@@ -48,7 +48,7 @@ BOOL CALLBACK EnumModule(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LPW
       void* data = LockResource(buf);
       if(data)
       {
-        (*pass->exports->AddModule)(pass->env, data, SizeofResource(hModule, res), pass->err);
+        (*pass->exports->AddModule)(pass->env, data, SizeofResource(hModule, res), lpName, pass->err);
         return TRUE;
       }
     }
@@ -130,8 +130,11 @@ int main(int argc, char** argv)
 
     if(EnumResourceNamesW(NULL, L"WASM_MODULE", &EnumModule, (LONG_PTR)&pass) == FALSE)
     {
-      fprintf(stderr, "Error enumerating modules: %u\n", GetLastError());
-      return err;
+      if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
+      {
+        fprintf(stderr, "Error enumerating modules: %u\n", GetLastError());
+        return err;
+      }
     }
 #elif defined(NW_PLATFORM_POSIX)
 #error TODO
@@ -151,8 +154,11 @@ int main(int argc, char** argv)
 #ifdef NW_PLATFORM_WIN32
     if(EnumResourceNamesW(NULL, L"WASM_ENVIRONMENT", &EnumEnvironment, (LONG_PTR)&pass) == FALSE || err < 0)
     {
-      fprintf(stderr, "Error enumerating embedding environments: %u - %i\n", GetLastError(), err);
-      return err;
+      if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
+      {
+        fprintf(stderr, "Error enumerating embedding environments: %u - %i\n", GetLastError(), err);
+        return err;
+      }
     }
 
 #elif defined(NW_PLATFORM_POSIX)
@@ -167,6 +173,9 @@ int main(int argc, char** argv)
 
       for(ValidationError* err = env->errors; err != 0; err = err->next)
         fprintf(stderr, "Error %i: %s\n", err->code, err->error);
+
+      int i = 0;
+      scanf_s("%i", &i);
       return err;
     }
 

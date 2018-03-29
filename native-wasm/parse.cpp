@@ -9,12 +9,6 @@
 __KHASH_IMPL(exports, kh_inline, kh_cstr_t, varuint32, 1, kh_str_hash_func, kh_str_hash_equal);
 __KHASH_IMPL(modules, kh_inline, kh_cstr_t, varuint32, 1, kh_str_hash_func, kh_str_hash_equal);
 
-template<class T>
-T* tmalloc(size_t n)
-{
-  return !n ? 0 : reinterpret_cast<T*>(malloc(n * sizeof(T)));
-}
-
 NW_FORCEINLINE ERROR_CODE ParseVarUInt32(Stream& s, varuint32& target) { ERROR_CODE err; target = static_cast<varuint32>(DecodeLEB128(s, err, 32, false)); return err; }
 NW_FORCEINLINE ERROR_CODE ParseVarSInt7(Stream& s, varsint7& target) { ERROR_CODE err; target = static_cast<varsint7>(DecodeLEB128(s, err, 7, true)); return err; }
 NW_FORCEINLINE ERROR_CODE ParseVarUInt7(Stream& s, varuint7& target) { ERROR_CODE err; target = static_cast<varuint7>(DecodeLEB128(s, err, 7, false)); return err; }
@@ -454,6 +448,7 @@ ERROR_CODE ParseLocalEntry(Stream& s, LocalEntry& entry)
 ERROR_CODE ParseFunctionBody(Stream& s, FunctionBody& f)
 {
   ERROR_CODE err = ParseVarUInt32(s, f.body_size);
+  varuint32 end = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
   if(err >= 0)
     err = Parse<LocalEntry>::template Array<&ParseLocalEntry>(s, f.locals, f.n_locals);
 
@@ -464,9 +459,8 @@ ERROR_CODE ParseFunctionBody(Stream& s, FunctionBody& f)
     if(!f.body)
       return ERR_FATAL_OUT_OF_MEMORY;
 
-    varuint32 i = 0;
-    for(varuint32 end = s.pos + f.body_size; s.pos < end && err >= 0; ++i)
-      err = ParseInstruction(s, f.body[i]);
+    for(f.n_body = 0; s.pos < end && err >= 0; ++f.n_body)
+      err = ParseInstruction(s, f.body[f.n_body]);
   }
 
   return err;
@@ -485,9 +479,18 @@ ERROR_CODE ParseDataInit(Stream& s, DataInit& data)
   return err;
 }
 
-ERROR_CODE ParseModule(Stream& s, Module& m)
+ERROR_CODE ParseModule(Stream& s, Module& m, ByteArray name)
 {
   memset(&m, 0, sizeof(Module));
+  if(!name.bytes || !name.n_bytes || !ValidateIdentifier(name))
+    return ERR_PARSE_INVALID_NAME;
+  m.name.bytes = tmalloc<uint8_t>(name.n_bytes + 1);
+  if(!m.name.bytes)
+    return ERR_FATAL_OUT_OF_MEMORY;
+  m.name.n_bytes = name.n_bytes;
+  memcpy(m.name.bytes, name.bytes, name.n_bytes);
+  m.name.bytes[m.name.n_bytes] = 0;
+
   ERROR_CODE err = ERR_SUCCESS;
   m.magic_cookie = ReadUInt32(s, err);
 

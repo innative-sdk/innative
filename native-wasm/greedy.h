@@ -81,8 +81,10 @@ protected:
     retval->size = nsize;
     _root.store(retval, std::memory_order_release);
   }
-  
+
   NW_ALIGN(4) std::atomic_flag _flag;
   std::atomic<size_t> _curpos;
   std::atomic<Node*> _root;
 };
+
+#endif

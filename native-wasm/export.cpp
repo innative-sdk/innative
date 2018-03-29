@@ -3,6 +3,7 @@
 
 #include "native-wasm/export.h"
 #include "parse.h"
+#include "validate.h"
 #include <atomic>
 #include <thread>
 #include <stdio.h>
@@ -45,14 +46,14 @@ void DestroyEnvironment(struct __ENVIRONMENT* env)
   free(env);
 }
 
-void LoadModule(struct __ENVIRONMENT* env, size_t index, void* data, uint64_t size, int* err)
+void LoadModule(struct __ENVIRONMENT* env, size_t index, void* data, uint64_t size, const char* name, int* err)
 {
   Stream s = { (uint8_t*)data, size, 0 };
-  *err = ParseModule(s, env->modules[index]);
+  *err = ParseModule(s, env->modules[index], ByteArray{ (varuint32)strlen(name), (uint8_t*)name });
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
 }
 
-void AddModule(struct __ENVIRONMENT* env, void* data, uint64_t size, int* err)
+void AddModule(struct __ENVIRONMENT* env, void* data, uint64_t size, const char* name, int* err)
 {
   if(!env || !err)
   {
@@ -82,9 +83,9 @@ void AddModule(struct __ENVIRONMENT* env, void* data, uint64_t size, int* err)
   }
 
   if(env->flags & ENV_MULTITHREADED)
-    std::thread(LoadModule, env, index, data, size, err).detach();
+    std::thread(LoadModule, env, index, data, size, name, err).detach();
   else
-    LoadModule(env, index, data, size, err);
+    LoadModule(env, index, data, size, name, err);
 }
 
 void WaitForLoad(struct __ENVIRONMENT* env)
@@ -104,6 +105,11 @@ enum ERROR_CODE Compile(struct __ENVIRONMENT* env)
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;
+
+  ValidateEnvironment(*env);
+  if(env->errors)
+    return ERR_VALIDATION_ERROR;
+
   return ERR_SUCCESS;
 }
 
@@ -144,4 +150,5 @@ void native_wasm_runtime(NWExports* exports)
   exports->Compile = &Compile;
   exports->Run = &Run;
   exports->LoadCache = &LoadCache;
+  exports->DestroyEnvironment = &DestroyEnvironment;
 }

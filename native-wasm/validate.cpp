@@ -3,6 +3,7 @@
 
 #include "validate.h"
 #include "util.h"
+#include "stack.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <atomic>
@@ -98,7 +99,7 @@ void ValidateFunctionSig(FunctionSig& sig, Environment& env, Module* m)
       AppendError(env, m, ERR_MULTIPLE_RETURN_VALUES, "Return count of %u encountered: only 0 or 1 allowed.", sig.form);
   }
   else
-    AppendError(env, m, ERR_UNKNOWN_SIGNATURE_TYPE, "Illegal function type %ihh encountered: only -0x20 allowed", sig.form);
+    AppendError(env, m, ERR_UNKNOWN_SIGNATURE_TYPE, "Illegal function type %hhi encountered: only -0x20 allowed", sig.form);
 }
 
 void ValidateImport(Import& imp, Environment& env, Module* m)
@@ -185,7 +186,7 @@ void ValidateImport(Import& imp, Environment& env, Module* m)
     break;
   }
   default:
-    AppendError(env, m, ERR_FATAL_UNKNOWN_KIND, "unknown export kind: %uhh", imp.kind);
+    AppendError(env, m, ERR_FATAL_UNKNOWN_KIND, "unknown export kind: %hhu", imp.kind);
   }
 }
 
@@ -204,7 +205,7 @@ void ValidateLimits(ResizableLimits& limits, Environment& env, Module* m)
 void ValidateTable(TableDesc& table, Environment& env, Module* m)
 {
   if(table.element_type != TE_anyfunc)
-    AppendError(env, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Table element type is %ihh: only anyfunc allowed.", table.element_type);
+    AppendError(env, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Table element type is %hhi: only anyfunc allowed.", table.element_type);
   ValidateLimits(table.resizable, env, m);
 }
 
@@ -236,7 +237,7 @@ varsint7 ValidateInitializer(Instruction& ins, Environment& env, Module* m)
     return TE_i32;
   }
 
-  AppendError(env, m, ERR_INVALID_INITIALIZER, "An initializer must be a get_global or const instruction, not %uhh", ins.opcode);
+  AppendError(env, m, ERR_INVALID_INITIALIZER, "An initializer must be a get_global or const instruction, not %hhu", ins.opcode);
   return TE_i32;
 }
 
@@ -244,7 +245,7 @@ void ValidateGlobal(GlobalDecl& decl, Environment& env, Module* m)
 {
   varsint7 type = ValidateInitializer(decl.init, env, m);
   if(type != decl.desc.type)
-    AppendError(env, m, ERR_INVALID_GLOBAL_TYPE, "The global initializer has type %ihh, must be the same as the description type %ihh.", type, decl.desc.type);
+    AppendError(env, m, ERR_INVALID_GLOBAL_TYPE, "The global initializer has type %hhi, must be the same as the description type %hhi.", type, decl.desc.type);
 }
 
 void ValidateExport(Export& e, Environment& env, Module* m)
@@ -275,7 +276,7 @@ void ValidateExport(Export& e, Environment& env, Module* m)
     break;
   }
   default:
-    AppendError(env, m, ERR_FATAL_UNKNOWN_KIND, "The %s export has invalid kind %uhh", e.name.bytes, e.kind);
+    AppendError(env, m, ERR_FATAL_UNKNOWN_KIND, "The %s export has invalid kind %hhu", e.name.bytes, e.kind);
     break;
   }
 }
@@ -310,7 +311,7 @@ varsint32 EvalInitializerI32(Instruction& ins, Environment& env, Module* m)
     break;
   }
   default:
-    AppendError(env, m, ERR_INVALID_INITIALIZER, "Expected i32 type but got %uhh", ins.opcode);
+    AppendError(env, m, ERR_INVALID_INITIALIZER, "Expected i32 type but got %hhu", ins.opcode);
   }
 
   return 0;
@@ -320,7 +321,7 @@ void ValidateTableOffset(TableInit& init, Environment& env, Module* m)
 {
   varsint7 type = ValidateInitializer(init.offset, env, m);
   if(type != TE_i32)
-    AppendError(env, m, ERR_INVALID_TABLE_TYPE, "Expected table offset instruction type of i32, got %ihh instead.", type);
+    AppendError(env, m, ERR_INVALID_TABLE_TYPE, "Expected table offset instruction type of i32, got %hhi instead.", type);
 
   TableDesc* table = ModuleTable(*m, init.index);
   if(!table)
@@ -336,7 +337,7 @@ void ValidateTableOffset(TableInit& init, Environment& env, Module* m)
         AppendError(env, m, ERR_INVALID_FUNCTION_INDEX, "Invalid element initializer %u function index: %u", i, init.elems[i]);
   }
   else
-    AppendError(env, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Invalid table element type %ihh", table->element_type);
+    AppendError(env, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Invalid table element type %hhi", table->element_type);
 }
 
 void ValidateFunctionBody(FunctionBody& body, Environment& env, Module* m)
@@ -345,7 +346,10 @@ void ValidateFunctionBody(FunctionBody& body, Environment& env, Module* m)
   Stack<varuint7> control; // control-flow stack that must be closed by end instructions
   control.Push(OP_block); // Push fake block instruction to represent the function block for analysis purposes
 
-  for(varuint32 i = 0; i < body.body_size; ++i)
+  if(!body.n_body)
+    return AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Cannot have an empty function body!");
+
+  for(varuint32 i = 0; i < body.n_body; ++i)
   {
     ValidateInstruction(cur[i], env, m);
 
@@ -371,21 +375,24 @@ void ValidateFunctionBody(FunctionBody& body, Environment& env, Module* m)
       {
         varuint7 op = control.Pop();
         if(op != OP_if)
-          AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Expected else instruction to terminate if block, but found %ihh instead.", op);
+          AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Expected else instruction to terminate if block, but found %hhi instead.", op);
         control.Push(OP_else); // Push a new else block that must be terminated by an end instruction
       }
     }
   }
 
-  if(cur[body.body_size - 1].opcode != OP_end)
-    AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Expected end instruction to terminate function body, got %uhh instead.", cur[body.body_size - 1].opcode);
+  if(control.Size() > 0)
+    AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Control stack not fully terminated, off by %zu", control.Size());
+
+  if(cur[body.n_body - 1].opcode != OP_end)
+    AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Expected end instruction to terminate function body, got %hhu instead.", cur[body.n_body - 1].opcode);
 }
 
 void ValidateDataOffset(DataInit& init, Environment& env, Module* m)
 {
   varsint7 type = ValidateInitializer(init.offset, env, m);
   if(type != TE_i32)
-    AppendError(env, m, ERR_INVALID_MEMORY_TYPE, "Expected memory offset instruction type of i32, got %ihh instead.", type);
+    AppendError(env, m, ERR_INVALID_MEMORY_TYPE, "Expected memory offset instruction type of i32, got %hhi instead.", type);
 
   MemoryDesc* memory = ModuleMemory(*m, init.index);
   if(!memory)
@@ -442,7 +449,7 @@ void ValidateEnvironment(Environment& env)
       if(f)
       {
         if(env.modules[i].start < env.modules[i].importsection.functions)
-          AppendError(env, env.modules + i, ERR_INVALID_START_FUNCTION, "The start function (%uhh) cannot be an imported function", env.modules[i].start);
+          AppendError(env, env.modules + i, ERR_INVALID_START_FUNCTION, "The start function (%hhu) cannot be an imported function", env.modules[i].start);
         if(f->n_params > 0 || f->n_returns > 0)
           AppendError(env, env.modules + i, ERR_INVALID_START_FUNCTION, "Starting function must have no parameters and no return value, instead it has %u parameters and %u return values.", f->n_params, f->n_returns);
       }

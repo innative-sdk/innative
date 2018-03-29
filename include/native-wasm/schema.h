@@ -44,6 +44,8 @@ enum TYPE_ENCODING
   TE_anyfunc = -0x10, 
   TE_func = -0x20,
   TE_void = -0x40,
+
+  TE_iPTR = 0x70, // Internal values, never encoded
 };
 
 enum SECTION_OPCODE
@@ -267,12 +269,15 @@ enum INSTRUCTION_OPCODES
 enum ERROR_CODE
 {
   ERR_SUCCESS = 0,
+  ERR_BLOCK_END = 1, // Used to signal the successful parsing of a block
+  ERR_BLOCK_ELSE = 2, // Used to signal the successful parsing of an else
 
   // Parse errors that immediately terminate parsing
   ERR_PARSE_UNEXPECTED_EOF = -0x01,
   ERR_PARSE_INVALID_MAGIC_COOKIE = -0x02,
   ERR_PARSE_INVALID_VERSION = -0x03,
   ERR_PARSE_INVALID_FILE_LENGTH = -0x04,
+  ERR_PARSE_INVALID_NAME = -0x05,
 
   // Fatal errors that prevent properly parsing the module
   ERR_FATAL_INVALID_SECTION_ORDER = -0x10,
@@ -317,6 +322,17 @@ enum ERROR_CODE
   ERR_INVALID_TABLE_OFFSET = -0x119,
   ERR_INVALID_MEMORY_OFFSET = -0x11A,
   ERR_INVALID_FUNCTION_BODY = -0x11B,
+  ERR_INVALID_VALUE_STACK = -0x11C,
+  ERR_INVALID_TYPE = -0x11D,
+  ERR_EXPECTED_ELSE_INSTRUCTION = -0x11E,
+  ERR_INVALID_BRANCH_TYPE = -0x11F,
+  ERR_IF_ELSE_MISMATCH = -0x120,
+  ERR_END_MISMATCH = -0x121,
+  ERR_SIGNATURE_MISMATCH = -0x122,
+  ERR_INVALID_BRANCH_DEPTH = -0x123,
+  ERR_INVALID_LOCAL_INDEX = -0x124,
+  ERR_INVALID_ARGUMENT_TYPE = -0x125,
+  ERR_MULTIPLE_ENTRY_POINTS = -0x126,
 };
 
 enum ENVIRONMENT_FLAGS
@@ -436,6 +452,7 @@ typedef struct __FUNCTION_BODY
   varuint32 n_locals;
   LocalEntry* locals;
   Instruction* body;
+  varuint32 n_body; // INTERNAL: track actual number of instructions
 } FunctionBody;
 
 typedef struct __DATA_INIT
@@ -458,6 +475,7 @@ typedef struct __MODULE
   uint32 magic_cookie;
   uint32 version;
   uint32_t knownsections; // bit-index corresponds to that OPCODE section being loaded
+  Identifier name; // Name of the module as determined by the environment
 
   struct TypeSection
   {
