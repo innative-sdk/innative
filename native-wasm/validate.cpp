@@ -214,14 +214,14 @@ void ValidateMemory(MemoryDesc& mem, Environment& env, Module* m)
   ValidateLimits(mem.limits, env, m);
 }
 
-void ValidateInstruction(Instruction& ins, Environment& env, Module* m)
+void ValidateInstruction(Instruction& ins, Stack<varsint7>* values, Environment& env, Module* m)
 {
   // TODO
 }
 
 varsint7 ValidateInitializer(Instruction& ins, Environment& env, Module* m)
 {
-  ValidateInstruction(ins, env, m);
+  ValidateInstruction(ins, 0, env, m);
 
   switch(ins.opcode)
   {
@@ -340,18 +340,30 @@ void ValidateTableOffset(TableInit& init, Environment& env, Module* m)
     AppendError(env, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Invalid table element type %hhi", table->element_type);
 }
 
-void ValidateFunctionBody(FunctionBody& body, Environment& env, Module* m)
+struct ControlBlock
+{
+  size_t limit; // Limit of value stack
+  varsint7 sig; // Block signature
+  varuint7 type; // instruction that pushed this label
+};
+
+void ValidateFunctionBody(FunctionSig& sig, FunctionBody& body, Environment& env, Module* m)
 {
   Instruction* cur = body.body;
-  Stack<varuint7> control; // control-flow stack that must be closed by end instructions
-  control.Push(OP_block); // Push fake block instruction to represent the function block for analysis purposes
+  Stack<ControlBlock> control; // control-flow stack that must be closed by end instructions
+  Stack<varsint7> value; // Current stack of value types
+  varsint7 ret = TE_void;
+  if(sig.n_returns > 0)
+    ret = sig.returns[0];
+
+  control.Push({ 0, ret, OP_block }); // Push the function body block with the function signature
 
   if(!body.n_body)
     return AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Cannot have an empty function body!");
 
   for(varuint32 i = 0; i < body.n_body; ++i)
   {
-    ValidateInstruction(cur[i], env, m);
+    ValidateInstruction(cur[i], value, env, m);
 
     // TODO: verify value stack along all reachable control paths
 
