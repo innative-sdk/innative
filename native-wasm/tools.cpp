@@ -1,0 +1,82 @@
+// Copyright ©2018 Black Sphere Studios
+// For conditions of distribution and use, see copyright notice in native-wasm.h
+
+#include "native-wasm/export.h"
+#include "tools.h"
+#include <stdio.h>
+#include <memory>
+
+std::unique_ptr<uint8_t[]> loadfile(const char* file, long& sz)
+{
+  FILE* f = 0;
+  fopen_s(&f, file, "rb");
+  if(!f)
+    return nullptr;
+  fseek(f, 0, SEEK_END);
+  sz = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  std::unique_ptr<uint8_t[]> data(new uint8_t[sz]);
+  sz = (long)fread(data.get(), 1, sz, f);
+  fclose(f);
+  return data;
+}
+
+int native_wasm_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic)
+{
+  // Then create the runtime environment with the module count.
+  Environment* env = CreateEnvironment(flags, 1, 0);
+  if(!env)
+  {
+    fprintf(stderr, "Unknown error creating environment.\n");
+    return -1;
+  }
+
+  // Load the module
+  long sz = 0;
+  int err = 0;
+  auto data_module = loadfile(file, sz);
+  if(sz > 0)
+    AddModule(env, data_module.get(), sz, file, &err);
+  else
+    err = -1;
+
+  if(err < 0)
+  {
+    fprintf(stderr, "Error loading modules: %i\n", err);
+    return err;
+  }
+
+  // Add all embedding environments that are included with this runtime
+  auto data_env = loadfile("native-wasm-env.lib", sz);
+  err = (sz > 0) ? AddEmbedding(env, 0, data_env.get(), sz) : -1;
+
+  if(err < 0)
+  {
+    fprintf(stderr, "Error loading environment: %i\n", err);
+    return err;
+  }
+
+  // Attempt to compile. If an error happens, output it and any validation errors to stderr
+  err = Compile(env);
+  if(err < 0)
+  {
+    fprintf(stderr, "Compile error: %i\n", err);
+
+    for(ValidationError* err = env->errors; err != 0; err = err->next)
+      fprintf(stderr, "Error %i: %s\n", err->code, err->error);
+
+    int i = 0;
+    scanf_s("%i", &i);
+    return err;
+  }
+
+  // Destroy environment now that compilation is complete
+  DestroyEnvironment(env);
+  //cache = LoadCache(flags);
+
+  return Run(0);
+}
+int native_wasm_build_loader(struct _NW_CHUNK* chunks, const char* out, bool dynamic)
+{
+  return -1;
+}

@@ -4,6 +4,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 15.0.27130.2026
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "native-wasm", "native-wasm\native-wasm.vcxproj", "{8B15928A-757D-4280-B90F-4D4E90D37F60}"
+	ProjectSection(ProjectDependencies) = postProject
+		{54E92032-38A6-4069-8189-2B27995700E0} = {54E92032-38A6-4069-8189-2B27995700E0}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "loader", "loader\loader.vcxproj", "{2E61191B-5993-45A1-8E01-E8069D8B05C2}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -12,6 +15,13 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "loader", "loader\loader.vcx
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "runtime-stub", "runtime-stub\runtime-stub.vcxproj", "{A47F55B9-D5E3-4EA1-B180-CDD1E7C8F378}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "native-wasm-env", "native-wasm-env\native-wasm-env.vcxproj", "{54E92032-38A6-4069-8189-2B27995700E0}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "native-wasm-cmd", "native-wasm-cmd\native-wasm-cmd.vcxproj", "{3538D7CC-7D47-421E-A80B-9BD53EA0F1B1}"
+	ProjectSection(ProjectDependencies) = postProject
+		{8B15928A-757D-4280-B90F-4D4E90D37F60} = {8B15928A-757D-4280-B90F-4D4E90D37F60}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -45,6 +55,22 @@ Global
 		{A47F55B9-D5E3-4EA1-B180-CDD1E7C8F378}.Release|x64.Build.0 = Release|x64
 		{A47F55B9-D5E3-4EA1-B180-CDD1E7C8F378}.Release|x86.ActiveCfg = Release|Win32
 		{A47F55B9-D5E3-4EA1-B180-CDD1E7C8F378}.Release|x86.Build.0 = Release|Win32
+		{54E92032-38A6-4069-8189-2B27995700E0}.Debug|x64.ActiveCfg = Debug|x64
+		{54E92032-38A6-4069-8189-2B27995700E0}.Debug|x64.Build.0 = Debug|x64
+		{54E92032-38A6-4069-8189-2B27995700E0}.Debug|x86.ActiveCfg = Debug|Win32
+		{54E92032-38A6-4069-8189-2B27995700E0}.Debug|x86.Build.0 = Debug|Win32
+		{54E92032-38A6-4069-8189-2B27995700E0}.Release|x64.ActiveCfg = Release|x64
+		{54E92032-38A6-4069-8189-2B27995700E0}.Release|x64.Build.0 = Release|x64
+		{54E92032-38A6-4069-8189-2B27995700E0}.Release|x86.ActiveCfg = Release|Win32
+		{54E92032-38A6-4069-8189-2B27995700E0}.Release|x86.Build.0 = Release|Win32
+		{3538D7CC-7D47-421E-A80B-9BD53EA0F1B1}.Debug|x64.ActiveCfg = Debug|x64
+		{3538D7CC-7D47-421E-A80B-9BD53EA0F1B1}.Debug|x64.Build.0 = Debug|x64
+		{3538D7CC-7D47-421E-A80B-9BD53EA0F1B1}.Debug|x86.ActiveCfg = Debug|Win32
+		{3538D7CC-7D47-421E-A80B-9BD53EA0F1B1}.Debug|x86.Build.0 = Debug|Win32
+		{3538D7CC-7D47-421E-A80B-9BD53EA0F1B1}.Release|x64.ActiveCfg = Release|x64
+		{3538D7CC-7D47-421E-A80B-9BD53EA0F1B1}.Release|x64.Build.0 = Release|x64
+		{3538D7CC-7D47-421E-A80B-9BD53EA0F1B1}.Release|x86.ActiveCfg = Release|Win32
+		{3538D7CC-7D47-421E-A80B-9BD53EA0F1B1}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -269,8 +269,6 @@ enum INSTRUCTION_OPCODES
 enum ERROR_CODE
 {
   ERR_SUCCESS = 0,
-  ERR_BLOCK_END = 1, // Used to signal the successful parsing of a block
-  ERR_BLOCK_ELSE = 2, // Used to signal the successful parsing of an else
 
   // Parse errors that immediately terminate parsing
   ERR_PARSE_UNEXPECTED_EOF = -0x01,
@@ -333,6 +331,8 @@ enum ERROR_CODE
   ERR_INVALID_LOCAL_INDEX = -0x124,
   ERR_INVALID_ARGUMENT_TYPE = -0x125,
   ERR_MULTIPLE_ENTRY_POINTS = -0x126,
+  ERR_INVALID_BLOCK_SIGNATURE = -0x127,
+  ERR_INVALID_MEMORY_ALIGNMENT = -0x128,
 };
 
 enum ENVIRONMENT_FLAGS

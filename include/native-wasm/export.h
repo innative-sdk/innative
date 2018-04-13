@@ -29,6 +29,18 @@ extern "C" {
     // Statically linked function that loads the runtime stub, which then loads the actual runtime functions.
     NW_COMPILER_DLLEXPORT extern void native_wasm_runtime(NWExports* exports);
 
+    // Command Line Tool exports
+    struct _NW_CHUNK
+    {
+      void* data;
+      uint64_t size; // If size is 0, data points to a null terminated UTF8 file path
+      const char* name; // If NULL, this is treated as an embedding
+      int tag; // Only used for embedding types
+    };
+
+    NW_COMPILER_DLLEXPORT extern int native_wasm_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic);
+    NW_COMPILER_DLLEXPORT extern int native_wasm_build_loader(struct _NW_CHUNK* chunks, const char* out, bool dynamic);
+
 #ifdef  __cplusplus
 }
 #endif

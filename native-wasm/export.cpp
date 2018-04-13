@@ -4,6 +4,7 @@
 #include "native-wasm/export.h"
 #include "parse.h"
 #include "validate.h"
+#include "tools.h"
 #include <atomic>
 #include <thread>
 #include <stdio.h>
@@ -22,6 +23,7 @@ struct __ENVIRONMENT* CreateEnvironment(unsigned int flags, unsigned int modules
 
     env->capacity = modules;
     env->flags = flags;
+    env->maxthreads = maxthreads;
   }
   return env;
 }
