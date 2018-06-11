@@ -14,6 +14,8 @@
 extern const char* NW_ENTRYPOINT;
 extern const char* NW_GETCPUINFO;
 extern const char* NW_EXTENSION;
+extern const char* NW_ENV_EXTENSION;
+extern const char* NW_GLUE_STRING;
 extern const char OPNAMES[][20];
 typedef int uintcpuinfo[5];
 
@@ -116,6 +118,7 @@ T* tmalloc(size_t n)
 }
 
 NW_FORCEINLINE bool ModuleHasSection(Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
+inline std::string MergeStrings(const char* a, const char* b) { return std::string(a) + b; }
 
 FunctionSig* ModuleFunction(Module& m, varuint32 index);
 TableDesc* ModuleTable(Module& m, varuint32 index);
@@ -123,10 +126,19 @@ MemoryDesc* ModuleMemory(Module& m, varuint32 index);
 GlobalDesc* ModuleGlobal(Module& m, varuint32 index);
 std::pair<Module*, Export*> ResolveExport(Environment& env, Import& imp);
 std::string GetProgramPath();
+std::string GetDir(std::string& s);
+std::string GetWorkingDir();
 std::string StrFormat(const char* fmt, ...);
 void GetCPUInfo(uintcpuinfo& info, int flags);
 void* LoadDLL(const char* path);
 void* LoadDLLFunction(void* dll, const char* name);
 void FreeDLL(void* dll);
 
+#ifdef NW_COMPILER_MSC
+#define FOPEN(f, path, mode) fopen_s((&f), (path), (mode))
+#define ITOA(value, buffer, size, radix) _itoa_s(value, buffer, size, radix)
+#else
+#define FOPEN(f, path, mode) f = fopen(path, mode)
+#define ITOA(value, buffer, size, radix) itoa((value), (buffer), (radix))
+#endif
 #endif

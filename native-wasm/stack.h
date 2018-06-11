@@ -21,14 +21,14 @@ public:
   {
     if(_capacity < capacity)
     {
-      _array = reinterpret_cast<T*>(realloc(_array, capacity));
+      _array = reinterpret_cast<T*>(realloc(_array, capacity * sizeof(T)));
       _capacity = capacity;
     }
   }
   inline void Push(const T& item)
   {
     if(_size >= _capacity)
-      Reserve(!_capacity ? MINSIZE : _capacity * 2);
+      Reserve(!_capacity ? MINSIZE : (_capacity * 2));
     _array[_size++] = item;
   }
   inline T Pop() { assert(_size > _limit); return _array[--_size]; } // This only works with trivial types

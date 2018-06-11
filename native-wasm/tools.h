@@ -12,8 +12,8 @@ void LoadModule(struct __ENVIRONMENT* env, size_t index, void* data, uint64_t si
 void AddModule(struct __ENVIRONMENT* env, void* data, uint64_t size, const char* name, int* err);
 void WaitForLoad(struct __ENVIRONMENT* env);
 enum ERROR_CODE AddEmbedding(struct __ENVIRONMENT* env, int tag, void* data, uint64_t size);
-enum ERROR_CODE Compile(struct __ENVIRONMENT* env);
+enum ERROR_CODE Compile(struct __ENVIRONMENT* env, const char* file);
 enum ERROR_CODE Run(void* cache);
-void* LoadCache(int flags);
+void* LoadCache(int flags, const char* file);
 
 #endif

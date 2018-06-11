@@ -42,12 +42,12 @@ NW_COMPILER_DLLEXPORT extern void* _native_wasm_internal_env_grow_memory(void* p
 #ifdef NW_PLATFORM_WIN32
   if(!p) // If null do initial allocation
     return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, i);
-  return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, p, _native_wasm_internal_env_memory_size(p) + i);
+  return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY| HEAP_REALLOC_IN_PLACE_ONLY, p, _native_wasm_internal_env_memory_size(p) + i);
 #endif
 }
 
 // This simply uses this compiler's implementation of memcpy for our platform
-NW_COMPILER_DLLEXPORT extern void* _native_wasm_internal_env_memcpy(void* dest, const void* src, uint64_t sz)
-{
-  return memcpy(dest, src, sz);
-}
+//NW_COMPILER_DLLEXPORT extern void* _native_wasm_internal_env_memcpy(void* dest, const void* src, uint64_t sz)
+//{
+//  return memcpy(dest, src, sz);
+//}

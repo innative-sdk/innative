@@ -4,6 +4,7 @@
 #include "native-wasm/export.h"
 #include "parse.h"
 #include "validate.h"
+#include "compile.h"
 #include "tools.h"
 #include <atomic>
 #include <thread>
@@ -37,6 +38,13 @@ void DestroyEnvironment(struct __ENVIRONMENT* env)
   {
     ValidationError* e = env->errors;
     env->errors = env->errors->next;
+    free(e);
+  }
+
+  while(env->embeddings)
+  {
+    Embedding* e = env->embeddings;
+    env->embeddings = env->embeddings->next;
     free(e);
   }
 
@@ -100,10 +108,18 @@ enum ERROR_CODE AddEmbedding(struct __ENVIRONMENT* env, int tag, void* data, uin
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;
+  
+  Embedding* embed = tmalloc<Embedding>(1);
+  embed->tag = tag;
+  embed->data = data;
+  embed->size = size;
+  embed->next = env->embeddings;
+  env->embeddings = embed;
+
   return ERR_SUCCESS;
 }
 
-enum ERROR_CODE Compile(struct __ENVIRONMENT* env)
+enum ERROR_CODE Compile(struct __ENVIRONMENT* env, const char* file)
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;
@@ -112,7 +128,7 @@ enum ERROR_CODE Compile(struct __ENVIRONMENT* env)
   if(env->errors)
     return ERR_VALIDATION_ERROR;
 
-  return ERR_SUCCESS;
+  return CompileEnvironment(env, file);
 }
 
 enum ERROR_CODE Run(void* cache)
@@ -126,9 +142,9 @@ enum ERROR_CODE Run(void* cache)
   return ERR_SUCCESS;
 }
 
-void* LoadCache(int flags)
+void* LoadCache(int flags, const char* file)
 {
-  std::string path = GetProgramPath() + NW_EXTENSION;
+  std::string path = file != nullptr ? std::string(file) : GetProgramPath() + NW_EXTENSION;
   void* handle = LoadDLL(path.c_str());
   if(!handle)
     return 0;

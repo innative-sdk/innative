@@ -17,12 +17,12 @@ extern "C" {
     typedef struct __NW_EXPORTS
     {
       struct __ENVIRONMENT* (*CreateEnvironment)(unsigned int flags, unsigned int modules, unsigned int maxthreads);
-      void(*AddModule)(struct __ENVIRONMENT* env, void* data, uint64_t size, const char* name, int* err);
+      void(*AddModule)(struct __ENVIRONMENT* env, void* data, uint64_t size, const char* name, int* err); // If size is 0, data points to a null terminated UTF8 file path
       void(*WaitForLoad)(struct __ENVIRONMENT* env);
-      enum ERROR_CODE(*AddEmbedding)(struct __ENVIRONMENT* env, int tag, void* data, uint64_t size);
-      enum ERROR_CODE(*Compile)(struct __ENVIRONMENT* env);
+      enum ERROR_CODE(*AddEmbedding)(struct __ENVIRONMENT* env, int tag, void* data, uint64_t size); // If size is 0, data points to a null terminated UTF8 file path
+      enum ERROR_CODE(*Compile)(struct __ENVIRONMENT* env, const char* file);
       enum ERROR_CODE(*Run)(void* cache);
-      void*(*LoadCache)(int flags);
+      void*(*LoadCache)(int flags, const char* file);
       void(*DestroyEnvironment)(struct __ENVIRONMENT* env);
     } NWExports;
 

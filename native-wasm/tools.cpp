@@ -47,8 +47,11 @@ int native_wasm_compile_file(const char* file, const char* out, unsigned int fla
   }
 
   // Add all embedding environments that are included with this runtime
-  auto data_env = loadfile("native-wasm-env.lib", sz);
-  err = (sz > 0) ? AddEmbedding(env, 0, data_env.get(), sz) : -1;
+#ifdef NW_DEBUG
+  err = AddEmbedding(env, 0, (void*)"native-wasm-env_d.lib", 0);
+#else
+  err = AddEmbedding(env, 0, (void*)"native-wasm-env.lib", 0);
+#endif
 
   if(err < 0)
   {
@@ -57,7 +60,7 @@ int native_wasm_compile_file(const char* file, const char* out, unsigned int fla
   }
 
   // Attempt to compile. If an error happens, output it and any validation errors to stderr
-  err = Compile(env);
+  err = Compile(env, out);
   if(err < 0)
   {
     fprintf(stderr, "Compile error: %i\n", err);

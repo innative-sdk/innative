@@ -330,6 +330,7 @@ void ValidateFunctionSig(Stack<varsint7>& values, FunctionSig& sig, Environment&
 
 void ValidateIndirectCall(Stack<varsint7>& values, varuint32 sig, Environment& env, Module* m)
 {
+  ValidatePopType(values, TE_i32, env, m); // Pop callee
   if(sig < m->type.n_functions)
     ValidateFunctionSig(values, m->type.functions[sig], env, m);
   else
@@ -464,11 +465,10 @@ void ValidateInstruction(Instruction& ins, Stack<varsint7>& values, Stack<Contro
       break;
 
       // Constants
-    case OP_i32_const:
-    case OP_i64_const:
-    case OP_f32_const:
-    case OP_f64_const:
-      break; // These have no validation
+    case OP_i32_const: values.Push(TE_i32); break;
+    case OP_i64_const: values.Push(TE_i64); break;
+    case OP_f32_const: values.Push(TE_f32); break;
+    case OP_f64_const: values.Push(TE_f64); break;
 
     // Comparison operators
     case OP_i32_eqz: ValidateUnaryOp<TE_i32, TE_i32>(values, env, m); break;
@@ -740,14 +740,15 @@ void ValidateFunctionBody(FunctionSig& sig, FunctionBody& body, Environment& env
   varsint7 ret = TE_void;
   if(sig.n_returns > 0)
     ret = sig.returns[0];
-
+  
   // Calculate function locals
   varuint32 n_local = sig.n_params;
   for(varuint32 i = 0; i < body.n_locals; ++i)
     n_local += body.locals[i].count;
 
   varsint7* locals = tmalloc<varsint7>(n_local);
-  memcpy(locals, sig.params, sig.n_params * sizeof(varsint7));
+  if(locals)
+    memcpy(locals, sig.params, sig.n_params * sizeof(varsint7));
   n_local = sig.n_params;
   for(varuint32 i = 0; i < body.n_locals; ++i)
     for(varuint32 j = 0; j < body.locals[i].count; ++j)
@@ -761,7 +762,7 @@ void ValidateFunctionBody(FunctionSig& sig, FunctionBody& body, Environment& env
   for(varuint32 i = 0; i < body.n_body; ++i)
   {
     ValidateInstruction(cur[i], values, control, n_local, locals, env, m);
-    
+
     switch(cur[i].opcode)
     {
     case OP_block:
@@ -791,8 +792,14 @@ void ValidateFunctionBody(FunctionSig& sig, FunctionBody& body, Environment& env
     }
   }
 
+  for(varuint32 i = 0; i < sig.n_returns; ++i)
+    ValidatePopType(values, sig.returns[i], env, m);
+
   if(control.Size() > 0)
     AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Control stack not fully terminated, off by %zu", control.Size());
+
+  if(values.Size() > 0 || values.Limit() > 0)
+    AppendError(env, m, ERR_INVALID_VALUE_STACK, "Value stack not fully empty, off by %zu", values.Size() + values.Limit());
 
   if(cur[body.n_body - 1].opcode != OP_end)
     AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Expected end instruction to terminate function body, got %hhu instead.", cur[body.n_body - 1].opcode);

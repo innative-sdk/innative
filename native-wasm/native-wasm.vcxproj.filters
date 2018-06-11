@@ -36,6 +36,9 @@
     <ClCompile Include="tools.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="optimize.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\native-wasm\native-wasm.h">
@@ -66,6 +69,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="tools.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="compile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="optimize.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -32,6 +32,9 @@
 const char* NW_ENTRYPOINT = "__native_wasm_main_func";
 const char* NW_GETCPUINFO = "__native_wasm_getcpuinfo";
 const char* NW_EXTENSION = ".nw-cache";
+const char* NW_ENV_EXTENSION = ".nw-env-cache";
+const char* NW_GLUE_STRING = "_NWLNK_";
+
 const char OPNAMES[][20] = {
   // Control flow operators
   "unreachable",           // 0x00
@@ -352,6 +355,28 @@ std::string GetProgramPath()
 #ifdef NW_PLATFORM_WIN32
   buf.resize(MAX_PATH);
   buf.resize(GetModuleFileNameA(NULL, const_cast<char*>(buf.data()), buf.capacity()));
+#elif defined(NW_PLATFORM_POSIX)
+#error TODO
+#endif
+  return buf;
+}
+
+std::string GetDir(std::string& s)
+{
+  size_t pos = s.find_last_of('/');
+  if(pos == std::string::npos)
+    pos = s.find_last_of('\\');
+  if(pos != std::string::npos)
+    return s.substr(0, pos+1);
+  return s;
+}
+
+std::string GetWorkingDir()
+{
+  std::string buf;
+#ifdef NW_PLATFORM_WIN32
+  buf.resize(GetCurrentDirectoryA(0, 0));
+  buf.resize(GetCurrentDirectoryA(buf.capacity(), const_cast<char*>(buf.data())));
 #elif defined(NW_PLATFORM_POSIX)
 #error TODO
 #endif

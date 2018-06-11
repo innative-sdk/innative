@@ -290,6 +290,10 @@ enum ERROR_CODE
   ERR_FATAL_BAD_HASH = -0x19,
   ERR_FATAL_DUPLICATE_EXPORT = -0x1A,
   ERR_FATAL_NULL_POINTER = -0x1B,
+  ERR_FATAL_UNKNOWN_TARGET = -0x1C,
+  ERR_FATAL_FILE_ERROR = -0x1D,
+  ERR_FATAL_INVALID_MODULE = -0x1E,
+  ERR_FATAL_LINK_ERROR = -0x1F,
 
   // Validation errors that prevent compiling the module
   ERR_VALIDATION_ERROR = -0x100,
@@ -337,8 +341,14 @@ enum ERROR_CODE
 
 enum ENVIRONMENT_FLAGS
 {
-  ENV_STRICT = 1,
-  ENV_MULTITHREADED = 2,
+  ENV_STRICT = (1 << 0),
+  ENV_MULTITHREADED = (1 << 1),
+  ENV_DEBUG = (1 << 2),
+  ENV_DLL = (1 << 3),
+  ENV_OPTIMIZE_INLINE = (1 << 4),
+  ENV_OPTIMIZE_ANALYSIS = (1 << 5),
+  ENV_OPTIMIZE_VECTORIZE = (1 << 6),
+  ENV_OPTIMIZE_ALL = ENV_OPTIMIZE_INLINE| ENV_OPTIMIZE_ANALYSIS| ENV_OPTIMIZE_VECTORIZE,
 };
 
 typedef struct __BYTE_ARRAY
@@ -560,12 +570,21 @@ typedef struct __VALIDATION_ERROR
   struct __VALIDATION_ERROR* next;
 } ValidationError;
 
+typedef struct __EMBEDDING
+{
+  void* data;
+  uint64_t size; // If size is 0, data points to a null terminated UTF8 file path
+  int tag; // defines the type of embedding data included, determined by the runtime. 0 is always a static library file for the current platform.
+  struct __EMBEDDING* next;
+} Embedding;
+
 typedef struct __ENVIRONMENT
 {
   size_t n_modules; // number of completely loaded modules (for multithreading)
   size_t size; // Size of loaded or loading modules
   size_t capacity; // Capacity of the modules array
   Module* modules;
+  Embedding* embeddings;
   ValidationError* errors; //A linked list of non-fatal validation errors that prevent proper execution.
   uint64_t flags;
   unsigned int maxthreads; // Max number of threads for any multithreaded action. If 0, there is no limit.
