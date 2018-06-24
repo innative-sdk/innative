@@ -292,7 +292,7 @@ uint64_t DecodeLEB128(Stream& s, ERROR_CODE& err, unsigned int maxbits, bool sig
 FunctionSig* ModuleFunction(Module& m, varuint32 index)
 {
   if(index < m.importsection.functions)
-    return &m.type.functions[m.importsection.imports[index].sig_index];
+    return &m.type.functions[m.importsection.imports[index].func_desc.sig_index];
   index -= m.importsection.functions;
   if(index < m.function.n_funcdecl)
     return &m.type.functions[m.function.funcdecl[index]];
@@ -349,7 +349,7 @@ std::pair<Module*, Export*> ResolveExport(Environment& env, Import& imp)
   return { env.modules + i, env.modules[i].exportsection.exports + j };
 }
 
-std::string GetProgramPath()
+NWPath GetProgramPath()
 {
   std::string buf;
 #ifdef NW_PLATFORM_WIN32
@@ -358,20 +358,10 @@ std::string GetProgramPath()
 #elif defined(NW_PLATFORM_POSIX)
 #error TODO
 #endif
-  return buf;
+  return NWPath(std::move(buf));
 }
 
-std::string GetDir(std::string& s)
-{
-  size_t pos = s.find_last_of('/');
-  if(pos == std::string::npos)
-    pos = s.find_last_of('\\');
-  if(pos != std::string::npos)
-    return s.substr(0, pos+1);
-  return s;
-}
-
-std::string GetWorkingDir()
+NWPath GetWorkingDir()
 {
   std::string buf;
 #ifdef NW_PLATFORM_WIN32
@@ -380,7 +370,16 @@ std::string GetWorkingDir()
 #elif defined(NW_PLATFORM_POSIX)
 #error TODO
 #endif
-  return buf;
+  return NWPath(std::move(buf));
+}
+
+bool SetWorkingDir(const char* path)
+{
+#ifdef NW_PLATFORM_WIN32
+  return SetCurrentDirectoryA(path) != 0;
+#elif defined(NW_PLATFORM_POSIX)
+#error TODO
+#endif
 }
 
 void GetCPUInfo(uintcpuinfo& info, int flags)
@@ -401,7 +400,7 @@ std::string StrFormat(const char* fmt, ...)
   va_list args;
   va_start(args, fmt);
   std::string s;
-  s.resize(vsnprintf(0, 0, fmt, args));
+  s.resize(vsnprintf(0, 0, fmt, args)+1);
   s.resize(vsnprintf((char*)s.data(), s.capacity(), fmt, args));
   va_end(args);
   return s;

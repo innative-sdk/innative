@@ -5,6 +5,7 @@
 #define __UTIL_H__NW__
 
 #include "native-wasm/schema.h"
+#include "path.h"
 #include <string>
 #include <math.h>
 #include <exception>
@@ -96,20 +97,17 @@ NW_FORCEINLINE varuint64 ReadVarUInt64(Stream& s, ERROR_CODE& err) { return stat
 NW_FORCEINLINE varsint7 ReadVarInt7(Stream& s, ERROR_CODE& err) { return static_cast<varsint7>(DecodeLEB128(s, err, 7, true)); }
 NW_FORCEINLINE varsint32 ReadVarInt32(Stream& s, ERROR_CODE& err) { return static_cast<varsint32>(DecodeLEB128(s, err, 32, true)); }
 NW_FORCEINLINE varsint64 ReadVarInt64(Stream& s, ERROR_CODE& err) { return static_cast<varsint64>(DecodeLEB128(s, err, 64, true)); }
-NW_FORCEINLINE float32 ReadFloat32(Stream& s, ERROR_CODE& err)
+template<class T>
+inline T ReadPrimitive(Stream& s, ERROR_CODE& err)
 {
-  float32 r = 0;
-  if(!s.Read(r))
+  T r = 0;
+  if(!s.Read<T>(r))
     err = ERR_PARSE_UNEXPECTED_EOF;
   return r;
 }
-NW_FORCEINLINE float64 ReadFloat64(Stream& s, ERROR_CODE& err)
-{
-  float64 r = 0;
-  if(!s.Read(r))
-    err = ERR_PARSE_UNEXPECTED_EOF;
-  return r;
-}
+NW_FORCEINLINE float64 ReadFloat64(Stream& s, ERROR_CODE& err) { return ReadPrimitive<float64>(s, err); }
+NW_FORCEINLINE float32 ReadFloat32(Stream& s, ERROR_CODE& err) { return ReadPrimitive<float32>(s, err); }
+NW_FORCEINLINE byte ReadByte(Stream& s, ERROR_CODE& err) { return ReadPrimitive<byte>(s, err); }
 
 template<class T>
 T* tmalloc(size_t n)
@@ -125,9 +123,9 @@ TableDesc* ModuleTable(Module& m, varuint32 index);
 MemoryDesc* ModuleMemory(Module& m, varuint32 index);
 GlobalDesc* ModuleGlobal(Module& m, varuint32 index);
 std::pair<Module*, Export*> ResolveExport(Environment& env, Import& imp);
-std::string GetProgramPath();
-std::string GetDir(std::string& s);
-std::string GetWorkingDir();
+NWPath GetProgramPath();
+NWPath GetWorkingDir();
+bool SetWorkingDir(const char* path);
 std::string StrFormat(const char* fmt, ...);
 void GetCPUInfo(uintcpuinfo& info, int flags);
 void* LoadDLL(const char* path);

@@ -23,6 +23,19 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "native-wasm-cmd", "native-w
 		{8B15928A-757D-4280-B90F-4D4E90D37F60} = {8B15928A-757D-4280-B90F-4D4E90D37F60}
 	EndProjectSection
 EndProject
+Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "out", "native-wasm-cmd\out.exe", "{1A81C317-9409-4516-A5B4-425A970C6917}"
+	ProjectSection(DebuggerProjectSystem) = preProject
+		PortSupplier = 00000000-0000-0000-0000-000000000000
+		Executable = D:\Erik Documents\Visual Studio 2017\Projects\native-wasm\native-wasm-cmd\out.exe
+		RemoteMachine = ERIKWIN10
+		StartingDirectory = D:\Erik Documents\Visual Studio 2017\Projects\native-wasm\native-wasm-cmd
+		Environment = Default
+		LaunchingEngine = 00000000-0000-0000-0000-000000000000
+		UseLegacyDebugEngines = No
+		LaunchSQLEngine = No
+		AttachLaunchAction = No
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -71,6 +84,10 @@ Global
 		{3538D7CC-7D47-421E-A80B-9BD53EA0F1B1}.Release|x64.Build.0 = Release|x64
 		{3538D7CC-7D47-421E-A80B-9BD53EA0F1B1}.Release|x86.ActiveCfg = Release|Win32
 		{3538D7CC-7D47-421E-A80B-9BD53EA0F1B1}.Release|x86.Build.0 = Release|Win32
+		{1A81C317-9409-4516-A5B4-425A970C6917}.Debug|x64.ActiveCfg = Release|x64
+		{1A81C317-9409-4516-A5B4-425A970C6917}.Debug|x86.ActiveCfg = Release|x64
+		{1A81C317-9409-4516-A5B4-425A970C6917}.Release|x64.ActiveCfg = Release|x64
+		{1A81C317-9409-4516-A5B4-425A970C6917}.Release|x86.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

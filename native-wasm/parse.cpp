@@ -5,6 +5,7 @@
 #include "validate.h"
 #include <malloc.h>
 #include <assert.h>
+#include <algorithm>
 
 __KHASH_IMPL(exports, kh_inline, kh_cstr_t, varuint32, 1, kh_str_hash_func, kh_str_hash_equal);
 __KHASH_IMPL(modules, kh_inline, kh_cstr_t, varuint32, 1, kh_str_hash_func, kh_str_hash_equal);
@@ -13,6 +14,7 @@ NW_FORCEINLINE ERROR_CODE ParseVarUInt32(Stream& s, varuint32& target) { ERROR_C
 NW_FORCEINLINE ERROR_CODE ParseVarSInt7(Stream& s, varsint7& target) { ERROR_CODE err; target = static_cast<varsint7>(DecodeLEB128(s, err, 7, true)); return err; }
 NW_FORCEINLINE ERROR_CODE ParseVarUInt7(Stream& s, varuint7& target) { ERROR_CODE err; target = static_cast<varuint7>(DecodeLEB128(s, err, 7, false)); return err; }
 NW_FORCEINLINE ERROR_CODE ParseVarUInt1(Stream& s, varuint1& target) { ERROR_CODE err; target = static_cast<varuint1>(DecodeLEB128(s, err, 1, false)); return err; }
+NW_FORCEINLINE ERROR_CODE ParseByte(Stream& s, byte& target) { return !s.Read(target) ? ERR_PARSE_UNEXPECTED_EOF : ERR_SUCCESS; }
 
 template<class T, typename... Args>
 struct Parse
@@ -166,7 +168,9 @@ ERROR_CODE ParseImport(Stream& s, Import& i)
     switch(i.kind)
     {
     case KIND_FUNCTION:
-      return ParseVarUInt32(s, i.sig_index);
+      i.func_desc.debug_name.bytes = nullptr;
+      i.func_desc.local_names = 0;
+      return ParseVarUInt32(s, i.func_desc.sig_index);
     case KIND_TABLE:
       return ParseTableDesc(s, i.table_desc);
     case KIND_MEMORY:
@@ -196,7 +200,7 @@ ERROR_CODE ParseExport(Stream& s, Export& e)
 
 ERROR_CODE ParseInstruction(Stream& s, Instruction& ins)
 {
-  ERROR_CODE err = ParseVarUInt7(s, ins.opcode);
+  ERROR_CODE err = ParseByte(s, ins.opcode);
   if(err < 0)
     return err;
 
@@ -448,7 +452,7 @@ ERROR_CODE ParseLocalEntry(Stream& s, LocalEntry& entry)
 ERROR_CODE ParseFunctionBody(Stream& s, FunctionBody& f)
 {
   ERROR_CODE err = ParseVarUInt32(s, f.body_size);
-  varuint32 end = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
+  size_t end = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
   if(err >= 0)
     err = Parse<LocalEntry>::template Array<&ParseLocalEntry>(s, f.locals, f.n_locals);
 
@@ -462,6 +466,8 @@ ERROR_CODE ParseFunctionBody(Stream& s, FunctionBody& f)
     for(f.n_body = 0; s.pos < end && err >= 0; ++f.n_body)
       err = ParseInstruction(s, f.body[f.n_body]);
   }
+  f.local_names = 0;
+  f.debug_name.bytes = 0;
 
   return err;
 }
@@ -475,6 +481,104 @@ ERROR_CODE ParseDataInit(Stream& s, DataInit& data)
 
   if(err >= 0)
     err = ParseByteArray(s, data.data, false);
+
+  return err;
+}
+
+ERROR_CODE ParseNameSectionLocal(Stream& s, size_t num, const char**& target)
+{
+  ERROR_CODE err;
+  auto index = ReadVarUInt32(s, err);
+  if(err < 0) return err;
+  if(index >= num)
+    return ERR_INVALID_LOCAL_INDEX;
+
+  ByteArray buf;
+  err = ParseByteArray(s, buf, true);
+  if(err >= 0 && buf.bytes != nullptr)
+  {
+    if(!target) // Only bother allocating the debug name if there's actually a name to worry about
+      target = (const char**)calloc(num, sizeof(const char*));
+    target[index] = (const char*)buf.bytes;
+  }
+  return err;
+}
+
+ERROR_CODE ParseNameSection(Stream& s, size_t end, Module& m)
+{
+  ERROR_CODE err = ERR_SUCCESS;
+
+  while(s.pos < end && err >= ERR_SUCCESS)
+  {
+    auto type = ReadVarUInt7(s, err);
+    if(err < 0) return err;
+    auto len = ReadVarUInt32(s, err);
+    if(err < 0) return err;
+
+    switch(type)
+    {
+    case 0: // module
+      err = ParseByteArray(s, m.name, true);
+      break;
+    case 1: // functions
+    {
+      varuint32 count = ReadVarUInt32(s, err);
+
+      for(varuint32 i = 0; i < count && err >= 0; ++i)
+      {
+        auto index = ReadVarUInt32(s, err);
+        if(err < 0) return err;
+
+        if(index < m.importsection.functions)
+        {
+          err = ParseByteArray(s, m.importsection.imports[index].func_desc.debug_name, true);
+          continue;
+        }
+        index -= m.importsection.functions;
+        if(index >= m.code.n_funcbody)
+          return ERR_INVALID_FUNCTION_INDEX;
+
+        err = ParseByteArray(s, m.code.funcbody[index].debug_name, true);
+      }
+    }
+      break;
+    case 2: // locals
+    {
+      varuint32 count = ReadVarUInt32(s, err);
+
+      for(varuint32 i = 0; i < count && err >= 0; ++i)
+      {
+        auto fn = ReadVarUInt32(s, err);
+        if(err < 0) return err;
+
+        if(fn < m.importsection.functions)
+        {
+          varuint32 num = ReadVarUInt32(s, err);
+          auto sig = m.importsection.imports[fn].func_desc.sig_index;
+          if(sig >= m.type.n_functions)
+            return ERR_INVALID_TYPE_INDEX;
+
+          for(varuint32 j = 0; j < num && err >= 0; ++j)
+            ParseNameSectionLocal(s, m.type.functions[sig].n_params, m.importsection.imports[fn].func_desc.local_names);
+
+          continue;
+        }
+
+        fn -= m.importsection.functions;
+        if(fn >= m.code.n_funcbody)
+          return ERR_INVALID_FUNCTION_INDEX;
+
+        varuint32 num = ReadVarUInt32(s, err);
+
+        for(varuint32 j = 0; j < num && err >= 0; ++j)
+          ParseNameSectionLocal(s, m.type.functions[m.function.funcdecl[fn]].n_params + m.code.funcbody[fn].n_locals, m.code.funcbody[fn].local_names);
+      }
+    }
+      break;
+    default:
+      s.pos += len;
+    }
+  }
 
   return err;
 }
@@ -545,9 +649,12 @@ ERROR_CODE ParseModule(Stream& s, Module& m, ByteArray name)
     varuint32 payload = ReadVarUInt32(s, err);
     if(err < 0)
       break;
-    if(!ValidateSectionOrder(m.knownsections, opcode))
-      return ERR_FATAL_INVALID_SECTION_ORDER; // This has to be a fatal error because some sections rely on others being loaded
-    m.knownsections |= (1 << opcode);
+    if(opcode != SECTION_CUSTOM) // Section order only applies to known sections
+    {
+      if(!ValidateSectionOrder(m.knownsections, opcode))
+        return ERR_FATAL_INVALID_SECTION_ORDER; // This has to be a fatal error because some sections rely on others being loaded
+      m.knownsections |= (1 << opcode);
+    }
 
     switch(opcode)
     {
@@ -555,7 +662,33 @@ ERROR_CODE ParseModule(Stream& s, Module& m, ByteArray name)
       err = Parse<FunctionSig>::template Array<&ParseFuncSig>(s, m.type.functions, m.type.n_functions);
       break;
     case SECTION_IMPORT:
+    {
       err = Parse<Import>::template Array<&ParseImport>(s, m.importsection.imports, m.importsection.n_import);
+      std::stable_sort(m.importsection.imports, m.importsection.imports + m.importsection.n_import, [](const Import& a, const Import& b) -> bool { return a.kind < b.kind; });
+
+      varuint32 num = m.importsection.n_import;
+      m.importsection.globals = 0;
+      for(varuint32 i = 0; i < num; ++i)
+      {
+        switch(m.importsection.imports[i].kind)
+        {
+        case KIND_FUNCTION:
+          ++m.importsection.functions;
+        case KIND_TABLE:
+          ++m.importsection.tables;
+        case KIND_MEMORY:
+          ++m.importsection.memory;
+        case KIND_GLOBAL:
+          ++m.importsection.globals;
+          break;
+        default:
+          return ERR_FATAL_UNKNOWN_KIND;
+        }
+      }
+
+      if(m.importsection.n_import != num) // n_import is the same as globals, check to make sure we derived it properly
+        return ERR_FATAL_INVALID_MODULE;
+    }
       break;
     case SECTION_FUNCTION:
       err = Parse<varuint32>::template Array<&ParseVarUInt32>(s, m.function.funcdecl, m.function.n_funcdecl);
@@ -589,7 +722,10 @@ ERROR_CODE ParseModule(Stream& s, Module& m, ByteArray name)
       m.custom[curcustom].payload = payload;
       m.custom[curcustom].data = s.data + s.pos;
       err = ParseIdentifier(s, m.custom[curcustom].name);
-      s.pos += payload - m.custom[curcustom].name.n_bytes; // Skip over the custom payload, minus the name
+      if(err == ERR_SUCCESS && !strcmp((const char*)m.custom[curcustom].name.bytes, "name"))
+        ParseNameSection(s, s.pos + payload - m.custom[curcustom].name.n_bytes, m);
+      else
+        s.pos += payload - m.custom[curcustom].name.n_bytes; // Skip over the custom payload, minus the name
       break;
     default:
       return ERR_FATAL_UNKNOWN_SECTION;

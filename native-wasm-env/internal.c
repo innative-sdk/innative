@@ -28,26 +28,53 @@
 #error unknown platform!
 #endif
 
-// Platform-specific implementation of the mem.size instruction, except it works in bytes
-NW_COMPILER_DLLEXPORT extern uint64_t _native_wasm_internal_env_memory_size(void* p)
-{
-#ifdef NW_PLATFORM_WIN32
-  return HeapSize(GetProcessHeap(), 0, p);
-#endif
-}
-
 // Platform-specific implementation of the mem.grow instruction, except it works in bytes
 NW_COMPILER_DLLEXPORT extern void* _native_wasm_internal_env_grow_memory(void* p, uint64_t i)
 {
+  uint64_t* info = (uint64_t*)p;
 #ifdef NW_PLATFORM_WIN32
-  if(!p) // If null do initial allocation
-    return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, i);
-  return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY| HEAP_REALLOC_IN_PLACE_ONLY, p, _native_wasm_internal_env_memory_size(p) + i);
+  info = !info ? HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, i + sizeof(uint64_t)) : HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, info - 1, (i += info[-1]) + sizeof(uint64_t));
+  info[0] = i;
+  return info + 1;
 #endif
 }
 
-// This simply uses this compiler's implementation of memcpy for our platform
-//NW_COMPILER_DLLEXPORT extern void* _native_wasm_internal_env_memcpy(void* dest, const void* src, uint64_t sz)
-//{
-//  return memcpy(dest, src, sz);
-//}
+NW_COMPILER_DLLEXPORT extern void _native_wasm_internal_env_memcpy(char* dest, const char* src, uint64_t sz)
+{
+  // Very simple memcpy implementation because we don't have access to the C library
+  while(sz > sizeof(uint64_t))
+  {
+    *((uint64_t*)dest) = *((uint64_t*)src);
+    dest += sizeof(uint64_t);
+    src += sizeof(uint64_t);
+    sz -= sizeof(uint64_t);
+  }
+  while(sz)
+  {
+    *dest = *src;
+    dest += 1;
+    src += 1;
+    sz -= 1;
+  }
+}
+
+NW_COMPILER_DLLEXPORT extern void _native_wasm_internal_env_print(uint64_t a)
+{
+  static char lookup[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+  char buf[25] = { 0 };
+
+  int i = 0;
+  do
+  {
+    buf[i++] = lookup[a >> 60];
+    a <<= 4;
+  } while(i < 16);
+  buf[i++] = '\n';
+  DWORD out;
+  WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buf, i, &out, NULL);
+}
+
+NW_COMPILER_DLLEXPORT extern void _native_wasm_internal_env_print_compiler(uint64_t a)
+{
+  _native_wasm_internal_env_print(a);
+}

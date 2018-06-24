@@ -25,6 +25,7 @@ typedef uint64_t varuptr;
 typedef float float32;
 typedef double float64;
 typedef varuint32 memflags;
+typedef uint8_t byte;
 
 const uint32 MAGIC_COOKIE = 0x6d736100;
 const uint32 MAGIC_VERSION = 0x01;
@@ -337,6 +338,7 @@ enum ERROR_CODE
   ERR_MULTIPLE_ENTRY_POINTS = -0x126,
   ERR_INVALID_BLOCK_SIGNATURE = -0x127,
   ERR_INVALID_MEMORY_ALIGNMENT = -0x128,
+  ERR_INVALID_RESERVED_VALUE = -0x129,
 };
 
 enum ENVIRONMENT_FLAGS
@@ -378,7 +380,7 @@ typedef union __IMMEDIATE
 
 typedef struct __INSTRUCTION
 {
-  varuint7 opcode;
+  byte opcode;
   Immediate immediates[MAX_IMMEDIATES];
 } Instruction;
 
@@ -421,6 +423,13 @@ typedef struct __GLOBAL_DECL
   Instruction init;
 } GlobalDecl;
 
+typedef struct __FUNCTION_DESC
+{
+  varuint32 sig_index;
+  Identifier debug_name;
+  const char** local_names;
+} FunctionDesc;
+
 typedef struct __IMPORT
 {
   Identifier module_name;
@@ -428,7 +437,7 @@ typedef struct __IMPORT
   varuint7 kind; // WA_KIND
   union
   {
-    varuint32 sig_index;
+    FunctionDesc func_desc;
     TableDesc table_desc;
     MemoryDesc mem_desc;
     GlobalDesc global_desc;
@@ -463,6 +472,8 @@ typedef struct __FUNCTION_BODY
   LocalEntry* locals;
   Instruction* body;
   varuint32 n_body; // INTERNAL: track actual number of instructions
+  Identifier debug_name; // INTERNAL: debug name if it exists
+  const char** local_names; // INTERNAL: debug names of locals, if known from name section. Always size of n_locals and NULL if doesn't exist.
 } FunctionBody;
 
 typedef struct __DATA_INIT
@@ -485,7 +496,7 @@ typedef struct __MODULE
   uint32 magic_cookie;
   uint32 version;
   uint32_t knownsections; // bit-index corresponds to that OPCODE section being loaded
-  Identifier name; // Name of the module as determined by the environment
+  Identifier name; // Name of the module as determined by the environment or name section
 
   struct TypeSection
   {

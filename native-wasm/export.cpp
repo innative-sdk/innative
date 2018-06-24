@@ -15,6 +15,7 @@ struct __ENVIRONMENT* CreateEnvironment(unsigned int flags, unsigned int modules
   Environment* env = (Environment*)calloc(1, sizeof(Environment));
   if(env)
   {
+    env->modulemap = kh_init_modules();
     env->modules = (Module*)realloc(0, modules * sizeof(Module));
     if(!env->modules)
     {
@@ -126,7 +127,20 @@ enum ERROR_CODE Compile(struct __ENVIRONMENT* env, const char* file)
 
   ValidateEnvironment(*env);
   if(env->errors)
+  {
+    // Reverse error list so it appears in chronological order
+    auto cur = env->errors;
+    ValidationError* prev = nullptr;
+    while(cur != 0)
+    {
+      auto next = cur->next;
+      cur->next = prev;
+      prev = cur;
+      cur = next;
+    }
+    env->errors = prev;
     return ERR_VALIDATION_ERROR;
+  }
 
   return CompileEnvironment(env, file);
 }
@@ -144,8 +158,8 @@ enum ERROR_CODE Run(void* cache)
 
 void* LoadCache(int flags, const char* file)
 {
-  std::string path = file != nullptr ? std::string(file) : GetProgramPath() + NW_EXTENSION;
-  void* handle = LoadDLL(path.c_str());
+  NWPath path(file != nullptr ? NWPath(file) : GetProgramPath() + NW_EXTENSION);
+  void* handle = LoadDLL(path.Get().c_str());
   if(!handle)
     return 0;
   NW_GetCPUInfo func = (NW_GetCPUInfo)LoadDLLFunction(handle, NW_GETCPUINFO);

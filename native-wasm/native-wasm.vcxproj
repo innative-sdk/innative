@@ -100,6 +100,9 @@
       <LanguageStandard>stdcpp14</LanguageStandard>
       <ExceptionHandling>false</ExceptionHandling>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeaderFile>llvm.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>%(PrecompiledHeaderFile)32_d.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -119,6 +122,9 @@
       <LanguageStandard>stdcpp14</LanguageStandard>
       <ExceptionHandling>false</ExceptionHandling>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeaderFile>llvm.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>%(PrecompiledHeaderFile)_d.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -140,6 +146,9 @@
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <LanguageStandard>stdcpp14</LanguageStandard>
       <ExceptionHandling>false</ExceptionHandling>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeaderFile>llvm.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>%(PrecompiledHeaderFile)32.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -164,6 +173,9 @@
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <LanguageStandard>stdcpp14</LanguageStandard>
       <ExceptionHandling>false</ExceptionHandling>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeaderFile>llvm.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>%(PrecompiledHeaderFile).pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -172,8 +184,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="compile.cpp" />
+    <ClCompile Include="compile.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="export.cpp" />
+    <ClCompile Include="intrinsic.cpp" />
     <ClCompile Include="optimize.cpp" />
     <ClCompile Include="parse.cpp" />
     <ClCompile Include="tools.cpp" />
@@ -187,8 +202,10 @@
     <ClInclude Include="..\include\native-wasm\schema.h" />
     <ClInclude Include="compile.h" />
     <ClInclude Include="greedy.h" />
+    <ClInclude Include="intrinsic.h" />
     <ClInclude Include="optimize.h" />
     <ClInclude Include="parse.h" />
+    <ClInclude Include="path.h" />
     <ClInclude Include="stack.h" />
     <ClInclude Include="tools.h" />
     <ClInclude Include="util.h" />

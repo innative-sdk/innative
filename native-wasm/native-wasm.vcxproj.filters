@@ -39,6 +39,9 @@
     <ClCompile Include="optimize.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="intrinsic.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\native-wasm\native-wasm.h">
@@ -75,6 +78,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="optimize.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="path.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="intrinsic.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

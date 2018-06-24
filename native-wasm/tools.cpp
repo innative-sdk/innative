@@ -3,8 +3,10 @@
 
 #include "native-wasm/export.h"
 #include "tools.h"
+#include "path.h"
 #include <stdio.h>
 #include <memory>
+#include <string>
 
 std::unique_ptr<uint8_t[]> loadfile(const char* file, long& sz)
 {
@@ -35,8 +37,10 @@ int native_wasm_compile_file(const char* file, const char* out, unsigned int fla
   long sz = 0;
   int err = 0;
   auto data_module = loadfile(file, sz);
+  NWPath name(file);
+
   if(sz > 0)
-    AddModule(env, data_module.get(), sz, file, &err);
+    AddModule(env, data_module.get(), sz, name.RemoveExtension().Get().c_str(), &err);
   else
     err = -1;
 

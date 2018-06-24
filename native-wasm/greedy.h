@@ -42,13 +42,14 @@ public:
 
       if(rend >= root->size)
       {
-        if(!_flag.test_and_set())
+        if(!_flag.test_and_set(std::memory_order_acquire)) // DOESNT WORK because there's no read lock.
         {
           if(rend >= _root.load(std::memory_order_acquire)->size) // We do another check in here to ensure another thread didn't already resize the root for us.
           {
             _allocChunk(rend * 2);
             _curpos.store(0, std::memory_order_release);
           }
+          _flag.clear(std::memory_order_release);
         }
       }
       else
