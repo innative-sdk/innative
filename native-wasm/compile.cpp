@@ -261,7 +261,8 @@ void BindLabel(BasicBlock* block, NWContext& context)
 void PushResult(NWBlockResult** root, llvm::Value* result, BasicBlock* block)
 {
   NWBlockResult* next = *root;
-  *root = new NWBlockResult{ result, block, next };
+  *root = tmalloc<NWBlockResult>(1);
+  new(*root) NWBlockResult{ result, block, next };
 }
 
 // Adds current value stack to target branch according to that branch's signature, but doesn't pop them.
@@ -1203,17 +1204,6 @@ uint64_t GetTotalSize(llvm::Type* t)
   return t->getArrayNumElements() * (t->getArrayElementType()->getPrimitiveSizeInBits() / 8);
 }
 
-std::string MergeName(const char* prefix, const char* name, int index = -1)
-{
-  if(index >= 0)
-  {
-    char buf[20];
-    ITOA(index, buf, 20, 10);
-    return !prefix ? std::string(name) + buf : (std::string(prefix) + NW_GLUE_STRING + name + buf);
-  }
-  return !prefix ? name : (std::string(prefix) + NW_GLUE_STRING + name);
-}
-
 std::string MergeImportName(Import& imp)
 {
   if(imp.module_name.bytes != 0 && (imp.module_name.bytes[0] == '$' || imp.module_name.bytes[0] == '!'))
@@ -1223,20 +1213,21 @@ std::string MergeImportName(Import& imp)
 
 int GetCallingConvention(Import& imp)
 {
-  if(!imp.module_name.bytes || imp.module_name.bytes[0] != '!')
+  const char* str = !imp.module_name.bytes ? nullptr : strrchr((char*)imp.module_name.bytes, '!');
+  if(!str)
     return llvm::CallingConv::C;
-  const char* str = (const char*)imp.module_name.bytes + 1;
-  if(!stricmp(str, "C"))
+  ++str;
+  if(!STRICMP(str, "C"))
     return llvm::CallingConv::C;
-  if(!stricmp(str, "STD"))
+  if(!STRICMP(str, "STD"))
     return llvm::CallingConv::X86_StdCall;
-  if(!stricmp(str, "JS"))
+  if(!STRICMP(str, "JS"))
     return llvm::CallingConv::WebKit_JS;
-  if(!stricmp(str, "GHC"))
+  if(!STRICMP(str, "GHC"))
     return llvm::CallingConv::GHC;
-  if(!stricmp(str, "SWIFT"))
+  if(!STRICMP(str, "SWIFT"))
     return llvm::CallingConv::Swift;
-  if(!stricmp(str, "HiPE"))
+  if(!STRICMP(str, "HiPE"))
     return llvm::CallingConv::HiPE;
   return llvm::CallingConv::C;
 }

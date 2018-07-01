@@ -8,6 +8,20 @@
 #include <stdarg.h>
 #include <atomic>
 
+// Hashes a pair of strings seperated by a null terminator
+static kh_inline khint_t __ac_X31_hash_string_pair(const char *s)
+{
+  khint_t h = (khint_t)*s;
+  if(h) for(++s; *s; ++s) h = (h << 5) - h + (khint_t)*s;
+  for(++s; *s; ++s) h = (h << 5) - h + (khint_t)*s;
+  return h;
+}
+
+#define str_pair_hash_equal(a, b) (strcmp(a, b) == 0) && (strcmp(strchr(a, 0)+1, strchr(a, 0)+1) == 0)
+
+__KHASH_IMPL(modulepair, kh_inline, kh_cstr_t, FunctionSig, 1, __ac_X31_hash_string_pair, str_pair_hash_equal);
+__KHASH_IMPL(cimport, kh_inline, kh_cstr_t, char, 0, kh_str_hash_func, kh_str_hash_equal);
+
 static const char trailingBytesForUTF8[256] = {
   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -76,7 +90,7 @@ void AppendError(Environment& env, Module* m, int code, const char* fmt, ...)
   va_list args;
   va_start(args, fmt);
   int len = vsnprintf(0, 0, fmt, args);
-  ValidationError* err = reinterpret_cast<ValidationError*>(malloc(sizeof(ValidationError) + len + 1));
+  ValidationError* err = reinterpret_cast<ValidationError*>(GreedyAlloc(sizeof(ValidationError) + len + 1));
   err->error = reinterpret_cast<char*>(err + 1);
   vsnprintf(err->error, len + 1, fmt, args);
   va_end(args);
@@ -109,13 +123,43 @@ void ValidateImport(Import& imp, Environment& env, Module* m)
   if(!ValidateIdentifier(imp.export_name))
     AppendError(env, m, ERR_INVALID_IDENTIFIER, "Identifier not valid UTF8: %s", imp.export_name.bytes);
 
-  if(!imp.module_name.bytes || !imp.module_name.bytes[0] || imp.module_name.bytes[0] == '!' || imp.module_name.bytes[0] == '$')
-    return; // A blank import or a special module name is always allowed even in strict mode in this environment
+  std::string name;
+  auto skip = strrchr((char*)imp.module_name.bytes, '!');
+  if(skip)
+    name.assign((char*)imp.module_name.bytes, skip - (char*)imp.module_name.bytes);
+  else
+    name.assign((char*)imp.module_name.bytes);
 
-  khint_t iter = kh_get_modules(env.modulemap, (char*)imp.module_name.bytes);
+  khint_t iter = kh_get_modules(env.modulemap, (char*)imp.module_name.bytes); // WASM modules do not understand !CALL convention appendings, so we use the full name no matter what
   if(iter == kh_end(env.modulemap))
-    return AppendError(env, m, ERR_UNKNOWN_MODULE, "%s module not found", imp.module_name.bytes);
+  {
+    if(env.whitelist)
+    {
+      name.append(1, 0);
+      khiter_t iter = kh_get_modulepair(env.whitelist, name.c_str()); // Check for a wildcard match first
+      if(!kh_exist(env.whitelist, iter))
+      {
+        name.append((char*)imp.export_name.bytes);
+        khiter_t iter = kh_get_modulepair(env.whitelist, name.c_str());
+        if(!kh_exist(env.whitelist, iter))
+          return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "%s - %s is not a whitelisted C import, nor a valid webassembly import.", imp.module_name.bytes, imp.export_name.bytes);
+      } else if(env.flags & ENV_STRICT) // Wildcard whitelists are not allowed in strict mode becuase we must know the function type in strict mode.
+        return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "Wildcard imports are not allowed in strict mode! Strict mode requires a valid function signature for all whitelisted C imports", imp.module_name.bytes, imp.export_name.bytes);
+    }
 
+    if(env.cimports)
+    {
+      khiter_t iter = kh_get_cimport(env.cimports, MergeName(name.c_str(), (char*)imp.export_name.bytes).c_str());
+      if(kh_exist(env.cimports, iter))
+      {
+        // If we are in strict mode, you MUST provide a signature
+      }
+      if(!name.c_str()[0]) // If the module name is blank this was a C import, otherwise we can't prove it was intended to be a C import.
+        return AppendError(env, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found", imp.export_name.bytes);
+    }
+
+    return AppendError(env, m, ERR_UNKNOWN_MODULE, "%s module not found", imp.module_name.bytes);
+  }
   varuint32 i = kh_value(env.modulemap, iter);
   if(i >= env.n_modules)
     return AppendError(env, m, ERR_UNKNOWN_MODULE, "%s module index (%u) not in range (%u)", imp.module_name.bytes, i, env.n_modules);
@@ -287,7 +331,7 @@ void ValidateLoad(varuint32 align, Stack<varsint7>& values, Environment& env, Mo
 {
   if(!ModuleMemory(*m, 0))
     AppendError(env, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
-  if((1 << align) > sizeof(T))
+  if((1ULL << align) > sizeof(T))
     AppendError(env, m, ERR_INVALID_MEMORY_ALIGNMENT, "Alignment of %u exceeds number of accessed bytes %i", (1 << align), sizeof(T));
   ValidatePopType(values, TE_i32, env, m);
   values.Push(PUSH);
@@ -298,7 +342,7 @@ void ValidateStore(varuint32 align, Stack<varsint7>& values, Environment& env, M
 {
   if(!ModuleMemory(*m, 0))
     AppendError(env, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
-  if((1 << align) > sizeof(T))
+  if((1ULL << align) > sizeof(T))
     AppendError(env, m, ERR_INVALID_MEMORY_ALIGNMENT, "Alignment of %u exceeds number of accessed bytes %i", (1 << align), sizeof(T));
   ValidatePopType(values, POP, env, m);
   ValidatePopType(values, TE_i32, env, m);

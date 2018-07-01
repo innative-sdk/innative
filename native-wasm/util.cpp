@@ -349,6 +349,11 @@ std::pair<Module*, Export*> ResolveExport(Environment& env, Import& imp)
   return { env.modules + i, env.modules[i].exportsection.exports + j };
 }
 
+void* GreedyAlloc(size_t n)
+{
+  return malloc(n);
+}
+
 NWPath GetProgramPath()
 {
   std::string buf;
@@ -405,6 +410,7 @@ std::string StrFormat(const char* fmt, ...)
   va_end(args);
   return s;
 }
+
 
 #ifdef NW_PLATFORM_WIN32
 void* LoadDLL(const char* path) { return LoadLibraryA(path); }

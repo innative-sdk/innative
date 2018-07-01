@@ -65,9 +65,6 @@
     <ClInclude Include="..\include\native-wasm\schema.h">
       <Filter>include</Filter>
     </ClInclude>
-    <ClInclude Include="greedy.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="stack.h">
       <Filter>Header Files</Filter>
     </ClInclude>

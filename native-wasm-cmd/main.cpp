@@ -6,7 +6,8 @@
 
 int main(int argc, char *argv[])
 {
-  int r = native_wasm_compile_file(argv[1], "out.exe", ENV_DEBUG|ENV_STRICT, false);
+  const char* whitelist[] = { "\0" }; // whitelist all blank imports
+  int r = native_wasm_compile_file(argv[1], "out.exe", ENV_DEBUG|ENV_STRICT, false, whitelist, 1);
   char c;
   std::cin >> c;
   return r;

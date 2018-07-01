@@ -16,6 +16,8 @@ struct __ENVIRONMENT* CreateEnvironment(unsigned int flags, unsigned int modules
   if(env)
   {
     env->modulemap = kh_init_modules();
+    env->whitelist = nullptr;
+    env->cimports = kh_init_cimport();
     env->modules = (Module*)realloc(0, modules * sizeof(Module));
     if(!env->modules)
     {
@@ -35,24 +37,14 @@ void DestroyEnvironment(struct __ENVIRONMENT* env)
   if(!env)
     return;
 
-  while(env->errors)
-  {
-    ValidationError* e = env->errors;
-    env->errors = env->errors->next;
-    free(e);
-  }
-
-  while(env->embeddings)
-  {
-    Embedding* e = env->embeddings;
-    env->embeddings = env->embeddings->next;
-    free(e);
-  }
-
   for(varuint32 i = 0; i < env->n_modules; ++i)
     kh_destroy_exports(env->modules[i].exports);
 
+  if(env->whitelist)
+    kh_destroy_modulepair(env->whitelist);
+  
   kh_destroy_modules(env->modulemap);
+  kh_destroy_cimport(env->cimports);
   free(env->modules);
   free(env);
 }
@@ -97,6 +89,23 @@ void AddModule(struct __ENVIRONMENT* env, void* data, uint64_t size, const char*
     std::thread(LoadModule, env, index, data, size, name, err).detach();
   else
     LoadModule(env, index, data, size, name, err);
+}
+
+void AddWhitelist(struct __ENVIRONMENT* env, const char* module_name, const char* export_name, FunctionSig* sig)
+{
+  if(!env->whitelist)
+    env->whitelist = kh_init_modulepair();
+  if(!module_name || !export_name)
+    return;
+
+  size_t module_len = strlen(module_name) + 1;
+  size_t export_len = strlen(export_name) + 1;
+  auto whitelist = tmalloc<char>(module_len + export_len);
+  memcpy(whitelist, module_name, module_len);
+  memcpy(whitelist + module_len, export_name, export_len);
+  int r;
+  auto iter = kh_put_modulepair(env->whitelist, whitelist, &r);
+  kh_val(env->whitelist, iter) = !sig ? FunctionSig{ TE_NONE, 0, 0, 0, 0 } : *sig;
 }
 
 void WaitForLoad(struct __ENVIRONMENT* env)
@@ -177,6 +186,7 @@ void native_wasm_runtime(NWExports* exports)
 {
   exports->CreateEnvironment = &CreateEnvironment;
   exports->AddModule = &AddModule;
+  exports->AddWhitelist = &AddWhitelist;
   exports->WaitForLoad = &WaitForLoad;
   exports->AddEmbedding = &AddEmbedding;
   exports->Compile = &Compile;

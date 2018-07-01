@@ -201,7 +201,6 @@
     <ClInclude Include="..\include\native-wasm\native-wasm.h" />
     <ClInclude Include="..\include\native-wasm\schema.h" />
     <ClInclude Include="compile.h" />
-    <ClInclude Include="greedy.h" />
     <ClInclude Include="intrinsic.h" />
     <ClInclude Include="optimize.h" />
     <ClInclude Include="parse.h" />

@@ -34,6 +34,7 @@ const uint32 MAGIC_VERSION = 0x01;
 #define MAX_IMMEDIATES 2
 
 KHASH_DECLARE(exports, kh_cstr_t, varuint32);
+KHASH_DECLARE(cimport, kh_cstr_t, char);
 KHASH_DECLARE(modules, kh_cstr_t, varuint32);
 
 enum TYPE_ENCODING
@@ -47,6 +48,7 @@ enum TYPE_ENCODING
   TE_void = -0x40,
 
   TE_iPTR = 0x70, // Internal values, never encoded
+  TE_NONE = 0x71,
 };
 
 enum SECTION_OPCODE
@@ -339,6 +341,8 @@ enum ERROR_CODE
   ERR_INVALID_BLOCK_SIGNATURE = -0x127,
   ERR_INVALID_MEMORY_ALIGNMENT = -0x128,
   ERR_INVALID_RESERVED_VALUE = -0x129,
+  ERR_UNKNOWN_BLANK_IMPORT = -0x12A,
+  ERR_ILLEGAL_C_IMPORT = -0x12B,
 };
 
 enum ENVIRONMENT_FLAGS
@@ -589,6 +593,8 @@ typedef struct __EMBEDDING
   struct __EMBEDDING* next;
 } Embedding;
 
+KHASH_DECLARE(modulepair, kh_cstr_t, FunctionSig);
+
 typedef struct __ENVIRONMENT
 {
   size_t n_modules; // number of completely loaded modules (for multithreading)
@@ -601,6 +607,8 @@ typedef struct __ENVIRONMENT
   unsigned int maxthreads; // Max number of threads for any multithreaded action. If 0, there is no limit.
 
   struct kh_modules_s* modulemap;
+  struct kh_modulepair_s* whitelist;
+  struct kh_cimport_s* cimports;
 } Environment;
 
 #ifdef  __cplusplus

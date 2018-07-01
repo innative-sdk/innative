@@ -108,11 +108,12 @@ inline T ReadPrimitive(Stream& s, ERROR_CODE& err)
 NW_FORCEINLINE float64 ReadFloat64(Stream& s, ERROR_CODE& err) { return ReadPrimitive<float64>(s, err); }
 NW_FORCEINLINE float32 ReadFloat32(Stream& s, ERROR_CODE& err) { return ReadPrimitive<float32>(s, err); }
 NW_FORCEINLINE byte ReadByte(Stream& s, ERROR_CODE& err) { return ReadPrimitive<byte>(s, err); }
+void* GreedyAlloc(size_t n);
 
 template<class T>
 T* tmalloc(size_t n)
 {
-  return !n ? 0 : reinterpret_cast<T*>(malloc(n * sizeof(T)));
+  return !n ? 0 : reinterpret_cast<T*>(GreedyAlloc(n * sizeof(T)));
 }
 
 NW_FORCEINLINE bool ModuleHasSection(Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
@@ -135,8 +136,24 @@ void FreeDLL(void* dll);
 #ifdef NW_COMPILER_MSC
 #define FOPEN(f, path, mode) fopen_s((&f), (path), (mode))
 #define ITOA(value, buffer, size, radix) _itoa_s(value, buffer, size, radix)
+#define STRICMP(a, b) _stricmp(a, b)
 #else
 #define FOPEN(f, path, mode) f = fopen(path, mode)
 #define ITOA(value, buffer, size, radix) itoa((value), (buffer), (radix))
+#define STRICMP(a, b) stricmp(a, b)
 #endif
+
+
+inline std::string MergeName(const char* prefix, const char* name, int index = -1)
+{
+  if(index >= 0)
+  {
+    char buf[20];
+    ITOA(index, buf, 20, 10);
+    return !prefix ? std::string(name) + buf : (std::string(prefix) + NW_GLUE_STRING + name + buf);
+  }
+  return !prefix ? name : (std::string(prefix) + NW_GLUE_STRING + name);
+}
+
+
 #endif

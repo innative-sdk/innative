@@ -74,6 +74,7 @@ limitations under the License.
 #define NW_ALIGNED(sn, n) NW_ALIGN(n) sn
 #define NW_SSE_ENABLED
 #define NW_ASSUME(x) __assume(x)
+#define _HAS_EXCEPTIONS 0
 #endif
 
 // Platform detection
