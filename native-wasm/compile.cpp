@@ -24,7 +24,7 @@ using llvm::APInt;
 using llvm::ConstantInt;
 using llvm::BasicBlock;
 
-//Function* fn_print;
+Function* fn_print;
 
 Type* GetType(varsint7 type, NWContext& context)
 {
@@ -59,7 +59,7 @@ FunctionType* GetFunctionType(FunctionSig& signature, NWContext& context)
   if(signature.n_params > 0)
   {
     std::vector<Type*> args;
-    for(varsint32 i = 0; i < signature.n_params; ++i)
+    for(varuint32 i = 0; i < signature.n_params; ++i)
       args.push_back(GetType(signature.params[i], context));
 
     return FunctionType::get(ret, args, false);
@@ -517,29 +517,29 @@ ERROR_CODE CompileCall(varuint32 index, NWContext& context)
     return assert(false), ERR_INVALID_FUNCTION_INDEX;
 
   // Because this is a static function call, we can call the imported C function directly with the appropriate calling convention
-  llvm::Function* fn = !context.functions[index].imported ? context.functions[index].internal: context.functions[index].imported;
-  unsigned int num = fn->getFunctionType()->getNumParams();
-  if(num > context.values.Size())
-    return assert(false), ERR_INVALID_VALUE_STACK;
+llvm::Function* fn = !context.functions[index].imported ? context.functions[index].internal: context.functions[index].imported;
+unsigned int num = fn->getFunctionType()->getNumParams();
+if(num > context.values.Size())
+return assert(false), ERR_INVALID_VALUE_STACK;
 
-  // Pop arguments in reverse order
-  llvm::Value** ArgsV = tmalloc<llvm::Value*>(num);
-  for(unsigned int i = num; i-- > 0;)
-  {
-    ArgsV[i] = context.values.Pop();
-    if(!CompareTypes(ArgsV[i]->getType(), fn->getFunctionType()->getParamType(i)))
-      return assert(false), ERR_INVALID_ARGUMENT_TYPE;
-  }
+// Pop arguments in reverse order
+llvm::Value** ArgsV = tmalloc<llvm::Value*>(num);
+for(unsigned int i = num; i-- > 0;)
+{
+  ArgsV[i] = context.values.Pop();
+  if(!CompareTypes(ArgsV[i]->getType(), fn->getFunctionType()->getParamType(i)))
+    return assert(false), ERR_INVALID_ARGUMENT_TYPE;
+}
 
-  llvm::CallInst* call = context.builder.CreateCall(fn, llvm::makeArrayRef(ArgsV, num));
-  if(context.env.flags & ENV_STRICT) // In strict mode, tail call optimization is not allowed
-    call->setTailCallKind(llvm::CallInst::TCK_NoTail);
-  call->setCallingConv(fn->getCallingConv());
-  call->setAttributes(fn->getAttributes());
+llvm::CallInst* call = context.builder.CreateCall(fn, llvm::makeArrayRef(ArgsV, num));
+if(context.env.flags & ENV_STRICT) // In strict mode, tail call optimization is not allowed
+call->setTailCallKind(llvm::CallInst::TCK_NoTail);
+call->setCallingConv(fn->getCallingConv());
+call->setAttributes(fn->getAttributes());
 
-  if(!fn->getReturnType()->isVoidTy()) // Only push a value if there is one to push
-    return PushReturn(context, call);
-  return ERR_SUCCESS;
+if(!fn->getReturnType()->isVoidTy()) // Only push a value if there is one to push
+return PushReturn(context, call);
+return ERR_SUCCESS;
 }
 
 llvm::Value* GetMemSize(llvm::GlobalVariable* target, NWContext& context)
@@ -572,8 +572,8 @@ ERROR_CODE CompileIndirectCall(varuint32 sigindex, NWContext& context)
   for(unsigned int i = sig.n_params; i-- > 0;)
   {
     ArgsV[i] = context.values.Pop();
-    if(!CompareTypes(ArgsV[i]->getType(), GetType(sig.params[i], context)));
-    return assert(false), ERR_INVALID_ARGUMENT_TYPE;
+    if(!CompareTypes(ArgsV[i]->getType(), GetType(sig.params[i], context)))
+      return assert(false), ERR_INVALID_ARGUMENT_TYPE;
   }
 
   if(context.env.flags & ENV_STRICT) // In strict mode, trap if index is out of bounds
@@ -589,8 +589,11 @@ ERROR_CODE CompileIndirectCall(varuint32 sigindex, NWContext& context)
   llvm::FunctionType* ty = GetFunctionType(sig, context);
   funcptr = context.builder.CreatePointerCast(funcptr, ty->getPointerTo(0));
 
-  //if(context.env.flags & ENV_STRICT) // TODO: In strict mode, trap if the expected type does not match the actual type of the function
-  //  InsertConditionalTrap(, context);
+  if(context.env.flags & ENV_STRICT) // In strict mode, trap if the expected type does not match the actual type of the function
+  {
+    auto funcsig = context.builder.CreateLoad(context.builder.CreateGEP(context.builder.CreateLoad(context.tabletypes[0]), callee));
+    InsertConditionalTrap(context.builder.CreateICmpNE(funcsig, context.builder.getInt32(sigindex), "indirect_call_sig_check"), context);
+  }
 
   // CreateCall will then do the final dereference of the function pointer to make the indirect call
   llvm::CallInst* call = context.builder.CreateCall(funcptr, llvm::makeArrayRef(ArgsV, sig.n_params), "indirect_call");
@@ -682,7 +685,7 @@ ERROR_CODE CompileStore(NWContext& context, varuint7 memory, varuint32 offset, v
 // Gets memory size in pages, not bytes
 llvm::Value* CompileMemSize(llvm::GlobalVariable* target, NWContext& context)
 {
-  return context.builder.CreateLShr(GetMemSize(target, context), 16);
+  return context.builder.CreateIntCast(context.builder.CreateLShr(GetMemSize(target, context), 16), context.builder.getInt32Ty(), true);
 }
 
 ERROR_CODE CompileMemGrow(NWContext& context, const char* name)
@@ -697,17 +700,11 @@ ERROR_CODE CompileMemGrow(NWContext& context, const char* name)
 
   if(!CheckType(TE_i32, delta))
     return assert(false), ERR_INVALID_TYPE;
+  auto max = ConstantInt::get(context.context, APInt(64, (context.m.memory.memory[0].limits.flags & LIMIT_HAS_MAXIMUM) ? context.m.memory.memory[0].limits.maximum : 0, true));
+  llvm::CallInst* call = context.builder.CreateCall(context.memgrow, { context.linearmemory[0], context.builder.CreateShl(context.builder.CreateZExt(delta, context.builder.getInt64Ty()), 16), max }, name);
 
-  llvm::CallInst* call = context.builder.CreateCall(context.memgrow, { context.linearmemory[0], context.builder.CreateShl(context.builder.CreateZExt(delta, context.builder.getInt64Ty()), 16) }, name);
-
-  // TODO: check if memory allocation failed or is over maximum value and return -1 if true
-  //auto block = BasicBlock::Create(context.context, "memcheck_block", context.builder.GetInsertBlock()->getParent());
-  //auto contblock = BasicBlock::Create(context.context, "memcheck_continue", context.builder.GetInsertBlock()->getParent());
-  //context.builder.CreateCondBr(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), ConstantInt::get(context.intptrty, 0)), block, contblock);
-  //context.builder.SetInsertPoint(block);
-  //context.builder.CreateStore(call, context.linearmemory[0]);
-
-  return PushReturn(context, old);
+  auto result = context.builder.CreateSelect(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), ConstantInt::get(context.intptrty, 0)), context.builder.getInt32(-1), old);
+  return PushReturn(context, result);
 }
 
 ERROR_CODE CompileInstruction(Instruction& ins, NWContext& context)
@@ -1204,13 +1201,6 @@ uint64_t GetTotalSize(llvm::Type* t)
   return t->getArrayNumElements() * (t->getArrayElementType()->getPrimitiveSizeInBits() / 8);
 }
 
-std::string MergeImportName(Import& imp)
-{
-  if(imp.module_name.bytes != 0 && (imp.module_name.bytes[0] == '$' || imp.module_name.bytes[0] == '!'))
-    return (const char*)imp.export_name.bytes;
-  return MergeName((const char*)imp.module_name.bytes, (const char*)imp.export_name.bytes);
-}
-
 int GetCallingConvention(Import& imp)
 {
   const char* str = !imp.module_name.bytes ? nullptr : strrchr((char*)imp.module_name.bytes, '!');
@@ -1268,7 +1258,7 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
 
   // Declare C runtime function prototypes that we assume exist on the system
   context.memgrow = Function::Create(
-    FunctionType::get(context.builder.getInt8PtrTy(0), { context.builder.getInt8PtrTy(0), context.builder.getInt64Ty() }, false),
+    FunctionType::get(context.builder.getInt8PtrTy(0), { context.builder.getInt8PtrTy(0), context.builder.getInt64Ty(), context.builder.getInt64Ty() }, false),
     Function::ExternalLinkage,
     "_native_wasm_internal_env_grow_memory",
     context.llvm);
@@ -1280,10 +1270,13 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
     "_native_wasm_internal_env_memcpy",
     context.llvm);
 
-  //fn_print = Function::Create(FunctionType::get(context.builder.getVoidTy(), { context.builder.getInt64Ty() }, false), Function::ExternalLinkage, "_native_wasm_internal_env_print_compiler", context.llvm);
+  fn_print = Function::Create(FunctionType::get(context.builder.getVoidTy(), { context.builder.getInt64Ty() }, false), Function::ExternalLinkage, "_native_wasm_internal_env_print_compiler", context.llvm);
 
   context.functions = (NWFunction*)calloc(context.m.importsection.functions + context.m.function.n_funcdecl, sizeof(NWFunction));
   context.tables = tmalloc<llvm::GlobalVariable*>(context.m.importsection.tables - context.m.importsection.functions + context.m.table.n_tables);
+  if(env->flags&ENV_STRICT)
+    context.tabletypes = tmalloc<llvm::GlobalVariable*>(context.m.importsection.tables - context.m.importsection.functions + context.m.table.n_tables);
+
   context.linearmemory = tmalloc<llvm::GlobalVariable*>(context.m.importsection.memory - context.m.importsection.tables + context.m.memory.n_memory);
   context.globals = tmalloc<llvm::GlobalVariable*>(context.m.importsection.globals - context.m.importsection.memory + context.m.global.n_globals);
   _ASSERTE(_CrtCheckMemory());
@@ -1296,7 +1289,7 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
     {
       context.functions[context.n_functions].internal = CompileFunction(
         context.m.type.functions[context.m.importsection.imports[i].func_desc.sig_index],
-        MergeImportName(context.m.importsection.imports[i]),
+        CanonImportName(context.m.importsection.imports[i]),
         context);
 
       auto e = ResolveExport(*env, context.m.importsection.imports[i]);
@@ -1325,7 +1318,7 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
       GetType(context.m.importsection.imports[i].table_desc.element_type, context)->getPointerTo(0),
       false,
       true,
-      MergeImportName(context.m.importsection.imports[i]));
+      CanonImportName(context.m.importsection.imports[i]));
 
   // Import memory
   for(varuint32 i = context.m.importsection.tables; i < context.m.importsection.memory; ++i)
@@ -1334,7 +1327,7 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
       context.builder.getInt8PtrTy(0),
       false,
       true,
-      MergeImportName(context.m.importsection.imports[i]));
+      CanonImportName(context.m.importsection.imports[i]));
 
   // Import global variables
   for(varuint32 i = context.m.importsection.memory; i < context.m.importsection.globals; ++i)
@@ -1344,7 +1337,7 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
       GetType(context.m.importsection.imports[i].global_desc.type, context),
       !context.m.importsection.imports[i].global_desc.mutability,
       true,
-      MergeImportName(context.m.importsection.imports[i]));
+      CanonImportName(context.m.importsection.imports[i]));
   }
 
   // Cache internal function start index
@@ -1371,7 +1364,7 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
       MergeName((const char*)context.m.name.bytes, "table#", i),
       llvm::ConstantPointerNull::get(type));
 
-    unsigned int bytewidth = context.llvm->getDataLayout().getTypeAllocSize(context.tables[context.n_tables]->getType());
+    uint64_t bytewidth = context.llvm->getDataLayout().getTypeAllocSize(context.tables[context.n_tables]->getType());
     if(!bytewidth)
       return assert(false), ERR_INVALID_TABLE_TYPE;
 
@@ -1379,11 +1372,35 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
       context.memgrow,
       {
         llvm::ConstantPointerNull::get(context.builder.getInt8PtrTy(0)),
-        ConstantInt::get(context.context, APInt(64, context.m.table.tables[i].resizable.minimum * bytewidth, true))
+        ConstantInt::get(context.context, APInt(64, context.m.table.tables[i].resizable.minimum * bytewidth, true)),
+        ConstantInt::get(context.context, APInt(64, (context.m.table.tables[i].resizable.flags & LIMIT_HAS_MAXIMUM) ? context.m.table.tables[i].resizable.maximum * bytewidth : 0, true))
       });
 
     InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), ConstantInt::get(context.intptrty, 0)), context);
     context.builder.CreateStore(context.builder.CreatePointerCast(call, type), context.tables[context.n_tables]);
+
+    if(env->flags&ENV_STRICT)
+    {
+      type = llvm::Type::getInt32PtrTy(context.context);
+      context.tabletypes[context.n_tables] = CreateGlobal(
+        context,
+        type,
+        false,
+        false,
+        MergeName((const char*)context.m.name.bytes, "tabletype#", i),
+        llvm::ConstantPointerNull::get(type));
+
+      call = context.builder.CreateCall(
+        context.memgrow,
+        {
+          llvm::ConstantPointerNull::get(context.builder.getInt8PtrTy(0)),
+          ConstantInt::get(context.context, APInt(64, context.m.table.tables[i].resizable.minimum * sizeof(int32_t), true)),
+          ConstantInt::get(context.context, APInt(64, (context.m.table.tables[i].resizable.flags & LIMIT_HAS_MAXIMUM) ? context.m.table.tables[i].resizable.maximum * sizeof(int32_t) : 0, true))
+        });
+
+      InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), ConstantInt::get(context.intptrty, 0)), context);
+      context.builder.CreateStore(context.builder.CreatePointerCast(call, type), context.tabletypes[context.n_tables]);
+    }
 
     ++context.n_tables;
   }
@@ -1393,9 +1410,10 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
   {
     auto type = context.builder.getInt8PtrTy(0);
     auto sz = ConstantInt::get(context.context, APInt(64, context.m.memory.memory[i].limits.minimum, true));
+    auto max = ConstantInt::get(context.context, APInt(64, (context.m.memory.memory[i].limits.flags & LIMIT_HAS_MAXIMUM) ? context.m.memory.memory[i].limits.maximum : 0, true));
     context.linearmemory[context.n_memory] = CreateGlobal(context, type, false, false, MergeName((const char*)context.m.name.bytes, "linearmemory#", i), llvm::ConstantPointerNull::get(type));
 
-    llvm::CallInst* call = context.builder.CreateCall(context.memgrow, { llvm::ConstantPointerNull::get(type), sz });
+    llvm::CallInst* call = context.builder.CreateCall(context.memgrow, { llvm::ConstantPointerNull::get(type), sz, max });
     InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), ConstantInt::get(context.intptrty, 0)), context);
     context.builder.CreateStore(call, context.linearmemory[context.n_memory]);
     ++context.n_memory;
@@ -1451,9 +1469,9 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
     llvm::Constant* offset = CompileInitConstant(d.offset, context);
 
     // Then we create a memcpy call that copies this data to the appropriate location in the init function
-    context.builder.CreateCall(fn_memcpy, 
+    context.builder.CreateCall(fn_memcpy,
       {
-        context.builder.CreateInBoundsGEP(context.builder.getInt8Ty(), context.builder.CreateLoad(context.linearmemory[d.index]), offset), 
+        context.builder.CreateInBoundsGEP(context.builder.getInt8Ty(), context.builder.CreateLoad(context.linearmemory[d.index]), offset),
         context.builder.CreateInBoundsGEP(data->getType(), val, {context.builder.getInt32(0), context.builder.getInt32(0)}),
         context.builder.getInt64(GetTotalSize(data->getType()))
       });
@@ -1481,6 +1499,16 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
         // Store function pointer in correct table memory location
         auto ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tables[e.index]), context.builder.CreateAdd(offset, ConstantInt::get(offset->getType(), j, true)));
         context.builder.CreateAlignedStore(context.builder.CreatePointerCast(context.functions[e.elems[j]].internal, target), ptr, context.llvm->getDataLayout().getPointerSize());
+
+        if(env->flags&ENV_STRICT)
+        {
+          ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tabletypes[e.index]), context.builder.CreateAdd(offset, ConstantInt::get(offset->getType(), j, true)));
+          varuint32 index = ModuleFunctionType(context.m, e.elems[j]);
+          if(index == (varuint32)~0)
+            return assert(false), ERR_INVALID_FUNCTION_INDEX;
+
+          context.builder.CreateAlignedStore(context.builder.getInt32(index), ptr, 4);
+        }
       }
     }
   }
@@ -1654,7 +1682,7 @@ ERROR_CODE CompileEnvironment(Environment* env, const char* filepath)
   {
     // Write all in-memory environments to cache files
     std::vector<std::string> cache;
-    std::vector<const char*> linkargs = { "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO", "/nodefaultlib", "/MANIFEST", "/MANIFEST:embed", "/SUBSYSTEM:CONSOLE", "/VERBOSE", "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT", "/MACHINE:X64", "/machine:x64" };
+    std::vector<const char*> linkargs = { "native-wasm", "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO", "/nodefaultlib", "/MANIFEST", "/MANIFEST:embed", "/SUBSYSTEM:CONSOLE", "/VERBOSE", "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT", "/MACHINE:X64", "/machine:x64" };
 
     if(start != nullptr)
       linkargs.push_back("/ENTRY:_native_wasm_internal_start");
@@ -1705,7 +1733,6 @@ ERROR_CODE CompileEnvironment(Environment* env, const char* filepath)
         std::remove(v.c_str());
       return assert(false), ERR_FATAL_LINK_ERROR;
     }
-
     // Delete cache files
     for(auto& v : cache)
       std::remove(v.c_str());

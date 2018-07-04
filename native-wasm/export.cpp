@@ -91,18 +91,16 @@ void AddModule(struct __ENVIRONMENT* env, void* data, uint64_t size, const char*
     LoadModule(env, index, data, size, name, err);
 }
 
-void AddWhitelist(struct __ENVIRONMENT* env, const char* module_name, const char* export_name, FunctionSig* sig)
+void AddWhitelist(struct __ENVIRONMENT* env, const char* module_name, const char* export_name, const FunctionSig* sig)
 {
   if(!env->whitelist)
     env->whitelist = kh_init_modulepair();
   if(!module_name || !export_name)
     return;
 
-  size_t module_len = strlen(module_name) + 1;
-  size_t export_len = strlen(export_name) + 1;
-  auto whitelist = tmalloc<char>(module_len + export_len);
-  memcpy(whitelist, module_name, module_len);
-  memcpy(whitelist + module_len, export_name, export_len);
+  auto whitelist = tmalloc<char>(CanonWhitelist(module_name, export_name, nullptr));
+  CanonWhitelist(module_name, export_name, whitelist);
+
   int r;
   auto iter = kh_put_modulepair(env->whitelist, whitelist, &r);
   kh_val(env->whitelist, iter) = !sig ? FunctionSig{ TE_NONE, 0, 0, 0, 0 } : *sig;

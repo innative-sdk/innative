@@ -29,11 +29,22 @@
 #endif
 
 // Platform-specific implementation of the mem.grow instruction, except it works in bytes
-NW_COMPILER_DLLEXPORT extern void* _native_wasm_internal_env_grow_memory(void* p, uint64_t i)
+NW_COMPILER_DLLEXPORT extern void* _native_wasm_internal_env_grow_memory(void* p, uint64_t i, uint64_t max)
 {
   uint64_t* info = (uint64_t*)p;
 #ifdef NW_PLATFORM_WIN32
-  info = !info ? HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, i + sizeof(uint64_t)) : HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, info - 1, (i += info[-1]) + sizeof(uint64_t));
+  if(info != 0)
+  {
+    i += info[-1];
+    if(max > 0 && i > max)
+      return 0;
+    info = HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, info - 1, i + sizeof(uint64_t));
+  }
+  else if(!max || i <= max)
+    info = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, i + sizeof(uint64_t));
+
+  if(!info)
+    return 0;
   info[0] = i;
   return info + 1;
 #endif

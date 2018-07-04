@@ -10,6 +10,7 @@ struct __ENVIRONMENT* CreateEnvironment(unsigned int flags, unsigned int modules
 void DestroyEnvironment(struct __ENVIRONMENT* env);
 void LoadModule(struct __ENVIRONMENT* env, size_t index, void* data, uint64_t size, const char* name, int* err);
 void AddModule(struct __ENVIRONMENT* env, void* data, uint64_t size, const char* name, int* err);
+void AddWhitelist(struct __ENVIRONMENT* env, const char* module_name, const char* export_name, const FunctionSig* sig);
 void WaitForLoad(struct __ENVIRONMENT* env);
 enum ERROR_CODE AddEmbedding(struct __ENVIRONMENT* env, int tag, void* data, uint64_t size);
 enum ERROR_CODE Compile(struct __ENVIRONMENT* env, const char* file);

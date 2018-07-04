@@ -23,7 +23,7 @@ std::unique_ptr<uint8_t[]> loadfile(const char* file, long& sz)
   return data;
 }
 
-int native_wasm_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const char* const* whitelist, int n_whitelist)
+int native_wasm_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const _NW_WHITELIST* whitelist, int n_whitelist)
 {
   // Then create the runtime environment with the module count.
   Environment* env = CreateEnvironment(flags, 1, 0);
@@ -33,9 +33,13 @@ int native_wasm_compile_file(const char* file, const char* out, unsigned int fla
     return -1;
   }
 
-  int tmp; // Fill whitelist directly
-  for(int i = 0; i < n_whitelist; ++i)
-    kh_put_modulepair(env->whitelist, whitelist[i], &tmp);
+  if(n_whitelist < 0) // This indicates we should enforce a whitelist that is empty, forbidding all C imports
+    AddWhitelist(env, 0, 0, 0);
+  else
+  {
+    for(int i = 0; i < n_whitelist; ++i)
+      AddWhitelist(env, whitelist[i].module_name, whitelist[i].export_name, &whitelist[i].sig);
+  }
 
   // Load the module
   long sz = 0;

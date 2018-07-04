@@ -51,6 +51,11 @@ enum TYPE_ENCODING
   TE_NONE = 0x71,
 };
 
+enum LIMIT_FLAGS
+{
+  LIMIT_HAS_MAXIMUM = 0x01,
+};
+
 enum SECTION_OPCODE
 {
   SECTION_CUSTOM   = 0x00,

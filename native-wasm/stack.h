@@ -5,6 +5,7 @@
 #define __STACK_H__NW__
 
 #include <malloc.h>
+#include <assert.h>
 
 // Implements a simple stack that can temporarily restrict how far it can be shrunk
 template<typename T>

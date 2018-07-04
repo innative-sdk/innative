@@ -289,6 +289,16 @@ uint64_t DecodeLEB128(Stream& s, ERROR_CODE& err, unsigned int maxbits, bool sig
   return result;
 }
 
+varuint32 ModuleFunctionType(Module& m, varuint32 index)
+{
+  if(index < m.importsection.functions)
+    return m.importsection.imports[index].func_desc.sig_index;
+  index -= m.importsection.functions;
+  if(index < m.function.n_funcdecl)
+    return m.function.funcdecl[index];
+  return (varuint32)~0;
+}
+
 FunctionSig* ModuleFunction(Module& m, varuint32 index)
 {
   if(index < m.importsection.functions)
@@ -359,7 +369,7 @@ NWPath GetProgramPath()
   std::string buf;
 #ifdef NW_PLATFORM_WIN32
   buf.resize(MAX_PATH);
-  buf.resize(GetModuleFileNameA(NULL, const_cast<char*>(buf.data()), buf.capacity()));
+  buf.resize(GetModuleFileNameA(NULL, const_cast<char*>(buf.data()), (DWORD)buf.capacity()));
 #elif defined(NW_PLATFORM_POSIX)
 #error TODO
 #endif
@@ -371,7 +381,7 @@ NWPath GetWorkingDir()
   std::string buf;
 #ifdef NW_PLATFORM_WIN32
   buf.resize(GetCurrentDirectoryA(0, 0));
-  buf.resize(GetCurrentDirectoryA(buf.capacity(), const_cast<char*>(buf.data())));
+  buf.resize(GetCurrentDirectoryA((DWORD)buf.capacity(), const_cast<char*>(buf.data())));
 #elif defined(NW_PLATFORM_POSIX)
 #error TODO
 #endif
@@ -410,7 +420,6 @@ std::string StrFormat(const char* fmt, ...)
   va_end(args);
   return s;
 }
-
 
 #ifdef NW_PLATFORM_WIN32
 void* LoadDLL(const char* path) { return LoadLibraryA(path); }

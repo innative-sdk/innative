@@ -57,6 +57,7 @@ struct NWContext
   llvm::GlobalVariable** linearmemory;
   varuint32 n_tables;
   llvm::GlobalVariable** tables;
+  llvm::GlobalVariable** tabletypes;
   varuint32 n_globals;
   llvm::GlobalVariable** globals;
   varuint32 n_functions;

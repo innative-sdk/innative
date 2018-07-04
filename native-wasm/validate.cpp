@@ -116,6 +116,22 @@ void ValidateFunctionSig(FunctionSig& sig, Environment& env, Module* m)
     AppendError(env, m, ERR_UNKNOWN_SIGNATURE_TYPE, "Illegal function type %hhi encountered: only -0x20 allowed", sig.form);
 }
 
+bool MatchFunctionSig(FunctionSig& a, FunctionSig& b)
+{
+  if(a.form != b.form || a.n_params != b.n_params || a.n_returns != b.n_returns)
+    return false;
+
+  for(varuint32 i = 0; i < a.n_params; ++i)
+    if(a.params[i] != b.params[i])
+      return false;
+
+  for(varuint32 i = 0; i < a.n_returns; ++i)
+    if(a.returns[i] != b.returns[i])
+      return false;
+
+  return true;
+}
+
 void ValidateImport(Import& imp, Environment& env, Module* m)
 {
   if(!ValidateIdentifier(imp.module_name))
@@ -123,39 +139,47 @@ void ValidateImport(Import& imp, Environment& env, Module* m)
   if(!ValidateIdentifier(imp.export_name))
     AppendError(env, m, ERR_INVALID_IDENTIFIER, "Identifier not valid UTF8: %s", imp.export_name.bytes);
 
-  std::string name;
-  auto skip = strrchr((char*)imp.module_name.bytes, '!');
-  if(skip)
-    name.assign((char*)imp.module_name.bytes, skip - (char*)imp.module_name.bytes);
-  else
-    name.assign((char*)imp.module_name.bytes);
+  char* modname = (char*)imp.module_name.bytes;
 
-  khint_t iter = kh_get_modules(env.modulemap, (char*)imp.module_name.bytes); // WASM modules do not understand !CALL convention appendings, so we use the full name no matter what
+  khint_t iter = kh_get_modules(env.modulemap, modname); // WASM modules do not understand !CALL convention appendings, so we use the full name no matter what
   if(iter == kh_end(env.modulemap))
   {
     if(env.whitelist)
     {
-      name.append(1, 0);
-      khiter_t iter = kh_get_modulepair(env.whitelist, name.c_str()); // Check for a wildcard match first
-      if(!kh_exist(env.whitelist, iter))
+      khiter_t iter = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.bytes, "").c_str()); // Check for a wildcard match first
+      if(!kh_exist2(env.whitelist, iter))
       {
-        name.append((char*)imp.export_name.bytes);
-        khiter_t iter = kh_get_modulepair(env.whitelist, name.c_str());
-        if(!kh_exist(env.whitelist, iter))
-          return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "%s - %s is not a whitelisted C import, nor a valid webassembly import.", imp.module_name.bytes, imp.export_name.bytes);
+        khiter_t iter = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.bytes, imp.export_name.bytes).c_str()); // We already canonized the whitelist imports to eliminate unnecessary !C specifiers
+        if(!kh_exist2(env.whitelist, iter))
+          return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a whitelisted C import, nor a valid webassembly import.", imp.module_name.bytes, imp.export_name.bytes);
+        if(imp.kind != KIND_FUNCTION)
+          return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a function. You can only import C functions at this time.", imp.module_name.bytes, imp.export_name.bytes);
+
+        FunctionSig& sig = kh_val(env.whitelist, iter);
+        if(sig.form != TE_NONE) // If we have a function signature, verify it
+        {
+          if(imp.func_desc.sig_index >= m->type.n_functions)
+            return AppendError(env, m, ERR_INVALID_TYPE_INDEX, "Invalid imported function type index %u", imp.func_desc.sig_index);
+          if(!MatchFunctionSig(sig, m->type.functions[imp.func_desc.sig_index]))
+            return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "%s:%s does not match function signature provided by environment.", imp.module_name.bytes, imp.export_name.bytes);
+          return;
+        }
+        else if(env.flags & ENV_STRICT) // Strict mode enforces function signatures
+          return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "%s:%s has no function signature - Strict mode requires a valid function signature for all whitelisted C imports.", imp.module_name.bytes, imp.export_name.bytes);
       } else if(env.flags & ENV_STRICT) // Wildcard whitelists are not allowed in strict mode becuase we must know the function type in strict mode.
-        return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "Wildcard imports are not allowed in strict mode! Strict mode requires a valid function signature for all whitelisted C imports", imp.module_name.bytes, imp.export_name.bytes);
+        return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "Wildcard imports (%s) are not allowed in strict mode! Strict mode requires a valid function signature for all whitelisted C imports.", imp.module_name.bytes);
     }
 
-    if(env.cimports)
+    if(env.cimports) 
     {
-      khiter_t iter = kh_get_cimport(env.cimports, MergeName(name.c_str(), (char*)imp.export_name.bytes).c_str());
-      if(kh_exist(env.cimports, iter))
-      {
-        // If we are in strict mode, you MUST provide a signature
-      }
-      if(!name.c_str()[0]) // If the module name is blank this was a C import, otherwise we can't prove it was intended to be a C import.
-        return AppendError(env, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found", imp.export_name.bytes);
+      // TODO: actually enforce this
+      return;
+      std::string name = CanonImportName(imp);
+      khiter_t iter = kh_get_cimport(env.cimports, name.c_str());
+      if(kh_exist2(env.cimports, iter))
+        return; // This function exists and we already have verified the signature if there was a whitelist, so just return
+      if(!modname || !modname[0] || modname[0] == '!') // Blank imports must have been C imports, otherwise it could have been a failed WASM module import attempt.
+        return AppendError(env, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found in C library imports", name.c_str());
     }
 
     return AppendError(env, m, ERR_UNKNOWN_MODULE, "%s module not found", imp.module_name.bytes);
@@ -883,6 +907,17 @@ void ValidateSection(T* a, varuint32 n, Environment& env, Module* m)
 // Performs all post-load validation that couldn't be done during parsing
 void ValidateEnvironment(Environment& env)
 {
+  int tmp;
+  if(!(env.flags&ENV_STRICT))
+  {
+    kh_put_cimport(env.cimports, "_native_wasm_to_c", &tmp);
+    kh_put_cimport(env.cimports, "_native_wasm_from_c", &tmp);
+  }
+  // TODO: replace with proper lib lookup
+  //kh_put_cimport(env.cimports, "_native_wasm_internal_env_print", &tmp);
+  //kh_put_cimport(env.cimports, "GetStdHandle", &tmp);
+  //kh_put_cimport(env.cimports, "WriteConsoleA", &tmp);
+
   for(size_t i = 0; i < env.n_modules; ++i)
   {
     if(env.modules[i].knownsections&(1 << SECTION_TYPE))

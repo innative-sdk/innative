@@ -18,7 +18,7 @@ extern "C" {
     {
       struct __ENVIRONMENT* (*CreateEnvironment)(unsigned int flags, unsigned int modules, unsigned int maxthreads);
       void(*AddModule)(struct __ENVIRONMENT* env, void* data, uint64_t size, const char* name, int* err); // If size is 0, data points to a null terminated UTF8 file path
-      void(*AddWhitelist)(struct __ENVIRONMENT* env, const char* module_name, const char* export_name, FunctionSig* sig);
+      void(*AddWhitelist)(struct __ENVIRONMENT* env, const char* module_name, const char* export_name, const FunctionSig* sig);
       void(*WaitForLoad)(struct __ENVIRONMENT* env);
       enum ERROR_CODE(*AddEmbedding)(struct __ENVIRONMENT* env, int tag, void* data, uint64_t size); // If size is 0, data points to a null terminated UTF8 file path
       enum ERROR_CODE(*Compile)(struct __ENVIRONMENT* env, const char* file);
@@ -39,7 +39,14 @@ extern "C" {
       int tag; // Only used for embedding types
     };
 
-    NW_COMPILER_DLLEXPORT extern int native_wasm_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const char* const* whitelist, int n_whitelist);
+    struct _NW_WHITELIST
+    {
+      const char* module_name;
+      const char* export_name;
+      FunctionSig sig;
+    };
+
+    NW_COMPILER_DLLEXPORT extern int native_wasm_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const struct _NW_WHITELIST* whitelist, int n_whitelist);
     NW_COMPILER_DLLEXPORT extern int native_wasm_build_loader(struct _NW_CHUNK* chunks, const char* out, bool dynamic);
 
 #ifdef  __cplusplus

@@ -119,6 +119,7 @@ T* tmalloc(size_t n)
 NW_FORCEINLINE bool ModuleHasSection(Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
 inline std::string MergeStrings(const char* a, const char* b) { return std::string(a) + b; }
 
+varuint32 ModuleFunctionType(Module& m, varuint32 index);
 FunctionSig* ModuleFunction(Module& m, varuint32 index);
 TableDesc* ModuleTable(Module& m, varuint32 index);
 MemoryDesc* ModuleMemory(Module& m, varuint32 index);
@@ -143,7 +144,7 @@ void FreeDLL(void* dll);
 #define STRICMP(a, b) stricmp(a, b)
 #endif
 
-
+// Merges two strings with the standard NW_GLUE_STRING
 inline std::string MergeName(const char* prefix, const char* name, int index = -1)
 {
   if(index >= 0)
@@ -155,5 +156,44 @@ inline std::string MergeName(const char* prefix, const char* name, int index = -
   return !prefix ? name : (std::string(prefix) + NW_GLUE_STRING + name);
 }
 
+// Generates the correct mangled C function name
+inline std::string CanonImportName(const void* module_name, const void* export_name)
+{
+  if(!module_name || strchr((const char*)module_name, '!') != nullptr) // blank imports or imports with a calling convention are always raw function names
+    return (const char*)export_name;
+  return MergeName((const char*)module_name, (const char*)export_name); // Otherwise do a standard merge
+}
+
+NW_FORCEINLINE std::string CanonImportName(Import& imp)
+{
+  return CanonImportName(imp.module_name.bytes, imp.export_name.bytes);
+}
+
+// Generates a whitelist string for a module and export name, which includes calling convention information
+inline size_t CanonWhitelist(const void* module_name, const void* export_name, char* out)
+{
+  if(module_name != nullptr && !STRICMP((const char*)module_name, "!C"))
+    module_name = nullptr;
+  if(!module_name)
+    module_name = "";
+
+  size_t module_len = strlen((const char*)module_name) + 1;
+  size_t export_len = strlen((const char*)export_name) + 1;
+  if(out)
+  {
+    memcpy(out, module_name, module_len);
+    memcpy(out + module_len, export_name, export_len);
+  }
+  return module_len + export_len;
+}
+NW_FORCEINLINE std::string CanonWhitelist(const void* module_name, const void* export_name)
+{
+  std::string s;
+  s.resize(CanonWhitelist(module_name, export_name, nullptr));
+  CanonWhitelist(module_name, export_name, const_cast<char*>(s.data()));
+  return s;
+}
+
+#define kh_exist2(h, x) ((iter < kh_end(h)) && kh_exist(h, iter))
 
 #endif
