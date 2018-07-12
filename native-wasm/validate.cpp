@@ -444,7 +444,7 @@ void ValidateInstruction(Instruction& ins, Stack<varsint7>& values, Stack<Contro
     break;
   case OP_return:
     if(control.Size() > 0)
-      ValidateSignature(control[control.Size() - 1].sig, values, env, m);
+      ValidateSignature(control[0].sig, values, env, m);
     else
       AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Empty control stack at return statement.");
     break;
@@ -527,12 +527,12 @@ void ValidateInstruction(Instruction& ins, Stack<varsint7>& values, Stack<Contro
   case OP_i64_store8: ValidateStore<int8_t, TE_i64>(ins.immediates[0]._memflags, values, env, m); break;
   case OP_i64_store16: ValidateStore<int16_t, TE_i64>(ins.immediates[0]._memflags, values, env, m); break;
   case OP_i64_store32: ValidateStore<int32_t, TE_i64>(ins.immediates[0]._memflags, values, env, m); break;
-  case OP_current_memory:
+  case OP_memory_size:
     if(ins.immediates[0]._varuint1 != 0)
       AppendError(env, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
     values.Push(TE_i32);
     break;
-  case OP_grow_memory:
+  case OP_memory_grow:
     if(ins.immediates[0]._varuint1 != 0)
       AppendError(env, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
     ValidatePopType(values, TE_i32, env, m);
@@ -817,17 +817,14 @@ void ValidateFunctionBody(FunctionSig& sig, FunctionBody& body, Environment& env
     ret = sig.returns[0];
 
   // Calculate function locals
-  varuint32 n_local = sig.n_params;
-  for(varuint32 i = 0; i < body.n_locals; ++i)
-    n_local += body.locals[i].count;
+  varuint32 n_local = sig.n_params + body.n_locals;
 
   varsint7* locals = tmalloc<varsint7>(n_local);
   if(locals)
     memcpy(locals, sig.params, sig.n_params * sizeof(varsint7));
   n_local = sig.n_params;
   for(varuint32 i = 0; i < body.n_locals; ++i)
-    for(varuint32 j = 0; j < body.locals[i].count; ++j)
-      locals[n_local++] = body.locals[i].type;
+    locals[n_local++] = body.locals[i];
 
   control.Push({ values.Limit(), ret, OP_block }); // Push the function body block with the function signature
 

@@ -133,8 +133,8 @@ enum INSTRUCTION_OPCODES
   OP_i64_store8 = 0x3c,
   OP_i64_store16 = 0x3d,
   OP_i64_store32 = 0x3e,
-  OP_current_memory = 0x3f,
-  OP_grow_memory = 0x40,
+  OP_memory_size = 0x3f,
+  OP_memory_grow = 0x40,
 
   // Constants
   OP_i32_const = 0x41,
@@ -348,6 +348,43 @@ enum ERROR_CODE
   ERR_INVALID_RESERVED_VALUE = -0x129,
   ERR_UNKNOWN_BLANK_IMPORT = -0x12A,
   ERR_ILLEGAL_C_IMPORT = -0x12B,
+
+  // Compilation errors when parsing WAT
+  ERR_WAT_INTERNAL_ERROR = -0x10000,
+  ERR_WAT_EXPECTED_OPEN = -0x10001,
+  ERR_WAT_EXPECTED_CLOSE = -0x10002,
+  ERR_WAT_EXPECTED_TOKEN = -0x10003,
+  ERR_WAT_EXPECTED_NAME = -0x10004,
+  ERR_WAT_EXPECTED_STRING = -0x10005,
+  ERR_WAT_EXPECTED_VALUE = -0x10006,
+  ERR_WAT_EXPECTED_NUMBER = -0x10007,
+  ERR_WAT_INVALID_TOKEN = -0x10008,
+  ERR_WAT_INVALID_IMPORT_ORDER = -0x10009,
+  ERR_WAT_DUPLICATE_NAME = -0x1000A,
+  ERR_WAT_INVALID_ALIGNMENT = -0x1000B,
+  ERR_WAT_EXPECTED_TYPE = -0x1000C,
+  ERR_WAT_INVALID_NAME = -0x1000D,
+  ERR_WAT_EXPECTED_VAR = -0x1000E,
+  ERR_WAT_INVALID_TYPE = -0x1000F,
+  ERR_WAT_TYPE_MISMATCH = -0x10010,
+  ERR_WAT_INVALID_LOCAL = -0x10011,
+  ERR_WAT_OUT_OF_RANGE = -0x10012,
+  ERR_WAT_EXPECTED_VALTYPE = -0x10013,
+  ERR_WAT_EXPECTED_FUNC = -0x10014,
+  ERR_WAT_EXPECTED_OPERATOR = -0x10015,
+  ERR_WAT_EXPECTED_INTEGER = -0x10016,
+  ERR_WAT_EXPECTED_FLOAT = -0x10017,
+  ERR_WAT_EXPECTED_RESULT = -0x10018,
+  ERR_WAT_EXPECTED_THEN = -0x10019,
+  ERR_WAT_EXPECTED_ELSE = -0x1001A,
+  ERR_WAT_EXPECTED_END = -0x1001B,
+  ERR_WAT_EXPECTED_LOCAL = -0x1001C,
+  ERR_WAT_EXPECTED_ANYFUNC = -0x1001D,
+  ERR_WAT_EXPECTED_MUT = -0x1001E,
+  ERR_WAT_EXPECTED_MODULE = -0x1001F,
+  ERR_WAT_EXPECTED_ELEM = -0x10020,
+  ERR_WAT_INVALID_VAR = -0x10021,
+  ERR_WAT_INVALID_INITIALIZER = -0x010022,
 };
 
 enum ENVIRONMENT_FLAGS
@@ -436,7 +473,7 @@ typedef struct __FUNCTION_DESC
 {
   varuint32 sig_index;
   Identifier debug_name;
-  const char** local_names;
+  const char** param_names; // Always the size of n_params from the signature
 } FunctionDesc;
 
 typedef struct __IMPORT
@@ -468,21 +505,16 @@ typedef struct __TABLE_INIT
   varuint32* elems;
 } TableInit;
 
-typedef struct __LOCAL_ENTRY
-{
-  varuint32 count;
-  varuint7 type;
-} LocalEntry;
-
 typedef struct __FUNCTION_BODY
 {
   varuint32 body_size;
   varuint32 n_locals;
-  LocalEntry* locals;
+  varuint7* locals;
   Instruction* body;
   varuint32 n_body; // INTERNAL: track actual number of instructions
   Identifier debug_name; // INTERNAL: debug name if it exists
-  const char** local_names; // INTERNAL: debug names of locals, if known from name section. Always size of n_locals and NULL if doesn't exist.
+  const char** local_names; // INTERNAL: debug names of locals, always the size of n_locals or NULL if it doesn't exist
+  const char** param_names; // INTERNAL: debug names of parameters, always the size of n_params or NULL if it doesn't exist
 } FunctionBody;
 
 typedef struct __DATA_INIT

@@ -108,6 +108,7 @@ inline T ReadPrimitive(Stream& s, ERROR_CODE& err)
 NW_FORCEINLINE float64 ReadFloat64(Stream& s, ERROR_CODE& err) { return ReadPrimitive<float64>(s, err); }
 NW_FORCEINLINE float32 ReadFloat32(Stream& s, ERROR_CODE& err) { return ReadPrimitive<float32>(s, err); }
 NW_FORCEINLINE byte ReadByte(Stream& s, ERROR_CODE& err) { return ReadPrimitive<byte>(s, err); }
+byte GetInstruction(const char* s);
 void* GreedyAlloc(size_t n);
 
 template<class T>

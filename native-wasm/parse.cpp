@@ -169,7 +169,7 @@ ERROR_CODE ParseImport(Stream& s, Import& i)
     {
     case KIND_FUNCTION:
       i.func_desc.debug_name.bytes = nullptr;
-      i.func_desc.local_names = 0;
+      i.func_desc.param_names = 0;
       return ParseVarUInt32(s, i.func_desc.sig_index);
     case KIND_TABLE:
       return ParseTableDesc(s, i.table_desc);
@@ -233,8 +233,8 @@ ERROR_CODE ParseInstruction(Stream& s, Instruction& ins)
   case OP_f64_const:
     ins.immediates[0]._float64 = ReadFloat64(s, err);
     break;
-  case OP_grow_memory:
-  case OP_current_memory:
+  case OP_memory_grow:
+  case OP_memory_size:
     ins.immediates[0]._varuint1 = ReadVarUInt1(s, err);
     break;
   case OP_br_table:
@@ -439,6 +439,12 @@ ERROR_CODE ParseTableInit(Stream& s, TableInit& init, Module& m)
   return err;
 }
 
+typedef struct LocalEntry
+{
+  varuint32 count;
+  varuint7 type;
+};
+
 ERROR_CODE ParseLocalEntry(Stream& s, LocalEntry& entry)
 {
   ERROR_CODE err = ParseVarUInt32(s, entry.count);
@@ -453,8 +459,25 @@ ERROR_CODE ParseFunctionBody(Stream& s, FunctionBody& f)
 {
   ERROR_CODE err = ParseVarUInt32(s, f.body_size);
   size_t end = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
-  if(err >= 0)
-    err = Parse<LocalEntry>::template Array<&ParseLocalEntry>(s, f.locals, f.n_locals);
+
+  if(err >= 0) // Parse local entries into a temporary array, then expand them into a usable local type array.
+  {
+    LocalEntry* locals;
+    varuint32 n_locals;
+    err = Parse<LocalEntry>::template Array<&ParseLocalEntry>(s, locals, n_locals);
+    if(err < 0)
+      return err;
+
+    f.n_locals = 0;
+    for(varuint32 i = 0; i < n_locals; ++i)
+      f.n_locals += locals[i].count;
+
+    f.locals = tmalloc<varuint7>(f.n_locals);
+    f.n_locals = 0;
+    for(varuint32 i = 0; i < n_locals; ++i)
+      for(varuint32 j = 0; j < locals[i].count; ++j)
+        f.locals[f.n_locals++] = locals[i].type;
+  }
 
   f.body = 0;
   if(err >= 0 && f.body_size)
@@ -559,7 +582,7 @@ ERROR_CODE ParseNameSection(Stream& s, size_t end, Module& m)
             return ERR_INVALID_TYPE_INDEX;
 
           for(varuint32 j = 0; j < num && err >= 0; ++j)
-            ParseNameSectionLocal(s, m.type.functions[sig].n_params, m.importsection.imports[fn].func_desc.local_names);
+            ParseNameSectionLocal(s, m.type.functions[sig].n_params, m.importsection.imports[fn].func_desc.param_names);
 
           continue;
         }
@@ -571,7 +594,7 @@ ERROR_CODE ParseNameSection(Stream& s, size_t end, Module& m)
         varuint32 num = ReadVarUInt32(s, err);
 
         for(varuint32 j = 0; j < num && err >= 0; ++j)
-          ParseNameSectionLocal(s, m.type.functions[m.function.funcdecl[fn]].n_params + m.code.funcbody[fn].n_locals, m.code.funcbody[fn].local_names);
+          ParseNameSectionLocal(s, m.code.funcbody[fn].n_locals, m.code.funcbody[fn].local_names);
       }
     }
       break;
@@ -605,7 +628,7 @@ ERROR_CODE ParseModule(Stream& s, Module& m, ByteArray name)
     return err;
   if(m.magic_cookie != MAGIC_COOKIE)
     return ERR_PARSE_INVALID_MAGIC_COOKIE;
-  if(m.version != 0x01)
+  if(m.version != MAGIC_VERSION)
     return ERR_PARSE_INVALID_VERSION;
 
   size_t begin = s.pos;
@@ -732,6 +755,14 @@ ERROR_CODE ParseModule(Stream& s, Module& m, ByteArray name)
     }
   }
 
+  if(err == ERR_SUCCESS)
+    err = ParseExportFixup(m);
+
+  return err;
+}
+
+ERROR_CODE ParseExportFixup(Module& m)
+{
   for(varuint32 i = 0; i < m.exportsection.n_exports; ++i)
   {
     int r = 0;
@@ -743,5 +774,5 @@ ERROR_CODE ParseModule(Stream& s, Module& m, ByteArray name)
     kh_value(m.exports, iter) = i;
   }
 
-  return err;
+  return ERR_SUCCESS;
 }

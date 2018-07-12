@@ -29,6 +29,8 @@
 #error TODO
 #endif
 
+KHASH_INIT(opnames, kh_cstr_t, byte, 1, kh_str_hash_funcins, kh_str_hash_insequal);
+
 const char* NW_ENTRYPOINT = "__native_wasm_main_func";
 const char* NW_GETCPUINFO = "__native_wasm_getcpuinfo";
 const char* NW_EXTENSION = ".nw-cache";
@@ -111,8 +113,8 @@ const char OPNAMES[][20] = {
   "i64.store8",            // 0x3c
   "i64.store16",           // 0x3d
   "i64.store32",           // 0x3e
-  "current_memory",        // 0x3f
-  "grow_memory",           // 0x40
+  "memory.grow",           // 0x3f
+  "memory.size",           // 0x40
 
   // Constants
   "i32.const",             // 0x41
@@ -260,6 +262,42 @@ const char OPNAMES[][20] = {
   "f32.reinterpret/i32",   // 0xbe
   "f64.reinterpret/i64"    // 0xbf
 };
+
+kh_opnames_t* GenOpNames()
+{
+  kh_opnames_t* h = kh_init_opnames();
+  int r;
+
+  const int len = sizeof(OPNAMES) / sizeof(const char*);
+  for(int i = 0; i < len; ++i)
+  {
+    if(strcmp(OPNAMES[i], "RESERVED") != 0)
+    {
+      khiter_t iter = kh_put_opnames(h, OPNAMES[i], &r);
+      kh_val(h, iter) = (byte)i;
+    }
+  }
+
+  // Backwards compatibility
+  khiter_t iter = kh_put_opnames(h, "grow_memory", &r);
+  kh_val(h, iter) = kh_val(h, kh_get_opnames(h, "memory.grow"));
+  iter = kh_put_opnames(h, "mem.grow", &r);
+  kh_val(h, iter) = kh_val(h, kh_get_opnames(h, "memory.grow"));
+  iter = kh_put_opnames(h, "current_memory", &r);
+  kh_val(h, iter) = kh_val(h, kh_get_opnames(h, "memory.size"));
+  iter = kh_put_opnames(h, "mem.size", &r);
+  kh_val(h, iter) = kh_val(h, kh_get_opnames(h, "memory.size"));
+
+  return h;
+}
+
+byte GetInstruction(const char* s)
+{
+  static kh_opnames_t* h = GenOpNames();
+
+  khiter_t iter = kh_get_opnames(h, s);
+  return kh_exist2(h, iter) ? kh_val(h, iter) : (byte)0xFF;
+}
 
 uint64_t DecodeLEB128(Stream& s, ERROR_CODE& err, unsigned int maxbits, bool sign)
 {

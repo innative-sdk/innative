@@ -39,6 +39,7 @@ public:
   inline size_t Size() const { return _size - _limit; }
   inline size_t Limit() const { return _limit; }
   inline void SetLimit(size_t limit) { assert(limit <= _size); _limit = limit; }
+  inline void SetSize(size_t size) { _size = size; }
 
   static const int MINSIZE = 8;
 

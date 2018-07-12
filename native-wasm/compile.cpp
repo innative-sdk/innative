@@ -830,9 +830,9 @@ ERROR_CODE CompileInstruction(Instruction& ins, NWContext& context)
     return CompileStore<TE_i64>(context, 0, ins.immediates[1]._varuint32, ins.immediates[0]._memflags, OPNAMES[ins.opcode], context.builder.getInt16Ty());
   case OP_i64_store32:
     return CompileStore<TE_i64>(context, 0, ins.immediates[1]._varuint32, ins.immediates[0]._memflags, OPNAMES[ins.opcode], context.builder.getInt32Ty());
-  case OP_current_memory:
+  case OP_memory_size:
     return PushReturn(context, CompileMemSize(context.linearmemory[0], context));
-  case OP_grow_memory:
+  case OP_memory_grow:
     return CompileMemGrow(context, OPNAMES[ins.opcode]);
 
     // Constants
@@ -1130,12 +1130,7 @@ ERROR_CODE CompileFunctionBody(Function* fn, FunctionSig& sig, FunctionBody& bod
   // Setup initial basic block.
   context.builder.SetInsertPoint(PushLabel("entry", ret, OP_return, fn, context));
   context.control.SetLimit(1); // Don't allow breaking to the function entry
-  context.n_locals = sig.n_params;
-
-  // Count and allocate all parameters and local variables
-  for(varuint32 i = 0; i < body.n_locals; ++i)
-    context.n_locals += body.locals[i].count;
-
+  context.n_locals = sig.n_params + body.n_locals;
   context.locals = tmalloc<llvm::AllocaInst*>(context.n_locals);
   varuint32 index = 0;
 
@@ -1144,13 +1139,12 @@ ERROR_CODE CompileFunctionBody(Function* fn, FunctionSig& sig, FunctionBody& bod
   {
     auto ty = GetType(sig.params[index], context);
     assert(ty == arg.getType());
-    context.locals[index] = context.builder.CreateAlloca(ty, nullptr, (body.local_names && body.local_names[index]) ? body.local_names[index] : "");
+    context.locals[index] = context.builder.CreateAlloca(ty, nullptr, (body.param_names && body.param_names[index]) ? body.param_names[index] : "");
     context.builder.CreateStore(&arg, context.locals[index++]); // Store parameter (we can't use the parameter directly because wasm lets you store to parameters)
   }
 
   for(varuint32 i = 0; i < body.n_locals; ++i)
-    for(varuint32 j = 0; j < body.locals[i].count; ++j)
-      context.locals[index++] = context.builder.CreateAlloca(GetType(body.locals[i].type, context), nullptr, (body.local_names && body.local_names[index]) ? body.local_names[index] : "");
+    context.locals[index++] = context.builder.CreateAlloca(GetType(body.locals[i], context), nullptr, (body.local_names && body.local_names[i]) ? body.local_names[i] : "");
 
   // Begin iterating through the instructions until there aren't any left
   for(varuint32 i = 0; i < body.n_body; ++i)

@@ -42,6 +42,12 @@
     <ClCompile Include="intrinsic.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="wat.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="trex.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\native-wasm\native-wasm.h">
@@ -81,6 +87,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="intrinsic.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="wat.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="trex.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

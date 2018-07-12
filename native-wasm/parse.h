@@ -14,9 +14,9 @@ ERROR_CODE ParseGlobalDesc(Stream& s, GlobalDesc& global);
 ERROR_CODE ParseImport(Stream& s, Import& imp);
 ERROR_CODE ParseExport(Stream& s, Export& exp);
 ERROR_CODE ParseInstruction(Stream& s, Instruction& instruction);
-ERROR_CODE ParseLocalEntry(Stream& s, LocalEntry& entry);
 ERROR_CODE ParseFunctionBody(Stream& s, FunctionBody& body);
 ERROR_CODE ParseDataInit(Stream& s, DataInit& data);
 ERROR_CODE ParseModule(Stream& s, Module& module, ByteArray name);
+ERROR_CODE ParseExportFixup(Module& module);
 
 #endif
