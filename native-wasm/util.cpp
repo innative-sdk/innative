@@ -29,7 +29,7 @@
 #error TODO
 #endif
 
-KHASH_INIT(opnames, kh_cstr_t, byte, 1, kh_str_hash_funcins, kh_str_hash_insequal);
+KHASH_INIT(opnames, StringRef, byte, 1, __ac_X31_hash_stringrefins, kh_int_hash_equal)
 
 const char* NW_ENTRYPOINT = "__native_wasm_main_func";
 const char* NW_GETCPUINFO = "__native_wasm_getcpuinfo";
@@ -273,29 +273,32 @@ kh_opnames_t* GenOpNames()
   {
     if(strcmp(OPNAMES[i], "RESERVED") != 0)
     {
-      khiter_t iter = kh_put_opnames(h, OPNAMES[i], &r);
+      khiter_t iter = kh_put_opnames(h, StringRef{ OPNAMES[i], strlen(OPNAMES[i]) }, &r);
       kh_val(h, iter) = (byte)i;
     }
   }
 
-  // Backwards compatibility
-  khiter_t iter = kh_put_opnames(h, "grow_memory", &r);
-  kh_val(h, iter) = kh_val(h, kh_get_opnames(h, "memory.grow"));
-  iter = kh_put_opnames(h, "mem.grow", &r);
-  kh_val(h, iter) = kh_val(h, kh_get_opnames(h, "memory.grow"));
-  iter = kh_put_opnames(h, "current_memory", &r);
-  kh_val(h, iter) = kh_val(h, kh_get_opnames(h, "memory.size"));
-  iter = kh_put_opnames(h, "mem.size", &r);
-  kh_val(h, iter) = kh_val(h, kh_get_opnames(h, "memory.size"));
+  std::pair<const char*, const char*> legacy[] = { 
+    { "grow_memory", "memory.grow" },
+  { "mem.grow", "memory.grow" },
+  { "current_memory", "memory.size" },
+  { "mem.size", "memory.size" },
+  };
+
+  for(auto& i : legacy)
+  {
+    khiter_t iter = kh_put_opnames(h, StringRef{ i.first, strlen(i.first) }, &r);
+    kh_val(h, iter) = kh_val(h, kh_get_opnames(h, StringRef{ i.second, strlen(i.second) }));
+  }
 
   return h;
 }
 
-byte GetInstruction(const char* s)
+byte GetInstruction(StringRef ref)
 {
   static kh_opnames_t* h = GenOpNames();
 
-  khiter_t iter = kh_get_opnames(h, s);
+  khiter_t iter = kh_get_opnames(h, ref);
   return kh_exist2(h, iter) ? kh_val(h, iter) : (byte)0xFF;
 }
 

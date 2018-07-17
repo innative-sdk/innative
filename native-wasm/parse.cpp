@@ -490,6 +490,7 @@ ERROR_CODE ParseFunctionBody(Stream& s, FunctionBody& f)
       err = ParseInstruction(s, f.body[f.n_body]);
   }
   f.local_names = 0;
+  f.param_names = 0;
   f.debug_name.bytes = 0;
 
   return err;

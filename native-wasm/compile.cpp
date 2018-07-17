@@ -1273,7 +1273,6 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
 
   context.linearmemory = tmalloc<llvm::GlobalVariable*>(context.m.importsection.memory - context.m.importsection.tables + context.m.memory.n_memory);
   context.globals = tmalloc<llvm::GlobalVariable*>(context.m.importsection.globals - context.m.importsection.memory + context.m.global.n_globals);
-  _ASSERTE(_CrtCheckMemory());
 
   // Import function prototypes
   for(varuint32 i = 0; i < context.m.importsection.functions; ++i)
@@ -1712,6 +1711,7 @@ ERROR_CODE CompileEnvironment(Environment* env, const char* filepath)
     // Generate object code
     for(varuint32 i = 0; i < env->n_modules; ++i)
     {
+      assert(nw[i].m.name.bytes != 0);
       targets.emplace_back(MergeStrings((char*)nw[i].m.name.bytes, ".o"));
       OutputObjectFile(nw[i], targets.back().c_str());
     }
@@ -1731,5 +1731,6 @@ ERROR_CODE CompileEnvironment(Environment* env, const char* filepath)
     for(auto& v : cache)
       std::remove(v.c_str());
   }
+
   return ERR_SUCCESS;
 }

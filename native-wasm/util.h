@@ -89,6 +89,30 @@ NW_FORCEINLINE uint32 ReadUInt32(Stream& s, ERROR_CODE& err)
   return r;
 }
 
+struct StringRef
+{
+  const char* s;
+  size_t len;
+
+  bool operator ==(const StringRef& r) const
+  {
+    if(len != r.len)
+      return false;
+    return !memcmp(s, r.s, len);
+  }
+};
+
+static inline khint_t __ac_X31_hash_stringrefins(StringRef ref)
+{
+  const char* s = ref.s;
+  const char* end = ref.s + ref.len;
+  khint_t h = ((*s)>64 && (*s)<91) ? (*s) + 32 : *s;
+  if(h)
+    for(++s; s < end; ++s)
+      h = (h << 5) - h + (((*s)>64 && (*s)<91) ? (*s) + 32 : *s);
+  return h;
+}
+
 uint64_t DecodeLEB128(Stream& s, ERROR_CODE& err, unsigned int maxbits, bool sign);
 NW_FORCEINLINE varuint1 ReadVarUInt1(Stream& s, ERROR_CODE& err) { return DecodeLEB128(s, err, 1, false) != 0; }
 NW_FORCEINLINE varuint7 ReadVarUInt7(Stream& s, ERROR_CODE& err) { return static_cast<varuint7>(DecodeLEB128(s, err, 7, false)); }
@@ -108,7 +132,7 @@ inline T ReadPrimitive(Stream& s, ERROR_CODE& err)
 NW_FORCEINLINE float64 ReadFloat64(Stream& s, ERROR_CODE& err) { return ReadPrimitive<float64>(s, err); }
 NW_FORCEINLINE float32 ReadFloat32(Stream& s, ERROR_CODE& err) { return ReadPrimitive<float32>(s, err); }
 NW_FORCEINLINE byte ReadByte(Stream& s, ERROR_CODE& err) { return ReadPrimitive<byte>(s, err); }
-byte GetInstruction(const char* s);
+byte GetInstruction(StringRef s);
 void* GreedyAlloc(size_t n);
 
 template<class T>
@@ -118,7 +142,7 @@ T* tmalloc(size_t n)
 }
 
 NW_FORCEINLINE bool ModuleHasSection(Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
-inline std::string MergeStrings(const char* a, const char* b) { return std::string(a) + b; }
+inline std::string MergeStrings(const char* a, const char* b) { return std::string(!a ? "" : a) + b; }
 
 varuint32 ModuleFunctionType(Module& m, varuint32 index);
 FunctionSig* ModuleFunction(Module& m, varuint32 index);

@@ -48,7 +48,7 @@ BOOL CALLBACK EnumModule(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LPW
       void* data = LockResource(buf);
       if(data)
       {
-        (*pass->exports->AddModule)(pass->env, data, SizeofResource(hModule, res), lpName, pass->err);
+        (*pass->exports->AddModule)(pass->env, data, SizeofResource(hModule, res), (const char*)lpName, pass->err);
         return TRUE;
       }
     }
@@ -94,7 +94,7 @@ int main(int argc, char** argv)
   native_wasm_runtime(&exports);
   unsigned int flags = 0; //ENV_MULTITHREADED;
   unsigned int maxthreads = 0;
-  void* cache = (*exports.LoadCache)(flags);
+  void* cache = (*exports.LoadCache)(flags, "out.cache");
 
   // Before doing anything, check if we have a cached version available
   if(!cache)
@@ -166,7 +166,7 @@ int main(int argc, char** argv)
 #endif
 
     // Attempt to compile. If an error happens, output it and any validation errors to stderr
-    err = (*exports.Compile)(env);
+    err = (*exports.Compile)(env, "out.cache");
     if(err < 0)
     {
       fprintf(stderr, "Compile error: %i\n", err);
@@ -181,7 +181,7 @@ int main(int argc, char** argv)
 
     // Destroy environment now that compilation is complete
     (*exports.DestroyEnvironment)(env);
-    cache = (*exports.LoadCache)(flags);
+    cache = (*exports.LoadCache)(flags, "out.cache");
   }
 
   if(!cache)

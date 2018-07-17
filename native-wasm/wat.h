@@ -5,9 +5,11 @@
 #define __WAT_H__NW__
 
 #include "native-wasm/schema.h"
+#include "util.h"
 #include <istream>
 
-int ParseWAT(Environment& env, std::istream& s);
+int ParseWat(Environment& env, uint8_t* data, size_t sz);
+int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, StringRef name);
 
 typedef unsigned short TokenID;
 

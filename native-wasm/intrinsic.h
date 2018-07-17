@@ -6,6 +6,9 @@
 
 #include "native-wasm/schema.h"
 #include "stack.h"
+#pragma warning(push)
+#pragma warning(disable:4146)
+#define _SCL_SECURE_NO_WARNINGS
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -16,6 +19,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Target/TargetMachine.h"
+#pragma warning(pop)
 
 struct NWBlockResult
 {

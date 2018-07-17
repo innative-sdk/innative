@@ -14,6 +14,7 @@
 /native-wasm/x64/
 /native-wasm-env/x64/
 /native-wasm-cmd/x64/
+/native-wasm-test/x64/
 /loader/x64/
 /runtime-stub/x64/
 /.vs/

@@ -6,6 +6,7 @@
 #include "validate.h"
 #include "compile.h"
 #include "tools.h"
+#include "wat.h"
 #include <atomic>
 #include <thread>
 #include <stdio.h>
@@ -52,7 +53,10 @@ void DestroyEnvironment(struct __ENVIRONMENT* env)
 void LoadModule(struct __ENVIRONMENT* env, size_t index, void* data, uint64_t size, const char* name, int* err)
 {
   Stream s = { (uint8_t*)data, size, 0 };
-  *err = ParseModule(s, env->modules[index], ByteArray{ (varuint32)strlen(name), (uint8_t*)name });
+  if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
+    *err = ParseWatModule(*env, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
+  else
+    *err = ParseModule(s, env->modules[index], ByteArray{ (varuint32)strlen(name), (uint8_t*)name });
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
 }
 

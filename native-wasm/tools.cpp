@@ -54,7 +54,7 @@ int native_wasm_compile_file(const char* file, const char* out, unsigned int fla
 
   if(err < 0)
   {
-    fprintf(stderr, "Error loading modules: %i\n", err);
+    fprintf(stderr, "Error loading modules: 0x%x\n", -err);
     return err;
   }
 
