@@ -8,7 +8,10 @@
 #include "stack.h"
 #include "parse.h"
 #include "validate.h"
+#include "compile.h"
 #include <vector>
+#include <signal.h>
+#include <setjmp.h>
 
 #define LEXER_DIGIT "0-9"
 #define LEXER_HEXDIGIT "0-9A-Fa-f"
@@ -112,8 +115,16 @@ static kh_tokens_t* tokenhash = GenTokenHash({ "(", ")", "module", "import", "ty
   "data", "elem", "offset", "align", "local", "result", "param", "i32", "i64", "f32", "f64", "anyfunc", "mut", "block", "loop",
   "if", "then", "else", "end", /* script extensions */ "binary", "quote", "register", "invoke", "get", "assert_return",
   "assert_return_canonical_nan", "assert_return_arithmetic_nan", "assert_trap", "assert_malformed", "assert_invalid",
-  "assert_unlinkable", "assert_trap", "script", "input", "output" });
+  "assert_unlinkable", "assert_exhaustion", "script", "input", "output" });
+static kh_tokens_t* assertionhash = GenTokenHash({ "alignment","out of bounds memory access", "unexpected end", "magic header not detected",
+  "unknown binary version", "integer representation too long", "integer too large", "zero flag expected", "too many locals", "type mismatch",
+  "mismatching label", "unknown label", "unknown function 0","constant out of range", "invalid section id", "length out of bounds",
+  "function and code section have inconsistent lengths", "data segment does not fit", "unknown memory 0", "elements segment does not fit",
+  "constant expression required", "duplicate export name", "unknown table", "unknown memory", "unknown operator", "unexpected token",
+  "undefined element", "unknown local", "invalid mutability", "incompatible import type", "unknown import", "integer overflow"
+  });
 static std::string numbuf;
+
 
 void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
 {
@@ -263,6 +274,7 @@ void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
 
       while(s < end && s[0] != ' ' && s[0] != '\n' && s[0] != '\r' && s[0] != '\t' && s[0] != '\f' && s[0] != '=' && s[0] != ')' && s[0] != '(' && s[0] != ';')
         ++s;
+
       StringRef ref = { begin, static_cast<size_t>(s - begin) };
       khiter_t iter = kh_get_tokens(tokenhash, ref);
       if(kh_exist2(tokenhash, iter))
@@ -278,6 +290,8 @@ void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
           tokens.Push(Token{ TOKEN_NONE });
         }
       }
+      if(*s == '=')
+        ++s;
     }
     }
   }
@@ -527,7 +541,7 @@ varuint32 WatGetFromHash(kh_indexname_t* hash, const Token& t)
 int WatFuncType(WatState& state, Queue<Token>& tokens, varuint32& sig, const char*** names)
 {
   sig = (varuint32)~0;
-  if(tokens.Peek().id == TOKEN_OPEN)
+  if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_TYPE)
   {
     EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
     EXPECTED(tokens, TOKEN_TYPE, ERR_WAT_EXPECTED_TYPE);
@@ -542,7 +556,7 @@ int WatFuncType(WatState& state, Queue<Token>& tokens, varuint32& sig, const cha
 
     EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
-  
+
   if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && (tokens[1].id == TOKEN_PARAM || tokens[1].id == TOKEN_RESULT))
   {
     // Create a type to match this function signature
@@ -704,7 +718,8 @@ int WatOperator(WatState& state, Queue<Token>& tokens, FunctionBody& f, Function
     op.immediates[1]._varuint32 = op.immediates[0].table[--op.immediates[0].n_table]; // Remove last jump from table and make it the default
     break;
   case OP_call_indirect:
-    WatFuncType(state, tokens, op.immediates[0]._varuint32, 0);
+    if(r = WatFuncType(state, tokens, op.immediates[0]._varuint32, 0))
+      return r;
     break;
   case OP_i32_load:
   case OP_i64_load:
@@ -746,7 +761,7 @@ int WatOperator(WatState& state, Queue<Token>& tokens, FunctionBody& f, Function
 
       op.immediates[0]._memflags = (memflags)tokens.Pop().i;
       if(op.immediates[0]._memflags == 0 || !IsPowerOfTwo(op.immediates[0]._memflags)) // Ensure this alignment is exactly a power of two
-        return assert(false), ERR_WAT_INVALID_ALIGNMENT;
+        return ERR_WAT_INVALID_ALIGNMENT;
       op.immediates[0]._memflags = Power2Log2(op.immediates[0]._memflags); // Calculate proper power of two
     }
 
@@ -817,12 +832,13 @@ int WatExpression(WatState& state, Queue<Token>& tokens, FunctionBody& f, Functi
   {
     EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
 
-    Token t = tokens.Pop();
     varsint7 blocktype;
-    switch(t.id)
+    switch(tokens[0].id)
     {
     case TOKEN_BLOCK:
     case TOKEN_LOOP:
+    {
+      Token t = tokens.Pop();
       WatLabel(state, tokens);
       if(r = WatBlockType(tokens, blocktype))
         return r;
@@ -842,13 +858,16 @@ int WatExpression(WatState& state, Queue<Token>& tokens, FunctionBody& f, Functi
         return r;
       state.stack.Pop();
       break;
+    }
     case TOKEN_IF:
+      tokens.Pop();
       WatLabel(state, tokens);
       if(r = WatBlockType(tokens, blocktype))
         return r;
 
       while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id != TOKEN_THEN)
-        WatExpression(state, tokens, f, sig, index);
+        if(r = WatExpression(state, tokens, f, sig, index))
+          return r;
 
       {
         Instruction op = { OP_if };
@@ -886,7 +905,8 @@ int WatExpression(WatState& state, Queue<Token>& tokens, FunctionBody& f, Functi
       state.stack.Pop();
       break;
     default:
-      WatOperator(state, tokens, f, sig, index);
+      if(r = WatOperator(state, tokens, f, sig, index))
+        return r;
       break;
     }
   }
@@ -991,7 +1011,8 @@ int WatInlineImportExport(Module& m, Queue<Token>& tokens, varuint32* index, var
     e.index = *index; // This is fine because you can only import OR export on a declaration statement
     if(r = WatString(e.name, tokens.Pop()))
       return r;
-    AppendArray<Export>(e, m.exportsection.exports, m.exportsection.n_exports);
+    if(r = AppendArray<Export>(e, m.exportsection.exports, m.exportsection.n_exports))
+      return r;
     EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
   else if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_IMPORT)
@@ -1039,7 +1060,9 @@ int WatFunction(WatState& state, Queue<Token>& tokens, varuint32* index, StringR
     return r;
 
   FunctionSig& desc = state.m.type.functions[sig];
-  WatString(body.debug_name, name); // Record debug_name if it exists
+  if(name.len > 0)
+    if(r = WatString(body.debug_name, name))
+      return r;
 
   // Read in all the locals
   while(tokens.Size() > 1 && tokens.Peek().id == TOKEN_OPEN && tokens[tokens.Size() - 2].id == TOKEN_LOCAL)
@@ -1079,14 +1102,13 @@ int WatFunction(WatState& state, Queue<Token>& tokens, varuint32* index, StringR
       return r;
   }
   assert(state.stack.Size() == 0);
-  AppendArray(Instruction{ OP_end }, body.body, body.n_body);
+  if(r = AppendArray(Instruction{ OP_end }, body.body, body.n_body))
+    return r;
 
-  r = AppendArray(sig, state.m.function.funcdecl, state.m.function.n_funcdecl);
+  if(r = AppendArray(sig, state.m.function.funcdecl, state.m.function.n_funcdecl))
+    return r;
 
-  if(r >= 0)
-    r = AppendArray(body, state.m.code.funcbody, state.m.code.n_funcbody);
-
-  return r;
+  return AppendArray(body, state.m.code.funcbody, state.m.code.n_funcbody);
 }
 
 int WatResizableLimits(ResizableLimits& limits, Queue<Token>& tokens)
@@ -1133,7 +1155,8 @@ int WatTable(WatState& state, Queue<Token>& tokens, varuint32* index)
   switch(tokens.Peek().id)
   {
   case TOKEN_INTEGER:
-    WatTableDesc(table, tokens);
+    if(r = WatTableDesc(table, tokens))
+      return r;
     break;
   default:
     EXPECTED(tokens, TOKEN_ANYFUNC, ERR_WAT_EXPECTED_ANYFUNC);
@@ -1153,7 +1176,8 @@ int WatTable(WatState& state, Queue<Token>& tokens, varuint32* index)
         varuint32 f = WatGetFromHash(state.funchash, tokens.Pop());
         if(f == (varuint32)~0)
           return assert(false), ERR_WAT_INVALID_VAR;
-        AppendArray(f, init.elems, init.n_elems);
+        if(r = AppendArray(f, init.elems, init.n_elems))
+          return r;
       }
 
       table.resizable.minimum = init.n_elems;
@@ -1256,7 +1280,8 @@ int WatMemory(WatState& state, Queue<Token>& tokens, varuint32* index)
     {
       if(tokens[0].id != TOKEN_STRING)
         return assert(false), ERR_WAT_EXPECTED_STRING;
-      WatString(init.data, tokens.Pop());
+      if(r = WatString(init.data, tokens.Pop()))
+        return r;
     }
 
     mem.limits.flags = 0;
@@ -1464,19 +1489,19 @@ void SkipSection(Queue<Token>& tokens)
 
 int WatModule(Environment& env, Module& m, Queue<Token>& tokens, StringRef name)
 {
-  EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-  EXPECTED(tokens, TOKEN_MODULE, ERR_WAT_EXPECTED_MODULE);
-
+  int r;
   memset(&m, 0, sizeof(Module));
-  WatName(m.name, Token{ TOKEN_NAME, (const char*)name.s, (int64_t)name.len });
+  if(name.s)
+    if(r = WatName(m.name, Token{ TOKEN_NAME, (const char*)name.s, (int64_t)name.len }))
+      return r;
 
   if(tokens.Peek().id == TOKEN_NAME)
-    WatName(m.name, tokens.Pop());
+    if(r = WatName(m.name, tokens.Pop()))
+      return r;
 
   WatState state(m);
 
   Token t;
-  int r;
   size_t restore = tokens.GetPosition();
   while(tokens.Size() > 0 && tokens.Peek().id != TOKEN_CLOSE)
   {
@@ -1507,9 +1532,11 @@ int WatModule(Environment& env, Module& m, Queue<Token>& tokens, StringRef name)
     {
       khiter_t iter = kh_end(state.funchash);
       if(tokens.Peek().id == TOKEN_NAME)
+      {
         iter = kh_put_indexname(state.funchash, tokens.Pop(), &r);
-      if(!r)
-        return assert(false), ERR_WAT_DUPLICATE_NAME;
+        if(!r)
+          return assert(false), ERR_WAT_DUPLICATE_NAME;
+      }
 
       StringRef ref = { 0,0 };
       if(iter != kh_end(state.funchash))
@@ -1586,8 +1613,6 @@ int WatModule(Environment& env, Module& m, Queue<Token>& tokens, StringRef name)
     EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
-  EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
-
   // Process all deferred actions
   while(state.defer.Size() > 0)
   {
@@ -1614,8 +1639,7 @@ int WatModule(Environment& env, Module& m, Queue<Token>& tokens, StringRef name)
   }
 
   m.exports = kh_init_exports();
-  ParseExportFixup(m);
-  return ERR_SUCCESS;
+  return ParseExportFixup(m);
 }
 int WatEnvironment(Environment& env, Queue<Token>& tokens)
 {
@@ -1626,7 +1650,273 @@ int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, String
 {
   Queue<Token> tokens;
   TokenizeWAT(tokens, (char*)data, (char*)data + sz);
-  return WatModule(env, m, tokens, name);
+
+  EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+  EXPECTED(tokens, TOKEN_MODULE, ERR_WAT_EXPECTED_MODULE);
+  int r = WatModule(env, m, tokens, name);
+  if(!r)
+    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+  return r;
+}
+
+int ParseWatScriptModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mapping, Module*& last, void*& cache)
+{
+  EXPECTED(tokens, TOKEN_MODULE, ERR_WAT_EXPECTED_MODULE);
+  int r;
+
+  cache = 0;
+  env.modules = (Module*)realloc(env.modules, ++env.n_modules * sizeof(Module));
+  last = &env.modules[env.n_modules - 1];
+  if(tokens[0].id == TOKEN_BINARY || (tokens.Size() > 1 && tokens[1].id == TOKEN_BINARY))
+  {
+    Token name = GetWatNameToken(tokens);
+    tokens.Pop();
+    ByteArray binary;
+    if(r = WatString(binary, tokens.Pop()))
+      return r;
+    Stream s = { (uint8_t*)binary.bytes, binary.n_bytes, 0 };
+    if(r = ParseModule(s, *last, ByteArray{ (varuint32)name.len, (uint8_t*)name.pos }))
+      return r;
+    if(name.id == TOKEN_NAME) // Override name if it exists
+      if(r = WatName(last->name, name))
+        return r;
+  }
+  else if(tokens[0].id == TOKEN_QUOTE || (tokens.Size() > 1 && tokens[1].id == TOKEN_QUOTE))
+  {
+    Token name = GetWatNameToken(tokens);
+    tokens.Pop();
+    Token t = tokens.Pop();
+    if(r = ParseWatModule(env, *last, (uint8_t*)t.pos, t.len, StringRef{ name.pos, name.len }))
+      return r;
+    if(name.id == TOKEN_NAME) // Override name if it exists
+      if(r = WatName(last->name, name))
+        return r;
+  }
+  else if(r = WatModule(env, *last, tokens, StringRef{ 0,0 }))
+    return r;
+
+  if(last->name.n_bytes > 0)
+  {
+    khiter_t iter = kh_put_modules(mapping, (const char*)last->name.bytes, &r);
+    if(!r)
+      return ERR_FATAL_DUPLICATE_MODULE_NAME;
+    kh_val(mapping, iter) = (varuint32)env.n_modules - 1;
+  }
+
+  return ERR_SUCCESS;
+}
+
+varuint32 GetMapping(kh_modules_t* mapping, const Token& t)
+{
+  khiter_t iter = kh_get_modules(mapping, std::string(t.pos, t.len).c_str());
+  return kh_exist2(mapping, iter) ? kh_val(mapping, iter) : (varuint32)~0;
+}
+
+jmp_buf jump_location;
+
+void CrashHandler(int)
+{
+  longjmp(jump_location, 1);
+}
+
+int CompileScript(Environment& env, const char* out, void*& cache)
+{
+  int r;
+  ValidateEnvironment(env);
+  if(env.errors)
+    return ERR_VALIDATION_ERROR;
+  if(r = CompileEnvironment(&env, out))
+    return r;
+
+  // Prepare to handle exceptions from the initialization
+  signal(SIGILL, CrashHandler);
+  int jmp = setjmp(jump_location);
+  if(jmp)
+    return ERR_RUNTIME_INIT_ERROR;
+  cache = LoadDLL(out);
+  signal(SIGILL, SIG_DFL);
+  return !cache ? ERR_RUNTIME_INIT_ERROR : ERR_SUCCESS;
+}
+
+struct WatResult
+{
+  TYPE_ENCODING type;
+  union
+  {
+    int32_t i32;
+    int64_t i64;
+    float f32;
+    double f64;
+  };
+};
+
+template<TYPE_ENCODING R>
+bool MatchFuncSig(FunctionSig sig)
+{
+  if(sig.n_params > 0)
+    return false;
+  if(R == TE_void && sig.n_returns > 0)
+    return false;
+  if(R != TE_void && (!sig.n_returns || sig.returns[0] != (varsint7)R))
+    return false;
+  return true;
+}
+
+template<TYPE_ENCODING R, TYPE_ENCODING P, TYPE_ENCODING... Args>
+bool MatchFuncSig(FunctionSig sig)
+{
+  if(!sig.n_params)
+    return false;
+  if(sig.params[0] != (varsint7)P)
+    return false;
+  sig.params++;
+  sig.n_params--;
+  return MatchFuncSig<R, Args...>(sig);
+}
+
+int ParseWatScriptAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mapping, Module*& last, void*& cache, WatResult& result)
+{
+  int r;
+  if(!cache) // If cache is null we need to recompile the current environment
+  {
+    if(r = CompileScript(env, "wast.dll", cache))
+      return r;
+    assert(cache);
+  }
+
+  switch(tokens.Pop().id)
+  {
+  case TOKEN_INVOKE:
+  {
+    Token name = GetWatNameToken(tokens);
+    Module* m = last;
+    if(name.id == TOKEN_NAME)
+    {
+      varuint32 i = GetMapping(mapping, name);
+      if(i >= env.n_modules)
+        return ERR_PARSE_INVALID_NAME;
+      m = env.modules + i;
+    }
+    if(!m)
+      return ERR_FATAL_INVALID_MODULE;
+
+    ByteArray func;
+    if(r = WatString(func, tokens.Pop()))
+      return r;
+
+    khiter_t iter = kh_get_exports(m->exports, (const char*)func.bytes);
+    if(!kh_exist2(m->exports, iter))
+      return ERR_INVALID_FUNCTION_INDEX;
+    Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
+    if(e.kind != KIND_FUNCTION || e.index >= m->function.n_funcdecl || m->function.funcdecl[e.index] >= m->type.n_functions)
+      return ERR_INVALID_FUNCTION_INDEX;
+
+    void* f = LoadDLLFunction(cache, MergeName((const char*)m->name.bytes, (const char*)func.bytes).c_str());
+    if(!f)
+      return ERR_INVALID_FUNCTION_INDEX;
+    
+    // Dig up the exported function signature from the module and assemble a C function pointer from it
+    FunctionSig& sig = m->type.functions[m->function.funcdecl[e.index]];
+
+    if(!sig.n_returns)
+      result.type = TE_void;
+    else
+      result.type = (TYPE_ENCODING)sig.returns[0];
+
+    // Call the function and set the correct result.
+    signal(SIGILL, CrashHandler);
+    int jmp = setjmp(jump_location);
+    if(jmp)
+      return ERR_RUNTIME_TRAP;
+
+    std::vector<Instruction> params;
+    while(tokens.Peek().id == TOKEN_OPEN)
+    {
+      WatState st(*m);
+      params.emplace_back();
+      EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+      if(r = WatInitializer(st, tokens, params.back()))
+        return r;
+      EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    }
+
+    if(params.size() != sig.n_params)
+      return ERR_SIGNATURE_MISMATCH;
+
+    if(MatchFuncSig<TE_i32, TE_i32>(sig))
+      result.i32 = static_cast<int32_t (*)(int32_t)>(f)(params[0].immediates[0]._varsint32);
+    else if(MatchFuncSig<TE_i64, TE_i32>(sig))
+      result.i64 = static_cast<int64_t(*)(int32_t)>(f)(params[0].immediates[0]._varsint32);
+    else if(MatchFuncSig<TE_f32, TE_i32>(sig))
+      result.f32 = static_cast<float(*)(int32_t)>(f)(params[0].immediates[0]._varsint32);
+    else if(MatchFuncSig<TE_f64, TE_i32>(sig))
+      result.f64 = static_cast<double(*)(int32_t)>(f)(params[0].immediates[0]._varsint32);
+    else if(MatchFuncSig<TE_i32, TE_i64>(sig))
+      result.i32 = static_cast<int32_t(*)(int64_t)>(f)(params[0].immediates[0]._varsint64);
+    else if(MatchFuncSig<TE_i64, TE_i64>(sig))
+      result.i64 = static_cast<int64_t(*)(int64_t)>(f)(params[0].immediates[0]._varsint64);
+    else if(MatchFuncSig<TE_f32, TE_i64>(sig))
+      result.f32 = static_cast<float(*)(int64_t)>(f)(params[0].immediates[0]._varsint64);
+    else if(MatchFuncSig<TE_f64, TE_i64>(sig))
+      result.f64 = static_cast<double(*)(int64_t)>(f)(params[0].immediates[0]._varsint64);
+    else if(MatchFuncSig<TE_i32, TE_f32>(sig))
+      result.i32 = static_cast<int32_t(*)(float)>(f)(params[0].immediates[0]._float32);
+    else if(MatchFuncSig<TE_i64, TE_f32>(sig))
+      result.i64 = static_cast<int64_t(*)(float)>(f)(params[0].immediates[0]._float32);
+    else if(MatchFuncSig<TE_f32, TE_f32>(sig))
+      result.f32 = static_cast<float(*)(float)>(f)(params[0].immediates[0]._float32);
+    else if(MatchFuncSig<TE_f64, TE_f32>(sig))
+      result.f64 = static_cast<double(*)(float)>(f)(params[0].immediates[0]._float32);
+    else if(MatchFuncSig<TE_i32, TE_f64>(sig))
+      result.i32 = static_cast<int32_t(*)(double)>(f)(params[0].immediates[0]._float64);
+    else if(MatchFuncSig<TE_i64, TE_f64>(sig))
+      result.i64 = static_cast<int64_t(*)(double)>(f)(params[0].immediates[0]._float64);
+    else if(MatchFuncSig<TE_f32, TE_f64>(sig))
+      result.f32 = static_cast<float(*)(double)>(f)(params[0].immediates[0]._float64);
+    else if(MatchFuncSig<TE_f64, TE_f64>(sig))
+      result.f64 = static_cast<double(*)(double)>(f)(params[0].immediates[0]._float64);
+    else if(MatchFuncSig<TE_i32, TE_i32, TE_i32>(sig))
+      result.i32 = static_cast<int32_t(*)(int32_t, int32_t)>(f)(params[0].immediates[0]._varsint32, params[0].immediates[0]._varsint32);
+    else if(MatchFuncSig<TE_i64, TE_i32, TE_i32>(sig))
+      result.i64 = static_cast<int64_t(*)(int32_t, int32_t)>(f)(params[0].immediates[0]._varsint32, params[0].immediates[0]._varsint32);
+    else if(MatchFuncSig<TE_f32, TE_i32, TE_i32>(sig))
+      result.f32 = static_cast<float(*)(int32_t, int32_t)>(f)(params[0].immediates[0]._varsint32, params[0].immediates[0]._varsint32);
+    else if(MatchFuncSig<TE_f64, TE_i32, TE_i32>(sig))
+      result.f64 = static_cast<double(*)(int32_t, int32_t)>(f)(params[0].immediates[0]._varsint32, params[0].immediates[0]._varsint32);
+    else if(MatchFuncSig<TE_f32, TE_f32, TE_f32>(sig))
+      result.f32 = static_cast<float(*)(float, float)>(f)(params[0].immediates[0]._float32, params[0].immediates[0]._float32);
+    else if(MatchFuncSig<TE_f64, TE_f64, TE_f64>(sig))
+      result.f64 = static_cast<double(*)(double, double)>(f)(params[0].immediates[0]._float64, params[0].immediates[0]._float64);
+    else if(MatchFuncSig<TE_i64, TE_i64, TE_i64>(sig))
+      result.i64 = static_cast<int64_t(*)(int64_t, int64_t)>(f)(params[0].immediates[0]._varsint64, params[0].immediates[0]._varsint64);
+    else
+      assert(false);
+
+    signal(SIGILL, SIG_DFL);
+    break;
+  }
+  case TOKEN_GET:
+    assert(false); // TODO: We have no way of getting globals out of DLLs yet
+    break;
+  default:
+    return ERR_WAT_EXPECTED_TOKEN;
+  }
+
+  return ERR_SUCCESS;
+}
+
+bool WatIsNaN(float f, bool canonical)
+{
+  if(!isnan(f))
+    return false;
+  return ((*reinterpret_cast<uint32_t*>(&f) & 0b00000000010000000000000000000000U) != 0) != canonical;
+}
+
+bool WatIsNaN(double f, bool canonical)
+{
+  if(!isnan(f))
+    return false;
+  return ((*reinterpret_cast<uint64_t*>(&f) & 0b0000000000001000000000000000000000000000000000000000000000000000ULL) != 0) != canonical;
 }
 
 // This parses an entire extended WAT testing script into an environment
@@ -1634,5 +1924,153 @@ int ParseWat(Environment& env, uint8_t* data, size_t sz)
 {
   Queue<Token> tokens;
   TokenizeWAT(tokens, (char*)data, (char*)data + sz);
-  return WatEnvironment(env, tokens);
+
+  int r;
+  kh_modules_t* mapping = kh_init_modules(); // This is a special mapping for all modules using the module name itself, not just registered ones.
+  Module* last = 0; // For anything not providing a module name, this was the most recently defined module.
+  void* cache = 0;
+
+  while(tokens.Size() > 0 && tokens[0].id != TOKEN_CLOSE)
+  {
+    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+    switch(tokens[0].id)
+    {
+    case TOKEN_MODULE:
+      if(r = ParseWatScriptModule(env, tokens, mapping, last, cache))
+        return r;
+      break;
+    case TOKEN_REGISTER:
+    {
+      tokens.Pop();
+      varuint32 i = ~0;
+      if(last)
+        i = last - env.modules;
+      if(tokens[0].id == TOKEN_NAME)
+        i = GetMapping(mapping, tokens.Pop());
+      if(i == ~0)
+        return ERR_PARSE_INVALID_NAME;
+        
+      ByteArray name;
+      if(r = WatString(name, tokens.Pop()))
+        return r;
+      khiter_t iter = kh_put_modules(env.modulemap, (const char*)name.bytes, &r);
+      if(!r)
+        return ERR_FATAL_DUPLICATE_MODULE_NAME;
+
+      kh_val(env.modulemap, iter) = i;
+      break;
+    }
+    case TOKEN_INVOKE:
+    case TOKEN_GET:
+    {
+      tokens.Pop();
+      EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+      WatResult result;
+      if(r = ParseWatScriptAction(env, tokens, mapping, last, cache, result))
+        return r;
+      EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      break;
+    }
+    case TOKEN_ASSERT_TRAP:
+      tokens.Pop();
+      if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_MODULE) // Check if we're actually trapping on a module load
+      {
+        EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+        if(r = ParseWatScriptModule(env, tokens, mapping, last, cache))
+          return r;
+        EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+
+        r = CompileScript(env, "wast.dll", cache);
+        if(r != ERR_RUNTIME_TRAP)
+          return ERR_RUNTIME_ASSERT_FAILURE;
+      }
+      else
+      {
+        EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+        WatResult result;
+        r = ParseWatScriptAction(env, tokens, mapping, last, cache, result);
+        if(r != ERR_RUNTIME_TRAP)
+          return ERR_RUNTIME_ASSERT_FAILURE;
+        EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      }
+      break;
+    case TOKEN_ASSERT_RETURN:
+    case TOKEN_ASSERT_RETURN_CANONICAL_NAN:
+    case TOKEN_ASSERT_RETURN_ARITHMETIC_NAN:
+    {
+      Token t = tokens.Pop();
+      EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+      WatResult result;
+      if(r = ParseWatScriptAction(env, tokens, mapping, last, cache, result))
+        return r;
+      EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      Instruction value;
+      WatState state(*last);
+
+      switch(t.id)
+      {
+      case TOKEN_ASSERT_RETURN:
+        if(r = WatInitializer(state, tokens, value))
+          return r;
+        switch(value.opcode)
+        {
+        case OP_i32_const:
+          if(result.type != TE_i32 || result.i32 != value.immediates[0]._varsint32)
+            return ERR_RUNTIME_ASSERT_FAILURE;
+          break;
+        case OP_i64_const:
+          if(result.type != TE_i64 || result.i64 != value.immediates[0]._varsint64)
+            return ERR_RUNTIME_ASSERT_FAILURE;
+          break;
+        case OP_f32_const:
+          if(result.type != TE_f32 || result.f32 != value.immediates[0]._float32)
+            return ERR_RUNTIME_ASSERT_FAILURE;
+          break;
+        case OP_f64_const:
+          if(result.type != TE_f64 || result.f64 != value.immediates[0]._float64)
+            return ERR_RUNTIME_ASSERT_FAILURE;
+          break;
+        }
+        break;
+      case TOKEN_ASSERT_RETURN_ARITHMETIC_NAN:
+      case TOKEN_ASSERT_RETURN_CANONICAL_NAN:
+        if(result.type == TE_f32 && !WatIsNaN(result.f32, t.id == TOKEN_ASSERT_RETURN_CANONICAL_NAN))
+          return ERR_RUNTIME_ASSERT_FAILURE;
+        if(result.type == TE_f64 && !WatIsNaN(result.f64, t.id == TOKEN_ASSERT_RETURN_CANONICAL_NAN))
+          return ERR_RUNTIME_ASSERT_FAILURE;
+        break;
+      }
+      break;
+    }
+    case TOKEN_ASSERT_MALFORMED:
+    case TOKEN_ASSERT_INVALID:
+    case TOKEN_ASSERT_UNLINKABLE:
+      tokens.Pop();
+      EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+      r = ParseWatScriptModule(env, tokens, mapping, last, cache);
+      if(r == ERR_SUCCESS) // prove compilation failed
+        return ERR_RUNTIME_ASSERT_FAILURE;
+      EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+
+      break;
+    case TOKEN_ASSERT_EXHAUSTION:
+      assert(false);
+      break;
+    case TOKEN_SCRIPT:
+    case TOKEN_INPUT:
+    case TOKEN_OUTPUT:
+    {
+      SkipSection(tokens);
+      EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      break;
+    }
+    default:
+      return ERR_WAT_EXPECTED_TOKEN;
+    }
+
+    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+  }
+
+  return ERR_SUCCESS;
 }

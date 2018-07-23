@@ -6,7 +6,8 @@
 
 int main(int argc, char *argv[])
 {
-  int r = native_wasm_compile_file("test.wast", "out.exe", ENV_DEBUG|ENV_STRICT|ENV_ENABLE_WAT, false, 0, 0);
+  int r = native_wasm_compile_script("../spec/test/core/align.wast", ENV_DEBUG | ENV_STRICT);
+  //int r = native_wasm_compile_file("test.wast", "out.exe", ENV_DEBUG|ENV_STRICT|ENV_ENABLE_WAT, false, 0, 0);
   char c;
   std::cin >> c;
   return r;

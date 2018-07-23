@@ -4,6 +4,7 @@
 #include "native-wasm/export.h"
 #include "tools.h"
 #include "path.h"
+#include "wat.h"
 #include <stdio.h>
 #include <memory>
 #include <string>
@@ -94,4 +95,46 @@ int native_wasm_compile_file(const char* file, const char* out, unsigned int fla
 int native_wasm_build_loader(struct _NW_CHUNK* chunks, const char* out, bool dynamic)
 {
   return -1;
+}
+
+int native_wasm_compile_script(const char* file, unsigned int flags)
+{
+  Environment* env = CreateEnvironment(flags, 1, 0);
+  if(!env)
+  {
+    fprintf(stderr, "Unknown error creating environment.\n");
+    return -1;
+  }
+
+  // Load the module
+  long sz = 0;
+  int err = 0;
+  auto data_module = loadfile(file, sz);
+  NWPath name(file);
+
+  // Add all embedding environments that are included with this runtime
+#ifdef NW_DEBUG
+  err = AddEmbedding(env, 0, (void*)"native-wasm-env_d.lib", 0);
+#else
+  err = AddEmbedding(env, 0, (void*)"native-wasm-env.lib", 0);
+#endif
+
+  if(err < 0)
+  {
+    fprintf(stderr, "Error loading environment: %i\n", err);
+    return err;
+  }
+
+  err = ParseWat(*env, data_module.get(), sz);
+
+  if(err < 0)
+  {
+    fprintf(stderr, "Error loading modules: 0x%x\n", -err);
+    return err;
+  }
+
+  // Destroy environment
+  DestroyEnvironment(env);
+
+  return err;
 }

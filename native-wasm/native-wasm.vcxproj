@@ -213,6 +213,7 @@
     <ClInclude Include="path.h" />
     <ClInclude Include="queue.h" />
     <ClInclude Include="stack.h" />
+    <ClInclude Include="stream.h" />
     <ClInclude Include="tools.h" />
     <ClInclude Include="trex.h" />
     <ClInclude Include="util.h" />

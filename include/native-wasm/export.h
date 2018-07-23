@@ -46,6 +46,7 @@ extern "C" {
       FunctionSig sig;
     };
 
+    NW_COMPILER_DLLEXPORT extern int native_wasm_compile_script(const char* file, unsigned int flags);
     NW_COMPILER_DLLEXPORT extern int native_wasm_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const struct _NW_WHITELIST* whitelist, int n_whitelist);
     NW_COMPILER_DLLEXPORT extern int native_wasm_build_loader(struct _NW_CHUNK* chunks, const char* out, bool dynamic);
 

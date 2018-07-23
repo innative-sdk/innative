@@ -459,6 +459,7 @@ std::string StrFormat(const char* fmt, ...)
   s.resize(vsnprintf(0, 0, fmt, args)+1);
   s.resize(vsnprintf((char*)s.data(), s.capacity(), fmt, args));
   va_end(args);
+  
   return s;
 }
 

@@ -136,6 +136,16 @@ enum ERROR_CODE Compile(struct __ENVIRONMENT* env, const char* file)
   if(!env)
     return ERR_FATAL_NULL_POINTER;
 
+  // Before validating, add all modules to the modulemap. We must do this outside of LoadModule for multithreading reasons.
+  for(size_t i = 0; i < env->n_modules; ++i)
+  {
+    int r;
+    khiter_t iter = kh_put_modules(env->modulemap, (const char*)env->modules[i].name.bytes, &r);
+    if(!r)
+      return ERR_FATAL_DUPLICATE_MODULE_NAME;
+    kh_val(env->modulemap, iter) = i;
+  }
+
   ValidateEnvironment(*env);
   if(env->errors)
   {

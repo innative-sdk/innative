@@ -1641,28 +1641,33 @@ ERROR_CODE CompileEnvironment(Environment* env, const char* filepath)
 
   uint64_t eflags = env->flags;
 
-  // Initialize all modules and call start function
-  if(start != nullptr)
-  {
-    Function* main = Function::Create(FunctionType::get(builder.getVoidTy(), false), Function::ExternalLinkage, "_native_wasm_internal_start", start->llvm);
-    BasicBlock* initblock = BasicBlock::Create(context, "start_entry", main);
-    builder.SetInsertPoint(initblock);
-    for(varuint32 i = 0; i < env->n_modules; ++i)
-      builder.CreateCall(nw[i].init, {});
+  if(!env->n_modules)
+    return ERR_FATAL_INVALID_MODULE;
+
+  // Initialize all modules and call start function (if it exists)
+  if(!start) // We always create an initialization function, even for DLLs, to do proper initialization of modules
+    start = &nw[0];
+  Function* main = Function::Create(FunctionType::get(builder.getVoidTy(), false), Function::ExternalLinkage, "_native_wasm_internal_start", start->llvm);
+  BasicBlock* initblock = BasicBlock::Create(context, "start_entry", main);
+  builder.SetInsertPoint(initblock);
+  for(varuint32 i = 0; i < env->n_modules; ++i)
+    builder.CreateCall(nw[i].init, {});
+
+  if(start->start != nullptr)
     builder.CreateCall(start->start, {});
-    builder.CreateRetVoid();
-
-    // Reverify module
-    std::error_code EC;
-    llvm::raw_fd_ostream dest(1, false, true);
-    if(llvm::verifyModule(*start->llvm, &dest))
-      return assert(false), ERR_FATAL_INVALID_MODULE;
-
-    llvm::raw_fd_ostream dest2(std::string(start->llvm->getName()) + ".llvm", EC, llvm::sys::fs::F_None);
-    start->llvm->print(dest2, nullptr);
-  }
   else
     eflags |= ENV_DLL; // We can't compile an EXE without an entry point
+
+  builder.CreateRetVoid();
+
+  // Reverify module
+  std::error_code EC;
+  llvm::raw_fd_ostream dest(1, false, true);
+  if(llvm::verifyModule(*start->llvm, &dest))
+    return assert(false), ERR_FATAL_INVALID_MODULE;
+
+  llvm::raw_fd_ostream dest2(std::string(start->llvm->getName()) + ".llvm", EC, llvm::sys::fs::F_None);
+  start->llvm->print(dest2, nullptr);
 
   // Annotate functions
   AnnotateFunctions(env, nw);
@@ -1677,10 +1682,7 @@ ERROR_CODE CompileEnvironment(Environment* env, const char* filepath)
     std::vector<std::string> cache;
     std::vector<const char*> linkargs = { "native-wasm", "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO", "/nodefaultlib", "/MANIFEST", "/MANIFEST:embed", "/SUBSYSTEM:CONSOLE", "/VERBOSE", "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT", "/MACHINE:X64", "/machine:x64" };
 
-    if(start != nullptr)
-      linkargs.push_back("/ENTRY:_native_wasm_internal_start");
-    else
-      linkargs.push_back("/NOENTRY");
+    linkargs.push_back("/ENTRY:_native_wasm_internal_start");
 
     if(eflags&ENV_DLL)
       linkargs.push_back("/DLL");
