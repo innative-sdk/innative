@@ -901,6 +901,64 @@ void ValidateSection(T* a, varuint32 n, Environment& env, Module* m)
     VALIDATE(a[i], env, m);
 }
 
+void ValidateModule(Environment& env, Module& m)
+{
+  if(m.knownsections&(1 << SECTION_TYPE))
+    ValidateSection<FunctionSig, &ValidateFunctionSig>(m.type.functions, m.type.n_functions, env, &m);
+
+  if(m.knownsections&(1 << SECTION_IMPORT))
+    ValidateSection<Import, &ValidateImport>(m.importsection.imports, m.importsection.n_import, env, &m);
+
+  if(m.knownsections&(1 << SECTION_FUNCTION))
+  {
+    ValidateSection<varuint32, &ValidateFunction>(m.function.funcdecl, m.function.n_funcdecl, env, &m);
+
+    if(m.function.n_funcdecl != m.code.n_funcbody)
+      AppendError(env, &m, ERR_FUNCTION_BODY_MISMATCH, "The number of function declarations (%u) does not equal the number of function bodies (%u)", m.function.n_funcdecl, m.code.n_funcbody);
+  }
+
+  if(m.knownsections&(1 << SECTION_TABLE))
+    ValidateSection<TableDesc, &ValidateTable>(m.table.tables, m.table.n_tables, env, &m);
+
+  if(m.knownsections&(1 << SECTION_MEMORY))
+    ValidateSection<MemoryDesc, &ValidateMemory>(m.memory.memory, m.memory.n_memory, env, &m);
+
+  if(m.knownsections&(1 << SECTION_GLOBAL))
+    ValidateSection<GlobalDecl, &ValidateGlobal>(m.global.globals, m.global.n_globals, env, &m);
+
+  if(m.knownsections&(1 << SECTION_EXPORT))
+    ValidateSection<Export, &ValidateExport>(m.exportsection.exports, m.exportsection.n_exports, env, &m);
+
+  if(m.knownsections&(1 << SECTION_START))
+  {
+    FunctionSig* f = ModuleFunction(m, m.start);
+    if(f)
+    {
+      if(m.start < m.importsection.functions)
+        AppendError(env, &m, ERR_INVALID_START_FUNCTION, "The start function (%hhu) cannot be an imported function", m.start);
+      if(f->n_params > 0 || f->n_returns > 0)
+        AppendError(env, &m, ERR_INVALID_START_FUNCTION, "Starting function must have no parameters and no return value, instead it has %u parameters and %u return values.", f->n_params, f->n_returns);
+    }
+    else
+      AppendError(env, &m, ERR_INVALID_FUNCTION_INDEX, "Start module function index %u does not exist.", m.start);
+  }
+
+  if(m.knownsections&(1 << SECTION_ELEMENT))
+    ValidateSection<TableInit, &ValidateTableOffset>(m.element.elements, m.element.n_elements, env, &m);
+
+  if(m.knownsections&(1 << SECTION_CODE))
+  {
+    for(varuint32 j = 0; j < m.code.n_funcbody; ++j)
+    {
+      if(m.function.funcdecl[j] < m.type.n_functions)
+        ValidateFunctionBody(m.type.functions[m.function.funcdecl[j]], m.code.funcbody[j], env, &m);
+    }
+  }
+
+  if(m.knownsections&(1 << SECTION_DATA))
+    ValidateSection<DataInit, &ValidateDataOffset>(m.data.data, m.data.n_data, env, &m);
+}
+
 // Performs all post-load validation that couldn't be done during parsing
 void ValidateEnvironment(Environment& env)
 {
@@ -916,62 +974,7 @@ void ValidateEnvironment(Environment& env)
   //kh_put_cimport(env.cimports, "WriteConsoleA", &tmp);
 
   for(size_t i = 0; i < env.n_modules; ++i)
-  {
-    if(env.modules[i].knownsections&(1 << SECTION_TYPE))
-      ValidateSection<FunctionSig, &ValidateFunctionSig>(env.modules[i].type.functions, env.modules[i].type.n_functions, env, env.modules + i);
-
-    if(env.modules[i].knownsections&(1 << SECTION_IMPORT))
-      ValidateSection<Import, &ValidateImport>(env.modules[i].importsection.imports, env.modules[i].importsection.n_import, env, env.modules + i);
-
-    if(env.modules[i].knownsections&(1 << SECTION_FUNCTION))
-    {
-      ValidateSection<varuint32, &ValidateFunction>(env.modules[i].function.funcdecl, env.modules[i].function.n_funcdecl, env, env.modules + i);
-
-      if(env.modules[i].function.n_funcdecl != env.modules[i].code.n_funcbody)
-        AppendError(env, env.modules + i, ERR_FUNCTION_BODY_MISMATCH, "The number of function declarations (%u) does not equal the number of function bodies (%u)", env.modules[i].function.n_funcdecl, env.modules[i].code.n_funcbody);
-    }
-
-    if(env.modules[i].knownsections&(1 << SECTION_TABLE))
-      ValidateSection<TableDesc, &ValidateTable>(env.modules[i].table.tables, env.modules[i].table.n_tables, env, env.modules + i);
-
-    if(env.modules[i].knownsections&(1 << SECTION_MEMORY))
-      ValidateSection<MemoryDesc, &ValidateMemory>(env.modules[i].memory.memory, env.modules[i].memory.n_memory, env, env.modules + i);
-
-    if(env.modules[i].knownsections&(1 << SECTION_GLOBAL))
-      ValidateSection<GlobalDecl, &ValidateGlobal>(env.modules[i].global.globals, env.modules[i].global.n_globals, env, env.modules + i);
-
-    if(env.modules[i].knownsections&(1 << SECTION_EXPORT))
-      ValidateSection<Export, &ValidateExport>(env.modules[i].exportsection.exports, env.modules[i].exportsection.n_exports, env, env.modules + i);
-
-    if(env.modules[i].knownsections&(1 << SECTION_START))
-    {
-      FunctionSig* f = ModuleFunction(env.modules[i], env.modules[i].start);
-      if(f)
-      {
-        if(env.modules[i].start < env.modules[i].importsection.functions)
-          AppendError(env, env.modules + i, ERR_INVALID_START_FUNCTION, "The start function (%hhu) cannot be an imported function", env.modules[i].start);
-        if(f->n_params > 0 || f->n_returns > 0)
-          AppendError(env, env.modules + i, ERR_INVALID_START_FUNCTION, "Starting function must have no parameters and no return value, instead it has %u parameters and %u return values.", f->n_params, f->n_returns);
-      }
-      else
-        AppendError(env, env.modules + i, ERR_INVALID_FUNCTION_INDEX, "Start module function index %u does not exist.", env.modules[i].start);
-    }
-
-    if(env.modules[i].knownsections&(1 << SECTION_ELEMENT))
-      ValidateSection<TableInit, &ValidateTableOffset>(env.modules[i].element.elements, env.modules[i].element.n_elements, env, env.modules + i);
-
-    if(env.modules[i].knownsections&(1 << SECTION_CODE))
-    {
-      for(varuint32 j = 0; j < env.modules[i].code.n_funcbody; ++j)
-      {
-        if(env.modules[i].function.funcdecl[j] < env.modules[i].type.n_functions)
-          ValidateFunctionBody(env.modules[i].type.functions[env.modules[i].function.funcdecl[j]], env.modules[i].code.funcbody[j], env, env.modules + i);
-      }
-    }
-
-    if(env.modules[i].knownsections&(1 << SECTION_DATA))
-      ValidateSection<DataInit, &ValidateDataOffset>(env.modules[i].data.data, env.modules[i].data.n_data, env, env.modules + i);
-  }
+    ValidateModule(env, env.modules[i]);
 }
 
 bool ValidateSectionOrder(uint32& sections, varuint7 opcode)

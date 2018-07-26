@@ -23,6 +23,7 @@
 #define LEXER_NAME "\\$[" LEXER_LETTER LEXER_DIGIT "_.+\\-*/\\\\\\^~=<>!?@#$%&|:'`]+"
 
 KHASH_INIT(tokens, StringRef, TokenID, 1, __ac_X31_hash_stringrefins, kh_int_hash_equal)
+KHASH_INIT(assertion, int, const char*, 1, kh_int_hash_func, kh_int_hash_equal)
 
 static kh_inline khint_t kh_hash_token(const Token& t)
 {
@@ -116,15 +117,57 @@ static kh_tokens_t* tokenhash = GenTokenHash({ "(", ")", "module", "import", "ty
   "if", "then", "else", "end", /* script extensions */ "binary", "quote", "register", "invoke", "get", "assert_return",
   "assert_return_canonical_nan", "assert_return_arithmetic_nan", "assert_trap", "assert_malformed", "assert_invalid",
   "assert_unlinkable", "assert_exhaustion", "script", "input", "output" });
-static kh_tokens_t* assertionhash = GenTokenHash({ "alignment","out of bounds memory access", "unexpected end", "magic header not detected",
-  "unknown binary version", "integer representation too long", "integer too large", "zero flag expected", "too many locals", "type mismatch",
-  "mismatching label", "unknown label", "unknown function 0","constant out of range", "invalid section id", "length out of bounds",
-  "function and code section have inconsistent lengths", "data segment does not fit", "unknown memory 0", "elements segment does not fit",
-  "constant expression required", "duplicate export name", "unknown table", "unknown memory", "unknown operator", "unexpected token",
-  "undefined element", "unknown local", "invalid mutability", "incompatible import type", "unknown import", "integer overflow"
-  });
-static std::string numbuf;
 
+kh_assertion_t* GenAssertions(std::initializer_list<int> code, std::initializer_list<const char*> msg)
+{
+  kh_assertion_t* h = kh_init_assertion();
+
+  int r;
+  assert(code.size() == msg.size());
+  auto m = msg.begin();
+  for(auto c = code.begin(); c != code.end() && m != msg.end(); ++c, ++m)
+  {
+    auto iter = kh_put_assertion(h, *c, &r);
+    kh_val(h, iter) = *m;
+  }
+
+  return h;
+}
+
+//static kh_assertion_t* assertionhash = GenAssertions({ 
+//  ERR_WAT_INVALID_ALIGNMENT, 
+//  ERR_INVALID_MEMORY_ALIGNMENT, 
+//  ERR_INVALID_MEMORY_OFFSET, 
+//  ERR_END_MISMATCH,
+//  ERR_PARSE_INVALID_MAGIC_COOKIE,
+//  ERR_PARSE_INVALID_VERSION,
+//  ERR_FATAL_INVALID_ENCODING,
+//  ERR_FATAL_INVALID_ENCODING,
+//  ERR_INVALID_RESERVED_VALUE,
+//  },
+//{
+//  "alignment", 
+//  "alignment",
+//  "out of bounds memory access", 
+//  "unexpected end",
+//  "magic header not detected",
+//  "unknown binary version", 
+//  "integer representation too long",
+//  "integer too large",
+//  "zero flag expected", 
+//  "too many locals", 
+//  "type mismatch",
+//  "mismatching label",
+//  "unknown label", 
+//  "unknown function 0",
+//  "constant out of range", 
+//  "invalid section id", 
+//  "length out of bounds",
+//  "function and code section have inconsistent lengths", "data segment does not fit", "unknown memory 0", "elements segment does not fit",
+//  "constant expression required", "duplicate export name", "unknown table", "unknown memory", "unknown operator", "unexpected token",
+//  "undefined element", "unknown local", "invalid mutability", "incompatible import type", "unknown import", "integer overflow"
+//  });
+static std::string numbuf;
 
 void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
 {
@@ -287,7 +330,7 @@ void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
         else
         {
           assert(false);
-          tokens.Push(Token{ TOKEN_NONE });
+          tokens.Push(Token{ TOKEN_NONE, begin, (int64_t)ref.len });
         }
       }
       if(*s == '=')
@@ -1925,6 +1968,13 @@ int ParseWat(Environment& env, uint8_t* data, size_t sz)
   Queue<Token> tokens;
   TokenizeWAT(tokens, (char*)data, (char*)data + sz);
 
+  for(size_t i = 0; i < tokens.Size(); ++i)
+    if(!tokens[i].id)
+      AppendError(env, nullptr, ERR_WAT_INVALID_TOKEN, "Invalid token: %s", std::string(tokens[i].pos, tokens[i].len).c_str());
+
+  if(env.errors)
+    return ERR_WAT_INVALID_TOKEN;
+
   int r;
   kh_modules_t* mapping = kh_init_modules(); // This is a special mapping for all modules using the module name itself, not just registered ones.
   Module* last = 0; // For anything not providing a module name, this was the most recently defined module.
@@ -1982,7 +2032,7 @@ int ParseWat(Environment& env, uint8_t* data, size_t sz)
 
         r = CompileScript(env, "wast.dll", cache);
         if(r != ERR_RUNTIME_TRAP)
-          return ERR_RUNTIME_ASSERT_FAILURE;
+          return ERR_RUNTIME_ASSERT_FAILURE; // TODO: AppendError
       }
       else
       {
@@ -1990,7 +2040,7 @@ int ParseWat(Environment& env, uint8_t* data, size_t sz)
         WatResult result;
         r = ParseWatScriptAction(env, tokens, mapping, last, cache, result);
         if(r != ERR_RUNTIME_TRAP)
-          return ERR_RUNTIME_ASSERT_FAILURE;
+          return ERR_RUNTIME_ASSERT_FAILURE; // TODO: AppendError
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       }
       break;
@@ -2016,28 +2066,28 @@ int ParseWat(Environment& env, uint8_t* data, size_t sz)
         {
         case OP_i32_const:
           if(result.type != TE_i32 || result.i32 != value.immediates[0]._varsint32)
-            return ERR_RUNTIME_ASSERT_FAILURE;
+            return ERR_RUNTIME_ASSERT_FAILURE;// TODO: AppendError
           break;
         case OP_i64_const:
           if(result.type != TE_i64 || result.i64 != value.immediates[0]._varsint64)
-            return ERR_RUNTIME_ASSERT_FAILURE;
+            return ERR_RUNTIME_ASSERT_FAILURE;// TODO: AppendError
           break;
         case OP_f32_const:
           if(result.type != TE_f32 || result.f32 != value.immediates[0]._float32)
-            return ERR_RUNTIME_ASSERT_FAILURE;
+            return ERR_RUNTIME_ASSERT_FAILURE;// TODO: AppendError
           break;
         case OP_f64_const:
           if(result.type != TE_f64 || result.f64 != value.immediates[0]._float64)
-            return ERR_RUNTIME_ASSERT_FAILURE;
+            return ERR_RUNTIME_ASSERT_FAILURE;// TODO: AppendError
           break;
         }
         break;
       case TOKEN_ASSERT_RETURN_ARITHMETIC_NAN:
       case TOKEN_ASSERT_RETURN_CANONICAL_NAN:
         if(result.type == TE_f32 && !WatIsNaN(result.f32, t.id == TOKEN_ASSERT_RETURN_CANONICAL_NAN))
-          return ERR_RUNTIME_ASSERT_FAILURE;
+          return ERR_RUNTIME_ASSERT_FAILURE;// TODO: AppendError
         if(result.type == TE_f64 && !WatIsNaN(result.f64, t.id == TOKEN_ASSERT_RETURN_CANONICAL_NAN))
-          return ERR_RUNTIME_ASSERT_FAILURE;
+          return ERR_RUNTIME_ASSERT_FAILURE;// TODO: AppendError
         break;
       }
       break;
@@ -2045,15 +2095,27 @@ int ParseWat(Environment& env, uint8_t* data, size_t sz)
     case TOKEN_ASSERT_MALFORMED:
     case TOKEN_ASSERT_INVALID:
     case TOKEN_ASSERT_UNLINKABLE:
-      tokens.Pop();
+    {
+      Token t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       r = ParseWatScriptModule(env, tokens, mapping, last, cache);
-      if(r == ERR_SUCCESS) // prove compilation failed
-        return ERR_RUNTIME_ASSERT_FAILURE;
-      EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      if(r == ERR_SUCCESS && t.id == TOKEN_ASSERT_MALFORMED) // prove compilation failed
+        return ERR_RUNTIME_ASSERT_FAILURE; // TODO: AppendError
+      else if(r != ERR_SUCCESS && t.id != TOKEN_ASSERT_MALFORMED)
+        return r; // TODO: AppendError
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
+      ByteArray err;
+      if(r = WatString(err, tokens.Pop()))
+        return r;
+
+      ValidateModule(env, *last);
+      if(t.id == TOKEN_ASSERT_MALFORMED && env.errors)
+        return ERR_RUNTIME_ASSERT_FAILURE; // TODO: AppendError
+      if(t.id != TOKEN_ASSERT_MALFORMED && !env.errors)
+        return ERR_RUNTIME_ASSERT_FAILURE; // TODO: AppendError
       break;
+    }
     case TOKEN_ASSERT_EXHAUSTION:
       assert(false);
       break;

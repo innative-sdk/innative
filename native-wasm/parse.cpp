@@ -236,13 +236,19 @@ ERROR_CODE ParseInstruction(Stream& s, Instruction& ins)
   case OP_memory_grow:
   case OP_memory_size:
     ins.immediates[0]._varuint1 = ReadVarUInt1(s, err);
+    if(ins.immediates[0]._varuint1 != 0)
+      err = ERR_INVALID_RESERVED_VALUE;
     break;
   case OP_br_table:
     err = Parse<varuint32>::template Array<&ParseVarUInt32>(s, ins.immediates[0].table, ins.immediates[0].n_table);
 
     if(err >= 0)
+    {
       ins.immediates[1]._varuint32 = ReadVarUInt32(s, err);
 
+      if(ins.immediates[0]._varuint1 != 0)
+        err = ERR_INVALID_RESERVED_VALUE;
+    }
     break;
   case OP_call_indirect:
     ins.immediates[0]._varuint32 = ReadVarUInt32(s, err);
@@ -439,7 +445,7 @@ ERROR_CODE ParseTableInit(Stream& s, TableInit& init, Module& m)
   return err;
 }
 
-typedef struct LocalEntry
+struct LocalEntry
 {
   varuint32 count;
   varuint7 type;
