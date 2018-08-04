@@ -74,6 +74,46 @@ Function* CompileFunction(FunctionSig& signature, const llvm::Twine& name, NWCon
   return fn;
 }
 
+Function* HomogenizeFunction(Function* fn, const llvm::Twine& name, NWContext& context)
+{
+  std::vector<llvm::Type*> types; // Replace the entire function with just i64
+  for(auto& arg : fn->args())
+    types.push_back(context.builder.getInt64Ty());
+
+  Function* wrap = Function::Create(llvm::FunctionType::get(context.builder.getInt64Ty(), types, false), Function::ExternalLinkage, name, context.llvm);
+
+  auto prev = context.builder.GetInsertBlock();
+
+  BasicBlock* bb = BasicBlock::Create(context.context, "homogenize_block", wrap);
+  context.builder.SetInsertPoint(bb);
+  std::vector<llvm::Value*> values;
+  int i = 0;
+  for(auto& arg : wrap->args())
+  {
+    llvm::Value* v = nullptr;
+    auto ty = fn->getFunctionType()->params()[i++];
+    if(ty->isIntegerTy()) // Directly convert all ints from i64
+      v = context.builder.CreateIntCast(&arg, ty, true);
+    else if(ty->isFloatingPointTy()) // Bitcast from i64 to a double, then shrink to the appropriate size
+      v = context.builder.CreateFPCast(context.builder.CreateBitCast(&arg, context.builder.getDoubleTy()), ty);
+    else if(ty->isPointerTy())
+      v = context.builder.CreateIntToPtr(&arg, ty);
+    else
+      assert(false);
+
+    values.push_back(v);
+  }
+  auto val = context.builder.CreateCall(fn, values);
+
+  if(!fn->getReturnType()->isVoidTy())
+    context.builder.CreateRet(val);
+  else
+    context.builder.CreateRet(context.builder.getInt64(0));
+
+  context.builder.SetInsertPoint(prev);
+  return wrap;
+}
+
 Function* WrapFunction(Function* fn, const llvm::Twine& name, NWContext& context)
 {
   Function* wrap = Function::Create(fn->getFunctionType(), Function::InternalLinkage, name, context.llvm);
@@ -1424,6 +1464,9 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
       CompileInitConstant(context.m.global.globals[i].init, context));
   }
 
+  // Set ENV_HOMOGENIZE_FUNCTIONS flag appropriately.
+  auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &HomogenizeFunction : &WrapFunction;
+
   // Process exports by modifying global variables or function definitions as needed
   for(varuint32 i = 0; i < context.m.exportsection.n_exports; ++i)
   {
@@ -1431,7 +1474,8 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
     switch(e.kind)
     {
     case KIND_FUNCTION:
-      context.functions[e.index].exported = WrapFunction(context.functions[e.index].imported ? context.functions[e.index].imported : context.functions[e.index].internal, MergeName((const char*)context.m.name.bytes, (const char*)e.name.bytes), context);
+      
+      context.functions[e.index].exported = (*wrapperfn)(context.functions[e.index].imported ? context.functions[e.index].imported : context.functions[e.index].internal, MergeName((const char*)context.m.name.bytes, (const char*)e.name.bytes), context);
       context.functions[e.index].exported->setLinkage(Function::ExternalLinkage);
       context.functions[e.index].exported->setCallingConv(llvm::CallingConv::C);
       break;

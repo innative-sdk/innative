@@ -85,7 +85,7 @@ bool ValidateValueType(varsint7 type)
   return false;
 }
 
-void AppendError(Environment& env, Module* m, int code, const char* fmt, ...)
+void AppendError(ValidationError*& errors, Module* m, int code, const char* fmt, ...)
 {
   va_list args;
   va_start(args, fmt);
@@ -101,8 +101,8 @@ void AppendError(Environment& env, Module* m, int code, const char* fmt, ...)
 
   do
   {
-    err->next = ((std::atomic<ValidationError*>&)env.errors).load(std::memory_order_relaxed);
-  } while(!((std::atomic<ValidationError*>&)env.errors).compare_exchange_weak(err->next, err, std::memory_order_release, std::memory_order_relaxed));
+    err->next = ((std::atomic<ValidationError*>&)errors).load(std::memory_order_relaxed);
+  } while(!((std::atomic<ValidationError*>&)errors).compare_exchange_weak(err->next, err, std::memory_order_release, std::memory_order_relaxed));
 }
 
 void ValidateFunctionSig(FunctionSig& sig, Environment& env, Module* m)
@@ -110,10 +110,10 @@ void ValidateFunctionSig(FunctionSig& sig, Environment& env, Module* m)
   if(sig.form == TE_func)
   {
     if(sig.n_returns > 1)
-      AppendError(env, m, ERR_MULTIPLE_RETURN_VALUES, "Return count of %u encountered: only 0 or 1 allowed.", sig.form);
+      AppendError(env.errors, m, ERR_MULTIPLE_RETURN_VALUES, "Return count of %u encountered: only 0 or 1 allowed.", sig.form);
   }
   else
-    AppendError(env, m, ERR_UNKNOWN_SIGNATURE_TYPE, "Illegal function type %hhi encountered: only -0x20 allowed", sig.form);
+    AppendError(env.errors, m, ERR_UNKNOWN_SIGNATURE_TYPE, "Illegal function type %hhi encountered: only -0x20 allowed", sig.form);
 }
 
 bool MatchFunctionSig(FunctionSig& a, FunctionSig& b)
@@ -135,9 +135,9 @@ bool MatchFunctionSig(FunctionSig& a, FunctionSig& b)
 void ValidateImport(Import& imp, Environment& env, Module* m)
 {
   if(!ValidateIdentifier(imp.module_name))
-    AppendError(env, m, ERR_INVALID_IDENTIFIER, "Identifier not valid UTF8: %s", imp.module_name.bytes);
+    AppendError(env.errors, m, ERR_INVALID_IDENTIFIER, "Identifier not valid UTF8: %s", imp.module_name.bytes);
   if(!ValidateIdentifier(imp.export_name))
-    AppendError(env, m, ERR_INVALID_IDENTIFIER, "Identifier not valid UTF8: %s", imp.export_name.bytes);
+    AppendError(env.errors, m, ERR_INVALID_IDENTIFIER, "Identifier not valid UTF8: %s", imp.export_name.bytes);
 
   char* modname = (char*)imp.module_name.bytes;
 
@@ -151,23 +151,23 @@ void ValidateImport(Import& imp, Environment& env, Module* m)
       {
         khiter_t iter = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.bytes, imp.export_name.bytes).c_str()); // We already canonized the whitelist imports to eliminate unnecessary !C specifiers
         if(!kh_exist2(env.whitelist, iter))
-          return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a whitelisted C import, nor a valid webassembly import.", imp.module_name.bytes, imp.export_name.bytes);
+          return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a whitelisted C import, nor a valid webassembly import.", imp.module_name.bytes, imp.export_name.bytes);
         if(imp.kind != KIND_FUNCTION)
-          return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a function. You can only import C functions at this time.", imp.module_name.bytes, imp.export_name.bytes);
+          return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a function. You can only import C functions at this time.", imp.module_name.bytes, imp.export_name.bytes);
 
         FunctionSig& sig = kh_val(env.whitelist, iter);
         if(sig.form != TE_NONE) // If we have a function signature, verify it
         {
           if(imp.func_desc.sig_index >= m->type.n_functions)
-            return AppendError(env, m, ERR_INVALID_TYPE_INDEX, "Invalid imported function type index %u", imp.func_desc.sig_index);
+            return AppendError(env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid imported function type index %u", imp.func_desc.sig_index);
           if(!MatchFunctionSig(sig, m->type.functions[imp.func_desc.sig_index]))
-            return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "%s:%s does not match function signature provided by environment.", imp.module_name.bytes, imp.export_name.bytes);
+            return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s does not match function signature provided by environment.", imp.module_name.bytes, imp.export_name.bytes);
           return;
         }
         else if(env.flags & ENV_STRICT) // Strict mode enforces function signatures
-          return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "%s:%s has no function signature - Strict mode requires a valid function signature for all whitelisted C imports.", imp.module_name.bytes, imp.export_name.bytes);
+          return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s has no function signature - Strict mode requires a valid function signature for all whitelisted C imports.", imp.module_name.bytes, imp.export_name.bytes);
       } else if(env.flags & ENV_STRICT) // Wildcard whitelists are not allowed in strict mode becuase we must know the function type in strict mode.
-        return AppendError(env, m, ERR_ILLEGAL_C_IMPORT, "Wildcard imports (%s) are not allowed in strict mode! Strict mode requires a valid function signature for all whitelisted C imports.", imp.module_name.bytes);
+        return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "Wildcard imports (%s) are not allowed in strict mode! Strict mode requires a valid function signature for all whitelisted C imports.", imp.module_name.bytes);
     }
 
     if(env.cimports) 
@@ -179,51 +179,51 @@ void ValidateImport(Import& imp, Environment& env, Module* m)
       if(kh_exist2(env.cimports, iter))
         return; // This function exists and we already have verified the signature if there was a whitelist, so just return
       if(!modname || !modname[0] || modname[0] == '!') // Blank imports must have been C imports, otherwise it could have been a failed WASM module import attempt.
-        return AppendError(env, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found in C library imports", name.c_str());
+        return AppendError(env.errors, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found in C library imports", name.c_str());
     }
 
-    return AppendError(env, m, ERR_UNKNOWN_MODULE, "%s module not found", imp.module_name.bytes);
+    return AppendError(env.errors, m, ERR_UNKNOWN_MODULE, "%s module not found", imp.module_name.bytes);
   }
   varuint32 i = kh_value(env.modulemap, iter);
   if(i >= env.n_modules)
-    return AppendError(env, m, ERR_UNKNOWN_MODULE, "%s module index (%u) not in range (%u)", imp.module_name.bytes, i, env.n_modules);
+    return AppendError(env.errors, m, ERR_UNKNOWN_MODULE, "%s module index (%u) not in range (%u)", imp.module_name.bytes, i, env.n_modules);
 
   iter = kh_get_exports(env.modules[i].exports, (char*)imp.export_name.bytes);
   if(iter == kh_end(env.modules[i].exports))
-    return AppendError(env, m, ERR_UNKNOWN_EXPORT, "%s export not found", imp.export_name.bytes);
+    return AppendError(env.errors, m, ERR_UNKNOWN_EXPORT, "%s export not found", imp.export_name.bytes);
 
   varuint32 j = kh_value(env.modules[i].exports, iter);
   if(j >= env.modules[i].exportsection.n_exports)
-    return AppendError(env, m, ERR_UNKNOWN_EXPORT, "%s export index (%u) not in range (%u)", imp.module_name.bytes, j, env.modules[i].exportsection.n_exports);
+    return AppendError(env.errors, m, ERR_UNKNOWN_EXPORT, "%s export index (%u) not in range (%u)", imp.module_name.bytes, j, env.modules[i].exportsection.n_exports);
 
   Export& exp = env.modules[i].exportsection.exports[j];
   if(exp.kind != imp.kind)
-    return AppendError(env, m, ERR_IMPORT_EXPORT_MISMATCH, "export kind (%u) does not match import kind (%u)", exp.kind, imp.kind);
+    return AppendError(env.errors, m, ERR_IMPORT_EXPORT_MISMATCH, "export kind (%u) does not match import kind (%u)", exp.kind, imp.kind);
 
   if(exp.name.n_bytes != imp.export_name.n_bytes || memcmp(exp.name.bytes, imp.export_name.bytes, exp.name.n_bytes) != 0)
-    AppendError(env, m, ERR_IMPORT_EXPORT_MISMATCH, "export name (%s) does not match import name (%s)", exp.name.bytes, imp.export_name.bytes);
+    AppendError(env.errors, m, ERR_IMPORT_EXPORT_MISMATCH, "export name (%s) does not match import name (%s)", exp.name.bytes, imp.export_name.bytes);
 
   switch(imp.kind)
   {
   case KIND_FUNCTION:
     if(imp.func_desc.sig_index >= m->type.n_functions)
-      AppendError(env, m, ERR_INVALID_TYPE_INDEX, "Invalid imported function type index %u", imp.func_desc.sig_index);
+      AppendError(env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid imported function type index %u", imp.func_desc.sig_index);
     break;
   case KIND_TABLE:
   {
     TableDesc* table = ModuleTable(env.modules[i], exp.index);
     if(!table)
-      AppendError(env, m, ERR_INVALID_TABLE_INDEX, "Invalid exported table index %u", exp.index);
+      AppendError(env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid exported table index %u", exp.index);
     else
     {
       if(imp.table_desc.resizable.minimum > table->resizable.minimum)
-        AppendError(env, m, ERR_INVALID_IMPORT_MEMORY_MINIMUM, "Imported table minimum (%u) greater than exported table minimum (%u).", imp.table_desc.resizable.minimum, table->resizable.minimum);
+        AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MINIMUM, "Imported table minimum (%u) greater than exported table minimum (%u).", imp.table_desc.resizable.minimum, table->resizable.minimum);
       if(table->resizable.flags & 1)
       {
         if(!(imp.table_desc.resizable.flags & 1))
-          AppendError(env, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported table doesn't have a maximum, but exported table does.");
+          AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported table doesn't have a maximum, but exported table does.");
         else if(imp.table_desc.resizable.maximum < table->resizable.maximum)
-          AppendError(env, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported table maximum (%u) less than exported table maximum (%u).", imp.table_desc.resizable.maximum, table->resizable.maximum);
+          AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported table maximum (%u) less than exported table maximum (%u).", imp.table_desc.resizable.maximum, table->resizable.maximum);
       }
     }
     break;
@@ -232,17 +232,17 @@ void ValidateImport(Import& imp, Environment& env, Module* m)
   {
     MemoryDesc* mem = ModuleMemory(env.modules[i], exp.index);
     if(!mem)
-      AppendError(env, m, ERR_INVALID_MEMORY_INDEX, "Invalid exported memory index %u", exp.index);
+      AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "Invalid exported memory index %u", exp.index);
     else
     {
       if(imp.mem_desc.limits.minimum > mem->limits.minimum)
-        AppendError(env, m, ERR_INVALID_IMPORT_MEMORY_MINIMUM, "Imported memory minimum (%u) greater than exported memory minimum (%u).", imp.mem_desc.limits.minimum, mem->limits.minimum);
+        AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MINIMUM, "Imported memory minimum (%u) greater than exported memory minimum (%u).", imp.mem_desc.limits.minimum, mem->limits.minimum);
       if(mem->limits.flags & 1)
       {
         if(!(imp.mem_desc.limits.flags & 1))
-          AppendError(env, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported memory doesn't have a maximum, but exported memory does.");
+          AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported memory doesn't have a maximum, but exported memory does.");
         else if(imp.mem_desc.limits.maximum < mem->limits.maximum)
-          AppendError(env, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported memory maximum (%u) less than exported memory maximum (%u).", imp.mem_desc.limits.maximum, mem->limits.maximum);
+          AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported memory maximum (%u) less than exported memory maximum (%u).", imp.mem_desc.limits.maximum, mem->limits.maximum);
       }
     }
     break;
@@ -251,32 +251,32 @@ void ValidateImport(Import& imp, Environment& env, Module* m)
   {
     GlobalDesc* global = ModuleGlobal(env.modules[i], exp.index);
     if(!global)
-      AppendError(env, m, ERR_INVALID_GLOBAL_INDEX, "Invalid exported global index %u", exp.index);
+      AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid exported global index %u", exp.index);
     else if(global->mutability) // Imported globals must be immutable for right now
-      AppendError(env, m, ERR_MUTABLE_GLOBAL, "Exported global %u cannot be mutable.", exp.index);
+      AppendError(env.errors, m, ERR_MUTABLE_GLOBAL, "Exported global %u cannot be mutable.", exp.index);
     break;
   }
   default:
-    AppendError(env, m, ERR_FATAL_UNKNOWN_KIND, "unknown export kind: %hhu", imp.kind);
+    AppendError(env.errors, m, ERR_FATAL_UNKNOWN_KIND, "unknown export kind: %hhu", imp.kind);
   }
 }
 
 void ValidateFunction(varuint32& decl, Environment& env, Module* m)
 {
   if(decl >= m->type.n_functions)
-    AppendError(env, m, ERR_INVALID_TYPE_INDEX, "Invalid function declaration type index: %u", decl);
+    AppendError(env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid function declaration type index: %u", decl);
 }
 
 void ValidateLimits(ResizableLimits& limits, Environment& env, Module* m)
 {
   if(limits.maximum < limits.minimum)
-    AppendError(env, m, ERR_INVALID_LIMITS, "Limits maximum (%u) cannot be smaller than minimum (%u)", limits.maximum, limits.minimum);
+    AppendError(env.errors, m, ERR_INVALID_LIMITS, "Limits maximum (%u) cannot be smaller than minimum (%u)", limits.maximum, limits.minimum);
 }
 
 void ValidateTable(TableDesc& table, Environment& env, Module* m)
 {
   if(table.element_type != TE_anyfunc)
-    AppendError(env, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Table element type is %hhi: only anyfunc allowed.", table.element_type);
+    AppendError(env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Table element type is %hhi: only anyfunc allowed.", table.element_type);
   ValidateLimits(table.resizable, env, m);
 }
 
@@ -296,19 +296,19 @@ void ValidateBlockSignature(varsint7 sig, Environment& env, Module* m)
   case TE_void:
     break;
   default:
-    AppendError(env, m, ERR_INVALID_BLOCK_SIGNATURE, "%hhi is not a valid block signature type.", sig);
+    AppendError(env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "%hhi is not a valid block signature type.", sig);
   }
 }
 
 void ValidatePopType(Stack<varsint7>& values, varsint7 type, Environment& env, Module* m)
 {
   if(values.Size() < 1)
-    AppendError(env, m, ERR_INVALID_VALUE_STACK, "Expected a value on the stack, but stack was empty.");
+    AppendError(env.errors, m, ERR_INVALID_VALUE_STACK, "Expected a value on the stack, but stack was empty.");
   else
   {
     varsint7 t = values.Pop();
     if(type != 0 && t != type)
-      AppendError(env, m, ERR_INVALID_VALUE_STACK, "Expected %hhi on the stack, but found %hhi.", type, t);
+      AppendError(env.errors, m, ERR_INVALID_VALUE_STACK, "Expected %hhi on the stack, but found %hhi.", type, t);
   }
 }
 
@@ -319,13 +319,13 @@ void ValidateSignature(varsint7 sig, Stack<varsint7>& values, Environment& env, 
     if(values.Size() > 0)
     {
       if(values.Peek() != sig)
-        AppendError(env, m, ERR_INVALID_VALUE_STACK, "block signature expected %hhi, but value stack had %hhi instead!", sig, values.Peek());
+        AppendError(env.errors, m, ERR_INVALID_VALUE_STACK, "block signature expected %hhi, but value stack had %hhi instead!", sig, values.Peek());
     }
     else
-      AppendError(env, m, ERR_INVALID_VALUE_STACK, "block signature expected %hhi, but value stack was empty!", sig);
+      AppendError(env.errors, m, ERR_INVALID_VALUE_STACK, "block signature expected %hhi, but value stack was empty!", sig);
   }
   else if(values.Size() != 0)
-    AppendError(env, m, ERR_INVALID_VALUE_STACK, "block signature was void, but stack wasn't empty!");
+    AppendError(env.errors, m, ERR_INVALID_VALUE_STACK, "block signature was void, but stack wasn't empty!");
 }
 
 struct ControlBlock
@@ -338,7 +338,7 @@ struct ControlBlock
 void ValidateBranch(varuint32 depth, Stack<varsint7>& values, Stack<ControlBlock>& control, Environment& env, Module* m)
 {
   if(depth >= control.Size())
-    AppendError(env, m, ERR_INVALID_VALUE_STACK, "Invalid branch depth: %u exceeds %zu", depth, control.Size());
+    AppendError(env.errors, m, ERR_INVALID_BRANCH_DEPTH, "Invalid branch depth: %u exceeds %zu", depth, control.Size());
   if(control[depth].type != OP_loop) // any branch that targets a loop just discards the entire stack to that point.
     ValidateSignature(control[depth].sig, values, env, m);
 }
@@ -354,9 +354,9 @@ template<typename T, TYPE_ENCODING PUSH>
 void ValidateLoad(varuint32 align, Stack<varsint7>& values, Environment& env, Module* m)
 {
   if(!ModuleMemory(*m, 0))
-    AppendError(env, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
+    AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
   if((1ULL << align) > sizeof(T))
-    AppendError(env, m, ERR_INVALID_MEMORY_ALIGNMENT, "Alignment of %u exceeds number of accessed bytes %i", (1 << align), sizeof(T));
+    AppendError(env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT, "Alignment of %u exceeds number of accessed bytes %i", (1 << align), sizeof(T));
   ValidatePopType(values, TE_i32, env, m);
   values.Push(PUSH);
 }
@@ -365,9 +365,9 @@ template<typename T, TYPE_ENCODING POP>
 void ValidateStore(varuint32 align, Stack<varsint7>& values, Environment& env, Module* m)
 {
   if(!ModuleMemory(*m, 0))
-    AppendError(env, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
+    AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
   if((1ULL << align) > sizeof(T))
-    AppendError(env, m, ERR_INVALID_MEMORY_ALIGNMENT, "Alignment of %u exceeds number of accessed bytes %i", (1 << align), sizeof(T));
+    AppendError(env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT, "Alignment of %u exceeds number of accessed bytes %i", (1 << align), sizeof(T));
   ValidatePopType(values, POP, env, m);
   ValidatePopType(values, TE_i32, env, m);
 }
@@ -393,7 +393,7 @@ void ValidateFunctionSig(Stack<varsint7>& values, FunctionSig& sig, Environment&
     ValidatePopType(values, sig.params[i], env, m);
 
   if(sig.n_returns > 1)
-    AppendError(env, m, ERR_INVALID_FUNCTION_INDEX, "Cannot return more than one value yet, tried to return %i.", sig.n_returns);
+    AppendError(env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Cannot return more than one value yet, tried to return %i.", sig.n_returns);
 
   for(varuint32 i = 0; i < sig.n_returns; ++i)
     values.Push(sig.returns[i]);
@@ -405,7 +405,7 @@ void ValidateIndirectCall(Stack<varsint7>& values, varuint32 sig, Environment& e
   if(sig < m->type.n_functions)
     ValidateFunctionSig(values, m->type.functions[sig], env, m);
   else
-    AppendError(env, m, ERR_INVALID_FUNCTION_INDEX, "signature index was %u, which is an invalid function signature index.", sig);
+    AppendError(env.errors, m, ERR_INVALID_FUNCTION_INDEX, "signature index was %u, which is an invalid function signature index.", sig);
 }
 
 void ValidateCall(Stack<varsint7>& values, varuint32 callee, Environment& env, Module* m)
@@ -414,7 +414,7 @@ void ValidateCall(Stack<varsint7>& values, varuint32 callee, Environment& env, M
   if(sig)
     ValidateFunctionSig(values, *sig, env, m);
   else
-    AppendError(env, m, ERR_INVALID_FUNCTION_INDEX, "callee was %u, which is an invalid function index.", callee);
+    AppendError(env.errors, m, ERR_INVALID_FUNCTION_INDEX, "callee was %u, which is an invalid function index.", callee);
 }
 
 void ValidateInstruction(Instruction& ins, Stack<varsint7>& values, Stack<ControlBlock>& control, varuint32 n_locals, varsint7* locals, Environment& env, Module* m)
@@ -446,7 +446,7 @@ void ValidateInstruction(Instruction& ins, Stack<varsint7>& values, Stack<Contro
     if(control.Size() > 0)
       ValidateSignature(control[0].sig, values, env, m);
     else
-      AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Empty control stack at return statement.");
+      AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Empty control stack at return statement.");
     break;
 
     // Call operators
@@ -470,17 +470,17 @@ void ValidateInstruction(Instruction& ins, Stack<varsint7>& values, Stack<Contro
     // Variable access
   case OP_get_local:
     if(ins.immediates[0]._varuint32 >= n_locals)
-      AppendError(env, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for get_local.");
+      AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for get_local.");
     values.Push(locals[ins.immediates[0]._varuint32]);
     break;
   case OP_set_local:
     if(ins.immediates[0]._varuint32 >= n_locals)
-      AppendError(env, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
+      AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
     ValidatePopType(values, locals[ins.immediates[0]._varuint32], env, m);
     break;
   case OP_tee_local:
     if(ins.immediates[0]._varuint32 >= n_locals)
-      AppendError(env, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
+      AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
     ValidatePopType(values, locals[ins.immediates[0]._varuint32], env, m);
     values.Push(locals[ins.immediates[0]._varuint32]);
     break;
@@ -488,7 +488,7 @@ void ValidateInstruction(Instruction& ins, Stack<varsint7>& values, Stack<Contro
   {
     GlobalDesc* desc = ModuleGlobal(*m, ins.immediates[0]._varuint32);
     if(!desc)
-      AppendError(env, m, ERR_INVALID_LOCAL_INDEX, "Invalid global index for get_global.");
+      AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid global index for get_global.");
     else
       values.Push(desc->type);
   }
@@ -497,7 +497,7 @@ void ValidateInstruction(Instruction& ins, Stack<varsint7>& values, Stack<Contro
   {
     GlobalDesc* desc = ModuleGlobal(*m, ins.immediates[0]._varuint32);
     if(!desc)
-      AppendError(env, m, ERR_INVALID_LOCAL_INDEX, "Invalid global index for get_global.");
+      AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid global index for get_global.");
     else
       ValidatePopType(values, desc->type, env, m);
   }
@@ -529,12 +529,12 @@ void ValidateInstruction(Instruction& ins, Stack<varsint7>& values, Stack<Contro
   case OP_i64_store32: ValidateStore<int32_t, TE_i64>(ins.immediates[0]._memflags, values, env, m); break;
   case OP_memory_size:
     if(ins.immediates[0]._varuint1 != 0)
-      AppendError(env, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
+      AppendError(env.errors, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
     values.Push(TE_i32);
     break;
   case OP_memory_grow:
     if(ins.immediates[0]._varuint1 != 0)
-      AppendError(env, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
+      AppendError(env.errors, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
     ValidatePopType(values, TE_i32, env, m);
     values.Push(TE_i32);
     break;
@@ -676,7 +676,7 @@ void ValidateInstruction(Instruction& ins, Stack<varsint7>& values, Stack<Contro
   case OP_f32_reinterpret_i32: ValidateUnaryOp<TE_i32, TE_f32>(values, env, m); break;
   case OP_f64_reinterpret_i64: ValidateUnaryOp<TE_i64, TE_f64>(values, env, m); break;
   default:
-    AppendError(env, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "Unknown instruction code %hhu", ins.opcode);
+    AppendError(env.errors, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "Unknown instruction code %hhu", ins.opcode);
   }
 }
 
@@ -690,15 +690,15 @@ varsint7 ValidateInitializer(Instruction& ins, Environment& env, Module* m)
   case OP_f64_const: return TE_f64;
   case OP_get_global:
     if(!ModuleGlobal(*m, ins.immediates[0]._varuint32))
-      AppendError(env, m, ERR_INVALID_LOCAL_INDEX, "Invalid global index for get_global.");
+      AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid global index for get_global.");
     else if(ins.immediates[0]._varuint32 < m->importsection.globals)
       return m->importsection.imports[ins.immediates[0]._varuint32].global_desc.type;
     else
-      AppendError(env, m, ERR_INVALID_INITIALIZER, "A get_global initializer must be an import.", ins.opcode);
+      AppendError(env.errors, m, ERR_INVALID_INITIALIZER, "A get_global initializer must be an import.", ins.opcode);
     return TE_i32;
   }
 
-  AppendError(env, m, ERR_INVALID_INITIALIZER, "An initializer must be a get_global or const instruction, not %hhu", ins.opcode);
+  AppendError(env.errors, m, ERR_INVALID_INITIALIZER, "An initializer must be a get_global or const instruction, not %hhu", ins.opcode);
   return TE_i32;
 }
 
@@ -706,7 +706,7 @@ void ValidateGlobal(GlobalDecl& decl, Environment& env, Module* m)
 {
   varsint7 type = ValidateInitializer(decl.init, env, m);
   if(type != decl.desc.type)
-    AppendError(env, m, ERR_INVALID_GLOBAL_TYPE, "The global initializer has type %hhi, must be the same as the description type %hhi.", type, decl.desc.type);
+    AppendError(env.errors, m, ERR_INVALID_GLOBAL_TYPE, "The global initializer has type %hhi, must be the same as the description type %hhi.", type, decl.desc.type);
 }
 
 void ValidateExport(Export& e, Environment& env, Module* m)
@@ -717,27 +717,27 @@ void ValidateExport(Export& e, Environment& env, Module* m)
   {
   case KIND_FUNCTION:
     if(!ModuleFunction(*m, e.index))
-      AppendError(env, m, ERR_INVALID_FUNCTION_INDEX, "Invalid function index %u", e.index);
+      AppendError(env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid function index %u", e.index);
     break;
   case KIND_TABLE:
     if(!ModuleTable(*m, e.index))
-      AppendError(env, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", e.index);
+      AppendError(env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", e.index);
     break;
   case KIND_MEMORY:
     if(!ModuleMemory(*m, e.index))
-      AppendError(env, m, ERR_INVALID_MEMORY_INDEX, "Invalid memory index %u", e.index);
+      AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "Invalid memory index %u", e.index);
     break;
   case KIND_GLOBAL:
   {
     GlobalDesc* g = ModuleGlobal(*m, e.index);
     if(!g)
-      AppendError(env, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index %u", e.index);
+      AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index %u", e.index);
     else if(g->mutability)
-      AppendError(env, m, ERR_MUTABLE_GLOBAL, "Exported global %s index %u should not be mutable.", e.name.bytes, e.index);
+      AppendError(env.errors, m, ERR_MUTABLE_GLOBAL, "Exported global %s index %u should not be mutable.", e.name.bytes, e.index);
     break;
   }
   default:
-    AppendError(env, m, ERR_FATAL_UNKNOWN_KIND, "The %s export has invalid kind %hhu", e.name.bytes, e.kind);
+    AppendError(env.errors, m, ERR_FATAL_UNKNOWN_KIND, "The %s export has invalid kind %hhu", e.name.bytes, e.kind);
     break;
   }
 }
@@ -756,7 +756,7 @@ varsint32 EvalInitializerI32(Instruction& ins, Environment& env, Module* m)
     {
       std::pair<Module*, Export*> p = ResolveExport(env, m->importsection.imports[i]);
       if(!p.second || p.second->kind != KIND_GLOBAL || p.second->index < p.first->importsection.globals)
-        AppendError(env, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global import %u", ins.immediates[0]._varsint32);
+        AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global import %u", ins.immediates[0]._varsint32);
       else
         return EvalInitializerI32(p.first->global.globals[p.second->index - p.first->importsection.globals].init, env, p.first);
       break;
@@ -766,13 +766,13 @@ varsint32 EvalInitializerI32(Instruction& ins, Environment& env, Module* m)
       global = &m->global.globals[i];
 
     if(!global)
-      AppendError(env, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index %u", ins.immediates[0]._varsint32);
+      AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index %u", ins.immediates[0]._varsint32);
     else
       return EvalInitializerI32(global->init, env, nullptr);
     break;
   }
   default:
-    AppendError(env, m, ERR_INVALID_INITIALIZER, "Expected i32 type but got %hhu", ins.opcode);
+    AppendError(env.errors, m, ERR_INVALID_INITIALIZER, "Expected i32 type but got %hhu", ins.opcode);
   }
 
   return 0;
@@ -782,23 +782,23 @@ void ValidateTableOffset(TableInit& init, Environment& env, Module* m)
 {
   varsint7 type = ValidateInitializer(init.offset, env, m);
   if(type != TE_i32)
-    AppendError(env, m, ERR_INVALID_TABLE_TYPE, "Expected table offset instruction type of i32, got %hhi instead.", type);
+    AppendError(env.errors, m, ERR_INVALID_TABLE_TYPE, "Expected table offset instruction type of i32, got %hhi instead.", type);
 
   TableDesc* table = ModuleTable(*m, init.index);
   if(!table)
-    AppendError(env, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", init.index);
+    AppendError(env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", init.index);
   else if(table->element_type == TE_anyfunc)
   {
     varsint32 offset = EvalInitializerI32(init.offset, env, m);
     if(offset + init.n_elems > table->resizable.minimum)
-      AppendError(env, m, ERR_INVALID_TABLE_OFFSET, "Offset (%i) plus element count (%u) exceeds minimum table length (%u)", offset, init.n_elems, table->resizable.minimum);
+      AppendError(env.errors, m, ERR_INVALID_TABLE_OFFSET, "Offset (%i) plus element count (%u) exceeds minimum table length (%u)", offset, init.n_elems, table->resizable.minimum);
 
     for(varuint32 i = 0; i < init.n_elems; ++i)
       if(!ModuleFunction(*m, init.elems[i]))
-        AppendError(env, m, ERR_INVALID_FUNCTION_INDEX, "Invalid element initializer %u function index: %u", i, init.elems[i]);
+        AppendError(env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid element initializer %u function index: %u", i, init.elems[i]);
   }
   else
-    AppendError(env, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Invalid table element type %hhi", table->element_type);
+    AppendError(env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Invalid table element type %hhi", table->element_type);
 }
 
 void ValidateEndBlock(ControlBlock block, Stack<varsint7>& values, Environment& env, Module* m)
@@ -829,7 +829,7 @@ void ValidateFunctionBody(FunctionSig& sig, FunctionBody& body, Environment& env
   control.Push({ values.Limit(), ret, OP_block }); // Push the function body block with the function signature
 
   if(!body.n_body)
-    return AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Cannot have an empty function body!");
+    return AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Cannot have an empty function body!");
 
   for(varuint32 i = 0; i < body.n_body; ++i)
   {
@@ -845,18 +845,18 @@ void ValidateFunctionBody(FunctionSig& sig, FunctionBody& body, Environment& env
       break;
     case OP_end:
       if(!control.Size())
-        AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Mismatched end instruction at index %u!", i);
+        AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Mismatched end instruction at index %u!", i);
       else
         ValidateEndBlock(control.Pop(), values, env, m);
       break;
     case OP_else:
       if(!control.Size())
-        AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Mismatched else instruction at index %u!", i);
+        AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Mismatched else instruction at index %u!", i);
       else
       {
         ControlBlock block = control.Pop();
         if(block.type != OP_if)
-          AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Expected else instruction to terminate if block, but found %hhi instead.", block.type);
+          AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Expected else instruction to terminate if block, but found %hhi instead.", block.type);
         ValidateEndBlock(block, values, env, m);
         control.Push({ values.Limit(), block.sig, OP_else }); // Push a new else block that must be terminated by an end instruction
         values.SetLimit(values.Size() + values.Limit());
@@ -868,29 +868,29 @@ void ValidateFunctionBody(FunctionSig& sig, FunctionBody& body, Environment& env
     ValidatePopType(values, sig.returns[i], env, m);
 
   if(control.Size() > 0)
-    AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Control stack not fully terminated, off by %zu", control.Size());
+    AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Control stack not fully terminated, off by %zu", control.Size());
 
   if(values.Size() > 0 || values.Limit() > 0)
-    AppendError(env, m, ERR_INVALID_VALUE_STACK, "Value stack not fully empty, off by %zu", values.Size() + values.Limit());
+    AppendError(env.errors, m, ERR_INVALID_VALUE_STACK, "Value stack not fully empty, off by %zu", values.Size() + values.Limit());
 
   if(cur[body.n_body - 1].opcode != OP_end)
-    AppendError(env, m, ERR_INVALID_FUNCTION_BODY, "Expected end instruction to terminate function body, got %hhu instead.", cur[body.n_body - 1].opcode);
+    AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Expected end instruction to terminate function body, got %hhu instead.", cur[body.n_body - 1].opcode);
 }
 
 void ValidateDataOffset(DataInit& init, Environment& env, Module* m)
 {
   varsint7 type = ValidateInitializer(init.offset, env, m);
   if(type != TE_i32)
-    AppendError(env, m, ERR_INVALID_MEMORY_TYPE, "Expected memory offset instruction type of i32, got %hhi instead.", type);
+    AppendError(env.errors, m, ERR_INVALID_MEMORY_TYPE, "Expected memory offset instruction type of i32, got %hhi instead.", type);
 
   MemoryDesc* memory = ModuleMemory(*m, init.index);
   if(!memory)
-    AppendError(env, m, ERR_INVALID_MEMORY_INDEX, "Invalid memory index %u", init.index);
+    AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "Invalid memory index %u", init.index);
   else
   {
     varsint32 offset = EvalInitializerI32(init.offset, env, m);
     if(offset + init.data.n_bytes > memory->limits.minimum)
-      AppendError(env, m, ERR_INVALID_MEMORY_OFFSET, "Offset (%i) plus element count (%u) exceeds minimum memory length (%u)", offset, init.data.n_bytes, memory->limits.minimum);
+      AppendError(env.errors, m, ERR_INVALID_MEMORY_OFFSET, "Offset (%i) plus element count (%u) exceeds minimum memory length (%u)", offset, init.data.n_bytes, memory->limits.minimum);
   }
 }
 
@@ -914,7 +914,7 @@ void ValidateModule(Environment& env, Module& m)
     ValidateSection<varuint32, &ValidateFunction>(m.function.funcdecl, m.function.n_funcdecl, env, &m);
 
     if(m.function.n_funcdecl != m.code.n_funcbody)
-      AppendError(env, &m, ERR_FUNCTION_BODY_MISMATCH, "The number of function declarations (%u) does not equal the number of function bodies (%u)", m.function.n_funcdecl, m.code.n_funcbody);
+      AppendError(env.errors, &m, ERR_FUNCTION_BODY_MISMATCH, "The number of function declarations (%u) does not equal the number of function bodies (%u)", m.function.n_funcdecl, m.code.n_funcbody);
   }
 
   if(m.knownsections&(1 << SECTION_TABLE))
@@ -935,12 +935,12 @@ void ValidateModule(Environment& env, Module& m)
     if(f)
     {
       if(m.start < m.importsection.functions)
-        AppendError(env, &m, ERR_INVALID_START_FUNCTION, "The start function (%hhu) cannot be an imported function", m.start);
+        AppendError(env.errors, &m, ERR_INVALID_START_FUNCTION, "The start function (%hhu) cannot be an imported function", m.start);
       if(f->n_params > 0 || f->n_returns > 0)
-        AppendError(env, &m, ERR_INVALID_START_FUNCTION, "Starting function must have no parameters and no return value, instead it has %u parameters and %u return values.", f->n_params, f->n_returns);
+        AppendError(env.errors, &m, ERR_INVALID_START_FUNCTION, "Starting function must have no parameters and no return value, instead it has %u parameters and %u return values.", f->n_params, f->n_returns);
     }
     else
-      AppendError(env, &m, ERR_INVALID_FUNCTION_INDEX, "Start module function index %u does not exist.", m.start);
+      AppendError(env.errors, &m, ERR_INVALID_FUNCTION_INDEX, "Start module function index %u does not exist.", m.start);
   }
 
   if(m.knownsections&(1 << SECTION_ELEMENT))

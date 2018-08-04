@@ -122,16 +122,6 @@ void* LoadDLL(const char* path);
 void* LoadDLLFunction(void* dll, const char* name);
 void FreeDLL(void* dll);
 
-#ifdef NW_COMPILER_MSC
-#define FOPEN(f, path, mode) fopen_s((&f), (path), (mode))
-#define ITOA(value, buffer, size, radix) _itoa_s(value, buffer, size, radix)
-#define STRICMP(a, b) _stricmp(a, b)
-#else
-#define FOPEN(f, path, mode) f = fopen(path, mode)
-#define ITOA(value, buffer, size, radix) itoa((value), (buffer), (radix))
-#define STRICMP(a, b) stricmp(a, b)
-#endif
-
 // Merges two strings with the standard NW_GLUE_STRING
 inline std::string MergeName(const char* prefix, const char* name, int index = -1)
 {

@@ -4,7 +4,7 @@
 #include "native-wasm/export.h"
 #include "tools.h"
 #include "path.h"
-#include "wat.h"
+#include "wast.h"
 #include <stdio.h>
 #include <memory>
 #include <string>
@@ -97,7 +97,7 @@ int native_wasm_build_loader(struct _NW_CHUNK* chunks, const char* out, bool dyn
   return -1;
 }
 
-int native_wasm_compile_script(const char* file, unsigned int flags)
+int native_wasm_compile_script(const char* file, unsigned int flags, ValidationError** errors)
 {
   Environment* env = CreateEnvironment(flags, 1, 0);
   if(!env)
@@ -125,12 +125,18 @@ int native_wasm_compile_script(const char* file, unsigned int flags)
     return err;
   }
 
-  err = ParseWat(*env, data_module.get(), sz);
+  err = ParseWast(*env, data_module.get(), sz);
 
   if(err < 0)
   {
     fprintf(stderr, "Error loading modules: 0x%x\n", -err);
     return err;
+  }
+
+  if(errors)
+  {
+    *errors = env->errors;
+    env->errors = 0;
   }
 
   // Destroy environment

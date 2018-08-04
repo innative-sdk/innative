@@ -196,9 +196,9 @@
     <ClCompile Include="optimize.cpp" />
     <ClCompile Include="parse.cpp" />
     <ClCompile Include="tools.cpp" />
-    <ClCompile Include="trex.c" />
     <ClCompile Include="util.cpp" />
     <ClCompile Include="validate.cpp" />
+    <ClCompile Include="wast.cpp" />
     <ClCompile Include="wat.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -215,9 +215,9 @@
     <ClInclude Include="stack.h" />
     <ClInclude Include="stream.h" />
     <ClInclude Include="tools.h" />
-    <ClInclude Include="trex.h" />
     <ClInclude Include="util.h" />
     <ClInclude Include="validate.h" />
+    <ClInclude Include="wast.h" />
     <ClInclude Include="wat.h" />
   </ItemGroup>
   <ItemGroup>

@@ -6,10 +6,9 @@
 
 #include "native-wasm/schema.h"
 #include "util.h"
+#include "queue.h"
+#include "stack.h"
 #include <istream>
-
-int ParseWat(Environment& env, uint8_t* data, size_t sz);
-int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, StringRef name);
 
 typedef unsigned short TokenID;
 
@@ -81,5 +80,54 @@ struct Token
     size_t len;
   };
 };
+
+struct DeferWatAction
+{
+  int id;
+  Token t;
+  uint64_t func;
+  uint64_t index;
+};
+
+KHASH_DECLARE(indexname, Token, varuint32);
+
+struct WatState
+{
+  WatState(Module& mod);
+  ~WatState();
+  varuint7 GetJump(Token var);
+
+  Module& m;
+  Queue<DeferWatAction> defer;
+  Stack<StringRef> stack;
+  kh_indexname_t* typehash;
+  kh_indexname_t* funchash;
+  kh_indexname_t* tablehash;
+  kh_indexname_t* memoryhash;
+  kh_indexname_t* globalhash;
+};
+
+#define EXPECTED(t, e, err) if((t).Size() == 0 || (t).Pop().id != (e)) return assert(false), (err)
+
+int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, StringRef name);
+int WatString(ByteArray& str, StringRef t);
+void SkipSection(Queue<Token>& tokens);
+int WatInitializer(WatState& state, Queue<Token>& tokens, Instruction& op);
+void TokenizeWAT(Queue<Token>& tokens, char* s, char* end);
+int WatName(ByteArray& name, const Token& t);
+int WatModule(Environment& env, Module& m, Queue<Token>& tokens, StringRef name);
+
+NW_FORCEINLINE int WatString(ByteArray& str, const Token& t)
+{
+  if(t.id != TOKEN_STRING)
+    return assert(false), ERR_WAT_EXPECTED_STRING;
+  return WatString(str, StringRef{ t.pos, t.len });
+}
+
+NW_FORCEINLINE Token GetWatNameToken(Queue<Token>& tokens)
+{
+  return (tokens.Peek().id == TOKEN_NAME) ? tokens.Pop() : Token{ TOKEN_NONE };
+}
+
 
 #endif

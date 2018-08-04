@@ -45,7 +45,7 @@
     <ClCompile Include="wat.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="trex.c">
+    <ClCompile Include="wast.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -92,13 +92,13 @@
     <ClInclude Include="wat.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="trex.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="queue.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="stream.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="wast.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

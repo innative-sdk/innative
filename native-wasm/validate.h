@@ -13,6 +13,6 @@ void ValidateModule(Environment& env, Module& m);
 bool ValidateSectionOrder(uint32& sections, varuint7 opcode);
 bool MatchFunctionSig(FunctionSig& a, FunctionSig& b);
 varsint32 EvalInitializerI32(Instruction& ins, Environment& env, Module* m);
-void AppendError(Environment& env, Module* m, int code, const char* fmt, ...);
+void AppendError(ValidationError*& errors, Module* m, int code, const char* fmt, ...);
 
 #endif
