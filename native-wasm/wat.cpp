@@ -11,7 +11,7 @@
 #define LEXER_DIGIT "0-9"
 #define LEXER_HEXDIGIT "a-fA-F0-9"
 #define LEXER_LETTER "A-Za-z"
-#define LEXER_PLUSMINUS "[+\\-]?"
+#define LEXER_PLUSMINUS "[+-]?"
 #define LEXER_NUM "[" LEXER_DIGIT "](_?[" LEXER_DIGIT "])*"
 #define LEXER_HEXNUM "[" LEXER_HEXDIGIT "](_?[" LEXER_HEXDIGIT "])*"
 
@@ -94,12 +94,13 @@ static std::string numbuf;
 
 void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
 {
-  static const int REGEX_CONFIG = std::regex_constants::extended | std::regex_constants::optimize;
-  static std::regex regex_INT("^" LEXER_PLUSMINUS "(" LEXER_NUM "|0x" LEXER_HEXNUM ")", REGEX_CONFIG);
-  static std::regex regex_NAME("^" "\\$[" LEXER_LETTER LEXER_DIGIT "_.+\\-*/\\\\\\^~=<>!?@#$%&|:'`]+", REGEX_CONFIG);
-  static std::regex regex_FLOAT("^" LEXER_PLUSMINUS LEXER_NUM "\\.(" LEXER_NUM ")?([eE]" LEXER_PLUSMINUS LEXER_NUM ")?", REGEX_CONFIG);
-  static std::regex regex_HEXFLOAT("^" LEXER_PLUSMINUS "0x" LEXER_HEXNUM "\\.(" LEXER_HEXNUM ")?([pP]" LEXER_PLUSMINUS LEXER_HEXNUM ")?", REGEX_CONFIG);
-  static std::regex regex_NANFLOAT("^" LEXER_PLUSMINUS "[nN][aA][nN](:0x" LEXER_HEXNUM ")?", REGEX_CONFIG);
+  static const std::regex::flag_type REGEX_CONFIG = std::regex_constants::ECMAScript | std::regex_constants::optimize;
+  static const std::regex_constants::match_flag_type REGEX_MATCH = std::regex_constants::match_not_null | std::regex_constants::match_continuous;
+  static std::regex regex_INT(LEXER_PLUSMINUS "(" LEXER_NUM "|0x" LEXER_HEXNUM ")", REGEX_CONFIG);
+  static std::regex regex_NAME("[$][-" LEXER_LETTER LEXER_DIGIT "_.+*/\\~=<>!?@#$%&|:'`^]+", REGEX_CONFIG);
+  static std::regex regex_FLOAT(LEXER_PLUSMINUS LEXER_NUM "[.](" LEXER_NUM ")?([eE]" LEXER_PLUSMINUS LEXER_NUM ")?", REGEX_CONFIG);
+  static std::regex regex_HEXFLOAT(LEXER_PLUSMINUS "0x" LEXER_HEXNUM "[.](" LEXER_HEXNUM ")?([pP]" LEXER_PLUSMINUS LEXER_HEXNUM ")?", REGEX_CONFIG);
+  static std::regex regex_NANFLOAT(LEXER_PLUSMINUS "[nN][aA][nN](:0x" LEXER_HEXNUM ")?", REGEX_CONFIG);
 
   while(s < end)
   {
@@ -185,7 +186,7 @@ void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
     case '$': // A name
     {
       std::match_results<const char*> results;
-      if(std::regex_search<char>(s, results, regex_NAME, std::regex_constants::match_not_null))
+      if(std::regex_search<char>(s, results, regex_NAME, REGEX_MATCH))
       {
         assert(results[0].first == s);
         Token t = { TOKEN_NAME, results[0].first + 1 };
@@ -209,19 +210,16 @@ void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
     case '9': // Either an integer or a float
     {
       std::match_results<const char*> results;
-      
-      if(std::regex_search<const char*>(s, end, results, regex_INT, std::regex_constants::match_not_null))
+      if(std::regex_search<const char*>(s, end, results, regex_INT, REGEX_MATCH))
       {
-        char* out;
-        tokens.Push(Token{ TOKEN_INTEGER, s, (int64_t)strtoll(results[0].str().data(), &out, 10) });
+        tokens.Push(Token{ TOKEN_INTEGER, s, (int64_t)strtoll(results[0].str().data(), NULL, 10) });
         s = const_cast<char*>(results[0].second);
         break;
       }
-      if(std::regex_search<const char*>(s, end, results, regex_FLOAT, std::regex_constants::match_not_null) || std::regex_search<const char*>(s, end, results, regex_HEXFLOAT, std::regex_constants::match_not_null))
+      if(std::regex_search<const char*>(s, end, results, regex_FLOAT, REGEX_MATCH) || std::regex_search<const char*>(s, end, results, regex_HEXFLOAT, REGEX_MATCH))
       {
-        char* out;
         Token t = { TOKEN_FLOAT, s };
-        t.f = strtod(results[0].str().data(), &out); // This can handle both normal and hex float format
+        t.f = strtod(results[0].str().data(), NULL); // This can handle both normal and hex float format
         tokens.Push(t);
         s = const_cast<char*>(end);
         break;
@@ -231,10 +229,26 @@ void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
     {
       // Check if this is an NaN first
       std::match_results<const char*> results;
-      if(std::regex_search(s, results, regex_NANFLOAT, std::regex_constants::match_not_null))
+      if(std::regex_search(s, results, regex_NANFLOAT, REGEX_MATCH))
       {
         Token t = { TOKEN_FLOAT, s };
-        assert(false); // TODO: not implemented
+        std::string nan("NAN("); // Construct a valid NAN(0xFFFF) string to be interpreted by strtod
+
+        switch(results[0].first[0]) // Prepend sign if it exists
+        {
+        case '+':
+        case '-':
+          nan.insert(0, 1, results[0].first[0]);
+          break;
+        }
+
+        if(results.length() > 0) // If digits are specified, add them, otherwise generate a quiet NAN
+          nan += results[1].str().substr(1);
+        nan += ')';
+
+        t.f = strtod(nan.data(), NULL);
+        tokens.Push(t);
+        break;
       }
 
       const char* begin = s;
@@ -262,6 +276,41 @@ void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
     }
     }
   }
+}
+
+void WriteUTF32(uint32_t ch, ByteArray& str)
+{
+  static const uint32_t UNI_REPLACEMENT_CHAR = 0x0000FFFD;
+  static const uint32_t UNI_MAX_LEGAL_UTF32 = 0x0010FFFF;
+  static const uint8_t firstByteMark[7] = { 0x00, 0x00, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC };
+  static const uint32_t byteMask = 0xBF;
+  static const uint32_t byteMark = 0x80;
+
+  int bytesToWrite;
+  if(ch < 0x80)
+    bytesToWrite = 1;
+  else if(ch < 0x800)
+    bytesToWrite = 2;
+  else if(ch < 0x10000)
+    bytesToWrite = 3;
+  else if(ch <= UNI_MAX_LEGAL_UTF32)
+    bytesToWrite = 4;
+  else
+  {
+    bytesToWrite = 3;
+    ch = UNI_REPLACEMENT_CHAR;
+  }
+
+  
+  uint8_t* target = str.bytes + str.n_bytes + bytesToWrite;
+  switch(bytesToWrite)
+  { /* note: everything falls through. */
+  case 4: *--target = (uint8_t)((ch | byteMark) & byteMask); ch >>= 6;
+  case 3: *--target = (uint8_t)((ch | byteMark) & byteMask); ch >>= 6;
+  case 2: *--target = (uint8_t)((ch | byteMark) & byteMask); ch >>= 6;
+  case 1: *--target = (uint8_t)(ch | firstByteMark[bytesToWrite]);
+  }
+  str.n_bytes += bytesToWrite;
 }
 
 int WatString(ByteArray& str, StringRef t)
@@ -303,7 +352,12 @@ int WatString(ByteArray& str, StringRef t)
         str.bytes[str.n_bytes++] = '"';
         break;
       case 'u':
-        // TODO: evaluate unicode
+      {
+        char* end;
+        WriteUTF32(strtol(t.s + i + 1, &end, 16), str);
+        i += end - (t.s + i + 1);
+        break;
+      }
       default:
         if((t.s[i] >= '0' && t.s[i] <= '9') || (t.s[i] >= 'A' && t.s[i] <= 'F'))
         {
