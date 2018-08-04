@@ -17,6 +17,8 @@ public:
   ~Queue() {}
   inline void Reserve(size_t capacity) { _array.reserve(capacity); }
   inline void Push(const T& item) { _array.push_back(item); }
+  inline T& Front() { return _array.front(); }
+  inline T& Back() { return _array.back(); }
   inline T Pop() { assert(_array.size() > _pos); return _array[_pos++]; } // This only works with trivial types
   inline T& Peek() { assert(_array.size() > _pos); return _array[_pos]; }
   inline const T& Peek() const { assert(_array.size() > _pos); return _array[_pos]; }

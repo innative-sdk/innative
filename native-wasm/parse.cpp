@@ -8,7 +8,7 @@
 #include <algorithm>
 
 __KHASH_IMPL(exports, kh_inline, kh_cstr_t, varuint32, 1, kh_str_hash_func, kh_str_hash_equal);
-__KHASH_IMPL(modules, kh_inline, kh_cstr_t, varuint32, 1, kh_str_hash_func, kh_str_hash_equal);
+__KHASH_IMPL(modules, kh_inline, kh_cstr_t, size_t, 1, kh_str_hash_func, kh_str_hash_equal);
 
 NW_FORCEINLINE ERROR_CODE ParseVarUInt32(Stream& s, varuint32& target) { ERROR_CODE err; target = static_cast<varuint32>(DecodeLEB128(s, err, 32, false)); return err; }
 NW_FORCEINLINE ERROR_CODE ParseVarSInt7(Stream& s, varsint7& target) { ERROR_CODE err; target = static_cast<varsint7>(DecodeLEB128(s, err, 7, true)); return err; }

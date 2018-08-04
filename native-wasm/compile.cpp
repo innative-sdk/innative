@@ -1694,7 +1694,7 @@ ERROR_CODE CompileEnvironment(Environment* env, const char* filepath)
   Function* main = Function::Create(FunctionType::get(builder.getVoidTy(), false), Function::ExternalLinkage, "_native_wasm_internal_start", start->llvm);
   BasicBlock* initblock = BasicBlock::Create(context, "start_entry", main);
   builder.SetInsertPoint(initblock);
-  for(varuint32 i = 0; i < env->n_modules; ++i)
+  for(size_t i = 0; i < env->n_modules; ++i)
     builder.CreateCall(nw[i].init, {});
 
   if(start->start != nullptr)
@@ -1717,7 +1717,7 @@ ERROR_CODE CompileEnvironment(Environment* env, const char* filepath)
   AnnotateFunctions(env, nw);
 
   // Optimize all modules
-  for(varuint32 i = 0; i < env->n_modules; ++i)
+  for(size_t i = 0; i < env->n_modules; ++i)
   {
   }
 
@@ -1755,7 +1755,7 @@ ERROR_CODE CompileEnvironment(Environment* env, const char* filepath)
     std::vector<std::string> targets = { std::string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.BaseDir().Get(), "/LIBPATH:" + workdir.Get() };
 
     // Generate object code
-    for(varuint32 i = 0; i < env->n_modules; ++i)
+    for(size_t i = 0; i < env->n_modules; ++i)
     {
       assert(nw[i].m.name.bytes != 0);
       targets.emplace_back(MergeStrings((char*)nw[i].m.name.bytes, ".o"));

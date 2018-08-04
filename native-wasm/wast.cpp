@@ -75,10 +75,10 @@ static kh_assertion_t* assertionhash = GenAssertions({
   //"undefined element", "unknown local", "invalid mutability", "incompatible import type", "unknown import", "integer overflow"
 });
 
-varuint32 GetMapping(kh_modules_t* mapping, const Token& t)
+size_t GetMapping(kh_modules_t* mapping, const Token& t)
 {
   khiter_t iter = kh_get_modules(mapping, std::string(t.pos, t.len).c_str());
-  return kh_exist2(mapping, iter) ? kh_val(mapping, iter) : (varuint32)~0;
+  return kh_exist2(mapping, iter) ? kh_val(mapping, iter) : (size_t)~0;
 }
 
 jmp_buf jump_location;
@@ -155,7 +155,7 @@ int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
   {
     Token name = GetWatNameToken(tokens);
     tokens.Pop();
-    ByteArray binary;
+    ByteArray binary = { 0 };
     if(r = WatString(binary, tokens.Pop()))
       return r;
     Stream s = { (uint8_t*)binary.bytes, binary.n_bytes, 0 };
@@ -208,7 +208,7 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
     Module* m = last;
     if(name.id == TOKEN_NAME)
     {
-      varuint32 i = GetMapping(mapping, name);
+      size_t i = GetMapping(mapping, name);
       if(i >= env.n_modules)
         return ERR_PARSE_INVALID_NAME;
       m = env.modules + i;
@@ -216,7 +216,7 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
     if(!m)
       return ERR_FATAL_INVALID_MODULE;
 
-    ByteArray func;
+    ByteArray func = { 0 };
     if(r = WatString(func, tokens.Pop()))
       return r;
 
@@ -345,7 +345,7 @@ inline std::string GetAssertionString(int code)
     {
       assertcode = "[unknown error code ";
       char buf[32] = { 0 };
-      itoa(code, buf, 16);
+      ITOA(code, buf, 32, 16);
       assertcode += buf;
       assertcode += "]";
     }
@@ -386,15 +386,15 @@ int ParseWast(Environment& env, uint8_t* data, size_t sz)
     case TOKEN_REGISTER:
     {
       tokens.Pop();
-      varuint32 i = ~0;
+      size_t i = ~0;
       if(last)
         i = last - env.modules;
       if(tokens[0].id == TOKEN_NAME)
         i = GetMapping(mapping, tokens.Pop());
-      if(i == ~0)
+      if(i == (size_t)~0)
         return ERR_PARSE_INVALID_NAME;
 
-      ByteArray name;
+      ByteArray name = { 0 };
       if(r = WatString(name, tokens.Pop()))
         return r;
       khiter_t iter = kh_put_modules(env.modulemap, (const char*)name.bytes, &r);
@@ -506,7 +506,7 @@ int ParseWast(Environment& env, uint8_t* data, size_t sz)
       int code = ParseWastModule(env, tokens, mapping, last, cache);
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
-      ByteArray err;
+      ByteArray err = { 0 };
       if(r = WatString(err, tokens.Pop()))
         return r;
       
@@ -525,7 +525,7 @@ int ParseWast(Environment& env, uint8_t* data, size_t sz)
       if(t.id == TOKEN_ASSERT_MALFORMED && code != ERR_SUCCESS)
         AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected module parsing success, but got '%s' instead", assertcode.c_str());
       if(t.id != TOKEN_ASSERT_MALFORMED && STRICMP(assertcode.c_str(), (const char*)err.bytes))
-        AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected '%s' error, but got '%s' instead", (const char*)err.bytes, env.errors->error);
+        AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected '%s' error, but got '%s' instead", (const char*)err.bytes, assertcode.c_str());
       env.errors = 0;
       break;
     }

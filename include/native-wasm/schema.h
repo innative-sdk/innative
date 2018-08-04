@@ -35,7 +35,7 @@ const uint32 MAGIC_VERSION = 0x01;
 
 KHASH_DECLARE(exports, kh_cstr_t, varuint32);
 KHASH_DECLARE(cimport, kh_cstr_t, char);
-KHASH_DECLARE(modules, kh_cstr_t, varuint32);
+KHASH_DECLARE(modules, kh_cstr_t, size_t);
 
 enum TYPE_ENCODING
 {

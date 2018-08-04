@@ -96,7 +96,7 @@ void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
 {
   static const std::regex::flag_type REGEX_CONFIG = std::regex_constants::ECMAScript | std::regex_constants::optimize;
   static const std::regex_constants::match_flag_type REGEX_MATCH = std::regex_constants::match_not_null | std::regex_constants::match_continuous;
-  static std::regex regex_INT(LEXER_PLUSMINUS "(" LEXER_NUM "|0x" LEXER_HEXNUM ")", REGEX_CONFIG);
+  static std::regex regex_INT(LEXER_PLUSMINUS "(0x" LEXER_HEXNUM "|" LEXER_NUM ")", REGEX_CONFIG);
   static std::regex regex_NAME("[$][-" LEXER_LETTER LEXER_DIGIT "_.+*/\\~=<>!?@#$%&|:'`^]+", REGEX_CONFIG);
   static std::regex regex_FLOAT(LEXER_PLUSMINUS LEXER_NUM "[.](" LEXER_NUM ")?([eE]" LEXER_PLUSMINUS LEXER_NUM ")?", REGEX_CONFIG);
   static std::regex regex_HEXFLOAT(LEXER_PLUSMINUS "0x" LEXER_HEXNUM "[.](" LEXER_HEXNUM ")?([pP]" LEXER_PLUSMINUS LEXER_HEXNUM ")?", REGEX_CONFIG);
@@ -192,7 +192,7 @@ void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
         Token t = { TOKEN_NAME, results[0].first + 1 };
         t.len = results[0].length() - 1;
         tokens.Push(t);
-        s = const_cast<char*>(end);
+        s = const_cast<char*>(results[0].second);
         break;
       } // If the search fails, fall through and just start trying other regexes. It will eventually be classified as an invalid token.
     }
@@ -210,18 +210,26 @@ void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
     case '9': // Either an integer or a float
     {
       std::match_results<const char*> results;
-      if(std::regex_search<const char*>(s, end, results, regex_INT, REGEX_MATCH))
+      if(std::regex_search<const char*>(s, end, results, regex_HEXFLOAT, REGEX_MATCH) || std::regex_search<const char*>(s, end, results, regex_FLOAT, REGEX_MATCH))
       {
-        tokens.Push(Token{ TOKEN_INTEGER, s, (int64_t)strtoll(results[0].str().data(), NULL, 10) });
+        Token t = { TOKEN_FLOAT, s };
+        errno = 0;
+        t.f = strtod(results[0].str().data(), NULL); // This can handle both normal and hex float format
+        if(errno == ERANGE)
+          t.id = TOKEN_NONE;
+
+        tokens.Push(t);
         s = const_cast<char*>(results[0].second);
         break;
       }
-      if(std::regex_search<const char*>(s, end, results, regex_FLOAT, REGEX_MATCH) || std::regex_search<const char*>(s, end, results, regex_HEXFLOAT, REGEX_MATCH))
+      if(std::regex_search<const char*>(s, end, results, regex_INT, REGEX_MATCH))
       {
-        Token t = { TOKEN_FLOAT, s };
-        t.f = strtod(results[0].str().data(), NULL); // This can handle both normal and hex float format
-        tokens.Push(t);
-        s = const_cast<char*>(end);
+        errno = 0;
+        tokens.Push(Token{ TOKEN_INTEGER, s, (int64_t)strtoll(results[0].str().data(), NULL, 10) });
+        if(errno == ERANGE)
+          tokens.Back().id = TOKEN_NONE;
+
+        s = const_cast<char*>(results[0].second);
         break;
       } // Fall through to attempt something else
     }
@@ -246,8 +254,12 @@ void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
           nan += results[1].str().substr(1);
         nan += ')';
 
+        errno = 0;
         t.f = strtod(nan.data(), NULL);
+        if(errno == ERANGE)
+          t.id = TOKEN_NONE;
         tokens.Push(t);
+        s = const_cast<char*>(results[0].second);
         break;
       }
 
@@ -301,7 +313,7 @@ void WriteUTF32(uint32_t ch, ByteArray& str)
     ch = UNI_REPLACEMENT_CHAR;
   }
 
-  
+
   uint8_t* target = str.bytes + str.n_bytes + bytesToWrite;
   switch(bytesToWrite)
   { /* note: everything falls through. */
@@ -354,7 +366,13 @@ int WatString(ByteArray& str, StringRef t)
       case 'u':
       {
         char* end;
-        WriteUTF32(strtol(t.s + i + 1, &end, 16), str);
+        long u;
+        errno = 0;
+        u = strtol(t.s + i + 1, &end, 16);
+        if(errno == ERANGE)
+          return ERR_WAT_OUT_OF_RANGE;
+
+        WriteUTF32(u, str);
         i += end - (t.s + i + 1);
         break;
       }
@@ -676,7 +694,7 @@ int WatConstantOperator(WatState& state, Queue<Token>& tokens, Instruction& op)
 
   return ERR_SUCCESS;
 }
-int WatOperator(WatState& state, Queue<Token>& tokens, FunctionBody& f, FunctionSig& sig, varuint32 index)
+int WatOperator(WatState& state, Queue<Token>& tokens, Instruction& op, FunctionBody& f, FunctionSig& sig, varuint32 index)
 {
   if(tokens.Peek().id != TOKEN_OPERATOR)
     return assert(false), ERR_WAT_EXPECTED_OPERATOR;
@@ -684,7 +702,7 @@ int WatOperator(WatState& state, Queue<Token>& tokens, FunctionBody& f, Function
   int r;
   if(tokens.Peek().i > 0xFF)
     return ERR_WAT_OUT_OF_RANGE;
-  Instruction op = { (byte)tokens.Pop().i };
+  op = { (byte)tokens.Pop().i };
 
   switch(op.opcode)
   {
@@ -779,8 +797,6 @@ int WatOperator(WatState& state, Queue<Token>& tokens, FunctionBody& f, Function
     break;
   }
 
-  if(r = AppendArray<Instruction>(op, f.body, f.n_body))
-    return r;
   return ERR_SUCCESS;
 }
 
@@ -835,91 +851,95 @@ int WatInstruction(WatState& state, Queue<Token>& tokens, FunctionBody& f, Funct
 
 int WatExpression(WatState& state, Queue<Token>& tokens, FunctionBody& f, FunctionSig& sig, varuint32 index)
 {
-  if(tokens.Peek().id != TOKEN_OPEN)
-    return assert(false), ERR_WAT_EXPECTED_OPEN;
+  EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
 
   int r;
-  while(tokens.Peek().id == TOKEN_OPEN)
+  varsint7 blocktype;
+  switch(tokens[0].id)
   {
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+  case TOKEN_BLOCK:
+  case TOKEN_LOOP:
+  {
+    Token t = tokens.Pop();
+    WatLabel(state, tokens);
+    if(r = WatBlockType(tokens, blocktype))
+      return r;
 
-    varsint7 blocktype;
-    switch(tokens[0].id)
     {
-    case TOKEN_BLOCK:
-    case TOKEN_LOOP:
-    {
-      Token t = tokens.Pop();
-      WatLabel(state, tokens);
-      if(r = WatBlockType(tokens, blocktype))
+      Instruction op = { t.id == TOKEN_BLOCK ? (byte)OP_block : (byte)OP_loop };
+      op.immediates[0]._varsint7 = blocktype;
+      if(r = AppendArray<Instruction>(op, f.body, f.n_body))
         return r;
-
-      {
-        Instruction op = { t.id == TOKEN_BLOCK ? (byte)OP_block : (byte)OP_loop };
-        op.immediates[0]._varsint7 = blocktype;
-        if(r = AppendArray<Instruction>(op, f.body, f.n_body))
-          return r;
-      }
-
-      while(tokens.Peek().id != TOKEN_CLOSE)
-        if(r = WatInstruction(state, tokens, f, sig, index))
-          return r;
-
-      if(r = AppendArray<Instruction>(Instruction{ OP_end }, f.body, f.n_body))
-        return r;
-      state.stack.Pop();
-      break;
     }
-    case TOKEN_IF:
-      tokens.Pop();
-      WatLabel(state, tokens);
-      if(r = WatBlockType(tokens, blocktype))
+
+    while(tokens.Peek().id != TOKEN_CLOSE)
+      if(r = WatInstruction(state, tokens, f, sig, index))
         return r;
 
-      while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id != TOKEN_THEN)
-        if(r = WatExpression(state, tokens, f, sig, index))
-          return r;
+    if(r = AppendArray<Instruction>(Instruction{ OP_end }, f.body, f.n_body))
+      return r;
+    state.stack.Pop();
+    break;
+  }
+  case TOKEN_IF:
+    tokens.Pop();
+    WatLabel(state, tokens);
+    if(r = WatBlockType(tokens, blocktype))
+      return r;
 
-      {
-        Instruction op = { OP_if };
-        op.immediates[0]._varsint7 = blocktype;
-        if(r = AppendArray<Instruction>(op, f.body, f.n_body)) // We append the if instruction _after_ the optional condition expression
-          return r;
-      }
+    while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id != TOKEN_THEN)
+      if(r = WatExpression(state, tokens, f, sig, index))
+        return r;
 
-      EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN); // There must always be a Then branch
-      EXPECTED(tokens, TOKEN_THEN, ERR_WAT_EXPECTED_THEN);
+    {
+      Instruction op = { OP_if };
+      op.immediates[0]._varsint7 = blocktype;
+      if(r = AppendArray<Instruction>(op, f.body, f.n_body)) // We append the if instruction _after_ the optional condition expression
+        return r;
+    }
+
+    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN); // There must always be a Then branch
+    EXPECTED(tokens, TOKEN_THEN, ERR_WAT_EXPECTED_THEN);
+
+    while(tokens.Peek().id != TOKEN_CLOSE)
+      if(r = WatInstruction(state, tokens, f, sig, index))
+        return r;
+
+    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+
+    if(tokens.Peek().id == TOKEN_OPEN) // Must be an else branch if it exists
+    {
+      EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+      EXPECTED(tokens, TOKEN_ELSE, ERR_WAT_EXPECTED_ELSE);
+
+      if(r = AppendArray<Instruction>(Instruction{ OP_else }, f.body, f.n_body))
+        return r;
 
       while(tokens.Peek().id != TOKEN_CLOSE)
         if(r = WatInstruction(state, tokens, f, sig, index))
           return r;
 
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
-
-      if(tokens.Peek().id == TOKEN_OPEN) // Must be an else branch if it exists
-      {
-        EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-        EXPECTED(tokens, TOKEN_ELSE, ERR_WAT_EXPECTED_ELSE);
-
-        if(r = AppendArray<Instruction>(Instruction{ OP_else }, f.body, f.n_body))
-          return r;
-
-        while(tokens.Peek().id != TOKEN_CLOSE)
-          if(r = WatInstruction(state, tokens, f, sig, index))
-            return r;
-
-        EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
-      }
-
-      if(r = AppendArray<Instruction>(Instruction{ OP_end }, f.body, f.n_body))
-        return r;
-      state.stack.Pop();
-      break;
-    default:
-      if(r = WatOperator(state, tokens, f, sig, index))
-        return r;
-      break;
     }
+
+    if(r = AppendArray<Instruction>(Instruction{ OP_end }, f.body, f.n_body))
+      return r;
+    state.stack.Pop();
+    break;
+  default:
+  {
+    Instruction op;
+    if(r = WatOperator(state, tokens, op, f, sig, index))
+      return r;
+
+    // Expressions are folded instructions, so we must unfold them before inserting the operator
+    while(tokens[0].id != TOKEN_CLOSE)
+      WatExpression(state, tokens, f, sig, index);
+
+    if(r = AppendArray<Instruction>(op, f.body, f.n_body)) // Now we append the operator
+      return r;
+    break;
+  }
   }
 
   EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
@@ -1003,7 +1023,12 @@ int WatInstruction(WatState& state, Queue<Token>& tokens, FunctionBody& f, Funct
     state.stack.Pop();
     break;
   default:
-    return WatOperator(state, tokens, f, sig, index);
+  {
+    Instruction op;
+    if(r = WatOperator(state, tokens, op, f, sig, index))
+      return r;
+    return AppendArray<Instruction>(op, f.body, f.n_body);
+  }
   }
 
   return ERR_SUCCESS;
