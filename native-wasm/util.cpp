@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <intrin.h>
 
-#ifdef NW_PLATFORM_WIN32
+#ifdef IR_PLATFORM_WIN32
 #pragma pack(push)
 #pragma pack(8)
 #define WINVER 0x0501 //_WIN32_WINNT_WINXP   
@@ -24,20 +24,24 @@
 #define NOGDI
 #include <windows.h>
 #pragma pack(pop)
-#elif defined(NW_PLATFORM_POSIX)
+#elif defined(IR_PLATFORM_POSIX)
 #include <cpuid.h>
 #error TODO
 #endif
 
-KHASH_INIT(opnames, StringRef, byte, 1, __ac_X31_hash_stringrefins, kh_int_hash_equal)
+namespace innative {
+  KHASH_INIT(opnames, StringRef, uint8_t, 1, __ac_X31_hash_stringrefins, kh_int_hash_equal)
+}
 
-const char* NW_ENTRYPOINT = "__native_wasm_main_func";
-const char* NW_GETCPUINFO = "__native_wasm_getcpuinfo";
-const char* NW_EXTENSION = ".nw-cache";
-const char* NW_ENV_EXTENSION = ".nw-env-cache";
-const char* NW_GLUE_STRING = "_NWLNK_";
+using namespace innative;
 
-const char OPNAMES[][20] = {
+const char* innative::IR_ENTRYPOINT = "__innative_main_func";
+const char* innative::IR_GETCPUINFO = "__innative_getcpuinfo";
+const char* innative::IR_EXTENSION = ".nw-cache";
+const char* innative::IR_ENV_EXTENSION = ".nw-env-cache";
+const char* innative::IR_GLUE_STRING = "_NWLNK_";
+
+const char innative::OPNAMES[][20] = {
   // Control flow operators
   "unreachable",           // 0x00
   "nop",                   // 0x01
@@ -274,7 +278,7 @@ kh_opnames_t* GenOpNames()
     if(strcmp(OPNAMES[i], "RESERVED") != 0)
     {
       khiter_t iter = kh_put_opnames(h, StringRef{ OPNAMES[i], strlen(OPNAMES[i]) }, &r);
-      kh_val(h, iter) = (byte)i;
+      kh_val(h, iter) = (uint8_t)i;
     }
   }
 
@@ -294,15 +298,15 @@ kh_opnames_t* GenOpNames()
   return h;
 }
 
-byte GetInstruction(StringRef ref)
+uint8_t innative::GetInstruction(StringRef ref)
 {
   static kh_opnames_t* h = GenOpNames();
 
   khiter_t iter = kh_get_opnames(h, ref);
-  return kh_exist2(h, iter) ? kh_val(h, iter) : (byte)0xFF;
+  return kh_exist2(h, iter) ? kh_val(h, iter) : (uint8_t)0xFF;
 }
 
-uint64_t DecodeLEB128(Stream& s, ERROR_CODE& err, unsigned int maxbits, bool sign)
+uint64_t innative::DecodeLEB128(Stream& s, IR_ERROR& err, unsigned int maxbits, bool sign)
 {
   size_t shift = 0;
   int byte = 0;
@@ -330,7 +334,7 @@ uint64_t DecodeLEB128(Stream& s, ERROR_CODE& err, unsigned int maxbits, bool sig
   return result;
 }
 
-varuint32 ModuleFunctionType(Module& m, varuint32 index)
+varuint32 innative::ModuleFunctionType(Module& m, varuint32 index)
 {
   if(index < m.importsection.functions)
     return m.importsection.imports[index].func_desc.sig_index;
@@ -340,7 +344,7 @@ varuint32 ModuleFunctionType(Module& m, varuint32 index)
   return (varuint32)~0;
 }
 
-FunctionSig* ModuleFunction(Module& m, varuint32 index)
+FunctionSig* innative::ModuleFunction(Module& m, varuint32 index)
 {
   if(index < m.importsection.functions)
     return &m.type.functions[m.importsection.imports[index].func_desc.sig_index];
@@ -349,7 +353,7 @@ FunctionSig* ModuleFunction(Module& m, varuint32 index)
     return &m.type.functions[m.function.funcdecl[index]];
   return 0;
 }
-TableDesc* ModuleTable(Module& m, varuint32 index)
+TableDesc* innative::ModuleTable(Module& m, varuint32 index)
 {
   size_t i = index + m.importsection.functions; // Shift index to table section
   if(i < m.importsection.tables)
@@ -359,7 +363,7 @@ TableDesc* ModuleTable(Module& m, varuint32 index)
     return &m.table.tables[i];
   return 0;
 }
-MemoryDesc* ModuleMemory(Module& m, varuint32 index)
+MemoryDesc* innative::ModuleMemory(Module& m, varuint32 index)
 {
   size_t i = index + m.importsection.tables; // Shift index to memory section
   if(i < m.importsection.memory)
@@ -369,7 +373,7 @@ MemoryDesc* ModuleMemory(Module& m, varuint32 index)
     return &m.memory.memory[i];
   return 0;
 }
-GlobalDesc* ModuleGlobal(Module& m, varuint32 index)
+GlobalDesc* innative::ModuleGlobal(Module& m, varuint32 index)
 {
   size_t i = index + m.importsection.memory; // Shift index to globals section
   if(i < m.importsection.globals)
@@ -379,13 +383,13 @@ GlobalDesc* ModuleGlobal(Module& m, varuint32 index)
     return &m.global.globals[i].desc;
   return 0;
 }
-std::pair<Module*, Export*> ResolveExport(Environment& env, Import& imp)
+std::pair<Module*, Export*> innative::ResolveExport(Environment& env, Import& imp)
 {
   khint_t iter = kh_get_modules(env.modulemap, (char*)imp.module_name.bytes);
   if(iter == kh_end(env.modulemap))
     return { 0,0 };
 
-  varuint32 i = kh_value(env.modulemap, iter);
+  size_t i = kh_value(env.modulemap, iter);
   if(i >= env.n_modules)
     return { 0,0 };
 
@@ -400,58 +404,58 @@ std::pair<Module*, Export*> ResolveExport(Environment& env, Import& imp)
   return { env.modules + i, env.modules[i].exportsection.exports + j };
 }
 
-void* GreedyAlloc(size_t n)
+void* innative::GreedyAlloc(size_t n)
 {
   return malloc(n);
 }
 
-NWPath GetProgramPath()
+Path innative::GetProgramPath()
 {
   std::string buf;
-#ifdef NW_PLATFORM_WIN32
+#ifdef IR_PLATFORM_WIN32
   buf.resize(MAX_PATH);
   buf.resize(GetModuleFileNameA(NULL, const_cast<char*>(buf.data()), (DWORD)buf.capacity()));
-#elif defined(NW_PLATFORM_POSIX)
+#elif defined(IR_PLATFORM_POSIX)
 #error TODO
 #endif
-  return NWPath(std::move(buf));
+  return Path(std::move(buf));
 }
 
-NWPath GetWorkingDir()
+Path innative::GetWorkingDir()
 {
   std::string buf;
-#ifdef NW_PLATFORM_WIN32
+#ifdef IR_PLATFORM_WIN32
   buf.resize(GetCurrentDirectoryA(0, 0));
   buf.resize(GetCurrentDirectoryA((DWORD)buf.capacity(), const_cast<char*>(buf.data())));
-#elif defined(NW_PLATFORM_POSIX)
+#elif defined(IR_PLATFORM_POSIX)
 #error TODO
 #endif
-  return NWPath(std::move(buf));
+  return Path(std::move(buf));
 }
 
-bool SetWorkingDir(const char* path)
+bool innative::SetWorkingDir(const char* path)
 {
-#ifdef NW_PLATFORM_WIN32
+#ifdef IR_PLATFORM_WIN32
   return SetCurrentDirectoryA(path) != 0;
-#elif defined(NW_PLATFORM_POSIX)
+#elif defined(IR_PLATFORM_POSIX)
 #error TODO
 #endif
 }
 
-void GetCPUInfo(uintcpuinfo& info, int flags)
+void innative::GetCPUInfo(uintcpuinfo& info, int flags)
 {
-#ifdef NW_PLATFORM_WIN32
+#ifdef IR_PLATFORM_WIN32
   SYSTEM_INFO sysinfo;
   GetSystemInfo(&sysinfo);
   info[5] = sysinfo.wProcessorArchitecture | (flags << 16);
   __cpuid(info, 1);
-#elif defined(NW_PLATFORM_POSIX)
+#elif defined(IR_PLATFORM_POSIX)
 #error TODO
 #endif
 }
 
 
-std::string StrFormat(const char* fmt, ...)
+std::string innative::StrFormat(const char* fmt, ...)
 {
   va_list args;
   va_start(args, fmt);
@@ -463,12 +467,12 @@ std::string StrFormat(const char* fmt, ...)
   return s;
 }
 
-#ifdef NW_PLATFORM_WIN32
-void* LoadDLL(const char* path) { return LoadLibraryA(path); }
-void* LoadDLLFunction(void* dll, const char* name) { return GetProcAddress((HMODULE)dll, name); }
-void FreeDLL(void* dll) { FreeLibrary((HMODULE)dll); }
-#elif defined(NW_PLATFORM_POSIX)
-void* LoadDLL(const char* path) { return dlopen(path, RTLD_LAZY); }
-void* LoadDLLFunction(void* dll, const char* name) { return dlsym(dll, name); }
-void FreeDLL(void* dll) { dlclose(dll); }
+#ifdef IR_PLATFORM_WIN32
+void* innative::LoadDLL(const char* path) { return LoadLibraryA(path); }
+void* innative::LoadDLLFunction(void* dll, const char* name) { return GetProcAddress((HMODULE)dll, name); }
+void innative::FreeDLL(void* dll) { FreeLibrary((HMODULE)dll); }
+#elif defined(IR_PLATFORM_POSIX)
+void* innative::LoadDLL(const char* path) { return dlopen(path, RTLD_NOW); } // We MUST load and initialize WASM dlls immediately for init function testing
+void* innative::LoadDLLFunction(void* dll, const char* name) { return dlsym(dll, name); }
+void innative::FreeDLL(void* dll) { dlclose(dll); }
 #endif

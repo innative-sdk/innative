@@ -3,7 +3,9 @@
 
 #include "intrinsic.h"
 
-llvm::Function* NW_Intrinsic_ToC(llvm::Function* f, struct NWContext& context)
+using namespace innative;
+
+llvm::Function* innative::code::IR_Intrinsic_ToC(llvm::Function* f, struct code::Context& context)
 {
   if(!f)
   {
@@ -26,7 +28,7 @@ llvm::Function* NW_Intrinsic_ToC(llvm::Function* f, struct NWContext& context)
   return f;
 }
 
-llvm::Function* NW_Intrinsic_FromC(llvm::Function* f, struct NWContext& context)
+llvm::Function* innative::code::IR_Intrinsic_FromC(llvm::Function* f, struct code::Context& context)
 {
   if(!f)
   {

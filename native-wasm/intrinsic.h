@@ -1,8 +1,8 @@
 // Copyright ©2018 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in native-wasm.h
 
-#ifndef __INTRINSIC_H__NW__
-#define __INTRINSIC_H__NW__
+#ifndef __INTRINSIC_H__IR__
+#define __INTRINSIC_H__IR__
 
 #include "native-wasm/schema.h"
 #include "stack.h"
@@ -21,69 +21,73 @@
 #include "llvm/Target/TargetMachine.h"
 #pragma warning(pop)
 
-struct NWBlockResult
-{
-  llvm::Value* v;
-  llvm::BasicBlock* b;
-  NWBlockResult* next;
-};
+namespace innative {
+  namespace code {
+    struct BlockResult
+    {
+      llvm::Value* v;
+      llvm::BasicBlock* b;
+      BlockResult* next;
+    };
 
-struct NWBlock
-{
-  llvm::BasicBlock* block; // Label
-  size_t limit; // Limit of value stack
-  varsint7 sig; // Block signature
-  byte type; // instruction that pushed this label
-  NWBlockResult* results; // Holds alternative branch results targeting this block
-};
+    struct Block
+    {
+      llvm::BasicBlock* block; // Label
+      size_t limit; // Limit of value stack
+      varsint7 sig; // Block signature
+      uint8_t type; // instruction that pushed this label
+      BlockResult* results; // Holds alternative branch results targeting this block
+    };
 
-struct NWFunction
-{
-  llvm::Function* internal;
-  llvm::Function* exported;
-  llvm::Function* imported;
-};
+    struct Function
+    {
+      llvm::Function* internal;
+      llvm::Function* exported;
+      llvm::Function* imported;
+    };
 
-struct NWContext
-{
-  Environment& env;
-  Module& m;
-  llvm::LLVMContext& context;
-  llvm::Module* llvm;
-  llvm::IRBuilder<>& builder;
-  llvm::TargetMachine* machine;
-  llvm::IntegerType* intptrty;
-  Stack<llvm::Value*> values; // Tracks the current value stack
-  Stack<NWBlock> control; // Control flow stack
-  varuint32 n_locals;
-  llvm::AllocaInst** locals;
-  varuint32 n_memory;
-  llvm::GlobalVariable** linearmemory;
-  varuint32 n_tables;
-  llvm::GlobalVariable** tables;
-  llvm::GlobalVariable** tabletypes;
-  varuint32 n_globals;
-  llvm::GlobalVariable** globals;
-  varuint32 n_functions;
-  NWFunction* functions;
-  llvm::Function* init;
-  llvm::Function* start;
-  llvm::Function* memgrow;
-};
+    struct Context
+    {
+      Environment& env;
+      Module& m;
+      llvm::LLVMContext& context;
+      llvm::Module* llvm;
+      llvm::IRBuilder<>& builder;
+      llvm::TargetMachine* machine;
+      llvm::IntegerType* intptrty;
+      Stack<llvm::Value*> values; // Tracks the current value stack
+      Stack<Block> control; // Control flow stack
+      varuint32 n_locals;
+      llvm::AllocaInst** locals;
+      varuint32 n_memory;
+      llvm::GlobalVariable** linearmemory;
+      varuint32 n_tables;
+      llvm::GlobalVariable** tables;
+      llvm::GlobalVariable** tabletypes;
+      varuint32 n_globals;
+      llvm::GlobalVariable** globals;
+      varuint32 n_functions;
+      Function* functions;
+      llvm::Function* init;
+      llvm::Function* start;
+      llvm::Function* memgrow;
+    };
 
-llvm::Function* NW_Intrinsic_ToC(llvm::Function* f, struct NWContext& context);
-llvm::Function* NW_Intrinsic_FromC(llvm::Function* f, struct NWContext& context);
+    llvm::Function* IR_Intrinsic_ToC(llvm::Function* f, struct Context& context);
+    llvm::Function* IR_Intrinsic_FromC(llvm::Function* f, struct Context& context);
 
-struct NWIntrinsic
-{
-  const char* name;
-  llvm::Function* (*gen)(llvm::Function* f, struct NWContext&);
-  llvm::Function* fn;
-};
+    struct Intrinsic
+    {
+      const char* name;
+      llvm::Function* (*gen)(llvm::Function* f, struct Context&);
+      llvm::Function* fn;
+    };
 
-static NWIntrinsic nw_intrinsics[] = {
-  NWIntrinsic{ "_native_wasm_to_c", &NW_Intrinsic_ToC, nullptr },
-  NWIntrinsic{ "_native_wasm_from_c", &NW_Intrinsic_FromC, nullptr } 
-};
+    static Intrinsic intrinsics[] = {
+      Intrinsic{ "_innative_to_c", &IR_Intrinsic_ToC, nullptr },
+      Intrinsic{ "_innative_from_c", &IR_Intrinsic_FromC, nullptr }
+    };
+  }
+}
 
 #endif

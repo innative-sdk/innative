@@ -9,6 +9,8 @@
 #include <memory>
 #include <string>
 
+using namespace innative;
+
 std::unique_ptr<uint8_t[]> loadfile(const char* file, long& sz)
 {
   FILE* f = 0;
@@ -24,7 +26,7 @@ std::unique_ptr<uint8_t[]> loadfile(const char* file, long& sz)
   return data;
 }
 
-int native_wasm_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const _NW_WHITELIST* whitelist, int n_whitelist)
+int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const _IR_WHITELIST* whitelist, int n_whitelist)
 {
   // Then create the runtime environment with the module count.
   Environment* env = CreateEnvironment(flags, 1, 0);
@@ -46,7 +48,7 @@ int native_wasm_compile_file(const char* file, const char* out, unsigned int fla
   long sz = 0;
   int err = 0;
   auto data_module = loadfile(file, sz);
-  NWPath name(file);
+  Path name(file);
 
   if(sz > 0)
     AddModule(env, data_module.get(), sz, name.RemoveExtension().Get().c_str(), &err);
@@ -60,7 +62,7 @@ int native_wasm_compile_file(const char* file, const char* out, unsigned int fla
   }
 
   // Add all embedding environments that are included with this runtime
-#ifdef NW_DEBUG
+#ifdef IR_DEBUG
   err = AddEmbedding(env, 0, (void*)"native-wasm-env_d.lib", 0);
 #else
   err = AddEmbedding(env, 0, (void*)"native-wasm-env.lib", 0);
@@ -92,12 +94,12 @@ int native_wasm_compile_file(const char* file, const char* out, unsigned int fla
 
   return Run(0);
 }
-int native_wasm_build_loader(struct _NW_CHUNK* chunks, const char* out, bool dynamic)
+int innative_build_loader(struct _IR_CHUNK* chunks, const char* out, bool dynamic)
 {
   return -1;
 }
 
-int native_wasm_compile_script(const char* file, unsigned int flags, ValidationError** errors)
+int innative_compile_script(const char* file, unsigned int flags, ValidationError** errors)
 {
   Environment* env = CreateEnvironment(flags, 1, 0);
   if(!env)
@@ -110,10 +112,10 @@ int native_wasm_compile_script(const char* file, unsigned int flags, ValidationE
   long sz = 0;
   int err = 0;
   auto data_module = loadfile(file, sz);
-  NWPath name(file);
+  Path name(file);
 
   // Add all embedding environments that are included with this runtime
-#ifdef NW_DEBUG
+#ifdef IR_DEBUG
   err = AddEmbedding(env, 0, (void*)"native-wasm-env_d.lib", 0);
 #else
   err = AddEmbedding(env, 0, (void*)"native-wasm-env.lib", 0);
@@ -125,7 +127,7 @@ int native_wasm_compile_script(const char* file, unsigned int flags, ValidationE
     return err;
   }
 
-  err = ParseWast(*env, data_module.get(), sz);
+  err = innative::wat::ParseWast(*env, data_module.get(), sz);
 
   if(err < 0)
   {

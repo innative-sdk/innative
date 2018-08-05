@@ -11,7 +11,9 @@
 #include <thread>
 #include <stdio.h>
 
-struct __ENVIRONMENT* CreateEnvironment(unsigned int flags, unsigned int modules, unsigned int maxthreads)
+using namespace innative;
+
+Environment* innative::CreateEnvironment(unsigned int flags, unsigned int modules, unsigned int maxthreads)
 {
   Environment* env = (Environment*)calloc(1, sizeof(Environment));
   if(env)
@@ -19,7 +21,7 @@ struct __ENVIRONMENT* CreateEnvironment(unsigned int flags, unsigned int modules
     env->modulemap = kh_init_modules();
     env->whitelist = nullptr;
     env->cimports = kh_init_cimport();
-    env->modules = (Module*)realloc(0, modules * sizeof(Module));
+    env->modules = trealloc<Module>(0, modules);
     if(!env->modules)
     {
       free(env);
@@ -33,7 +35,7 @@ struct __ENVIRONMENT* CreateEnvironment(unsigned int flags, unsigned int modules
   return env;
 }
 
-void DestroyEnvironment(struct __ENVIRONMENT* env)
+void innative::DestroyEnvironment(Environment* env)
 {
   if(!env)
     return;
@@ -50,17 +52,17 @@ void DestroyEnvironment(struct __ENVIRONMENT* env)
   free(env);
 }
 
-void LoadModule(struct __ENVIRONMENT* env, size_t index, void* data, uint64_t size, const char* name, int* err)
+void innative::LoadModule(Environment* env, size_t index, void* data, uint64_t size, const char* name, int* err)
 {
   Stream s = { (uint8_t*)data, size, 0 };
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
-    *err = ParseWatModule(*env, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
+    *err = innative::wat::ParseWatModule(*env, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
   else
     *err = ParseModule(s, env->modules[index], ByteArray{ (varuint32)strlen(name), (uint8_t*)name });
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
 }
 
-void AddModule(struct __ENVIRONMENT* env, void* data, uint64_t size, const char* name, int* err)
+void innative::AddModule(Environment* env, void* data, uint64_t size, const char* name, int* err)
 {
   if(!env || !err)
   {
@@ -80,7 +82,7 @@ void AddModule(struct __ENVIRONMENT* env, void* data, uint64_t size, const char*
     while(((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed) != index)
       std::this_thread::sleep_for(std::chrono::milliseconds(5)); // If we've exceeded our capacity, block until all other threads have finished
 
-    env->modules = (Module*)realloc(env->modules, index * 2 * sizeof(Module));
+    env->modules = trealloc<Module>(env->modules, index * 2);
     if(!env->modules)
     {
       *err = ERR_FATAL_OUT_OF_MEMORY;
@@ -95,7 +97,7 @@ void AddModule(struct __ENVIRONMENT* env, void* data, uint64_t size, const char*
     LoadModule(env, index, data, size, name, err);
 }
 
-void AddWhitelist(struct __ENVIRONMENT* env, const char* module_name, const char* export_name, const FunctionSig* sig)
+void innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name, const FunctionSig* sig)
 {
   if(!env->whitelist)
     env->whitelist = kh_init_modulepair();
@@ -110,13 +112,13 @@ void AddWhitelist(struct __ENVIRONMENT* env, const char* module_name, const char
   kh_val(env->whitelist, iter) = !sig ? FunctionSig{ TE_NONE, 0, 0, 0, 0 } : *sig;
 }
 
-void WaitForLoad(struct __ENVIRONMENT* env)
+void innative::WaitForLoad(Environment* env)
 {
   while(((std::atomic<size_t>&)env->size).load(std::memory_order_relaxed) > ((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed))
     std::this_thread::sleep_for(std::chrono::milliseconds(5)); // Spin until all modules loaded
 }
 
-enum ERROR_CODE AddEmbedding(struct __ENVIRONMENT* env, int tag, void* data, uint64_t size)
+enum IR_ERROR innative::AddEmbedding(Environment* env, int tag, void* data, uint64_t size)
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;
@@ -131,7 +133,7 @@ enum ERROR_CODE AddEmbedding(struct __ENVIRONMENT* env, int tag, void* data, uin
   return ERR_SUCCESS;
 }
 
-enum ERROR_CODE Compile(struct __ENVIRONMENT* env, const char* file)
+enum IR_ERROR innative::Compile(Environment* env, const char* file)
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;
@@ -166,24 +168,24 @@ enum ERROR_CODE Compile(struct __ENVIRONMENT* env, const char* file)
   return CompileEnvironment(env, file);
 }
 
-enum ERROR_CODE Run(void* cache)
+enum IR_ERROR innative::Run(void* cache)
 {
   if(!cache)
     return ERR_FATAL_NULL_POINTER;
-  NW_Entrypoint func = (NW_Entrypoint)LoadDLLFunction(cache, NW_ENTRYPOINT);
+  IR_Entrypoint func = (IR_Entrypoint)LoadDLLFunction(cache, IR_ENTRYPOINT);
   if(!func)
     return ERR_FATAL_NULL_POINTER;
   (*func)();
   return ERR_SUCCESS;
 }
 
-void* LoadCache(int flags, const char* file)
+void* innative::LoadCache(int flags, const char* file)
 {
-  NWPath path(file != nullptr ? NWPath(file) : GetProgramPath() + NW_EXTENSION);
+  Path path(file != nullptr ? Path(file) : GetProgramPath() + IR_EXTENSION);
   void* handle = LoadDLL(path.Get().c_str());
   if(!handle)
     return 0;
-  NW_GetCPUInfo func = (NW_GetCPUInfo)LoadDLLFunction(handle, NW_GETCPUINFO);
+  IR_GetCPUInfo func = (IR_GetCPUInfo)LoadDLLFunction(handle, IR_GETCPUINFO);
   if(!func)
     return 0;
   uintcpuinfo target;
@@ -194,7 +196,7 @@ void* LoadCache(int flags, const char* file)
 }
 
 // Return pointers to all our internal functions
-void native_wasm_runtime(NWExports* exports)
+void innative_runtime(NWExports* exports)
 {
   exports->CreateEnvironment = &CreateEnvironment;
   exports->AddModule = &AddModule;

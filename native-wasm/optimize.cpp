@@ -7,8 +7,10 @@
 #include "optimize.h"
 #pragma warning(pop)
 
+using namespace innative;
+
 // Generate function annotations based on dependency graph.
-ERROR_CODE AnnotateFunctions(Environment* env, NWContext* contexts)
+IR_ERROR innative::AnnotateFunctions(Environment* env, code::Context* contexts)
 {
   // Go through every single function and start by considering it maximally pure, then remove 
   // tags as we walk through the code, ignoring function calls. If it has no function body,

@@ -15,6 +15,8 @@
 #include <iostream>
 #pragma warning(pop)
 
+using namespace innative;
+
 using llvm::Function;
 using llvm::FunctionType;
 using llvm::Type;
@@ -26,7 +28,7 @@ using llvm::BasicBlock;
 
 Function* fn_print;
 
-Type* GetType(varsint7 type, NWContext& context)
+Type* GetType(varsint7 type, code::Context& context)
 {
   switch(type)
   {
@@ -45,12 +47,12 @@ Type* GetType(varsint7 type, NWContext& context)
 Export* FindExport(varuint32 index, Module& m)
 {
   for(varuint32 i = 0; i < m.exportsection.n_exports; ++i)
-    if(m.exportsection.exports[i].kind == KIND_FUNCTION && m.exportsection.exports[i].index == index)
+    if(m.exportsection.exports[i].kind == WASM_KIND_FUNCTION && m.exportsection.exports[i].index == index)
       return m.exportsection.exports + i;
   return 0;
 }
 
-FunctionType* GetFunctionType(FunctionSig& signature, NWContext& context)
+FunctionType* GetFunctionType(FunctionSig& signature, code::Context& context)
 {
   if(signature.n_returns > 1)
     return 0;
@@ -67,14 +69,14 @@ FunctionType* GetFunctionType(FunctionSig& signature, NWContext& context)
   return FunctionType::get(ret, false);
 }
 
-Function* CompileFunction(FunctionSig& signature, const llvm::Twine& name, NWContext& context)
+Function* CompileFunction(FunctionSig& signature, const llvm::Twine& name, code::Context& context)
 {
   Function* fn = Function::Create(GetFunctionType(signature, context), Function::InternalLinkage, name, context.llvm);
   fn->setCallingConv(llvm::CallingConv::Fast);
   return fn;
 }
 
-Function* HomogenizeFunction(Function* fn, const llvm::Twine& name, NWContext& context)
+Function* HomogenizeFunction(Function* fn, const llvm::Twine& name, code::Context& context)
 {
   std::vector<llvm::Type*> types; // Replace the entire function with just i64
   for(auto& arg : fn->args())
@@ -103,10 +105,20 @@ Function* HomogenizeFunction(Function* fn, const llvm::Twine& name, NWContext& c
 
     values.push_back(v);
   }
-  auto val = context.builder.CreateCall(fn, values);
+  llvm::Value* val = context.builder.CreateCall(fn, values);
 
   if(!fn->getReturnType()->isVoidTy())
+  {
+    if(fn->getReturnType()->isIntegerTy()) // Directly convert all ints to i64
+      val = context.builder.CreateIntCast(val, context.builder.getInt64Ty(), true);
+    else if(fn->getReturnType()->isFloatingPointTy()) // expand to double, then bitcast to i64
+      val = context.builder.CreateBitCast(context.builder.CreateFPCast(val, context.builder.getDoubleTy()), context.builder.getInt64Ty());
+    else if(fn->getReturnType()->isPointerTy())
+      val = context.builder.CreatePtrToInt(val, context.builder.getInt64Ty());
+    else
+      assert(false);
     context.builder.CreateRet(val);
+  }
   else
     context.builder.CreateRet(context.builder.getInt64(0));
 
@@ -114,7 +126,7 @@ Function* HomogenizeFunction(Function* fn, const llvm::Twine& name, NWContext& c
   return wrap;
 }
 
-Function* WrapFunction(Function* fn, const llvm::Twine& name, NWContext& context)
+Function* WrapFunction(Function* fn, const llvm::Twine& name, code::Context& context)
 {
   Function* wrap = Function::Create(fn->getFunctionType(), Function::InternalLinkage, name, context.llvm);
   wrap->setCallingConv(llvm::CallingConv::Fast);
@@ -138,18 +150,18 @@ Function* WrapFunction(Function* fn, const llvm::Twine& name, NWContext& context
   return wrap;
 }
 
-ERROR_CODE PushReturn(NWContext& context) { return ERR_SUCCESS; }
+IR_ERROR PushReturn(code::Context& context) { return ERR_SUCCESS; }
 
 // Given a set of returns in the order given in the function/instruction signature, pushes them on to the stack in reverse order
 template<typename Arg, typename... Args>
-ERROR_CODE PushReturn(NWContext& context, Arg arg, Args... args)
+IR_ERROR PushReturn(code::Context& context, Arg arg, Args... args)
 {
-  ERROR_CODE e = PushReturn(context, args...);
+  IR_ERROR e = PushReturn(context, args...);
   context.values.Push(arg);
   return e;
 }
 
-bool CheckType(TYPE_ENCODING Ty, llvm::Value* v)
+bool CheckType(WASM_TYPE_ENCODING Ty, llvm::Value* v)
 {
   llvm::Type* t = v->getType();
   switch(Ty)
@@ -170,8 +182,8 @@ bool CheckType(TYPE_ENCODING Ty, llvm::Value* v)
 }
 
 // Given a function pointer to the appropriate builder function, pops two binary arguments off the stack and pushes the result
-template<TYPE_ENCODING Ty1, TYPE_ENCODING Ty2, TYPE_ENCODING TyR, typename... Args>
-ERROR_CODE CompileBinaryOp(NWContext& context, llvm::Value* (llvm::IRBuilder<>::*op)(llvm::Value*, llvm::Value*, Args...), Args... args)
+template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR, typename... Args>
+IR_ERROR CompileBinaryOp(code::Context& context, llvm::Value* (llvm::IRBuilder<>::*op)(llvm::Value*, llvm::Value*, Args...), Args... args)
 {
   if(context.values.Size() < 2)
     return assert(false), ERR_INVALID_VALUE_STACK;
@@ -187,8 +199,8 @@ ERROR_CODE CompileBinaryOp(NWContext& context, llvm::Value* (llvm::IRBuilder<>::
 }
 
 // Given an intrinsic function ID, pops two binary arguments off the stack and pushes the result, converting it to a Value*
-template<TYPE_ENCODING Ty1, TYPE_ENCODING Ty2, TYPE_ENCODING TyR>
-ERROR_CODE CompileBinaryIntrinsic(NWContext& context, llvm::Intrinsic::ID id, const llvm::Twine& name)
+template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR>
+IR_ERROR CompileBinaryIntrinsic(code::Context& context, llvm::Intrinsic::ID id, const llvm::Twine& name)
 {
   if(context.values.Size() < 2)
     return assert(false), ERR_INVALID_VALUE_STACK;
@@ -204,8 +216,8 @@ ERROR_CODE CompileBinaryIntrinsic(NWContext& context, llvm::Intrinsic::ID id, co
 }
 
 // Given a function pointer to the appropriate builder function, pops one unary argument off the stack and pushes the result
-template<TYPE_ENCODING Ty1, TYPE_ENCODING TyR, typename... Args>
-ERROR_CODE CompileUnaryOp(NWContext& context, llvm::Value* (llvm::IRBuilder<>::*op)(llvm::Value*, Args...), Args... args)
+template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING TyR, typename... Args>
+IR_ERROR CompileUnaryOp(code::Context& context, llvm::Value* (llvm::IRBuilder<>::*op)(llvm::Value*, Args...), Args... args)
 {
   if(context.values.Size() < 1)
     return assert(false), ERR_INVALID_VALUE_STACK;
@@ -219,8 +231,8 @@ ERROR_CODE CompileUnaryOp(NWContext& context, llvm::Value* (llvm::IRBuilder<>::*
 }
 
 // Given an intrinsic function ID, pops one unary argument off the stack and pushes the result, converting it to a Value*
-template<TYPE_ENCODING Ty1, TYPE_ENCODING TyR>
-ERROR_CODE CompileUnaryIntrinsic(NWContext& context, llvm::Intrinsic::ID id, const llvm::Twine& name)
+template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING TyR>
+IR_ERROR CompileUnaryIntrinsic(code::Context& context, llvm::Intrinsic::ID id, const llvm::Twine& name)
 {
   if(context.values.Size() < 1)
     return assert(false), ERR_INVALID_VALUE_STACK;
@@ -234,7 +246,7 @@ ERROR_CODE CompileUnaryIntrinsic(NWContext& context, llvm::Intrinsic::ID id, con
   return PushReturn(context, context.builder.CreateCall(fn, { val1 }, name, nullptr));
 }
 
-ERROR_CODE CompileSelectOp(NWContext& context, const llvm::Twine& name, llvm::Instruction* from)
+IR_ERROR CompileSelectOp(code::Context& context, const llvm::Twine& name, llvm::Instruction* from)
 {
   if(context.values.Size() < 3)
     return assert(false), ERR_INVALID_VALUE_STACK;
@@ -250,8 +262,8 @@ ERROR_CODE CompileSelectOp(NWContext& context, const llvm::Twine& name, llvm::In
   return PushReturn(context, context.builder.CreateSelect(cond, valt, valf, name, from));
 }
 
-template<TYPE_ENCODING Ty, bool LEFT>
-ERROR_CODE CompileRotationOp(NWContext& context, const char* name)
+template<WASM_TYPE_ENCODING Ty, bool LEFT>
+IR_ERROR CompileRotationOp(code::Context& context, const char* name)
 {
   if(context.values.Size() < 2)
     return assert(false), ERR_INVALID_VALUE_STACK;
@@ -280,15 +292,15 @@ ERROR_CODE CompileRotationOp(NWContext& context, const char* name)
   return PushReturn(context, context.builder.CreateOr(l, r, name));
 }
 
-BasicBlock* PushLabel(const char* name, varsint7 sig, byte opcode, llvm::Function* fnptr, NWContext& context)
+BasicBlock* PushLabel(const char* name, varsint7 sig, uint8_t opcode, llvm::Function* fnptr, code::Context& context)
 {
   BasicBlock* bb = BasicBlock::Create(context.context, name, fnptr);
-  context.control.Push(NWBlock{ bb, context.values.Limit(), sig, opcode });
+  context.control.Push(code::Block{ bb, context.values.Limit(), sig, opcode });
   context.values.SetLimit(context.values.Size() + context.values.Limit()); // Set limit to current stack size to prevent a block from popping past this
   return bb;
 }
 
-void BindLabel(BasicBlock* block, NWContext& context)
+void BindLabel(BasicBlock* block, code::Context& context)
 {
   if(!block->getParent())
   {
@@ -298,19 +310,19 @@ void BindLabel(BasicBlock* block, NWContext& context)
   assert(block->getParent() != 0);
 }
 
-void PushResult(NWBlockResult** root, llvm::Value* result, BasicBlock* block)
+void PushResult(code::BlockResult** root, llvm::Value* result, BasicBlock* block)
 {
-  NWBlockResult* next = *root;
-  *root = tmalloc<NWBlockResult>(1);
-  new(*root) NWBlockResult{ result, block, next };
+  code::BlockResult* next = *root;
+  *root = tmalloc<code::BlockResult>(1);
+  new(*root) code::BlockResult{ result, block, next };
 }
 
 // Adds current value stack to target branch according to that branch's signature, but doesn't pop them.
-ERROR_CODE AddBranch(NWBlock& target, NWContext& context)
+IR_ERROR AddBranch(code::Block& target, code::Context& context)
 {
   if(target.sig != TE_void)
   {
-    if(context.values.Size() != 1 || !CheckType(TYPE_ENCODING(target.sig), context.values.Peek())) // Verify stack
+    if(context.values.Size() != 1 || !CheckType(WASM_TYPE_ENCODING(target.sig), context.values.Peek())) // Verify stack
       return assert(false), ERR_INVALID_VALUE_STACK;
     PushResult(&target.results, context.values.Peek(), context.builder.GetInsertBlock()); // Push result
   }
@@ -321,12 +333,12 @@ ERROR_CODE AddBranch(NWBlock& target, NWContext& context)
 }
 
 // Pops a label off the control stack, verifying that the value stack matches the signature and building PHI nodes as necessary
-ERROR_CODE PopLabel(NWContext& context)
+IR_ERROR PopLabel(code::Context& context)
 {
   varsint7 sig = context.control.Peek().sig;
   if(sig != TE_void)
   {
-    if(context.values.Size() != 1 || !CheckType(TYPE_ENCODING(sig), context.values.Peek())) // Verify stack
+    if(context.values.Size() != 1 || !CheckType(WASM_TYPE_ENCODING(sig), context.values.Peek())) // Verify stack
       return assert(false), ERR_INVALID_VALUE_STACK;
     if(context.control.Peek().results != nullptr) // If there are results from other branches, perform a PHI merge. Otherwise, leave the value stack alone
     {
@@ -355,7 +367,7 @@ ERROR_CODE PopLabel(NWContext& context)
   return ERR_SUCCESS;
 }
 
-ERROR_CODE CompileIfBlock(varsint7 sig, NWContext& context)
+IR_ERROR CompileIfBlock(varsint7 sig, code::Context& context)
 {
   if(context.values.Size() < 1)
     return assert(false), ERR_INVALID_VALUE_STACK;
@@ -377,7 +389,7 @@ ERROR_CODE CompileIfBlock(varsint7 sig, NWContext& context)
   return ERR_SUCCESS;
 }
 
-ERROR_CODE CompileElseBlock(NWContext& context)
+IR_ERROR CompileElseBlock(code::Context& context)
 {
   if(context.control.Size() == 0 || context.control.Peek().type != OP_if)
     return assert(false), ERR_IF_ELSE_MISMATCH;
@@ -397,7 +409,7 @@ ERROR_CODE CompileElseBlock(NWContext& context)
   return ERR_SUCCESS;
 }
 
-ERROR_CODE CompileReturn(NWContext& context, varsint7 sig)
+IR_ERROR CompileReturn(code::Context& context, varsint7 sig)
 {
   if(sig == TE_void)
   {
@@ -409,7 +421,7 @@ ERROR_CODE CompileReturn(NWContext& context, varsint7 sig)
   {
     if(context.values.Size() != 1)
       return assert(false), ERR_INVALID_VALUE_STACK;
-    if(!CheckType(TYPE_ENCODING(sig), context.values.Peek()))
+    if(!CheckType(WASM_TYPE_ENCODING(sig), context.values.Peek()))
       return assert(false), ERR_INVALID_TYPE;
     context.builder.CreateRet(context.values.Peek());
   }
@@ -417,7 +429,7 @@ ERROR_CODE CompileReturn(NWContext& context, varsint7 sig)
   return ERR_SUCCESS;
 }
 
-ERROR_CODE CompileEndBlock(NWContext& context)
+IR_ERROR CompileEndBlock(code::Context& context)
 {
   if(context.control.Size() == 0)
   {
@@ -428,7 +440,7 @@ ERROR_CODE CompileEndBlock(NWContext& context)
       if(context.control.Peek().type != OP_return)
         return assert(false), ERR_END_MISMATCH;
 
-      ERROR_CODE err = PopLabel(context);
+      IR_ERROR err = PopLabel(context);
       if(err >= 0)
         err = CompileReturn(context, sig);
       if(err >= 0 && sig != TE_void)
@@ -456,7 +468,7 @@ ERROR_CODE CompileEndBlock(NWContext& context)
   return PopLabel(context);
 }
 
-ERROR_CODE CompileTrap(NWContext& context)
+IR_ERROR CompileTrap(code::Context& context)
 {
   auto call = context.builder.CreateCall(llvm::Intrinsic::getDeclaration(context.llvm, llvm::Intrinsic::trap), { });
   call->setDoesNotReturn();
@@ -464,7 +476,7 @@ ERROR_CODE CompileTrap(NWContext& context)
   return ERR_SUCCESS;
 }
 
-ERROR_CODE InsertConditionalTrap(llvm::Value* cond, NWContext& context)
+IR_ERROR InsertConditionalTrap(llvm::Value* cond, code::Context& context)
 {
   // Define a failure block that all errors jump to via a conditional branch which simply traps
   auto trapblock = BasicBlock::Create(context.context, "trap_block", context.builder.GetInsertBlock()->getParent());
@@ -478,17 +490,17 @@ ERROR_CODE InsertConditionalTrap(llvm::Value* cond, NWContext& context)
   return ERR_SUCCESS;
 }
 
-ERROR_CODE CompileBranch(varuint32 depth, NWContext& context)
+IR_ERROR CompileBranch(varuint32 depth, code::Context& context)
 {
   if(depth >= context.control.Size())
     return assert(false), ERR_INVALID_BRANCH_DEPTH;
 
-  NWBlock& target = context.control[depth];
+  code::Block& target = context.control[depth];
   context.builder.CreateBr(target.block);
   return (target.type != OP_loop) ? AddBranch(target, context) : ERR_SUCCESS; // Branches targeting loops just throw all their values away, so we don't need to build PHI nodes.
 }
 
-ERROR_CODE CompileIfBranch(varuint32 depth, NWContext& context)
+IR_ERROR CompileIfBranch(varuint32 depth, code::Context& context)
 {
   if(depth >= context.control.Size())
     return assert(false), ERR_INVALID_BRANCH_DEPTH;
@@ -505,12 +517,12 @@ ERROR_CODE CompileIfBranch(varuint32 depth, NWContext& context)
   // Because llvm requires explicit branches, we have to create a new block and append it to our current one
   BasicBlock* block = BasicBlock::Create(context.context, "br_if_cont", context.builder.GetInsertBlock()->getParent());
 
-  NWBlock& target = context.control[depth];
+  code::Block& target = context.control[depth];
   context.builder.CreateCondBr(cmp, target.block, block);
   context.builder.SetInsertPoint(block); // Start inserting code into continuation.
   return (target.type != OP_loop) ? AddBranch(target, context) : ERR_SUCCESS; // Branches targeting loops just throw all their values away, so we don't need to build PHI nodes.
 }
-ERROR_CODE CompileBranchTable(varuint32 n_table, varuint32* table, varuint32 def, NWContext& context)
+IR_ERROR CompileBranchTable(varuint32 n_table, varuint32* table, varuint32 def, code::Context& context)
 {
   if(context.values.Size() < 1)
     return assert(false), ERR_INVALID_VALUE_STACK;
@@ -523,14 +535,14 @@ ERROR_CODE CompileBranchTable(varuint32 n_table, varuint32* table, varuint32 def
     return assert(false), ERR_INVALID_BRANCH_DEPTH;
 
   llvm::SwitchInst* s = context.builder.CreateSwitch(index, context.control[def].block, n_table);
-  ERROR_CODE err = (context.control[def].type != OP_loop) ? AddBranch(context.control[def], context) : ERR_SUCCESS;
+  IR_ERROR err = (context.control[def].type != OP_loop) ? AddBranch(context.control[def], context) : ERR_SUCCESS;
 
   for(varuint32 i = 0; i < n_table && err == ERR_SUCCESS; ++i)
   {
     if(table[i] >= context.control.Size())
       return assert(false), ERR_INVALID_BRANCH_DEPTH;
 
-    NWBlock& target = context.control[table[i]];
+    code::Block& target = context.control[table[i]];
     s->addCase(ConstantInt::get(context.context, APInt(32, i, true)), target.block);
     err = (target.type != OP_loop) ? AddBranch(target, context) : ERR_SUCCESS;
   }
@@ -551,7 +563,7 @@ bool CompareTypes(llvm::Type* a, llvm::Type* b)
   return false;
 }
 
-ERROR_CODE CompileCall(varuint32 index, NWContext& context)
+IR_ERROR CompileCall(varuint32 index, code::Context& context)
 {
   if(index >= context.n_functions)
     return assert(false), ERR_INVALID_FUNCTION_INDEX;
@@ -582,7 +594,7 @@ return PushReturn(context, call);
 return ERR_SUCCESS;
 }
 
-llvm::Value* GetMemSize(llvm::GlobalVariable* target, NWContext& context)
+llvm::Value* GetMemSize(llvm::GlobalVariable* target, code::Context& context)
 {
   return context.builder.CreateLoad(
     context.builder.CreateGEP(
@@ -592,7 +604,7 @@ llvm::Value* GetMemSize(llvm::GlobalVariable* target, NWContext& context)
       context.builder.getInt32(-1)));
 }
 
-ERROR_CODE CompileIndirectCall(varuint32 sigindex, NWContext& context)
+IR_ERROR CompileIndirectCall(varuint32 sigindex, code::Context& context)
 {
   if(sigindex >= context.m.type.n_functions)
     return assert(false), ERR_INVALID_TYPE_INDEX;
@@ -647,7 +659,7 @@ ERROR_CODE CompileIndirectCall(varuint32 sigindex, NWContext& context)
   return ERR_SUCCESS;
 }
 
-std::pair<ERROR_CODE, llvm::Constant*> CompileConstant(Instruction& ins, NWContext& context)
+std::pair<IR_ERROR, llvm::Constant*> CompileConstant(Instruction& ins, code::Context& context)
 {
   switch(ins.opcode)
   {
@@ -668,7 +680,7 @@ std::pair<ERROR_CODE, llvm::Constant*> CompileConstant(Instruction& ins, NWConte
   return { ERR_INVALID_INITIALIZER, 0 };
 }
 
-llvm::Value* GetMemPointer(NWContext& context, llvm::Value* base, llvm::PointerType* ptr, varuint7 memory, varuint32 offset)
+llvm::Value* GetMemPointer(code::Context& context, llvm::Value* base, llvm::PointerType* ptr, varuint7 memory, varuint32 offset)
 {
   llvm::Value* loc = context.builder.CreateAdd(base, ConstantInt::get(context.context, APInt(32, offset, true)), "", true, true);
 
@@ -679,7 +691,7 @@ llvm::Value* GetMemPointer(NWContext& context, llvm::Value* base, llvm::PointerT
 }
 
 template<bool SIGNED>
-ERROR_CODE CompileLoad(NWContext& context, varuint7 memory, varuint32 offset, varuint32 memflags, const char* name, llvm::Type* Ext, llvm::Type* Ty)
+IR_ERROR CompileLoad(code::Context& context, varuint7 memory, varuint32 offset, varuint32 memflags, const char* name, llvm::Type* Ext, llvm::Type* Ty)
 {
   if(context.values.Size() < 1)
     return assert(false), ERR_INVALID_VALUE_STACK;
@@ -699,8 +711,8 @@ ERROR_CODE CompileLoad(NWContext& context, varuint7 memory, varuint32 offset, va
   return PushReturn(context, result);
 }
 
-template<TYPE_ENCODING Ty>
-ERROR_CODE CompileStore(NWContext& context, varuint7 memory, varuint32 offset, varuint32 memflags, const char* name, llvm::IntegerType* Ext)
+template<WASM_TYPE_ENCODING Ty>
+IR_ERROR CompileStore(code::Context& context, varuint7 memory, varuint32 offset, varuint32 memflags, const char* name, llvm::IntegerType* Ext)
 {
   if(context.values.Size() < 2)
     return assert(false), ERR_INVALID_VALUE_STACK;
@@ -723,12 +735,12 @@ ERROR_CODE CompileStore(NWContext& context, varuint7 memory, varuint32 offset, v
 }
 
 // Gets memory size in pages, not bytes
-llvm::Value* CompileMemSize(llvm::GlobalVariable* target, NWContext& context)
+llvm::Value* CompileMemSize(llvm::GlobalVariable* target, code::Context& context)
 {
   return context.builder.CreateIntCast(context.builder.CreateLShr(GetMemSize(target, context), 16), context.builder.getInt32Ty(), true);
 }
 
-ERROR_CODE CompileMemGrow(NWContext& context, const char* name)
+IR_ERROR CompileMemGrow(code::Context& context, const char* name)
 {
   if(context.values.Size() < 1)
     return assert(false), ERR_INVALID_VALUE_STACK;
@@ -740,14 +752,14 @@ ERROR_CODE CompileMemGrow(NWContext& context, const char* name)
 
   if(!CheckType(TE_i32, delta))
     return assert(false), ERR_INVALID_TYPE;
-  auto max = ConstantInt::get(context.context, APInt(64, (context.m.memory.memory[0].limits.flags & LIMIT_HAS_MAXIMUM) ? context.m.memory.memory[0].limits.maximum : 0, true));
+  auto max = ConstantInt::get(context.context, APInt(64, (context.m.memory.memory[0].limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? context.m.memory.memory[0].limits.maximum : 0, true));
   llvm::CallInst* call = context.builder.CreateCall(context.memgrow, { context.linearmemory[0], context.builder.CreateShl(context.builder.CreateZExt(delta, context.builder.getInt64Ty()), 16), max }, name);
 
   auto result = context.builder.CreateSelect(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), ConstantInt::get(context.intptrty, 0)), context.builder.getInt32(-1), old);
   return PushReturn(context, result);
 }
 
-ERROR_CODE CompileInstruction(Instruction& ins, NWContext& context)
+IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
 {
   switch(ins.opcode)
   {
@@ -1156,7 +1168,7 @@ ERROR_CODE CompileInstruction(Instruction& ins, NWContext& context)
   return ERR_SUCCESS;
 }
 
-ERROR_CODE CompileFunctionBody(Function* fn, FunctionSig& sig, FunctionBody& body, NWContext& context)
+IR_ERROR CompileFunctionBody(Function* fn, FunctionSig& sig, FunctionBody& body, code::Context& context)
 {
   // Ensure context is reset
   assert(!context.control.Size() && !context.control.Limit());
@@ -1189,7 +1201,7 @@ ERROR_CODE CompileFunctionBody(Function* fn, FunctionSig& sig, FunctionBody& bod
   // Begin iterating through the instructions until there aren't any left
   for(varuint32 i = 0; i < body.n_body; ++i)
   {
-    ERROR_CODE err = CompileInstruction(body.body[i], context);
+    IR_ERROR err = CompileInstruction(body.body[i], context);
     if(err != ERR_SUCCESS)
       return err;
   }
@@ -1210,7 +1222,7 @@ const char* GlobalName(varuint32 i)
   return buf;
 }
 
-llvm::GlobalVariable* CreateGlobal(NWContext& context, llvm::Type* ty, bool isconst, bool external, const llvm::Twine& name, llvm::Constant* init = 0)
+llvm::GlobalVariable* CreateGlobal(code::Context& context, llvm::Type* ty, bool isconst, bool external, const llvm::Twine& name, llvm::Constant* init = 0)
 {
   return new llvm::GlobalVariable(
     *context.llvm,
@@ -1225,7 +1237,7 @@ llvm::GlobalVariable* CreateGlobal(NWContext& context, llvm::Type* ty, bool isco
     !init);
 }
 
-llvm::Constant* CompileInitConstant(Instruction& ins, NWContext& context)
+llvm::Constant* CompileInitConstant(Instruction& ins, code::Context& context)
 {
   auto pair = CompileConstant(ins, context);
   return pair.first < 0 ? nullptr : pair.second;
@@ -1256,11 +1268,11 @@ int GetCallingConvention(Import& imp)
   return llvm::CallingConv::C;
 }
 
-llvm::Function* GetIntrinsic(Import& imp, NWContext& context)
+llvm::Function* GetIntrinsic(Import& imp, code::Context& context)
 {
   if(!imp.module_name.n_bytes || !imp.module_name.bytes[0])
   {
-    for(auto& v : nw_intrinsics)
+    for(auto& v : code::intrinsics)
     {
       if(!strcmp(v.name, (const char*)imp.export_name.bytes))
         return v.fn = (*v.gen)(0, context);
@@ -1269,7 +1281,7 @@ llvm::Function* GetIntrinsic(Import& imp, NWContext& context)
   return nullptr;
 }
 
-ERROR_CODE CompileModule(Environment* env, NWContext& context)
+IR_ERROR CompileModule(Environment* env, code::Context& context)
 {
   context.llvm = new llvm::Module((const char*)context.m.name.bytes, context.context);
   context.llvm->setTargetTriple(context.machine->getTargetTriple().getTriple());
@@ -1280,7 +1292,7 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
   context.init = Function::Create(
     FunctionType::get(context.builder.getVoidTy(), false),
     Function::ExternalLinkage,
-    MergeName((const char*)context.m.name.bytes, "native_wasm_internal_init"),
+    MergeName((const char*)context.m.name.bytes, "innative_internal_init"),
     context.llvm);
 
   BasicBlock* initblock = BasicBlock::Create(
@@ -1294,19 +1306,19 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
   context.memgrow = Function::Create(
     FunctionType::get(context.builder.getInt8PtrTy(0), { context.builder.getInt8PtrTy(0), context.builder.getInt64Ty(), context.builder.getInt64Ty() }, false),
     Function::ExternalLinkage,
-    "_native_wasm_internal_env_grow_memory",
+    "_innative_internal_env_grow_memory",
     context.llvm);
   context.memgrow->setReturnDoesNotAlias(); // This is a system memory allocation function, so the return value does not alias
 
   Function* fn_memcpy = Function::Create(
     FunctionType::get(context.builder.getVoidTy(), { context.builder.getInt8PtrTy(0), context.builder.getInt8PtrTy(0), context.builder.getInt64Ty() }, false),
     Function::ExternalLinkage,
-    "_native_wasm_internal_env_memcpy",
+    "_innative_internal_env_memcpy",
     context.llvm);
 
-  fn_print = Function::Create(FunctionType::get(context.builder.getVoidTy(), { context.builder.getInt64Ty() }, false), Function::ExternalLinkage, "_native_wasm_internal_env_print_compiler", context.llvm);
+  fn_print = Function::Create(FunctionType::get(context.builder.getVoidTy(), { context.builder.getInt64Ty() }, false), Function::ExternalLinkage, "_innative_internal_env_print_compiler", context.llvm);
 
-  context.functions = (NWFunction*)calloc(context.m.importsection.functions + context.m.function.n_funcdecl, sizeof(NWFunction));
+  context.functions = (code::Function*)calloc(context.m.importsection.functions + context.m.function.n_funcdecl, sizeof(code::Function));
   context.tables = tmalloc<llvm::GlobalVariable*>(context.m.importsection.tables - context.m.importsection.functions + context.m.table.n_tables);
   if(env->flags&ENV_STRICT)
     context.tabletypes = tmalloc<llvm::GlobalVariable*>(context.m.importsection.tables - context.m.importsection.functions + context.m.table.n_tables);
@@ -1320,8 +1332,11 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
     context.functions[context.n_functions].internal = GetIntrinsic(context.m.importsection.imports[i], context);
     if(context.functions[context.n_functions].internal == nullptr)
     {
+      auto index = context.m.importsection.imports[i].func_desc.sig_index;
+      if(index >= context.m.type.n_functions)
+        return assert(false), ERR_INVALID_TYPE_INDEX;
       context.functions[context.n_functions].internal = CompileFunction(
-        context.m.type.functions[context.m.importsection.imports[i].func_desc.sig_index],
+        context.m.type.functions[index],
         CanonImportName(context.m.importsection.imports[i]),
         context);
 
@@ -1380,10 +1395,16 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
 
   // Declare function prototypes
   for(varuint32 i = 0; i < context.m.function.n_funcdecl; ++i)
+  {
+    auto index = context.m.function.funcdecl[i];
+    if(index >= context.m.type.n_functions)
+      return assert(false), ERR_INVALID_TYPE_INDEX;
+
     context.functions[context.n_functions++].internal = CompileFunction(
-      context.m.type.functions[context.m.function.funcdecl[i]],
+      context.m.type.functions[index],
       "func:" + std::to_string(context.n_functions),
       context);
+  }
 
   // Declare tables and allocate in init function
   for(varuint32 i = 0; i < context.m.table.n_tables; ++i)
@@ -1406,7 +1427,7 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
       {
         llvm::ConstantPointerNull::get(context.builder.getInt8PtrTy(0)),
         ConstantInt::get(context.context, APInt(64, context.m.table.tables[i].resizable.minimum * bytewidth, true)),
-        ConstantInt::get(context.context, APInt(64, (context.m.table.tables[i].resizable.flags & LIMIT_HAS_MAXIMUM) ? context.m.table.tables[i].resizable.maximum * bytewidth : 0, true))
+        ConstantInt::get(context.context, APInt(64, (context.m.table.tables[i].resizable.flags & WASM_LIMIT_HAS_MAXIMUM) ? context.m.table.tables[i].resizable.maximum * bytewidth : 0, true))
       });
 
     InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), ConstantInt::get(context.intptrty, 0)), context);
@@ -1428,7 +1449,7 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
         {
           llvm::ConstantPointerNull::get(context.builder.getInt8PtrTy(0)),
           ConstantInt::get(context.context, APInt(64, context.m.table.tables[i].resizable.minimum * sizeof(int32_t), true)),
-          ConstantInt::get(context.context, APInt(64, (context.m.table.tables[i].resizable.flags & LIMIT_HAS_MAXIMUM) ? context.m.table.tables[i].resizable.maximum * sizeof(int32_t) : 0, true))
+          ConstantInt::get(context.context, APInt(64, (context.m.table.tables[i].resizable.flags & WASM_LIMIT_HAS_MAXIMUM) ? context.m.table.tables[i].resizable.maximum * sizeof(int32_t) : 0, true))
         });
 
       InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), ConstantInt::get(context.intptrty, 0)), context);
@@ -1443,7 +1464,7 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
   {
     auto type = context.builder.getInt8PtrTy(0);
     auto sz = ConstantInt::get(context.context, APInt(64, context.m.memory.memory[i].limits.minimum, true));
-    auto max = ConstantInt::get(context.context, APInt(64, (context.m.memory.memory[i].limits.flags & LIMIT_HAS_MAXIMUM) ? context.m.memory.memory[i].limits.maximum : 0, true));
+    auto max = ConstantInt::get(context.context, APInt(64, (context.m.memory.memory[i].limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? context.m.memory.memory[i].limits.maximum : 0, true));
     context.linearmemory[context.n_memory] = CreateGlobal(context, type, false, false, MergeName((const char*)context.m.name.bytes, "linearmemory#", i), llvm::ConstantPointerNull::get(type));
 
     llvm::CallInst* call = context.builder.CreateCall(context.memgrow, { llvm::ConstantPointerNull::get(type), sz, max });
@@ -1473,23 +1494,23 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
     Export& e = context.m.exportsection.exports[i];
     switch(e.kind)
     {
-    case KIND_FUNCTION:
+    case WASM_KIND_FUNCTION:
       
       context.functions[e.index].exported = (*wrapperfn)(context.functions[e.index].imported ? context.functions[e.index].imported : context.functions[e.index].internal, MergeName((const char*)context.m.name.bytes, (const char*)e.name.bytes), context);
       context.functions[e.index].exported->setLinkage(Function::ExternalLinkage);
       context.functions[e.index].exported->setCallingConv(llvm::CallingConv::C);
       break;
-    case KIND_TABLE:
+    case WASM_KIND_TABLE:
       assert(context.tables[e.index]->getLinkage() != Function::ExternalLinkage); // We can't export other imports right now because the names blow up
       context.tables[e.index]->setLinkage(llvm::GlobalValue::ExternalLinkage);
       context.tables[e.index]->setName(MergeName((const char*)context.m.name.bytes, (const char*)e.name.bytes));
       break;
-    case KIND_MEMORY:
+    case WASM_KIND_MEMORY:
       assert(context.linearmemory[e.index]->getLinkage() != Function::ExternalLinkage); // We can't export other imports right now because the names blow up
       context.linearmemory[e.index]->setLinkage(llvm::GlobalValue::ExternalLinkage);
       context.linearmemory[e.index]->setName(MergeName((const char*)context.m.name.bytes, (const char*)e.name.bytes));
       break;
-    case KIND_GLOBAL:
+    case WASM_KIND_GLOBAL:
       assert(context.globals[e.index]->getLinkage() != Function::ExternalLinkage); // We can't export other imports right now because the names blow up
       context.globals[e.index]->setLinkage(llvm::GlobalValue::ExternalLinkage);
       context.globals[e.index]->setName(MergeName((const char*)context.m.name.bytes, (const char*)e.name.bytes));
@@ -1558,19 +1579,21 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
   {
     assert(!context.functions[code_index].imported);
     Function* fn = context.functions[code_index++].internal;
-    ERROR_CODE err;
+    IR_ERROR err;
 
     if(fn)
     {
       if(context.m.code.funcbody[i].debug_name.bytes) // If there is a debug name, use it, but always number the function because names are not required to be unique
         fn->setName(llvm::Twine((const char*)context.m.code.funcbody[i].debug_name.bytes) + ":" + std::to_string(i + context.m.importsection.functions));
+      if(context.m.function.funcdecl[i] >= context.m.type.n_functions)
+        return assert(false), ERR_INVALID_TYPE_INDEX;
       if((err = CompileFunctionBody(fn, context.m.type.functions[context.m.function.funcdecl[i]], context.m.code.funcbody[i], context)) < 0)
         return err;
     }
   }
 
   // If the start section exists, lift the start function to the context so our environment knows about it.
-  if(context.m.knownsections & (1 << SECTION_START))
+  if(context.m.knownsections & (1 << WASM_SECTION_START))
   {
     if(context.m.start >= context.n_functions)
       return assert(false), ERR_INVALID_START_FUNCTION;
@@ -1579,7 +1602,7 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
   }
 
   // Generate intrinsic function bodies for this module
-  for(auto& v : nw_intrinsics)
+  for(auto& v : code::intrinsics)
   {
     if(v.fn)
     {
@@ -1603,7 +1626,7 @@ ERROR_CODE CompileModule(Environment* env, NWContext& context)
   return ERR_SUCCESS;
 }
 
-ERROR_CODE OutputObjectFile(NWContext& nw, const char* out)
+IR_ERROR OutputObjectFile(code::Context& nw, const char* out)
 {
   std::error_code EC;
   llvm::raw_fd_ostream dest(out, EC, llvm::sys::fs::F_None);
@@ -1628,21 +1651,22 @@ ERROR_CODE OutputObjectFile(NWContext& nw, const char* out)
   return ERR_SUCCESS;
 }
 
-ERROR_CODE CompileEnvironment(Environment* env, const char* filepath)
+IR_ERROR CompileEnvironment(Environment* env, const char* filepath)
 {
-  NWPath file(filepath);
-  NWPath workdir = GetWorkingDir();
-  NWPath programpath = GetProgramPath();
+  Path file(filepath);
+  Path workdir = GetWorkingDir();
+  Path programpath = GetProgramPath();
   SetWorkingDir(programpath.BaseDir().Get().c_str());
+  DeferLambda<std::function<void()>> defer([&]() { SetWorkingDir(workdir.Get().c_str()); });
 
   if(!file.IsAbsolute())
     file = workdir + file;
 
   llvm::LLVMContext context;
   llvm::IRBuilder<> builder(context);
-  NWContext* start = nullptr;
-  ERROR_CODE err = ERR_SUCCESS;
-  NWContext* nw = tmalloc<NWContext>(env->n_modules);
+  code::Context* start = nullptr;
+  IR_ERROR err = ERR_SUCCESS;
+  code::Context* nw = tmalloc<code::Context>(env->n_modules);
   std::string triple = llvm::sys::getDefaultTargetTriple();
 
   // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
@@ -1670,7 +1694,7 @@ ERROR_CODE CompileEnvironment(Environment* env, const char* filepath)
 
   for(varuint32 i = 0; i < env->n_modules; ++i)
   {
-    new(nw + i) NWContext{ *env, env->modules[i], context, 0, builder, machine };
+    new(nw + i) code::Context{ *env, env->modules[i], context, 0, builder, machine };
     if((err = CompileModule(env, nw[i])) < 0)
       return err;
 
@@ -1691,25 +1715,53 @@ ERROR_CODE CompileEnvironment(Environment* env, const char* filepath)
   // Initialize all modules and call start function (if it exists)
   if(!start) // We always create an initialization function, even for DLLs, to do proper initialization of modules
     start = &nw[0];
-  Function* main = Function::Create(FunctionType::get(builder.getVoidTy(), false), Function::ExternalLinkage, "_native_wasm_internal_start", start->llvm);
+  if(start->start == nullptr)
+    eflags |= ENV_DLL; // We can't compile an EXE without an entry point
+
+  FunctionType* mainTy = FunctionType::get(builder.getVoidTy(), false);
+#ifdef IR_PLATFORM_WIN32
+  if(eflags&ENV_DLL)
+    mainTy = FunctionType::get(builder.getInt32Ty(), {builder.getInt8PtrTy(), start->intptrty, builder.getInt8PtrTy() }, false);
+#endif
+
+  Function* main = Function::Create(mainTy, Function::ExternalLinkage, IR_INIT_FUNCTION);
+#ifdef IR_PLATFORM_WIN32
+  if(eflags&ENV_DLL)
+    main->setCallingConv(llvm::CallingConv::X86_StdCall);
+#endif
+
   BasicBlock* initblock = BasicBlock::Create(context, "start_entry", main);
   builder.SetInsertPoint(initblock);
   for(size_t i = 0; i < env->n_modules; ++i)
-    builder.CreateCall(nw[i].init, {});
-
+  {
+    if(nw + i == start)
+      builder.CreateCall(nw[i].init, {});
+    else
+    {
+      Function* stub = Function::Create(nw[i].init->getFunctionType(),
+        nw[i].init->getLinkage(),
+        nw[i].init->getName(),
+        start->llvm); // Create function prototype in main module
+      builder.CreateCall(stub, {});
+    }
+  }
   if(start->start != nullptr)
     builder.CreateCall(start->start, {});
-  else
-    eflags |= ENV_DLL; // We can't compile an EXE without an entry point
 
-  builder.CreateRetVoid();
+#ifdef IR_PLATFORM_WIN32
+  if(eflags&ENV_DLL)
+    builder.CreateRet(builder.getInt32(1));
+  else
+#endif
+    builder.CreateRetVoid();
+
+  start->llvm->getFunctionList().push_back(main);
 
   // Reverify module
   std::error_code EC;
   llvm::raw_fd_ostream dest(1, false, true);
   if(llvm::verifyModule(*start->llvm, &dest))
     return assert(false), ERR_FATAL_INVALID_MODULE;
-
   llvm::raw_fd_ostream dest2(std::string(start->llvm->getName()) + ".llvm", EC, llvm::sys::fs::F_None);
   start->llvm->print(dest2, nullptr);
 
@@ -1726,18 +1778,41 @@ ERROR_CODE CompileEnvironment(Environment* env, const char* filepath)
     std::vector<std::string> cache;
     std::vector<const char*> linkargs = { "native-wasm", "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO", "/nodefaultlib", "/MANIFEST", "/MANIFEST:embed", "/SUBSYSTEM:CONSOLE", "/VERBOSE", "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT", "/MACHINE:X64", "/machine:x64" };
 
-    linkargs.push_back("/ENTRY:_native_wasm_internal_start");
+#ifdef IR_PLATFORM_WIN32
+    linkargs.push_back("/ENTRY:" IR_INIT_FUNCTION);
+#else
+    linkargs.push_back("-init " IR_INIT_FUNCTION); // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
+#endif
 
     if(eflags&ENV_DLL)
       linkargs.push_back("/DLL");
     if(eflags&ENV_DEBUG)
       linkargs.push_back("/DEBUG");
 
+    for(size_t i = 0; i < env->n_modules; ++i)
+    {
+      for(size_t j = 0; j < nw[i].n_functions; ++j)
+        if(nw[i].functions[j].exported != nullptr)
+          cache.push_back(("/EXPORT:" + nw[i].functions[j].exported->getName()).str().c_str());
+
+      for(size_t j = 0; j < nw[i].n_tables; ++j)
+        if(nw[i].tables[j]->getLinkage() == llvm::GlobalValue::ExternalLinkage)
+          cache.push_back(("/EXPORT:" + nw[i].tables[j]->getName() + ",DATA").str().c_str());
+
+      for(size_t j = 0; j < nw[i].n_memory; ++j)
+        if(nw[i].linearmemory[j]->getLinkage() == llvm::GlobalValue::ExternalLinkage)
+          cache.push_back(("/EXPORT:" + nw[i].linearmemory[j]->getName() + ",DATA").str().c_str());
+
+      for(size_t j = 0; j < nw[i].n_globals; ++j)
+        if(nw[i].globals[j]->getLinkage() == llvm::GlobalValue::ExternalLinkage)
+          cache.push_back(("/EXPORT:" + nw[i].globals[j]->getName() + ",DATA").str().c_str());
+    }
+
     for(Embedding* cur = env->embeddings; cur != nullptr; cur = cur->next)
     {
       if(cur->size > 0) // If the size is greater than 0, this is an in-memory embedding
       {
-        cache.push_back(std::to_string(reinterpret_cast<size_t>(cur)) + NW_ENV_EXTENSION + ".lib");
+        cache.push_back(std::to_string(reinterpret_cast<size_t>(cur)) + IR_ENV_EXTENSION + ".lib");
         FILE* f;
         FOPEN(f, cache.back().c_str(), "wb");
         if(!f)

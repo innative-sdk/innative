@@ -1,8 +1,8 @@
 // Copyright ©2018 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in native-wasm.h
 
-#ifndef __SCHEMA_H__NW__
-#define __SCHEMA_H__NW__
+#ifndef __SCHEMA_H__IR__
+#define __SCHEMA_H__IR__
 
 #include "native-wasm/native-wasm.h"
 #include "native-wasm/khash.h"
@@ -25,10 +25,9 @@ typedef uint64_t varuptr;
 typedef float float32;
 typedef double float64;
 typedef varuint32 memflags;
-typedef uint8_t byte;
 
-const uint32 MAGIC_COOKIE = 0x6d736100;
-const uint32 MAGIC_VERSION = 0x01;
+const uint32 WASM_MAGIC_COOKIE = 0x6d736100;
+const uint32 WASM_MAGIC_VERSION = 0x01;
 
 // Maximum number of immediates used by any instruction
 #define MAX_IMMEDIATES 2
@@ -37,7 +36,7 @@ KHASH_DECLARE(exports, kh_cstr_t, varuint32);
 KHASH_DECLARE(cimport, kh_cstr_t, char);
 KHASH_DECLARE(modules, kh_cstr_t, size_t);
 
-enum TYPE_ENCODING
+enum WASM_TYPE_ENCODING
 {
   TE_i32 = -0x01,
   TE_i64 = -0x02,
@@ -51,36 +50,36 @@ enum TYPE_ENCODING
   TE_NONE = 0x71,
 };
 
-enum LIMIT_FLAGS
+enum WASM_LIMIT_FLAGS
 {
-  LIMIT_HAS_MAXIMUM = 0x01,
+  WASM_LIMIT_HAS_MAXIMUM = 0x01,
 };
 
-enum SECTION_OPCODE
+enum WASM_SECTION_OPCODE
 {
-  SECTION_CUSTOM   = 0x00,
-  SECTION_TYPE     = 0x01,
-  SECTION_IMPORT   = 0x02,
-  SECTION_FUNCTION = 0x03,
-  SECTION_TABLE    = 0x04,
-  SECTION_MEMORY   = 0x05,
-  SECTION_GLOBAL   = 0x06,
-  SECTION_EXPORT   = 0x07,
-  SECTION_START    = 0x08,
-  SECTION_ELEMENT  = 0x09,
-  SECTION_CODE     = 0x0A,
-  SECTION_DATA     = 0x0B
+  WASM_SECTION_CUSTOM   = 0x00,
+  WASM_SECTION_TYPE     = 0x01,
+  WASM_SECTION_IMPORT   = 0x02,
+  WASM_SECTION_FUNCTION = 0x03,
+  WASM_SECTION_TABLE    = 0x04,
+  WASM_SECTION_MEMORY   = 0x05,
+  WASM_SECTION_GLOBAL   = 0x06,
+  WASM_SECTION_EXPORT   = 0x07,
+  WASM_SECTION_START    = 0x08,
+  WASM_SECTION_ELEMENT  = 0x09,
+  WASM_SECTION_CODE     = 0x0A,
+  WASM_SECTION_DATA     = 0x0B
 };
 
-enum WA_KIND
+enum WASM_KIND
 {
-  KIND_FUNCTION = 0,
-  KIND_TABLE    = 1,
-  KIND_MEMORY   = 2,
-  KIND_GLOBAL   = 3
+  WASM_KIND_FUNCTION = 0,
+  WASM_KIND_TABLE    = 1,
+  WASM_KIND_MEMORY   = 2,
+  WASM_KIND_GLOBAL   = 3
 };
 
-enum INSTRUCTION_OPCODES
+enum WASM_INSTRUCTION_OPCODES
 {
   OP_unreachable = 0x00,
   OP_nop = 0x01,
@@ -274,7 +273,7 @@ enum INSTRUCTION_OPCODES
   OP_f64_reinterpret_i64 = 0xbf,
 };
 
-enum ERROR_CODE
+enum IR_ERROR
 {
   ERR_SUCCESS = 0,
 
@@ -286,7 +285,7 @@ enum ERROR_CODE
   ERR_PARSE_INVALID_NAME,
 
   // Fatal errors that prevent properly parsing the module
-  ERR_FATAL_INVALID_SECTION_ORDER = -0xFF,
+  ERR_FATAL_INVALID_WASM_SECTION_ORDER = -0xFF,
   ERR_FATAL_INVALID_MODULE,
   ERR_FATAL_INVALID_ENCODING,
   ERR_FATAL_INVALID_BYTE_LENGTH,
@@ -398,7 +397,7 @@ enum ERROR_CODE
   ERR_RUNTIME_ASSERT_FAILURE,
 };
 
-enum ENVIRONMENT_FLAGS
+enum WASM_ENVIRONMENT_FLAGS
 {
   ENV_STRICT = (1 << 0), // Enables strict mode, disabling some optimizations to strictly adhere to the standard
   ENV_MULTITHREADED = (1 << 1), // Compiles each module in parallel
@@ -412,7 +411,7 @@ enum ENVIRONMENT_FLAGS
   ENV_OPTIMIZE_ALL = ENV_OPTIMIZE_INLINE| ENV_OPTIMIZE_ANALYSIS| ENV_OPTIMIZE_VECTORIZE,
 };
 
-typedef struct __BYTE_ARRAY
+typedef struct __WASM_BYTE_ARRAY
 {
   varuint32 n_bytes;
   uint8_t* bytes;
@@ -420,7 +419,7 @@ typedef struct __BYTE_ARRAY
 
 typedef ByteArray Identifier;
 
-typedef union __IMMEDIATE
+typedef union __WASM_IMMEDIATE
 {
   uint32 _uint32;
   varuint1 _varuint1;
@@ -437,13 +436,13 @@ typedef union __IMMEDIATE
   struct { varuint32 n_table; varuint32* table; };
 } Immediate;
 
-typedef struct __INSTRUCTION
+typedef struct __WASM_INSTRUCTION
 {
-  byte opcode;
+  uint8_t opcode;
   Immediate immediates[MAX_IMMEDIATES];
 } Instruction;
 
-typedef struct __FUNC_SIG
+typedef struct __WASM_FUNC_SIG
 {
   varsint7 form;
   varsint7* params;
@@ -452,48 +451,48 @@ typedef struct __FUNC_SIG
   varuint32 n_returns;
 } FunctionSig;
 
-typedef struct __RESIZABLE_LIMITS
+typedef struct __WASM_RESIZABLE_LIMITS
 {
   varuint32 flags;
   varuint32 minimum;
   varuint32 maximum;
 } ResizableLimits;
 
-typedef struct __MEMORY_DESC
+typedef struct __WASM_MEMORY_DESC
 {
   ResizableLimits limits;
 } MemoryDesc;
 
-typedef struct __TABLE_DESC
+typedef struct __WASM_TABLE_DESC
 {
   varsint7 element_type;
   ResizableLimits resizable;
 } TableDesc;
 
-typedef struct __GLOBAL_DESC
+typedef struct __WASM_GLOBAL_DESC
 {
   varsint7 type;
   varuint1 mutability;
 } GlobalDesc;
 
-typedef struct __GLOBAL_DECL
+typedef struct __WASM_GLOBAL_DECL
 {
   GlobalDesc desc;
   Instruction init;
 } GlobalDecl;
 
-typedef struct __FUNCTION_DESC
+typedef struct __WASM_FUNCTION_DESC
 {
   varuint32 sig_index;
   Identifier debug_name;
   const char** param_names; // Always the size of n_params from the signature
 } FunctionDesc;
 
-typedef struct __IMPORT
+typedef struct __WASM_IMPORT
 {
   Identifier module_name;
   Identifier export_name;
-  varuint7 kind; // WA_KIND
+  varuint7 kind; // WASM_KIND
   union
   {
     FunctionDesc func_desc;
@@ -503,14 +502,14 @@ typedef struct __IMPORT
   };
 } Import;
 
-typedef struct __EXPORT
+typedef struct __WASM_EXPORT
 {
   Identifier name;
-  varuint7 kind; // WA_KIND
+  varuint7 kind; // WASM_KIND
   varuint32 index;
 } Export;
 
-typedef struct __TABLE_INIT
+typedef struct __WASM_TABLE_INIT
 {
   varuint32 index;
   Instruction offset;
@@ -518,7 +517,7 @@ typedef struct __TABLE_INIT
   varuint32* elems;
 } TableInit;
 
-typedef struct __FUNCTION_BODY
+typedef struct __WASM_FUNCTION_BODY
 {
   varuint32 body_size;
   varuint32 n_locals;
@@ -530,14 +529,14 @@ typedef struct __FUNCTION_BODY
   const char** param_names; // INTERNAL: debug names of parameters, always the size of n_params or NULL if it doesn't exist
 } FunctionBody;
 
-typedef struct __DATA_INIT
+typedef struct __WASM_DATA_INIT
 {
   varuint32 index;
   Instruction offset;
   ByteArray data;
 } DataInit;
 
-typedef struct __CUSTOM_SECTION
+typedef struct __WASM_CUSTOM_SECTION
 {
   varuint7 opcode;
   varuint32 payload;
@@ -545,7 +544,7 @@ typedef struct __CUSTOM_SECTION
   uint8_t* data;
 } CustomSection;
 
-typedef struct __MODULE
+typedef struct __WASM_MODULE
 {
   uint32 magic_cookie;
   uint32 version;
@@ -627,25 +626,25 @@ typedef struct __MODULE
   struct kh_exports_s* exports;
 } Module;
 
-typedef struct __VALIDATION_ERROR
+typedef struct __WASM_VALIDATION_ERROR
 {
   int code;
   char* error;
   Module* m;
-  struct __VALIDATION_ERROR* next;
+  struct __WASM_VALIDATION_ERROR* next;
 } ValidationError;
 
-typedef struct __EMBEDDING
+typedef struct __WASM_EMBEDDING
 {
   void* data;
   uint64_t size; // If size is 0, data points to a null terminated UTF8 file path
   int tag; // defines the type of embedding data included, determined by the runtime. 0 is always a static library file for the current platform.
-  struct __EMBEDDING* next;
+  struct __WASM_EMBEDDING* next;
 } Embedding;
 
 KHASH_DECLARE(modulepair, kh_cstr_t, FunctionSig);
 
-typedef struct __ENVIRONMENT
+typedef struct __WASM_ENVIRONMENT
 {
   size_t n_modules; // number of completely loaded modules (for multithreading)
   size_t size; // Size of loaded or loading modules

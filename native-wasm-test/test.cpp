@@ -9,7 +9,7 @@ using namespace std::filesystem;
 
 int main(int argc, char *argv[])
 {
-  std::cout << "Native-wasm v" << NATIVE_WASM_VERSION_MAJOR << "." << NATIVE_WASM_VERSION_MINOR << "." << NATIVE_WASM_VERSION_REVISION << " Test Utility" << std::endl;
+  std::cout << "Native-wasm v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
   std::cout << std::endl;
 
   path testdir("../spec/test/core");
@@ -22,14 +22,14 @@ int main(int argc, char *argv[])
   }
 
   std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
-  
+
   for(auto file : testfiles)
   {
     ValidationError* errors = 0;
-    int r = native_wasm_compile_script(file.generic_u8string().data(), ENV_DEBUG | ENV_STRICT, &errors);
+    int r = innative_compile_script(file.generic_u8string().data(), ENV_DEBUG | ENV_STRICT, &errors);
     if(r)
       std::cout << "Error running script " << file << ": " << r << std::endl;
-    if(!errors)
+    if(!r && !errors)
       std::cout << file << ": SUCCESS" << std::endl;
     else
     {

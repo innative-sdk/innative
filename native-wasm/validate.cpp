@@ -8,6 +8,8 @@
 #include <stdarg.h>
 #include <atomic>
 
+using namespace innative;
+
 // Hashes a pair of strings seperated by a null terminator
 static kh_inline khint_t __ac_X31_hash_string_pair(const char *s)
 {
@@ -34,7 +36,7 @@ static const char trailingBytesForUTF8[256] = {
 };
 
 // UTF8 validator based off the official unicode C validator source
-bool ValidateIdentifier(ByteArray& b)
+bool innative::ValidateIdentifier(ByteArray& b)
 {
   size_t i = 0;
   char a;
@@ -72,7 +74,7 @@ bool ValidateIdentifier(ByteArray& b)
   return i == b.n_bytes; // If these aren't exactly equal there was an expected length mismatch
 }
 
-bool ValidateValueType(varsint7 type)
+bool innative::ValidateValueType(varsint7 type)
 {
   switch(type)
   {
@@ -85,7 +87,7 @@ bool ValidateValueType(varsint7 type)
   return false;
 }
 
-void AppendError(ValidationError*& errors, Module* m, int code, const char* fmt, ...)
+void innative::AppendError(ValidationError*& errors, Module* m, int code, const char* fmt, ...)
 {
   va_list args;
   va_start(args, fmt);
@@ -116,7 +118,7 @@ void ValidateFunctionSig(FunctionSig& sig, Environment& env, Module* m)
     AppendError(env.errors, m, ERR_UNKNOWN_SIGNATURE_TYPE, "Illegal function type %hhi encountered: only -0x20 allowed", sig.form);
 }
 
-bool MatchFunctionSig(FunctionSig& a, FunctionSig& b)
+bool innative::MatchFunctionSig(FunctionSig& a, FunctionSig& b)
 {
   if(a.form != b.form || a.n_params != b.n_params || a.n_returns != b.n_returns)
     return false;
@@ -152,7 +154,7 @@ void ValidateImport(Import& imp, Environment& env, Module* m)
         khiter_t iter = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.bytes, imp.export_name.bytes).c_str()); // We already canonized the whitelist imports to eliminate unnecessary !C specifiers
         if(!kh_exist2(env.whitelist, iter))
           return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a whitelisted C import, nor a valid webassembly import.", imp.module_name.bytes, imp.export_name.bytes);
-        if(imp.kind != KIND_FUNCTION)
+        if(imp.kind != WASM_KIND_FUNCTION)
           return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a function. You can only import C functions at this time.", imp.module_name.bytes, imp.export_name.bytes);
 
         FunctionSig& sig = kh_val(env.whitelist, iter);
@@ -184,7 +186,7 @@ void ValidateImport(Import& imp, Environment& env, Module* m)
 
     return AppendError(env.errors, m, ERR_UNKNOWN_MODULE, "%s module not found", imp.module_name.bytes);
   }
-  varuint32 i = kh_value(env.modulemap, iter);
+  size_t i = kh_value(env.modulemap, iter);
   if(i >= env.n_modules)
     return AppendError(env.errors, m, ERR_UNKNOWN_MODULE, "%s module index (%u) not in range (%u)", imp.module_name.bytes, i, env.n_modules);
 
@@ -205,11 +207,11 @@ void ValidateImport(Import& imp, Environment& env, Module* m)
 
   switch(imp.kind)
   {
-  case KIND_FUNCTION:
+  case WASM_KIND_FUNCTION:
     if(imp.func_desc.sig_index >= m->type.n_functions)
       AppendError(env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid imported function type index %u", imp.func_desc.sig_index);
     break;
-  case KIND_TABLE:
+  case WASM_KIND_TABLE:
   {
     TableDesc* table = ModuleTable(env.modules[i], exp.index);
     if(!table)
@@ -228,7 +230,7 @@ void ValidateImport(Import& imp, Environment& env, Module* m)
     }
     break;
   }
-  case KIND_MEMORY:
+  case WASM_KIND_MEMORY:
   {
     MemoryDesc* mem = ModuleMemory(env.modules[i], exp.index);
     if(!mem)
@@ -247,7 +249,7 @@ void ValidateImport(Import& imp, Environment& env, Module* m)
     }
     break;
   }
-  case KIND_GLOBAL:
+  case WASM_KIND_GLOBAL:
   {
     GlobalDesc* global = ModuleGlobal(env.modules[i], exp.index);
     if(!global)
@@ -332,7 +334,7 @@ struct ControlBlock
 {
   size_t limit; // Previous limit of value stack
   varsint7 sig; // Block signature
-  byte type; // instruction that pushed this label
+  uint8_t type; // instruction that pushed this label
 };
 
 void ValidateBranch(varuint32 depth, Stack<varsint7>& values, Stack<ControlBlock>& control, Environment& env, Module* m)
@@ -350,7 +352,7 @@ void ValidateBranchTable(varuint32 n_table, varuint32* table, varuint32 def, Sta
     ValidateBranch(table[i], values, control, env, m);
 }
 
-template<typename T, TYPE_ENCODING PUSH>
+template<typename T, WASM_TYPE_ENCODING PUSH>
 void ValidateLoad(varuint32 align, Stack<varsint7>& values, Environment& env, Module* m)
 {
   if(!ModuleMemory(*m, 0))
@@ -361,7 +363,7 @@ void ValidateLoad(varuint32 align, Stack<varsint7>& values, Environment& env, Mo
   values.Push(PUSH);
 }
 
-template<typename T, TYPE_ENCODING POP>
+template<typename T, WASM_TYPE_ENCODING POP>
 void ValidateStore(varuint32 align, Stack<varsint7>& values, Environment& env, Module* m)
 {
   if(!ModuleMemory(*m, 0))
@@ -372,14 +374,14 @@ void ValidateStore(varuint32 align, Stack<varsint7>& values, Environment& env, M
   ValidatePopType(values, TE_i32, env, m);
 }
 
-template<TYPE_ENCODING ARG1, TYPE_ENCODING RESULT>
+template<WASM_TYPE_ENCODING ARG1, WASM_TYPE_ENCODING RESULT>
 void ValidateUnaryOp(Stack<varsint7>& values, Environment& env, Module* m)
 {
   ValidatePopType(values, ARG1, env, m);
   values.Push(RESULT);
 }
 
-template<TYPE_ENCODING ARG1, TYPE_ENCODING ARG2, TYPE_ENCODING RESULT>
+template<WASM_TYPE_ENCODING ARG1, WASM_TYPE_ENCODING ARG2, WASM_TYPE_ENCODING RESULT>
 void ValidateBinaryOp(Stack<varsint7>& values, Environment& env, Module* m)
 {
   ValidatePopType(values, ARG2, env, m);
@@ -715,19 +717,19 @@ void ValidateExport(Export& e, Environment& env, Module* m)
 
   switch(e.kind)
   {
-  case KIND_FUNCTION:
+  case WASM_KIND_FUNCTION:
     if(!ModuleFunction(*m, e.index))
       AppendError(env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid function index %u", e.index);
     break;
-  case KIND_TABLE:
+  case WASM_KIND_TABLE:
     if(!ModuleTable(*m, e.index))
       AppendError(env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", e.index);
     break;
-  case KIND_MEMORY:
+  case WASM_KIND_MEMORY:
     if(!ModuleMemory(*m, e.index))
       AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "Invalid memory index %u", e.index);
     break;
-  case KIND_GLOBAL:
+  case WASM_KIND_GLOBAL:
   {
     GlobalDesc* g = ModuleGlobal(*m, e.index);
     if(!g)
@@ -742,7 +744,7 @@ void ValidateExport(Export& e, Environment& env, Module* m)
   }
 }
 
-varsint32 EvalInitializerI32(Instruction& ins, Environment& env, Module* m)
+varsint32 innative::EvalInitializerI32(Instruction& ins, Environment& env, Module* m)
 {
   switch(ins.opcode)
   {
@@ -755,7 +757,7 @@ varsint32 EvalInitializerI32(Instruction& ins, Environment& env, Module* m)
     if(i < m->importsection.globals)
     {
       std::pair<Module*, Export*> p = ResolveExport(env, m->importsection.imports[i]);
-      if(!p.second || p.second->kind != KIND_GLOBAL || p.second->index < p.first->importsection.globals)
+      if(!p.second || p.second->kind != WASM_KIND_GLOBAL || p.second->index < p.first->importsection.globals)
         AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global import %u", ins.immediates[0]._varsint32);
       else
         return EvalInitializerI32(p.first->global.globals[p.second->index - p.first->importsection.globals].init, env, p.first);
@@ -821,7 +823,7 @@ void ValidateFunctionBody(FunctionSig& sig, FunctionBody& body, Environment& env
 
   varsint7* locals = tmalloc<varsint7>(n_local);
   if(locals)
-    memcpy(locals, sig.params, sig.n_params * sizeof(varsint7));
+    tmemcpy<varsint7>(locals, n_local, sig.params, sig.n_params);
   n_local = sig.n_params;
   for(varuint32 i = 0; i < body.n_locals; ++i)
     locals[n_local++] = body.locals[i];
@@ -901,15 +903,15 @@ void ValidateSection(T* a, varuint32 n, Environment& env, Module* m)
     VALIDATE(a[i], env, m);
 }
 
-void ValidateModule(Environment& env, Module& m)
+void innative::ValidateModule(Environment& env, Module& m)
 {
-  if(m.knownsections&(1 << SECTION_TYPE))
+  if(m.knownsections&(1 << WASM_SECTION_TYPE))
     ValidateSection<FunctionSig, &ValidateFunctionSig>(m.type.functions, m.type.n_functions, env, &m);
 
-  if(m.knownsections&(1 << SECTION_IMPORT))
+  if(m.knownsections&(1 << WASM_SECTION_IMPORT))
     ValidateSection<Import, &ValidateImport>(m.importsection.imports, m.importsection.n_import, env, &m);
 
-  if(m.knownsections&(1 << SECTION_FUNCTION))
+  if(m.knownsections&(1 << WASM_SECTION_FUNCTION))
   {
     ValidateSection<varuint32, &ValidateFunction>(m.function.funcdecl, m.function.n_funcdecl, env, &m);
 
@@ -917,19 +919,19 @@ void ValidateModule(Environment& env, Module& m)
       AppendError(env.errors, &m, ERR_FUNCTION_BODY_MISMATCH, "The number of function declarations (%u) does not equal the number of function bodies (%u)", m.function.n_funcdecl, m.code.n_funcbody);
   }
 
-  if(m.knownsections&(1 << SECTION_TABLE))
+  if(m.knownsections&(1 << WASM_SECTION_TABLE))
     ValidateSection<TableDesc, &ValidateTable>(m.table.tables, m.table.n_tables, env, &m);
 
-  if(m.knownsections&(1 << SECTION_MEMORY))
+  if(m.knownsections&(1 << WASM_SECTION_MEMORY))
     ValidateSection<MemoryDesc, &ValidateMemory>(m.memory.memory, m.memory.n_memory, env, &m);
 
-  if(m.knownsections&(1 << SECTION_GLOBAL))
+  if(m.knownsections&(1 << WASM_SECTION_GLOBAL))
     ValidateSection<GlobalDecl, &ValidateGlobal>(m.global.globals, m.global.n_globals, env, &m);
 
-  if(m.knownsections&(1 << SECTION_EXPORT))
+  if(m.knownsections&(1 << WASM_SECTION_EXPORT))
     ValidateSection<Export, &ValidateExport>(m.exportsection.exports, m.exportsection.n_exports, env, &m);
 
-  if(m.knownsections&(1 << SECTION_START))
+  if(m.knownsections&(1 << WASM_SECTION_START))
   {
     FunctionSig* f = ModuleFunction(m, m.start);
     if(f)
@@ -943,10 +945,10 @@ void ValidateModule(Environment& env, Module& m)
       AppendError(env.errors, &m, ERR_INVALID_FUNCTION_INDEX, "Start module function index %u does not exist.", m.start);
   }
 
-  if(m.knownsections&(1 << SECTION_ELEMENT))
+  if(m.knownsections&(1 << WASM_SECTION_ELEMENT))
     ValidateSection<TableInit, &ValidateTableOffset>(m.element.elements, m.element.n_elements, env, &m);
 
-  if(m.knownsections&(1 << SECTION_CODE))
+  if(m.knownsections&(1 << WASM_SECTION_CODE))
   {
     for(varuint32 j = 0; j < m.code.n_funcbody; ++j)
     {
@@ -955,21 +957,21 @@ void ValidateModule(Environment& env, Module& m)
     }
   }
 
-  if(m.knownsections&(1 << SECTION_DATA))
+  if(m.knownsections&(1 << WASM_SECTION_DATA))
     ValidateSection<DataInit, &ValidateDataOffset>(m.data.data, m.data.n_data, env, &m);
 }
 
 // Performs all post-load validation that couldn't be done during parsing
-void ValidateEnvironment(Environment& env)
+void innative::ValidateEnvironment(Environment& env)
 {
   int tmp;
   if(!(env.flags&ENV_STRICT))
   {
-    kh_put_cimport(env.cimports, "_native_wasm_to_c", &tmp);
-    kh_put_cimport(env.cimports, "_native_wasm_from_c", &tmp);
+    kh_put_cimport(env.cimports, "_innative_to_c", &tmp);
+    kh_put_cimport(env.cimports, "_innative_from_c", &tmp);
   }
   // TODO: replace with proper lib lookup
-  //kh_put_cimport(env.cimports, "_native_wasm_internal_env_print", &tmp);
+  //kh_put_cimport(env.cimports, "_innative_internal_env_print", &tmp);
   //kh_put_cimport(env.cimports, "GetStdHandle", &tmp);
   //kh_put_cimport(env.cimports, "WriteConsoleA", &tmp);
 
@@ -977,7 +979,7 @@ void ValidateEnvironment(Environment& env)
     ValidateModule(env, env.modules[i]);
 }
 
-bool ValidateSectionOrder(uint32& sections, varuint7 opcode)
+bool innative::ValidateSectionOrder(uint32& sections, varuint7 opcode)
 {
   return (sections & ((~0) << opcode)) == 0;
 }

@@ -1,8 +1,8 @@
 // Copyright ©2018 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in native-wasm.h
 
-#ifndef __EXPORT_H__NW__
-#define __EXPORT_H__NW__
+#ifndef __EXPORT_H__IR__
+#define __EXPORT_H__IR__
 
 #include "native-wasm/schema.h"
 
@@ -10,28 +10,28 @@
 extern "C" {
 #endif
 
-    typedef void(*NW_GetCPUInfo)(int* out);
-    typedef void(*NW_Entrypoint)();
+    typedef void(*IR_GetCPUInfo)(int* out);
+    typedef void(*IR_Entrypoint)();
 
     // Contains the actual runtime functions
-    typedef struct __NW_EXPORTS
+    typedef struct __IR_EXPORTS
     {
-      struct __ENVIRONMENT* (*CreateEnvironment)(unsigned int flags, unsigned int modules, unsigned int maxthreads);
-      void(*AddModule)(struct __ENVIRONMENT* env, void* data, uint64_t size, const char* name, int* err); // If size is 0, data points to a null terminated UTF8 file path
-      void(*AddWhitelist)(struct __ENVIRONMENT* env, const char* module_name, const char* export_name, const FunctionSig* sig);
-      void(*WaitForLoad)(struct __ENVIRONMENT* env);
-      enum ERROR_CODE(*AddEmbedding)(struct __ENVIRONMENT* env, int tag, void* data, uint64_t size); // If size is 0, data points to a null terminated UTF8 file path
-      enum ERROR_CODE(*Compile)(struct __ENVIRONMENT* env, const char* file);
-      enum ERROR_CODE(*Run)(void* cache);
+      Environment* (*CreateEnvironment)(unsigned int flags, unsigned int modules, unsigned int maxthreads);
+      void(*AddModule)(Environment* env, void* data, uint64_t size, const char* name, int* err); // If size is 0, data points to a null terminated UTF8 file path
+      void(*AddWhitelist)(Environment* env, const char* module_name, const char* export_name, const FunctionSig* sig);
+      void(*WaitForLoad)(Environment* env);
+      enum IR_ERROR(*AddEmbedding)(Environment* env, int tag, void* data, uint64_t size); // If size is 0, data points to a null terminated UTF8 file path
+      enum IR_ERROR(*Compile)(Environment* env, const char* file);
+      enum IR_ERROR(*Run)(void* cache);
       void*(*LoadCache)(int flags, const char* file);
-      void(*DestroyEnvironment)(struct __ENVIRONMENT* env);
+      void(*DestroyEnvironment)(Environment* env);
     } NWExports;
 
     // Statically linked function that loads the runtime stub, which then loads the actual runtime functions.
-    NW_COMPILER_DLLEXPORT extern void native_wasm_runtime(NWExports* exports);
+    IR_COMPILER_DLLEXPORT extern void innative_runtime(NWExports* exports);
 
     // Command Line Tool exports
-    struct _NW_CHUNK
+    struct _IR_CHUNK
     {
       void* data;
       uint64_t size; // If size is 0, data points to a null terminated UTF8 file path
@@ -39,16 +39,16 @@ extern "C" {
       int tag; // Only used for embedding types
     };
 
-    struct _NW_WHITELIST
+    struct _IR_WHITELIST
     {
       const char* module_name;
       const char* export_name;
       FunctionSig sig;
     };
 
-    NW_COMPILER_DLLEXPORT extern int native_wasm_compile_script(const char* file, unsigned int flags, ValidationError** errors);
-    NW_COMPILER_DLLEXPORT extern int native_wasm_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const struct _NW_WHITELIST* whitelist, int n_whitelist);
-    NW_COMPILER_DLLEXPORT extern int native_wasm_build_loader(struct _NW_CHUNK* chunks, const char* out, bool dynamic);
+    IR_COMPILER_DLLEXPORT extern int innative_compile_script(const char* file, unsigned int flags, ValidationError** errors);
+    IR_COMPILER_DLLEXPORT extern int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const struct _IR_WHITELIST* whitelist, int n_whitelist);
+    IR_COMPILER_DLLEXPORT extern int innative_build_loader(struct _IR_CHUNK* chunks, const char* out, bool dynamic);
 
 #ifdef  __cplusplus
 }

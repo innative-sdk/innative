@@ -9,6 +9,9 @@
 #include <signal.h>
 #include <setjmp.h>
 
+using namespace innative;
+using namespace wat;
+
 KHASH_INIT(assertion, int, const char*, 1, kh_int_hash_func, kh_int_hash_equal)
 
 kh_assertion_t* GenAssertions(std::initializer_list<int> code, std::initializer_list<const char*> msg)
@@ -98,18 +101,15 @@ int CompileScript(Environment& env, const char* out, void*& cache)
     return r;
 
   // Prepare to handle exceptions from the initialization
-  signal(SIGILL, CrashHandler);
-  int jmp = setjmp(jump_location);
-  if(jmp)
-    return ERR_RUNTIME_INIT_ERROR;
-  cache = LoadDLL(out);
-  signal(SIGILL, SIG_DFL);
+  auto dir = GetWorkingDir();
+  dir.Append(out);
+  cache = LoadDLL(dir.Get().c_str());
   return !cache ? ERR_RUNTIME_INIT_ERROR : ERR_SUCCESS;
 }
 
 struct WatResult
 {
-  TYPE_ENCODING type;
+  WASM_TYPE_ENCODING type;
   union
   {
     int32_t i32;
@@ -119,7 +119,7 @@ struct WatResult
   };
 };
 
-template<TYPE_ENCODING R>
+template<WASM_TYPE_ENCODING R>
 bool MatchFuncSig(FunctionSig sig)
 {
   if(sig.n_params > 0)
@@ -131,7 +131,7 @@ bool MatchFuncSig(FunctionSig sig)
   return true;
 }
 
-template<TYPE_ENCODING R, TYPE_ENCODING P, TYPE_ENCODING... Args>
+template<WASM_TYPE_ENCODING R, WASM_TYPE_ENCODING P, WASM_TYPE_ENCODING... Args>
 bool MatchFuncSig(FunctionSig sig)
 {
   if(!sig.n_params)
@@ -149,7 +149,7 @@ int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
   int r;
 
   cache = 0;
-  env.modules = (Module*)realloc(env.modules, ++env.n_modules * sizeof(Module));
+  env.modules = trealloc<Module>(env.modules, ++env.n_modules);
   last = &env.modules[env.n_modules - 1];
   if(tokens[0].id == TOKEN_BINARY || (tokens.Size() > 1 && tokens[1].id == TOKEN_BINARY))
   {
@@ -186,8 +186,50 @@ int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
       return ERR_FATAL_DUPLICATE_MODULE_NAME;
     kh_val(mapping, iter) = (varuint32)env.n_modules - 1;
   }
-
+  else // If the module has no name, we must assign a temporary one
+  {
+    char buf[30] = { 'm', 0 };
+    ITOA(env.n_modules, buf + 1, 29, 10);
+    size_t len = strlen(buf);
+    last->name.n_bytes = len;
+    last->name.bytes = tmalloc<uint8_t>(len + 1);
+    tmemcpy((char*)last->name.bytes, len + 1, buf, len + 1);
+  }
   return ERR_SUCCESS;
+}
+int64_t Homogenize(const Instruction& i)
+{
+  switch(i.opcode)
+  {
+  case OP_i32_const: return i.immediates[0]._varsint32;
+  case OP_i64_const: return i.immediates[0]._varsint64;
+  case OP_f32_const: { double d = i.immediates[0]._float32; return *(int64_t*)&d; }
+  case OP_f64_const: return *(int64_t*)&i.immediates[0]._float64;
+  }
+
+  assert(false);
+  return 0;
+}
+
+template<typename T>
+struct HType { typedef int64_t T; };
+
+template<typename... Args>
+void GenFuncCall(void* f, WatResult& result, Args... params)
+{
+  int64_t r = static_cast<int64_t(*)(typename HType<Args>::T...)>(f)(Homogenize(params)...);
+  switch(result.type)
+  {
+  case TE_i32: result.i32 = (int32_t)r; break;
+  case TE_i64: result.i64 = r; break;
+  case TE_f32: { double d = *(double*)&r; result.f32 = (float)d; break; }
+  case TE_f64: result.f64 = *(double*)&r; break;
+  default: 
+    assert(false); 
+    result.type = TE_NONE;
+  case TE_void:
+    break;
+  }
 }
 
 int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mapping, Module*& last, void*& cache, WatResult& result)
@@ -195,6 +237,7 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
   int r;
   if(!cache) // If cache is null we need to recompile the current environment
   {
+    env.flags |= ENV_HOMOGENIZE_FUNCTIONS;
     if(r = CompileScript(env, "wast.dll", cache))
       return r;
     assert(cache);
@@ -224,7 +267,7 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
     if(!kh_exist2(m->exports, iter))
       return ERR_INVALID_FUNCTION_INDEX;
     Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
-    if(e.kind != KIND_FUNCTION || e.index >= m->function.n_funcdecl || m->function.funcdecl[e.index] >= m->type.n_functions)
+    if(e.kind != WASM_KIND_FUNCTION || e.index >= m->function.n_funcdecl || m->function.funcdecl[e.index] >= m->type.n_functions)
       return ERR_INVALID_FUNCTION_INDEX;
 
     void* f = LoadDLLFunction(cache, MergeName((const char*)m->name.bytes, (const char*)func.bytes).c_str());
@@ -237,13 +280,7 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
     if(!sig.n_returns)
       result.type = TE_void;
     else
-      result.type = (TYPE_ENCODING)sig.returns[0];
-
-    // Call the function and set the correct result.
-    signal(SIGILL, CrashHandler);
-    int jmp = setjmp(jump_location);
-    if(jmp)
-      return ERR_RUNTIME_TRAP;
+      result.type = (WASM_TYPE_ENCODING)sig.returns[0];
 
     std::vector<Instruction> params;
     while(tokens.Peek().id == TOKEN_OPEN)
@@ -258,62 +295,87 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
 
     if(params.size() != sig.n_params)
       return ERR_SIGNATURE_MISMATCH;
+    for(int i = 0; i < sig.n_params; ++i)
+    {
+      varsint7 ty = TE_NONE;
+      switch(params[i].opcode)
+      {
+      case OP_i32_const: ty = TE_i32; break;
+      case OP_i64_const: ty = TE_i64; break;
+      case OP_f32_const: ty = TE_f32; break;
+      case OP_f64_const: ty = TE_f64; break;
+      }
 
-    if(MatchFuncSig<TE_i32, TE_i32>(sig))
-      result.i32 = static_cast<int32_t(*)(int32_t)>(f)(params[0].immediates[0]._varsint32);
-    else if(MatchFuncSig<TE_i64, TE_i32>(sig))
-      result.i64 = static_cast<int64_t(*)(int32_t)>(f)(params[0].immediates[0]._varsint32);
-    else if(MatchFuncSig<TE_f32, TE_i32>(sig))
-      result.f32 = static_cast<float(*)(int32_t)>(f)(params[0].immediates[0]._varsint32);
-    else if(MatchFuncSig<TE_f64, TE_i32>(sig))
-      result.f64 = static_cast<double(*)(int32_t)>(f)(params[0].immediates[0]._varsint32);
-    else if(MatchFuncSig<TE_i32, TE_i64>(sig))
-      result.i32 = static_cast<int32_t(*)(int64_t)>(f)(params[0].immediates[0]._varsint64);
-    else if(MatchFuncSig<TE_i64, TE_i64>(sig))
-      result.i64 = static_cast<int64_t(*)(int64_t)>(f)(params[0].immediates[0]._varsint64);
-    else if(MatchFuncSig<TE_f32, TE_i64>(sig))
-      result.f32 = static_cast<float(*)(int64_t)>(f)(params[0].immediates[0]._varsint64);
-    else if(MatchFuncSig<TE_f64, TE_i64>(sig))
-      result.f64 = static_cast<double(*)(int64_t)>(f)(params[0].immediates[0]._varsint64);
-    else if(MatchFuncSig<TE_i32, TE_f32>(sig))
-      result.i32 = static_cast<int32_t(*)(float)>(f)(params[0].immediates[0]._float32);
-    else if(MatchFuncSig<TE_i64, TE_f32>(sig))
-      result.i64 = static_cast<int64_t(*)(float)>(f)(params[0].immediates[0]._float32);
-    else if(MatchFuncSig<TE_f32, TE_f32>(sig))
-      result.f32 = static_cast<float(*)(float)>(f)(params[0].immediates[0]._float32);
-    else if(MatchFuncSig<TE_f64, TE_f32>(sig))
-      result.f64 = static_cast<double(*)(float)>(f)(params[0].immediates[0]._float32);
-    else if(MatchFuncSig<TE_i32, TE_f64>(sig))
-      result.i32 = static_cast<int32_t(*)(double)>(f)(params[0].immediates[0]._float64);
-    else if(MatchFuncSig<TE_i64, TE_f64>(sig))
-      result.i64 = static_cast<int64_t(*)(double)>(f)(params[0].immediates[0]._float64);
-    else if(MatchFuncSig<TE_f32, TE_f64>(sig))
-      result.f32 = static_cast<float(*)(double)>(f)(params[0].immediates[0]._float64);
-    else if(MatchFuncSig<TE_f64, TE_f64>(sig))
-      result.f64 = static_cast<double(*)(double)>(f)(params[0].immediates[0]._float64);
-    else if(MatchFuncSig<TE_i32, TE_i32, TE_i32>(sig))
-      result.i32 = static_cast<int32_t(*)(int32_t, int32_t)>(f)(params[0].immediates[0]._varsint32, params[0].immediates[0]._varsint32);
-    else if(MatchFuncSig<TE_i64, TE_i32, TE_i32>(sig))
-      result.i64 = static_cast<int64_t(*)(int32_t, int32_t)>(f)(params[0].immediates[0]._varsint32, params[0].immediates[0]._varsint32);
-    else if(MatchFuncSig<TE_f32, TE_i32, TE_i32>(sig))
-      result.f32 = static_cast<float(*)(int32_t, int32_t)>(f)(params[0].immediates[0]._varsint32, params[0].immediates[0]._varsint32);
-    else if(MatchFuncSig<TE_f64, TE_i32, TE_i32>(sig))
-      result.f64 = static_cast<double(*)(int32_t, int32_t)>(f)(params[0].immediates[0]._varsint32, params[0].immediates[0]._varsint32);
-    else if(MatchFuncSig<TE_f32, TE_f32, TE_f32>(sig))
-      result.f32 = static_cast<float(*)(float, float)>(f)(params[0].immediates[0]._float32, params[0].immediates[0]._float32);
-    else if(MatchFuncSig<TE_f64, TE_f64, TE_f64>(sig))
-      result.f64 = static_cast<double(*)(double, double)>(f)(params[0].immediates[0]._float64, params[0].immediates[0]._float64);
-    else if(MatchFuncSig<TE_i64, TE_i64, TE_i64>(sig))
-      result.i64 = static_cast<int64_t(*)(int64_t, int64_t)>(f)(params[0].immediates[0]._varsint64, params[0].immediates[0]._varsint64);
-    else
+      if(sig.params[i] != ty) 
+        return ERR_INVALID_TYPE;
+    }
+
+    // Call the function and set the correct result.
+    signal(SIGILL, CrashHandler);
+    int jmp = setjmp(jump_location);
+    if(jmp)
+      return ERR_RUNTIME_TRAP;
+
+    switch(sig.n_params)
+    {
+    case 0: GenFuncCall(f, result); break;
+    case 1: GenFuncCall(f, result, params[0]); break;
+    case 2: GenFuncCall(f, result, params[0], params[1]); break;
+    case 3: GenFuncCall(f, result, params[0], params[1], params[2]); break;
+    case 4: GenFuncCall(f, result, params[0], params[1], params[2], params[3]); break;
+    case 5: GenFuncCall(f, result, params[0], params[1], params[2], params[3], params[4]); break;
+    case 6: GenFuncCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5]); break;
+    case 7: GenFuncCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6]); break;
+    case 8: GenFuncCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7]); break;
+    case 9: GenFuncCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7], params[8]); break;
+    default:
       assert(false);
-
+      return ERR_FATAL_UNKNOWN_KIND;
+    }
+    
     signal(SIGILL, SIG_DFL);
     break;
   }
   case TOKEN_GET:
-    assert(false); // TODO: We have no way of getting globals out of DLLs yet
+  {
+    Token name = GetWatNameToken(tokens);
+    Module* m = last;
+    if(name.id == TOKEN_NAME)
+    {
+      size_t i = GetMapping(mapping, name);
+      if(i >= env.n_modules)
+        return ERR_PARSE_INVALID_NAME;
+      m = env.modules + i;
+    }
+    if(!m)
+      return ERR_FATAL_INVALID_MODULE;
+
+    ByteArray global = { 0 };
+    if(r = WatString(global, tokens.Pop()))
+      return r;
+
+    khiter_t iter = kh_get_exports(m->exports, (const char*)global.bytes);
+    if(!kh_exist2(m->exports, iter))
+      return ERR_INVALID_GLOBAL_INDEX;
+    Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
+    if(e.kind != WASM_KIND_GLOBAL || e.index >= m->global.n_globals)
+      return ERR_INVALID_GLOBAL_INDEX;
+
+    void* f = LoadDLLFunction(cache, MergeName((const char*)m->name.bytes, (const char*)global.bytes).c_str());
+    if(!f)
+      return ERR_INVALID_GLOBAL_INDEX;
+
+    switch(m->global.globals[e.index].desc.type)
+    {
+    case TE_i32: result.i32 = *(int32_t*)f; break;
+    case TE_i64: result.i64 = *(int64_t*)f; break;
+    case TE_f32: result.f32 = *(float*)f; break;
+    case TE_f64: result.f64 = *(double*)f; break;
+    default: return ERR_INVALID_TYPE;
+    }
+
     break;
+  }
   default:
     return ERR_WAT_EXPECTED_TOKEN;
   }
@@ -356,7 +418,7 @@ inline std::string GetAssertionString(int code)
 }
 
 // This parses an entire extended WAT testing script into an environment
-int ParseWast(Environment& env, uint8_t* data, size_t sz)
+int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
 {
   Queue<Token> tokens;
   TokenizeWAT(tokens, (char*)data, (char*)data + sz);
@@ -382,6 +444,9 @@ int ParseWast(Environment& env, uint8_t* data, size_t sz)
     case TOKEN_MODULE:
       if(r = ParseWastModule(env, tokens, mapping, last, cache))
         return r;
+      ValidateModule(env, *last);
+      if(env.errors)
+        return ERR_VALIDATION_ERROR;
       break;
     case TOKEN_REGISTER:
     {
@@ -426,7 +491,8 @@ int ParseWast(Environment& env, uint8_t* data, size_t sz)
 
         r = CompileScript(env, "wast.dll", cache);
         if(r != ERR_RUNTIME_TRAP)
-          return ERR_RUNTIME_ASSERT_FAILURE; // TODO: AppendError
+          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected trap, but call succeeded");
+        EXPECTED(tokens, TOKEN_STRING, ERR_WAT_EXPECTED_STRING);
       }
       else
       {
@@ -435,8 +501,8 @@ int ParseWast(Environment& env, uint8_t* data, size_t sz)
         r = ParseWastAction(env, tokens, mapping, last, cache, result);
         if(r != ERR_RUNTIME_TRAP)
           AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected trap, but call succeeded");
-        return ERR_RUNTIME_ASSERT_FAILURE; // TODO: AppendError
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+        EXPECTED(tokens, TOKEN_STRING, ERR_WAT_EXPECTED_STRING);
       }
       break;
     case TOKEN_ASSERT_RETURN:
@@ -445,9 +511,13 @@ int ParseWast(Environment& env, uint8_t* data, size_t sz)
     {
       Token t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-      WatResult result;
+      WatResult result = { TE_NONE };
       if(r = ParseWastAction(env, tokens, mapping, last, cache, result))
-        return r;
+      {
+        if(r != ERR_RUNTIME_TRAP && r != ERR_RUNTIME_INIT_ERROR)
+          return r;
+        AppendError(errors, last, r, "Runtime error %i while attempting to verify result.", r);
+      }
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       Instruction value;
       WatState state(*last);
@@ -455,8 +525,11 @@ int ParseWast(Environment& env, uint8_t* data, size_t sz)
       switch(t.id)
       {
       case TOKEN_ASSERT_RETURN:
+        EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
         if(r = WatInitializer(state, tokens, value))
           return r;
+        EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+
         switch(value.opcode)
         {
         case OP_i32_const:
@@ -504,6 +577,7 @@ int ParseWast(Environment& env, uint8_t* data, size_t sz)
       Token t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       int code = ParseWastModule(env, tokens, mapping, last, cache);
+      Token test = tokens.Pop();
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
       ByteArray err = { 0 };
@@ -544,6 +618,7 @@ int ParseWast(Environment& env, uint8_t* data, size_t sz)
       return ERR_WAT_EXPECTED_TOKEN;
     }
 
+    Token t = tokens[0];
     EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 

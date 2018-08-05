@@ -4,7 +4,7 @@
 #include "native-wasm/export.h"
 #include <string.h>
 
-#ifdef NW_PLATFORM_WIN32
+#ifdef IR_PLATFORM_WIN32
 #pragma pack(push)
 #pragma pack(8)
 #define WINVER 0x0501 //_WIN32_WINNT_WINXP   
@@ -22,17 +22,17 @@
 #define NOGDI
 #include <windows.h>
 #pragma pack(pop)
-#elif defined(NW_PLATFORM_POSIX)
+#elif defined(IR_PLATFORM_POSIX)
 #error TODO
 #else
 #error unknown platform!
 #endif
 
 // Platform-specific implementation of the mem.grow instruction, except it works in bytes
-NW_COMPILER_DLLEXPORT extern void* _native_wasm_internal_env_grow_memory(void* p, uint64_t i, uint64_t max)
+IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max)
 {
   uint64_t* info = (uint64_t*)p;
-#ifdef NW_PLATFORM_WIN32
+#ifdef IR_PLATFORM_WIN32
   if(info != 0)
   {
     i += info[-1];
@@ -50,7 +50,7 @@ NW_COMPILER_DLLEXPORT extern void* _native_wasm_internal_env_grow_memory(void* p
 #endif
 }
 
-NW_COMPILER_DLLEXPORT extern void _native_wasm_internal_env_memcpy(char* dest, const char* src, uint64_t sz)
+IR_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz)
 {
   // Very simple memcpy implementation because we don't have access to the C library
   while(sz > sizeof(uint64_t))
@@ -69,7 +69,7 @@ NW_COMPILER_DLLEXPORT extern void _native_wasm_internal_env_memcpy(char* dest, c
   }
 }
 
-NW_COMPILER_DLLEXPORT extern void _native_wasm_internal_env_print(uint64_t a)
+IR_COMPILER_DLLEXPORT extern void _innative_internal_env_print(uint64_t a)
 {
   static char lookup[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
   char buf[25] = { 0 };
@@ -85,7 +85,7 @@ NW_COMPILER_DLLEXPORT extern void _native_wasm_internal_env_print(uint64_t a)
   WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buf, i, &out, NULL);
 }
 
-NW_COMPILER_DLLEXPORT extern void _native_wasm_internal_env_print_compiler(uint64_t a)
+IR_COMPILER_DLLEXPORT extern void _innative_internal_env_print_compiler(uint64_t a)
 {
-  _native_wasm_internal_env_print(a);
+  _innative_internal_env_print(a);
 }
