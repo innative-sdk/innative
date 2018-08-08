@@ -25,10 +25,10 @@ extern "C" {
       enum IR_ERROR(*Run)(void* cache);
       void*(*LoadCache)(int flags, const char* file);
       void(*DestroyEnvironment)(Environment* env);
-    } NWExports;
+    } IRExports;
 
     // Statically linked function that loads the runtime stub, which then loads the actual runtime functions.
-    IR_COMPILER_DLLEXPORT extern void innative_runtime(NWExports* exports);
+    IR_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports);
 
     // Command Line Tool exports
     struct _IR_CHUNK

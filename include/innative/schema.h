@@ -8,6 +8,7 @@
 #include "innative/khash.h"
 #include <stdint.h>
 #include <stdbool.h>
+#include <assert.h>
 
 #ifdef  __cplusplus
 extern "C" {
@@ -288,7 +289,7 @@ enum IR_ERROR
   ERR_FATAL_INVALID_WASM_SECTION_ORDER = -0xFF,
   ERR_FATAL_INVALID_MODULE,
   ERR_FATAL_INVALID_ENCODING,
-  ERR_FATAL_INVALID_BYTE_LENGTH,
+  ERR_FATAL_OVERLONG_ENCODING,
   ERR_FATAL_UNKNOWN_KIND,
   ERR_FATAL_UNKNOWN_INSTRUCTION,
   ERR_FATAL_UNKNOWN_SECTION,
@@ -413,6 +414,23 @@ enum WASM_ENVIRONMENT_FLAGS
 
 typedef struct __WASM_BYTE_ARRAY
 {
+#ifdef  __cplusplus
+  __WASM_BYTE_ARRAY() : bytes(nullptr), n_bytes(0) {}
+  __WASM_BYTE_ARRAY(uint8_t* b, varuint32 n) : bytes(b), n_bytes(n) {}
+  inline uint8_t* get() { return bytes; }
+  inline const uint8_t* get() const { return bytes; }
+  inline const char* str() const { return (char*)bytes; }
+  inline varuint32 size() const { return n_bytes; }
+  void resize(varuint32 sz, bool terminator);
+  void discard(varuint32 sz, bool terminator);
+
+  bool operator==(const __WASM_BYTE_ARRAY& r) const;
+  inline bool operator!=(const __WASM_BYTE_ARRAY& r) const { return !operator==(r); }
+  inline const uint8_t& operator[](varuint32 i) const { assert(i < n_bytes); return bytes[i]; }
+  inline uint8_t& operator[](varuint32 i) { assert(i < n_bytes); return bytes[i]; }
+
+protected:
+#endif
   varuint32 n_bytes;
   uint8_t* bytes;
 } ByteArray;
@@ -483,6 +501,9 @@ typedef struct __WASM_GLOBAL_DECL
 
 typedef struct __WASM_FUNCTION_DESC
 {
+#ifdef  __cplusplus
+  inline __WASM_FUNCTION_DESC() : sig_index(0), param_names(nullptr) {}
+#endif
   varuint32 sig_index;
   Identifier debug_name;
   const char** param_names; // Always the size of n_params from the signature
@@ -490,6 +511,9 @@ typedef struct __WASM_FUNCTION_DESC
 
 typedef struct __WASM_IMPORT
 {
+#ifdef  __cplusplus
+  inline __WASM_IMPORT() : kind(0), func_desc() {}
+#endif
   Identifier module_name;
   Identifier export_name;
   varuint7 kind; // WASM_KIND

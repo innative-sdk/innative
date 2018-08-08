@@ -101,7 +101,7 @@ namespace innative {
 
       Module& m;
       Queue<DeferWatAction> defer;
-      Stack<StringRef> stack;
+      Stack<utility::StringRef> stack;
       kh_indexname_t* typehash;
       kh_indexname_t* funchash;
       kh_indexname_t* tablehash;
@@ -111,19 +111,20 @@ namespace innative {
 
 #define EXPECTED(t, e, err) if((t).Size() == 0 || (t).Pop().id != (e)) return assert(false), (err)
 
-    int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, StringRef name);
-    int WatString(ByteArray& str, StringRef t);
+    int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, utility::StringRef name);
+    int WatString(ByteArray& str, utility::StringRef t);
     void SkipSection(Queue<Token>& tokens);
     int WatInitializer(WatState& state, Queue<Token>& tokens, Instruction& op);
-    void TokenizeWAT(Queue<Token>& tokens, char* s, char* end);
+    void TokenizeWAT(Queue<Token>& tokens, const char* s, const char* end);
     int WatName(ByteArray& name, const Token& t);
-    int WatModule(Environment& env, Module& m, Queue<Token>& tokens, StringRef name);
+    int WatModule(Environment& env, Module& m, Queue<Token>& tokens, utility::StringRef name);
+    size_t WatLineNumber(const char* start, const char* pos);
 
     IR_FORCEINLINE int WatString(ByteArray& str, const Token& t)
     {
       if(t.id != TOKEN_STRING)
         return assert(false), ERR_WAT_EXPECTED_STRING;
-      return WatString(str, StringRef{ t.pos, t.len });
+      return WatString(str, utility::StringRef{ t.pos, t.len });
     }
 
     IR_FORCEINLINE Token GetWatNameToken(Queue<Token>& tokens)

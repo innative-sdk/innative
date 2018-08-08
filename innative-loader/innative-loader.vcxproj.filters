@@ -20,7 +20,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="loader.rc">
+    <ResourceCompile Include="innative-loader.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>

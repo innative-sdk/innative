@@ -8,9 +8,13 @@
 #include "parse.h"
 #include <signal.h>
 #include <setjmp.h>
+#include <iostream>
 
 using namespace innative;
 using namespace wat;
+using namespace utility;
+using std::string;
+using validate::AppendError;
 
 KHASH_INIT(assertion, int, const char*, 1, kh_int_hash_func, kh_int_hash_equal)
 
@@ -37,8 +41,8 @@ static kh_assertion_t* assertionhash = GenAssertions({
   ERR_END_MISMATCH,
   ERR_PARSE_INVALID_MAGIC_COOKIE,
   ERR_PARSE_INVALID_VERSION,
+  ERR_FATAL_OVERLONG_ENCODING,
   ERR_FATAL_INVALID_ENCODING,
-  ERR_FATAL_INVALID_BYTE_LENGTH,
   ERR_INVALID_RESERVED_VALUE,
   ERR_FATAL_TOO_MANY_LOCALS,
   ERR_IMPORT_EXPORT_MISMATCH,
@@ -50,6 +54,7 @@ static kh_assertion_t* assertionhash = GenAssertions({
   ERR_INVALID_FUNCTION_INDEX,
   ERR_INVALID_TABLE_INDEX,
   ERR_WAT_OUT_OF_RANGE,
+  ERR_PARSE_UNEXPECTED_EOF,
   },
 {
   "alignment",
@@ -71,6 +76,7 @@ static kh_assertion_t* assertionhash = GenAssertions({
   "unknown function",
   "unknown function 0",
   "constant out of range",
+  "unexpected end",
   //"invalid section id", 
   //"length out of bounds",
   //"function and code section have inconsistent lengths", "data segment does not fit", "unknown memory 0", "elements segment does not fit",
@@ -80,7 +86,7 @@ static kh_assertion_t* assertionhash = GenAssertions({
 
 size_t GetMapping(kh_modules_t* mapping, const Token& t)
 {
-  khiter_t iter = kh_get_modules(mapping, std::string(t.pos, t.len).c_str());
+  khiter_t iter = kh_get_modules(mapping, string(t.pos, t.len).c_str());
   return kh_exist2(mapping, iter) ? kh_val(mapping, iter) : (size_t)~0;
 }
 
@@ -94,9 +100,10 @@ void CrashHandler(int)
 int CompileScript(Environment& env, const char* out, void*& cache)
 {
   int r;
-  ValidateEnvironment(env);
+  validate::ValidateEnvironment(env);
   if(env.errors)
     return ERR_VALIDATION_ERROR;
+  return ERR_SUCCESS;
   if(r = CompileEnvironment(&env, out))
     return r;
 
@@ -143,6 +150,14 @@ bool MatchFuncSig(FunctionSig sig)
   return MatchFuncSig<R, Args...>(sig);
 }
 
+void SetTempName(Environment& env, Module* m)
+{
+  char buf[30] = { 'm', 0 };
+  ITOA(env.n_modules, buf + 1, 29, 10);
+  size_t len = strlen(buf);
+  m->name.resize(len, true);
+  tmemcpy((char*)m->name.get(), len, buf, len);
+}
 int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mapping, Module*& last, void*& cache)
 {
   EXPECTED(tokens, TOKEN_MODULE, ERR_WAT_EXPECTED_MODULE);
@@ -153,13 +168,22 @@ int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
   last = &env.modules[env.n_modules - 1];
   if(tokens[0].id == TOKEN_BINARY || (tokens.Size() > 1 && tokens[1].id == TOKEN_BINARY))
   {
+    std::string tempname("m");
+    tempname += std::to_string(env.n_modules);
     Token name = GetWatNameToken(tokens);
-    tokens.Pop();
-    ByteArray binary = { 0 };
-    if(r = WatString(binary, tokens.Pop()))
-      return r;
-    Stream s = { (uint8_t*)binary.bytes, binary.n_bytes, 0 };
-    if(r = ParseModule(s, *last, ByteArray{ (varuint32)name.len, (uint8_t*)name.pos }))
+    if(!name.pos)
+    {
+      name.pos = tempname.data();
+      name.len = tempname.size();
+    }
+
+    EXPECTED(tokens, TOKEN_BINARY, ERR_WAT_EXPECTED_TOKEN);
+    ByteArray binary;
+    while(tokens.Peek().id == TOKEN_STRING)
+      if(r = WatString(binary, tokens.Pop()))
+        return r;
+    parse::Stream s = { binary.get(), binary.size(), 0 };
+    if(r = parse::ParseModule(s, *last, ByteArray((uint8_t*)name.pos, (varuint32)name.len)))
       return r;
     if(name.id == TOKEN_NAME) // Override name if it exists
       if(r = WatName(last->name, name))
@@ -168,9 +192,12 @@ int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
   else if(tokens[0].id == TOKEN_QUOTE || (tokens.Size() > 1 && tokens[1].id == TOKEN_QUOTE))
   {
     Token name = GetWatNameToken(tokens);
-    tokens.Pop();
-    Token t = tokens.Pop();
-    if(r = ParseWatModule(env, *last, (uint8_t*)t.pos, t.len, StringRef{ name.pos, name.len }))
+    EXPECTED(tokens, TOKEN_QUOTE, ERR_WAT_EXPECTED_TOKEN);
+    ByteArray quote;
+    while(tokens.Peek().id == TOKEN_STRING)
+      if(r = WatString(quote, tokens.Pop()))
+        return r;
+    if(r = ParseWatModule(env, *last, quote.get(), quote.size(), StringRef{ name.pos, name.len }))
       return r;
     if(name.id == TOKEN_NAME) // Override name if it exists
       if(r = WatName(last->name, name))
@@ -179,24 +206,18 @@ int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
   else if(r = WatModule(env, *last, tokens, StringRef{ 0,0 }))
     return r;
 
-  if(last->name.n_bytes > 0)
+  if(last->name.size() > 0)
   {
-    khiter_t iter = kh_put_modules(mapping, (const char*)last->name.bytes, &r);
+    khiter_t iter = kh_put_modules(mapping, last->name.str(), &r);
     if(!r)
       return ERR_FATAL_DUPLICATE_MODULE_NAME;
     kh_val(mapping, iter) = (varuint32)env.n_modules - 1;
   }
   else // If the module has no name, we must assign a temporary one
-  {
-    char buf[30] = { 'm', 0 };
-    ITOA(env.n_modules, buf + 1, 29, 10);
-    size_t len = strlen(buf);
-    last->name.n_bytes = len;
-    last->name.bytes = tmalloc<uint8_t>(len + 1);
-    tmemcpy((char*)last->name.bytes, len + 1, buf, len + 1);
-  }
+    SetTempName(env, last);
   return ERR_SUCCESS;
 }
+
 int64_t Homogenize(const Instruction& i)
 {
   switch(i.opcode)
@@ -211,13 +232,17 @@ int64_t Homogenize(const Instruction& i)
   return 0;
 }
 
-template<typename T>
-struct HType { typedef int64_t T; };
+namespace innative {
+  namespace internal {
+    template<typename T>
+    struct HType { typedef int64_t T; };
+  }
+}
 
 template<typename... Args>
 void GenFuncCall(void* f, WatResult& result, Args... params)
 {
-  int64_t r = static_cast<int64_t(*)(typename HType<Args>::T...)>(f)(Homogenize(params)...);
+  int64_t r = static_cast<int64_t(*)(typename internal::HType<Args>::T...)>(f)(Homogenize(params)...);
   switch(result.type)
   {
   case TE_i32: result.i32 = (int32_t)r; break;
@@ -240,7 +265,7 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
     env.flags |= ENV_HOMOGENIZE_FUNCTIONS;
     if(r = CompileScript(env, "wast.dll", cache))
       return r;
-    assert(cache);
+    //assert(cache);
   }
 
   switch(tokens.Pop().id)
@@ -259,28 +284,19 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
     if(!m)
       return ERR_FATAL_INVALID_MODULE;
 
-    ByteArray func = { 0 };
+    ByteArray func;
     if(r = WatString(func, tokens.Pop()))
       return r;
 
-    khiter_t iter = kh_get_exports(m->exports, (const char*)func.bytes);
+    khiter_t iter = kh_get_exports(m->exports, func.str());
     if(!kh_exist2(m->exports, iter))
       return ERR_INVALID_FUNCTION_INDEX;
     Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
     if(e.kind != WASM_KIND_FUNCTION || e.index >= m->function.n_funcdecl || m->function.funcdecl[e.index] >= m->type.n_functions)
       return ERR_INVALID_FUNCTION_INDEX;
 
-    void* f = LoadDLLFunction(cache, MergeName((const char*)m->name.bytes, (const char*)func.bytes).c_str());
-    if(!f)
-      return ERR_INVALID_FUNCTION_INDEX;
-
     // Dig up the exported function signature from the module and assemble a C function pointer from it
     FunctionSig& sig = m->type.functions[m->function.funcdecl[e.index]];
-
-    if(!sig.n_returns)
-      result.type = TE_void;
-    else
-      result.type = (WASM_TYPE_ENCODING)sig.returns[0];
 
     std::vector<Instruction> params;
     while(tokens.Peek().id == TOKEN_OPEN)
@@ -295,7 +311,7 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
 
     if(params.size() != sig.n_params)
       return ERR_SIGNATURE_MISMATCH;
-    for(int i = 0; i < sig.n_params; ++i)
+    for(varuint32 i = 0; i < sig.n_params; ++i)
     {
       varsint7 ty = TE_NONE;
       switch(params[i].opcode)
@@ -309,6 +325,16 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
       if(sig.params[i] != ty) 
         return ERR_INVALID_TYPE;
     }
+
+    void* f = LoadDLLFunction(cache, MergeName(m->name.str(), func.str()).c_str());
+    if(!f)
+      //return ERR_INVALID_FUNCTION_INDEX;
+      return ERR_RUNTIME_TRAP;
+
+    if(!sig.n_returns)
+      result.type = TE_void;
+    else
+      result.type = (WASM_TYPE_ENCODING)sig.returns[0];
 
     // Call the function and set the correct result.
     signal(SIGILL, CrashHandler);
@@ -350,18 +376,18 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
     if(!m)
       return ERR_FATAL_INVALID_MODULE;
 
-    ByteArray global = { 0 };
+    ByteArray global;
     if(r = WatString(global, tokens.Pop()))
       return r;
 
-    khiter_t iter = kh_get_exports(m->exports, (const char*)global.bytes);
+    khiter_t iter = kh_get_exports(m->exports, global.str());
     if(!kh_exist2(m->exports, iter))
       return ERR_INVALID_GLOBAL_INDEX;
     Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
     if(e.kind != WASM_KIND_GLOBAL || e.index >= m->global.n_globals)
       return ERR_INVALID_GLOBAL_INDEX;
 
-    void* f = LoadDLLFunction(cache, MergeName((const char*)m->name.bytes, (const char*)global.bytes).c_str());
+    void* f = LoadDLLFunction(cache, MergeName(m->name.str(), global.str()).c_str());
     if(!f)
       return ERR_INVALID_GLOBAL_INDEX;
 
@@ -397,9 +423,9 @@ bool WatIsNaN(double f, bool canonical)
   return ((*reinterpret_cast<uint64_t*>(&f) & 0b0000000000001000000000000000000000000000000000000000000000000000ULL) != 0) != canonical;
 }
 
-inline std::string GetAssertionString(int code)
+inline string GetAssertionString(int code)
 {
-  std::string assertcode = "[SUCCESS]";
+  string assertcode = "[SUCCESS]";
   if(code < 0)
   {
     khiter_t iter = kh_get_assertion(assertionhash, code);
@@ -421,12 +447,13 @@ inline std::string GetAssertionString(int code)
 int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
 {
   Queue<Token> tokens;
-  TokenizeWAT(tokens, (char*)data, (char*)data + sz);
-  ValidationError* errors;
+  const char* start = (char*)data;
+  TokenizeWAT(tokens, start, (char*)data + sz);
+  ValidationError* errors = nullptr;
 
   for(size_t i = 0; i < tokens.Size(); ++i)
     if(!tokens[i].id)
-      AppendError(errors, nullptr, ERR_WAT_INVALID_TOKEN, "Invalid token: %s", std::string(tokens[i].pos, tokens[i].len).c_str());
+      AppendError(errors, nullptr, ERR_WAT_INVALID_TOKEN, "[%zu] Invalid token: %s", WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
 
   if(env.errors)
     return ERR_WAT_INVALID_TOKEN;
@@ -442,12 +469,14 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
     switch(tokens[0].id)
     {
     case TOKEN_MODULE:
+    {
       if(r = ParseWastModule(env, tokens, mapping, last, cache))
         return r;
-      ValidateModule(env, *last);
+      validate::ValidateModule(env, *last);
       if(env.errors)
         return ERR_VALIDATION_ERROR;
       break;
+    }
     case TOKEN_REGISTER:
     {
       tokens.Pop();
@@ -459,10 +488,10 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       if(i == (size_t)~0)
         return ERR_PARSE_INVALID_NAME;
 
-      ByteArray name = { 0 };
+      ByteArray name;
       if(r = WatString(name, tokens.Pop()))
         return r;
-      khiter_t iter = kh_put_modules(env.modulemap, (const char*)name.bytes, &r);
+      khiter_t iter = kh_put_modules(env.modulemap, name.str(), &r);
       if(!r)
         return ERR_FATAL_DUPLICATE_MODULE_NAME;
 
@@ -472,16 +501,20 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
     case TOKEN_INVOKE:
     case TOKEN_GET:
     {
-      tokens.Pop();
+      Token t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       WatResult result;
       if(r = ParseWastAction(env, tokens, mapping, last, cache, result))
-        return r;
+      {
+        if(r != ERR_RUNTIME_TRAP && r != ERR_RUNTIME_INIT_ERROR)
+          return r;
+        AppendError(errors, last, r, "[%zu] Runtime error %i while attempting to verify result.", WatLineNumber(start, t.pos), r);
+      }
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       break;
     }
     case TOKEN_ASSERT_TRAP:
-      tokens.Pop();
+      Token t = tokens.Pop();
       if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_MODULE) // Check if we're actually trapping on a module load
       {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
@@ -491,7 +524,7 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
 
         r = CompileScript(env, "wast.dll", cache);
         if(r != ERR_RUNTIME_TRAP)
-          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected trap, but call succeeded");
+          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
         EXPECTED(tokens, TOKEN_STRING, ERR_WAT_EXPECTED_STRING);
       }
       else
@@ -500,7 +533,7 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
         WatResult result;
         r = ParseWastAction(env, tokens, mapping, last, cache, result);
         if(r != ERR_RUNTIME_TRAP)
-          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected trap, but call succeeded");
+          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
         EXPECTED(tokens, TOKEN_STRING, ERR_WAT_EXPECTED_STRING);
       }
@@ -516,7 +549,7 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       {
         if(r != ERR_RUNTIME_TRAP && r != ERR_RUNTIME_INIT_ERROR)
           return r;
-        AppendError(errors, last, r, "Runtime error %i while attempting to verify result.", r);
+        AppendError(errors, last, r, "[%zu] Runtime error %i while attempting to verify result.", WatLineNumber(start, t.pos), r);
       }
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       Instruction value;
@@ -525,91 +558,121 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       switch(t.id)
       {
       case TOKEN_ASSERT_RETURN:
-        EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-        if(r = WatInitializer(state, tokens, value))
-          return r;
-        EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+        if(tokens[0].id == TOKEN_CLOSE) // This is valid because it represents a return of nothing
+          value.opcode = OP_nop;
+        else
+        {
+          EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+          if(r = WatInitializer(state, tokens, value))
+            return r;
+          EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+        }
 
         switch(value.opcode)
         {
+        case OP_nop:
+          if(result.type != TE_NONE)
+            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected no return value but got %i", WatLineNumber(start, t.pos), result.type);
+          break;
         case OP_i32_const:
           if(result.type != TE_i32)
-            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected i32 type but got %i", result.type);
+            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i32 type but got %i", WatLineNumber(start, t.pos), result.type);
           else if(result.i32 != value.immediates[0]._varsint32)
-            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected %i but got %i", value.immediates[0]._varsint32, result.i32);
+            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %i but got %i", WatLineNumber(start, t.pos), value.immediates[0]._varsint32, result.i32);
           break;
         case OP_i64_const:
           if(result.type != TE_i64)
-            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected i64 type but got %i", result.type);
+            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i64 type but got %i", WatLineNumber(start, t.pos), result.type);
           else if(result.i64 != value.immediates[0]._varsint64)
-            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected %i but got %i", value.immediates[0]._varsint64, result.i64);
+            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %i but got %i", WatLineNumber(start, t.pos), value.immediates[0]._varsint64, result.i64);
           break;
         case OP_f32_const:
           if(result.type != TE_f32)
-            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected f32 type but got %i", result.type);
+            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f32 type but got %i", WatLineNumber(start, t.pos), result.type);
           else if(result.f32 != value.immediates[0]._float32)
-            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected %i but got %i", value.immediates[0]._float32, result.f32);
+            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %i but got %i", WatLineNumber(start, t.pos), value.immediates[0]._float32, result.f32);
           break;
         case OP_f64_const:
           if(result.type != TE_f64)
-            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected f64 type but got %i", result.type);
+            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f64 type but got %i", WatLineNumber(start, t.pos), result.type);
           else if(result.f64 != value.immediates[0]._float64)
-            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected %i but got %i", value.immediates[0]._float64, result.f64);
+            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %i but got %i", WatLineNumber(start, t.pos), value.immediates[0]._float64, result.f64);
           break;
         }
         break;
       case TOKEN_ASSERT_RETURN_ARITHMETIC_NAN:
       case TOKEN_ASSERT_RETURN_CANONICAL_NAN:
         if(result.type != TE_f32 && result.type != TE_f64)
-          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected canonical NaN but got unexpected integer %z", result.i64);
+          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected canonical NaN but got unexpected integer %z", WatLineNumber(start, t.pos), result.i64);
         if(result.type == TE_f32 && !WatIsNaN(result.f32, t.id == TOKEN_ASSERT_RETURN_CANONICAL_NAN))
-          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected canonical NaN but got %g", result.f32);
+          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected canonical NaN but got %g", WatLineNumber(start, t.pos), result.f32);
         if(result.type == TE_f64 && !WatIsNaN(result.f64, t.id == TOKEN_ASSERT_RETURN_CANONICAL_NAN))
-          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected canonical NaN but got %g", result.f64);
+          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected canonical NaN but got %g", WatLineNumber(start, t.pos), result.f64);
         break;
       }
       break;
     }
     case TOKEN_ASSERT_MALFORMED:
+    {
+      Token t = tokens.Pop();
+      EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+      int code = ParseWastModule(env, tokens, mapping, last, cache);
+      EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+
+      ByteArray err;
+      if(r = WatString(err, tokens.Pop()))
+        return r;
+
+      string assertcode = GetAssertionString(code);
+
+      if(STRICMP(assertcode.c_str(), err.str()))
+        AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead", WatLineNumber(start, t.pos), err.str(), assertcode.c_str());
+      break;
+    }
     case TOKEN_ASSERT_INVALID:
     case TOKEN_ASSERT_UNLINKABLE:
     {
       Token t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       int code = ParseWastModule(env, tokens, mapping, last, cache);
-      Token test = tokens.Pop();
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
-      ByteArray err = { 0 };
+      ByteArray err;
       if(r = WatString(err, tokens.Pop()))
         return r;
       
-      std::string assertcode = GetAssertionString(code);
+      string assertcode = GetAssertionString(code);
 
-      if(t.id == TOKEN_ASSERT_MALFORMED && STRICMP(assertcode.c_str(), (const char*)err.bytes))
-        AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected '%s' error, but got '%s' instead", (const char*)err.bytes, assertcode.c_str());
-      if(t.id != TOKEN_ASSERT_MALFORMED && code != ERR_SUCCESS)
-        AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected module parsing success, but got '%s' instead", assertcode.c_str());
+      if(code != ERR_SUCCESS)
+        AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected module parsing success, but got '%s' instead", WatLineNumber(start, t.pos), assertcode.c_str());
 
-      ValidateModule(env, *last);
+      validate::ValidateModule(env, *last);
       code = ERR_SUCCESS;
       if(env.errors)
         code = env.errors->code;
       assertcode = GetAssertionString(code);
-      if(t.id == TOKEN_ASSERT_MALFORMED && code != ERR_SUCCESS)
-        AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected module parsing success, but got '%s' instead", assertcode.c_str());
-      if(t.id != TOKEN_ASSERT_MALFORMED && STRICMP(assertcode.c_str(), (const char*)err.bytes))
-        AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "Expected '%s' error, but got '%s' instead", (const char*)err.bytes, assertcode.c_str());
+      if(STRICMP(assertcode.c_str(), err.str()))
+        AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead", WatLineNumber(start, t.pos), err.str(), assertcode.c_str());
       env.errors = 0;
       break;
     }
     case TOKEN_ASSERT_EXHAUSTION:
-      assert(false);
+    {
+      Token t = tokens.Pop();
+      EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+      WatResult result;
+      r = ParseWastAction(env, tokens, mapping, last, cache, result);
+      if(r != ERR_RUNTIME_TRAP)
+        AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected call exhaustion trap, but call succeeded", WatLineNumber(start, t.pos));
+      EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      EXPECTED(tokens, TOKEN_STRING, ERR_WAT_EXPECTED_STRING);
       break;
+    }
     case TOKEN_SCRIPT:
     case TOKEN_INPUT:
     case TOKEN_OUTPUT:
     {
+      assert(false);
       SkipSection(tokens);
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       break;
@@ -618,10 +681,12 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       return ERR_WAT_EXPECTED_TOKEN;
     }
 
-    Token t = tokens[0];
     EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
   env.errors = errors;
+  if(env.errors)
+    internal::ReverseErrorList(env.errors);
+  std::cout << "Finished Script" << std::endl;
   return ERR_SUCCESS;
 }

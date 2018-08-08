@@ -23,185 +23,237 @@ namespace innative {
   extern const char* IR_ENV_EXTENSION;
   extern const char* IR_GLUE_STRING;
 
-  extern const char OPNAMES[][20];
-  typedef int uintcpuinfo[5];
+  namespace utility {
+    extern const char OPNAMES[][20];
+    typedef int uintcpuinfo[5];
 
-  inline void FlipEndian(uint8_t* target, uint8_t n) noexcept
-  {
-    uint8_t t;
-    uint8_t end = (n >> 1);
-    --n;
-    for(uint8_t i = 0; i < end; ++i)
+    struct StringRef
     {
-      t = target[n - i];
-      target[n - i] = target[i];
-      target[i] = t;
-    }
+      const char* s;
+      size_t len;
+
+      bool operator ==(const StringRef& r) const
+      {
+        if(len != r.len)
+          return false;
+        return !memcmp(s, r.s, len);
+      }
+    };
   }
 
-  template<typename T>
-  IR_FORCEINLINE void FlipEndian(T* target) noexcept
-  {
-    FlipEndian(reinterpret_cast<uint8_t*>(target), sizeof(T));
-  }
-
-  IR_FORCEINLINE uint32 ReadUInt32(Stream& s, IR_ERROR& err)
-  {
-    uint32 r = 0;
-    if(!s.Read(r))
-      err = ERR_PARSE_UNEXPECTED_EOF;
-
-#ifdef IR_ENDIAN_BIG
-    FlipEndian(&r);
-#endif
-    return r;
-  }
-
-  struct StringRef
-  {
-    const char* s;
-    size_t len;
-
-    bool operator ==(const StringRef& r) const
+  namespace internal {
+    // For simplicity reasons, we assemble the error list backwards. This reverses it so it appears in the correct order.
+    inline void ReverseErrorList(ValidationError*& errors) noexcept
     {
-      if(len != r.len)
-        return false;
-      return !memcmp(s, r.s, len);
+      auto cur = errors;
+      ValidationError* prev = nullptr;
+      while(cur != 0)
+      {
+        auto next = cur->next;
+        cur->next = prev;
+        prev = cur;
+        cur = next;
+      }
+      errors = prev;
     }
-  };
 
-  static inline khint_t __ac_X31_hash_stringrefins(StringRef ref)
-  {
-    const char* s = ref.s;
-    const char* end = ref.s + ref.len;
-    khint_t h = ((*s) > 64 && (*s) < 91) ? (*s) + 32 : *s;
-    if(h)
-      for(++s; s < end; ++s)
-        h = (h << 5) - h + (((*s) > 64 && (*s) < 91) ? (*s) + 32 : *s);
-    return h;
+    inline void FlipEndian(uint8_t* target, uint8_t n) noexcept
+    {
+      uint8_t t;
+      uint8_t end = (n >> 1);
+      --n;
+      for(uint8_t i = 0; i < end; ++i)
+      {
+        t = target[n - i];
+        target[n - i] = target[i];
+        target[i] = t;
+      }
+    }
+
+    template<typename T>
+    IR_FORCEINLINE void FlipEndian(T* target) noexcept
+    {
+      FlipEndian(reinterpret_cast<uint8_t*>(target), sizeof(T));
+    }
+
+    inline khint_t __ac_X31_hash_stringrefins(utility::StringRef ref)
+    {
+      const char* s = ref.s;
+      const char* end = ref.s + ref.len;
+      khint_t h = ((*s) > 64 && (*s) < 91) ? (*s) + 32 : *s;
+      if(h)
+        for(++s; s < end; ++s)
+          h = (h << 5) - h + (((*s) > 64 && (*s) < 91) ? (*s) + 32 : *s);
+      return h;
+    }
+
+    // Hashes a pair of strings seperated by a null terminator
+    kh_inline khint_t __ac_X31_hash_string_pair(const char *s)
+    {
+      khint_t h = (khint_t)*s;
+      if(h) for(++s; *s; ++s) h = (h << 5) - h + (khint_t)*s;
+      for(++s; *s; ++s) h = (h << 5) - h + (khint_t)*s;
+      return h;
+    }
+
+    // Single threaded greedy allocator
+    struct GreedyAllocBytes
+    {
+      inline static void* allocate(std::size_t n) 
+      { 
+        if(cur + n >= max)
+        {
+          max = (cur + n) * 2;
+          mem = malloc(max);
+          cur = 0;
+        }
+        void* r = (char*)mem + cur;
+        cur += n;
+        assert(cur < max);
+        return r;
+      }
+      template<class T>
+      static T* allocateT(std::size_t n) { return (T*)allocate(n * sizeof(T)); }
+
+      static void* mem;
+      static size_t cur;
+      static size_t max;
+    };
+
+    template <class T>
+    struct GreedyAlloc
+    {
+      typedef T value_type;
+
+      GreedyAlloc() = default;
+      template <class U>
+      constexpr GreedyAlloc(const GreedyAlloc<U>&) noexcept {}
+
+      inline T* allocate(std::size_t n) { return GreedyAllocBytes::allocateT<T>(n); }
+
+      inline void deallocate(T*, std::size_t) noexcept {}
+    };
+
+    template <class T, class U>
+    bool operator==(const GreedyAlloc<T>&, const GreedyAlloc<U>&) { return true; }
+    template <class T, class U>
+    bool operator!=(const GreedyAlloc<T>&, const GreedyAlloc<U>&) { return false; }
   }
 
-  template<class T>
-  inline errno_t tmemcpy(T* dest, size_t destsize, const T* src, size_t srcsize)
-  {
+  namespace utility {
+    template<class F>
+    class DeferLambda
+    {
+    public:
+      inline DeferLambda(const F& f) : _f(f) {}
+      inline ~DeferLambda() { _f(); }
+
+    protected:
+      F _f;
+    };
+
+    template<class T>
+    inline errno_t tmemcpy(T* dest, size_t destsize, const T* src, size_t srcsize)
+    {
 #ifdef IR_COMPILER_MSC
-    return memcpy_s(dest, destsize * sizeof(T), src, srcsize * sizeof(T));
+      return memcpy_s(dest, destsize * sizeof(T), src, srcsize * sizeof(T));
 #else
-    return memcpy(dest, src, srcsize * sizeof(T));
+      return memcpy(dest, src, srcsize * sizeof(T));
 #endif
-  }
-
-  template<class T>
-  inline T* trealloc(T* p, size_t sz)
-  {
-    return reinterpret_cast<T*>(realloc(p, sz * sizeof(T)));
-  }
-
-  uint64_t DecodeLEB128(Stream& s, IR_ERROR& err, unsigned int maxbits, bool sign);
-  IR_FORCEINLINE varuint1 ReadVarUInt1(Stream& s, IR_ERROR& err) { return DecodeLEB128(s, err, 1, false) != 0; }
-  IR_FORCEINLINE varuint7 ReadVarUInt7(Stream& s, IR_ERROR& err) { return static_cast<varuint7>(DecodeLEB128(s, err, 7, false)); }
-  IR_FORCEINLINE varuint32 ReadVarUInt32(Stream& s, IR_ERROR& err) { return static_cast<varuint32>(DecodeLEB128(s, err, 32, false)); }
-  IR_FORCEINLINE varuint64 ReadVarUInt64(Stream& s, IR_ERROR& err) { return static_cast<varuint64>(DecodeLEB128(s, err, 64, false)); }
-  IR_FORCEINLINE varsint7 ReadVarInt7(Stream& s, IR_ERROR& err) { return static_cast<varsint7>(DecodeLEB128(s, err, 7, true)); }
-  IR_FORCEINLINE varsint32 ReadVarInt32(Stream& s, IR_ERROR& err) { return static_cast<varsint32>(DecodeLEB128(s, err, 32, true)); }
-  IR_FORCEINLINE varsint64 ReadVarInt64(Stream& s, IR_ERROR& err) { return static_cast<varsint64>(DecodeLEB128(s, err, 64, true)); }
-  template<class T>
-  inline T ReadPrimitive(Stream& s, IR_ERROR& err)
-  {
-    T r = 0;
-    if(!s.Read<T>(r))
-      err = ERR_PARSE_UNEXPECTED_EOF;
-    return r;
-  }
-  IR_FORCEINLINE float64 ReadFloat64(Stream& s, IR_ERROR& err) { return ReadPrimitive<float64>(s, err); }
-  IR_FORCEINLINE float32 ReadFloat32(Stream& s, IR_ERROR& err) { return ReadPrimitive<float32>(s, err); }
-  IR_FORCEINLINE uint8_t ReadByte(Stream& s, IR_ERROR& err) { return ReadPrimitive<uint8_t>(s, err); }
-  uint8_t GetInstruction(StringRef s);
-  void* GreedyAlloc(size_t n);
-
-  template<class T>
-  T* tmalloc(size_t n)
-  {
-    return !n ? 0 : reinterpret_cast<T*>(GreedyAlloc(n * sizeof(T)));
-  }
-
-  IR_FORCEINLINE bool ModuleHasSection(Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
-  inline std::string MergeStrings(const char* a, const char* b) { return std::string(!a ? "" : a) + b; }
-
-  varuint32 ModuleFunctionType(Module& m, varuint32 index);
-  FunctionSig* ModuleFunction(Module& m, varuint32 index);
-  TableDesc* ModuleTable(Module& m, varuint32 index);
-  MemoryDesc* ModuleMemory(Module& m, varuint32 index);
-  GlobalDesc* ModuleGlobal(Module& m, varuint32 index);
-  std::pair<Module*, Export*> ResolveExport(Environment& env, Import& imp);
-  Path GetProgramPath();
-  Path GetWorkingDir();
-  bool SetWorkingDir(const char* path);
-  std::string StrFormat(const char* fmt, ...);
-  void GetCPUInfo(uintcpuinfo& info, int flags);
-  void* LoadDLL(const char* path);
-  void* LoadDLLFunction(void* dll, const char* name);
-  void FreeDLL(void* dll);
-
-  template<class F>
-  class DeferLambda
-  {
-  public:
-    inline DeferLambda(const F& f) : _f(f) {}
-    inline ~DeferLambda() { _f(); }
-
-  protected:
-    F _f;
-  };
-
-  // Merges two strings with the standard IR_GLUE_STRING
-  inline std::string MergeName(const char* prefix, const char* name, int index = -1)
-  {
-    if(index >= 0)
-    {
-      char buf[20] = { 0 };
-      ITOA(index, buf, 20, 10);
-      return !prefix ? std::string(name) + buf : (std::string(prefix) + IR_GLUE_STRING + name + buf);
     }
-    return !prefix ? name : (std::string(prefix) + IR_GLUE_STRING + name);
-  }
 
-  // Generates the correct mangled C function name
-  inline std::string CanonImportName(const void* module_name, const void* export_name)
-  {
-    if(!module_name || strchr((const char*)module_name, '!') != nullptr) // blank imports or imports with a calling convention are always raw function names
-      return (const char*)export_name;
-    return MergeName((const char*)module_name, (const char*)export_name); // Otherwise do a standard merge
-  }
-
-  IR_FORCEINLINE std::string CanonImportName(Import& imp)
-  {
-    return CanonImportName(imp.module_name.bytes, imp.export_name.bytes);
-  }
-
-  // Generates a whitelist string for a module and export name, which includes calling convention information
-  inline size_t CanonWhitelist(const void* module_name, const void* export_name, char* out)
-  {
-    if(module_name != nullptr && !STRICMP((const char*)module_name, "!C"))
-      module_name = nullptr;
-    if(!module_name)
-      module_name = "";
-
-    size_t module_len = strlen((const char*)module_name) + 1;
-    size_t export_len = strlen((const char*)export_name) + 1;
-    if(out)
+    template<class T>
+    inline T* trealloc(T* p, size_t sz)
     {
-      tmemcpy<char>(out, module_len + export_len, (const char*)module_name, module_len);
-      tmemcpy<char>(out + module_len, export_len, (const char*)export_name, export_len);
+      return reinterpret_cast<T*>(realloc(p, sz * sizeof(T)));
     }
-    return module_len + export_len;
-  }
-  IR_FORCEINLINE std::string CanonWhitelist(const void* module_name, const void* export_name)
-  {
-    std::string s;
-    s.resize(CanonWhitelist(module_name, export_name, nullptr));
-    CanonWhitelist(module_name, export_name, const_cast<char*>(s.data()));
-    return s;
+    uint8_t GetInstruction(StringRef s);
+
+    template<class T>
+    T* tmalloc(size_t n) { return internal::GreedyAllocBytes::allocateT<T>(n); }
+
+    IR_FORCEINLINE bool ModuleHasSection(Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
+    inline std::string MergeStrings(const char* a, const char* b) { return std::string(!a ? "" : a) + b; }
+
+    varuint32 ModuleFunctionType(Module& m, varuint32 index);
+    FunctionSig* ModuleFunction(Module& m, varuint32 index);
+    TableDesc* ModuleTable(Module& m, varuint32 index);
+    MemoryDesc* ModuleMemory(Module& m, varuint32 index);
+    GlobalDesc* ModuleGlobal(Module& m, varuint32 index);
+    std::pair<Module*, Export*> ResolveExport(Environment& env, Import& imp);
+    Path GetProgramPath();
+    Path GetWorkingDir();
+    bool SetWorkingDir(const char* path);
+    std::string StrFormat(const char* fmt, ...);
+    void GetCPUInfo(uintcpuinfo& info, int flags);
+    void* LoadDLL(const char* path);
+    void* LoadDLLFunction(void* dll, const char* name);
+    void FreeDLL(void* dll);
+
+    // Merges two strings with the standard IR_GLUE_STRING
+    inline std::string MergeName(const char* prefix, const char* name, int index = -1)
+    {
+      if(index >= 0)
+      {
+        char buf[20] = { 0 };
+        ITOA(index, buf, 20, 10);
+        return !prefix ? std::string(name) + buf : (std::string(prefix) + IR_GLUE_STRING + name + buf);
+      }
+      return !prefix ? name : (std::string(prefix) + IR_GLUE_STRING + name);
+    }
+
+    // Generates the correct mangled C function name
+    inline std::string CanonImportName(const void* module_name, const void* export_name)
+    {
+      if(!module_name || strchr((const char*)module_name, '!') != nullptr) // blank imports or imports with a calling convention are always raw function names
+        return (const char*)export_name;
+      return MergeName((const char*)module_name, (const char*)export_name); // Otherwise do a standard merge
+    }
+
+    IR_FORCEINLINE std::string CanonImportName(Import& imp)
+    {
+      return CanonImportName(imp.module_name.str(), imp.export_name.str());
+    }
+
+    // Generates a whitelist string for a module and export name, which includes calling convention information
+    inline size_t CanonWhitelist(const void* module_name, const void* export_name, char* out)
+    {
+      if(module_name != nullptr && !STRICMP((const char*)module_name, "!C"))
+        module_name = nullptr;
+      if(!module_name)
+        module_name = "";
+
+      size_t module_len = strlen((const char*)module_name) + 1;
+      size_t export_len = strlen((const char*)export_name) + 1;
+      if(out)
+      {
+        tmemcpy<char>(out, module_len + export_len, (const char*)module_name, module_len);
+        tmemcpy<char>(out + module_len, export_len, (const char*)export_name, export_len);
+      }
+      return module_len + export_len;
+    }
+    IR_FORCEINLINE std::string CanonWhitelist(const void* module_name, const void* export_name)
+    {
+      std::string s;
+      s.resize(CanonWhitelist(module_name, export_name, nullptr));
+      CanonWhitelist(module_name, export_name, const_cast<char*>(s.data()));
+      return s;
+    }
+
+    inline std::unique_ptr<uint8_t[]> LoadFile(const char* file, long& sz)
+    {
+      FILE* f = 0;
+      fopen_s(&f, file, "rb");
+      if(!f)
+        return nullptr;
+      fseek(f, 0, SEEK_END);
+      sz = ftell(f);
+      fseek(f, 0, SEEK_SET);
+      std::unique_ptr<uint8_t[]> data(new uint8_t[sz]);
+      sz = (long)fread(data.get(), 1, sz, f);
+      fclose(f);
+      return data;
+    }
   }
 }
 

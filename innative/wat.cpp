@@ -15,9 +15,15 @@
 #define LEXER_NUM "[" LEXER_DIGIT "](_?[" LEXER_DIGIT "])*"
 #define LEXER_HEXNUM "[" LEXER_HEXDIGIT "](_?[" LEXER_HEXDIGIT "])*"
 
-namespace innative {
-  namespace wat {
+using std::string;
+using std::regex;
+using std::regex_search;
+using std::numeric_limits;
 
+namespace innative {
+  using namespace utility;
+
+  namespace wat {
     WatState::WatState(Module& mod) : m(mod)
     {
       typehash = kh_init_indexname();
@@ -36,11 +42,11 @@ namespace innative {
     }
     varuint7 WatState::GetJump(Token var)
     {
-      if(var.id == TOKEN_INTEGER && var.i < std::numeric_limits<varuint7>::max())
+      if(var.id == TOKEN_INTEGER && var.i < numeric_limits<varuint7>::max())
         return (varuint7)var.i;
       if(var.id == TOKEN_NAME)
       {
-        StringRef r = { var.pos, var.len };
+        utility::StringRef r = { var.pos, var.len };
         for(varuint7 i = 0; i < stack.Size(); ++i)
           if(stack[i] == r)
             return i;
@@ -49,7 +55,7 @@ namespace innative {
       return (varuint7)~0;
     }
 
-    KHASH_INIT(tokens, StringRef, TokenID, 1, __ac_X31_hash_stringrefins, kh_int_hash_equal)
+    KHASH_INIT(tokens, StringRef, TokenID, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal)
 
       static kh_inline khint_t kh_hash_token(const Token& t)
     {
@@ -93,17 +99,17 @@ namespace innative {
       "assert_return_canonical_nan", "assert_return_arithmetic_nan", "assert_trap", "assert_malformed", "assert_invalid",
       "assert_unlinkable", "assert_exhaustion", "script", "input", "output" });
 
-    static std::string numbuf;
+    static string numbuf;
 
-    void TokenizeWAT(Queue<Token>& tokens, char* s, char* end)
+    void TokenizeWAT(Queue<Token>& tokens, const char* s, const char* end)
     {
-      static const std::regex::flag_type REGEX_CONFIG = std::regex_constants::ECMAScript | std::regex_constants::optimize;
+      static const regex::flag_type REGEX_CONFIG = std::regex_constants::ECMAScript | std::regex_constants::optimize;
       static const std::regex_constants::match_flag_type REGEX_MATCH = std::regex_constants::match_not_null | std::regex_constants::match_continuous;
-      static std::regex regex_INT(LEXER_PLUSMINUS "(0x" LEXER_HEXNUM "|" LEXER_NUM ")", REGEX_CONFIG);
-      static std::regex regex_NAME("[$][-" LEXER_LETTER LEXER_DIGIT "_.+*/\\~=<>!?@#$%&|:'`^]+", REGEX_CONFIG);
-      static std::regex regex_FLOAT(LEXER_PLUSMINUS LEXER_NUM "[.](" LEXER_NUM ")?([eE]" LEXER_PLUSMINUS LEXER_NUM ")?", REGEX_CONFIG);
-      static std::regex regex_HEXFLOAT(LEXER_PLUSMINUS "0x" LEXER_HEXNUM "[.](" LEXER_HEXNUM ")?([pP]" LEXER_PLUSMINUS LEXER_HEXNUM ")?", REGEX_CONFIG);
-      static std::regex regex_NANFLOAT(LEXER_PLUSMINUS "[nN][aA][nN](:0x" LEXER_HEXNUM ")?", REGEX_CONFIG);
+      static regex regex_INT(LEXER_PLUSMINUS "(0x" LEXER_HEXNUM "|" LEXER_NUM ")", REGEX_CONFIG);
+      static regex regex_NAME("[$][-" LEXER_LETTER LEXER_DIGIT "_.+*/\\~=<>!?@#$%&|:'`^]+", REGEX_CONFIG);
+      static regex regex_FLOAT(LEXER_PLUSMINUS LEXER_NUM "[.](" LEXER_NUM ")?([eE]" LEXER_PLUSMINUS LEXER_NUM ")?", REGEX_CONFIG);
+      static regex regex_HEXFLOAT(LEXER_PLUSMINUS "0x" LEXER_HEXNUM "[.](" LEXER_HEXNUM ")?([pP]" LEXER_PLUSMINUS LEXER_HEXNUM ")?", REGEX_CONFIG);
+      static regex regex_NANFLOAT(LEXER_PLUSMINUS "[nN][aA][nN](:0x" LEXER_HEXNUM ")?", REGEX_CONFIG);
 
       while(s < end)
       {
@@ -188,8 +194,8 @@ namespace innative {
         }
         case '$': // A name
         {
-          std::match_results<const char*> results;
-          if(std::regex_search<char>(s, results, regex_NAME, REGEX_MATCH))
+          std::match_results<const char*, internal::GreedyAlloc<std::sub_match<const char*>>> results;
+          if(regex_search<const char*>(s, end, results, regex_NAME, REGEX_MATCH))
           {
             assert(results[0].first == s);
             Token t = { TOKEN_NAME, results[0].first + 1 };
@@ -212,8 +218,8 @@ namespace innative {
         case '8':
         case '9': // Either an integer or a float
         {
-          std::match_results<const char*> results;
-          if(std::regex_search<const char*>(s, end, results, regex_HEXFLOAT, REGEX_MATCH) || std::regex_search<const char*>(s, end, results, regex_FLOAT, REGEX_MATCH))
+          std::match_results<const char*, internal::GreedyAlloc<std::sub_match<const char*>>> results;
+          if(regex_search<const char*>(s, end, results, regex_HEXFLOAT, REGEX_MATCH) || regex_search<const char*>(s, end, results, regex_FLOAT, REGEX_MATCH))
           {
             Token t = { TOKEN_FLOAT, s };
             errno = 0;
@@ -225,7 +231,7 @@ namespace innative {
             s = const_cast<char*>(results[0].second);
             break;
           }
-          if(std::regex_search<const char*>(s, end, results, regex_INT, REGEX_MATCH))
+          if(regex_search<const char*>(s, end, results, regex_INT, REGEX_MATCH))
           {
             errno = 0;
             tokens.Push(Token{ TOKEN_INTEGER, s, (int64_t)strtoll(results[0].str().data(), NULL, 10) });
@@ -239,11 +245,11 @@ namespace innative {
         default:
         {
           // Check if this is an NaN first
-          std::match_results<const char*> results;
-          if(std::regex_search(s, results, regex_NANFLOAT, REGEX_MATCH))
+          std::match_results<const char*, internal::GreedyAlloc<std::sub_match<const char*>>> results;
+          if(regex_search<const char*>(s, end, results, regex_NANFLOAT, REGEX_MATCH))
           {
             Token t = { TOKEN_FLOAT, s };
-            std::string nan("NAN("); // Construct a valid NAN(0xFFFF) string to be interpreted by strtod
+            string nan("NAN("); // Construct a valid NAN(0xFFFF) string to be interpreted by strtod
 
             switch(results[0].first[0]) // Prepend sign if it exists
             {
@@ -293,7 +299,7 @@ namespace innative {
       }
     }
 
-    void WriteUTF32(uint32_t ch, ByteArray& str)
+    void WriteUTF32(uint32_t ch, ByteArray& str, varuint32& index)
     {
       static const uint32_t UNI_REPLACEMENT_CHAR = 0x0000FFFD;
       static const uint32_t UNI_MAX_LEGAL_UTF32 = 0x0010FFFF;
@@ -317,15 +323,15 @@ namespace innative {
       }
 
 
-      uint8_t* target = str.bytes + str.n_bytes + bytesToWrite;
+      varuint32 target = index + bytesToWrite;
       switch(bytesToWrite)
       { /* note: everything falls through. */
-      case 4: *--target = (uint8_t)((ch | byteMark) & byteMask); ch >>= 6;
-      case 3: *--target = (uint8_t)((ch | byteMark) & byteMask); ch >>= 6;
-      case 2: *--target = (uint8_t)((ch | byteMark) & byteMask); ch >>= 6;
-      case 1: *--target = (uint8_t)(ch | firstByteMark[bytesToWrite]);
+      case 4: str[--target] = (uint8_t)((ch | byteMark) & byteMask); ch >>= 6;
+      case 3: str[--target] = (uint8_t)((ch | byteMark) & byteMask); ch >>= 6;
+      case 2: str[--target] = (uint8_t)((ch | byteMark) & byteMask); ch >>= 6;
+      case 1: str[--target] = (uint8_t)(ch | firstByteMark[bytesToWrite]);
       }
-      str.n_bytes += bytesToWrite;
+      index += bytesToWrite;
     }
 
     int WatString(ByteArray& str, StringRef t)
@@ -333,38 +339,47 @@ namespace innative {
       if(!t.s)
         return assert(false), ERR_PARSE_INVALID_NAME;
 
-      if(str.bytes)
+      varuint32 index = 0;
+      if(str.get())
       {
-        uint8_t* n = tmalloc<uint8_t>(str.n_bytes + t.len + 1);
-        tmemcpy(n, str.n_bytes + t.len + 1, str.bytes, str.n_bytes);
-        str.bytes = n;
+        index = str.size();
+        varuint32 n = str.size() + t.len;
+        uint8_t* b = tmalloc<uint8_t>(n + 1);
+        if(!b)
+          return assert(false), ERR_FATAL_OUT_OF_MEMORY;
+
+        tmemcpy(b, n, str.get(), str.size());
+        new(&str) ByteArray(b, n);
       }
       else
-        str.bytes = tmalloc<uint8_t>(t.len + 1);
+        str.resize(t.len, true);
 
-      if(!str.bytes)
-        return ERR_FATAL_OUT_OF_MEMORY;
+      if(!t.len)
+        return ERR_SUCCESS;
 
-      for(int i = 0; i < t.len; ++i)
+      if(!str.get())
+        return assert(false), ERR_FATAL_OUT_OF_MEMORY;
+
+      for(size_t i = 0; i < t.len; ++i)
       {
         if(t.s[i] == '\\')
         {
           switch(t.s[++i])
           {
           case 'n':
-            str.bytes[str.n_bytes++] = '\n';
+            str[index++] = '\n';
             break;
           case 't':
-            str.bytes[str.n_bytes++] = '\t';
+            str[index++] = '\t';
             break;
           case '\\':
-            str.bytes[str.n_bytes++] = '\\';
+            str[index++] = '\\';
             break;
           case '\'':
-            str.bytes[str.n_bytes++] = '\'';
+            str[index++] = '\'';
             break;
           case '"':
-            str.bytes[str.n_bytes++] = '"';
+            str[index++] = '"';
             break;
           case 'u':
           {
@@ -375,17 +390,17 @@ namespace innative {
             if(errno == ERANGE)
               return ERR_WAT_OUT_OF_RANGE;
 
-            WriteUTF32(u, str);
+            WriteUTF32(u, str, index);
             i += end - (t.s + i + 1);
             break;
           }
           default:
-            if((t.s[i] >= '0' && t.s[i] <= '9') || (t.s[i] >= 'A' && t.s[i] <= 'F'))
+            if((t.s[i] >= '0' && t.s[i] <= '9') || (t.s[i] >= 'A' && t.s[i] <= 'F') || (t.s[i] >= 'a' && t.s[i] <= 'f'))
             {
-              if((t.s[i + 1] >= '0' && t.s[i + 1] <= '9') || (t.s[i + 1] >= 'A' && t.s[i + 1] <= 'F'))
+              if((t.s[i + 1] >= '0' && t.s[i + 1] <= '9') || (t.s[i + 1] >= 'A' && t.s[i + 1] <= 'F') || (t.s[i + 1] >= 'a' && t.s[i + 1] <= 'f'))
               {
                 char buf[3] = { t.s[i], t.s[i + 1], 0 };
-                str.bytes[str.n_bytes++] = (uint8_t)strtol(buf, 0, 16);
+                str[index++] = (uint8_t)strtol(buf, 0, 16);
                 ++i;
                 break;
               }
@@ -394,9 +409,9 @@ namespace innative {
           }
         }
         else
-          str.bytes[str.n_bytes++] = t.s[i];
+          str[index++] = t.s[i];
       }
-      str.bytes[str.n_bytes] = 0;
+      str.discard(index, true);
 
       return ERR_SUCCESS;
     }
@@ -406,12 +421,10 @@ namespace innative {
       if(t.id != TOKEN_NAME || !t.pos || !t.len)
         return assert(false), ERR_PARSE_INVALID_NAME;
 
-      name.bytes = tmalloc<uint8_t>(t.len + 1);
-      if(!name.bytes || t.len > std::numeric_limits<varuint32>::max())
+      name.resize(t.len, true);
+      if(!name.get() || t.len > numeric_limits<varuint32>::max())
         return assert(false), ERR_FATAL_OUT_OF_MEMORY;
-      name.n_bytes = (varuint32)t.len;
-      tmemcpy((char*)name.bytes, name.n_bytes, t.pos, t.len);
-      name.bytes[name.n_bytes] = 0;
+      tmemcpy((char*)name.get(), name.size(), t.pos, t.len);
 
       return ERR_SUCCESS;
     }
@@ -461,7 +474,7 @@ namespace innative {
           {
             if(names) // You are legally allowed to put parameter names in typedefs in WAT, but the names are thrown away.
             {
-              if(tokens.Peek().len >= std::numeric_limits<varuint32>::max())
+              if(tokens.Peek().len >= numeric_limits<varuint32>::max())
                 return assert(false), ERR_WAT_OUT_OF_RANGE;
               varuint32 len = (varuint32)tokens.Peek().len;
               char* s = tmalloc<char>(len + 1);
@@ -557,7 +570,7 @@ namespace innative {
 
     varuint32 WatGetFromHash(kh_indexname_t* hash, const Token& t)
     {
-      if(t.id == TOKEN_INTEGER && t.i < std::numeric_limits<varuint32>::max())
+      if(t.id == TOKEN_INTEGER && t.i < numeric_limits<varuint32>::max())
         return (varuint32)t.i;
       else if(t.id == TOKEN_NAME)
       {
@@ -597,7 +610,7 @@ namespace innative {
 
         if(sig != (varuint32)~0) // If we already have a type, compare the two types and make sure they are identical
         {
-          if(!MatchFunctionSig(state.m.type.functions[sig], func))
+          if(!validate::MatchFunctionSig(state.m.type.functions[sig], func))
             return assert(false), ERR_WAT_TYPE_MISMATCH;
         }
         else
@@ -644,19 +657,19 @@ namespace innative {
 
     varuint32 WatGetLocal(FunctionBody& f, FunctionSig& sig, const Token& t)
     {
-      if(t.id == TOKEN_INTEGER && t.i < std::numeric_limits<varuint32>::max())
+      if(t.id == TOKEN_INTEGER && t.i < numeric_limits<varuint32>::max())
         return (varuint32)t.i;
       else if(t.id == TOKEN_NAME)
       {
-        std::string n(t.pos, t.len);
+        string n(t.pos, t.len);
 
-        for(varuint32 i = 0; i < sig.n_params; ++i)
+        for(uint64_t i = 0; i < sig.n_params; ++i)
           if(!strcmp(f.param_names[i], n.c_str()))
-            return i;
+            return (varuint32)i;
 
-        for(varuint32 i = 0; i < f.n_locals; ++i)
+        for(uint64_t i = 0; i < f.n_locals; ++i)
           if(!strcmp(f.local_names[i], n.c_str()))
-            return i + sig.n_params;
+            return (varuint32)(i + sig.n_params);
       }
 
       return (varuint32)~0;
@@ -794,7 +807,7 @@ namespace innative {
           tokens.Pop();
           if(tokens.Peek().id != TOKEN_INTEGER)
             return assert(false), ERR_WAT_EXPECTED_INTEGER;
-          if(tokens.Peek().i >= std::numeric_limits<memflags>::max())
+          if(tokens.Peek().i >= numeric_limits<memflags>::max())
             return assert(false), ERR_WAT_OUT_OF_RANGE;
 
           op.immediates[0]._memflags = (memflags)tokens.Pop().i;
@@ -1051,7 +1064,7 @@ namespace innative {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
         EXPECTED(tokens, TOKEN_EXPORT, ERR_WAT_EXPECTED_TOKEN);
 
-        Export e = { 0 };
+        Export e = { };
         e.kind = kind;
         e.index = *index; // This is fine because you can only import OR export on a declaration statement
         if(r = WatString(e.name, tokens.Pop()))
@@ -1065,7 +1078,7 @@ namespace innative {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
         EXPECTED(tokens, TOKEN_IMPORT, ERR_WAT_EXPECTED_TOKEN);
 
-        Import i = { 0 };
+        Import i;
         if(r = WatString(i.module_name, tokens.Pop()))
           return r;
         if(r = WatString(i.export_name, tokens.Pop()))
@@ -1125,7 +1138,7 @@ namespace innative {
 
         if(tokens.Peek().id == TOKEN_NAME)
         {
-          if(tokens.Peek().len > std::numeric_limits<varuint32>::max())
+          if(tokens.Peek().len > numeric_limits<varuint32>::max())
             return assert(false), ERR_WAT_OUT_OF_RANGE;
           varuint32 len = (varuint32)tokens.Peek().len;
           char* s = tmalloc<char>(len + 1);
@@ -1171,13 +1184,13 @@ namespace innative {
 
     int WatResizableLimits(ResizableLimits& limits, Queue<Token>& tokens)
     {
-      if(tokens.Peek().id != TOKEN_INTEGER || tokens.Peek().i >= std::numeric_limits<varuint32>::max())
+      if(tokens.Peek().id != TOKEN_INTEGER || tokens.Peek().i >= numeric_limits<varuint32>::max())
         return assert(false), ERR_WAT_EXPECTED_INTEGER;
       limits.minimum = (varuint32)tokens.Pop().i;
 
       if(tokens.Peek().id == TOKEN_INTEGER)
       {
-        if(tokens.Peek().i >= std::numeric_limits<varuint32>::max())
+        if(tokens.Peek().i >= numeric_limits<varuint32>::max())
           return assert(false), ERR_WAT_OUT_OF_RANGE;
         limits.maximum = (varuint32)tokens.Pop().i;
         limits.flags = 1;
@@ -1225,7 +1238,7 @@ namespace innative {
         EXPECTED(tokens, TOKEN_ELEM, ERR_WAT_EXPECTED_ELEM);
 
         {
-          TableInit init;
+          TableInit init = { 0 };
           init.index = *index;
           init.offset = Instruction{ OP_i32_const, 0 };
 
@@ -1343,7 +1356,7 @@ namespace innative {
         }
 
         mem.limits.flags = 0;
-        mem.limits.minimum = init.data.n_bytes;
+        mem.limits.minimum = init.data.size();
       }
       else if(r = WatMemoryDesc(mem, tokens))
         return r;
@@ -1368,7 +1381,7 @@ namespace innative {
 
     int WatImport(WatState& state, Queue<Token>& tokens)
     {
-      Import i = { 0 };
+      Import i;
       int r;
       if(r = WatString(i.module_name, tokens.Pop()))
         return r;
@@ -1432,7 +1445,7 @@ namespace innative {
 
     int WatExport(WatState& state, Queue<Token>& tokens)
     {
-      Export e = { 0 };
+      Export e = {};
       int r;
       if(r = WatString(e.name, tokens.Pop()))
         return r;
@@ -1692,7 +1705,7 @@ namespace innative {
       }
 
       m.exports = kh_init_exports();
-      return ParseExportFixup(m);
+      return parse::ParseExportFixup(m);
     }
 
     int WatEnvironment(Environment& env, Queue<Token>& tokens)
@@ -1705,6 +1718,9 @@ namespace innative {
       Queue<Token> tokens;
       TokenizeWAT(tokens, (char*)data, (char*)data + sz);
 
+      if(!tokens.Size())
+        return ERR_FATAL_INVALID_MODULE;
+
       // If we don't detect (module, just assume it's an inline module
       if(tokens[0].id != TOKEN_OPEN || tokens[1].id != TOKEN_MODULE)
         return WatModule(env, m, tokens, name);
@@ -1715,6 +1731,17 @@ namespace innative {
       if(!r)
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       return r;
+    }
+
+    size_t WatLineNumber(const char* start, const char* pos)
+    {
+      size_t count = 1;
+      while(start < pos)
+      {
+        if(*(start++) == '\n')
+          ++count;
+      }
+      return count;
     }
   }
 }

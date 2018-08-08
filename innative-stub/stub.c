@@ -5,7 +5,7 @@
 
 // This is a stub loader for the runtime. It looks for an existing installation
 // of the runtime on the OS that is equal to or newer than the compiled version.
-IR_COMPILER_DLLEXPORT extern void innative_runtime(NWExports* exports)
+IR_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
 {
 #ifdef IR_PLATFORM_WIN32
   // On windows, we use the registry to store versions, with a key set to the DLL path of the runtime.

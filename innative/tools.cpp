@@ -11,21 +11,6 @@
 
 using namespace innative;
 
-std::unique_ptr<uint8_t[]> loadfile(const char* file, long& sz)
-{
-  FILE* f = 0;
-  fopen_s(&f, file, "rb");
-  if(!f)
-    return nullptr;
-  fseek(f, 0, SEEK_END);
-  sz = ftell(f);
-  fseek(f, 0, SEEK_SET);
-  std::unique_ptr<uint8_t[]> data(new uint8_t[sz]);
-  sz = (long)fread(data.get(), 1, sz, f);
-  fclose(f);
-  return data;
-}
-
 int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const _IR_WHITELIST* whitelist, int n_whitelist)
 {
   // Then create the runtime environment with the module count.
@@ -47,10 +32,10 @@ int innative_compile_file(const char* file, const char* out, unsigned int flags,
   // Load the module
   long sz = 0;
   int err = 0;
-  auto data_module = loadfile(file, sz);
+  auto data_module = utility::LoadFile(file, sz);
   Path name(file);
 
-  if(sz > 0)
+  if(sz > 0) 
     AddModule(env, data_module.get(), sz, name.RemoveExtension().Get().c_str(), &err);
   else
     err = -1;
@@ -111,7 +96,7 @@ int innative_compile_script(const char* file, unsigned int flags, ValidationErro
   // Load the module
   long sz = 0;
   int err = 0;
-  auto data_module = loadfile(file, sz);
+  auto data_module = utility::LoadFile(file, sz);
   Path name(file);
 
   // Add all embedding environments that are included with this runtime
@@ -127,11 +112,11 @@ int innative_compile_script(const char* file, unsigned int flags, ValidationErro
     return err;
   }
 
-  err = innative::wat::ParseWast(*env, data_module.get(), sz);
+  err = wat::ParseWast(*env, data_module.get(), sz);
 
   if(err < 0)
   {
-    fprintf(stderr, "Error loading modules: 0x%x\n", -err);
+    fprintf(stderr, "Error loading modules: %i\n", err);
     return err;
   }
 

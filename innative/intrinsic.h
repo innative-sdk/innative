@@ -57,17 +57,12 @@ namespace innative {
       llvm::IntegerType* intptrty;
       Stack<llvm::Value*> values; // Tracks the current value stack
       Stack<Block> control; // Control flow stack
-      varuint32 n_locals;
-      llvm::AllocaInst** locals;
-      varuint32 n_memory;
-      llvm::GlobalVariable** linearmemory;
-      varuint32 n_tables;
-      llvm::GlobalVariable** tables;
-      llvm::GlobalVariable** tabletypes;
-      varuint32 n_globals;
-      llvm::GlobalVariable** globals;
-      varuint32 n_functions;
-      Function* functions;
+      std::vector<llvm::AllocaInst*> locals;
+      std::vector<llvm::GlobalVariable*> memories;
+      std::vector<llvm::GlobalVariable*> tables;
+      std::vector<llvm::GlobalVariable*> tabletypes;
+      std::vector<llvm::GlobalVariable*> globals;
+      std::vector<Function> functions;
       llvm::Function* init;
       llvm::Function* start;
       llvm::Function* memgrow;

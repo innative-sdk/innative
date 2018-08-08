@@ -28,6 +28,8 @@
 #error unknown platform!
 #endif
 
+HANDLE heap;
+
 // Platform-specific implementation of the mem.grow instruction, except it works in bytes
 IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max)
 {
@@ -38,11 +40,13 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
     i += info[-1];
     if(max > 0 && i > max)
       return 0;
-    info = HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, info - 1, i + sizeof(uint64_t));
+    info = HeapReAlloc(heap, HEAP_ZERO_MEMORY, info - 1, i + sizeof(uint64_t));
   }
   else if(!max || i <= max)
-    info = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, i + sizeof(uint64_t));
-
+  {
+    heap = HeapCreate(0, i, 0);
+    info = HeapAlloc(heap, HEAP_ZERO_MEMORY, i + sizeof(uint64_t));
+  }
   if(!info)
     return 0;
   info[0] = i;

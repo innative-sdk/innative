@@ -9,7 +9,7 @@ using namespace std::filesystem;
 
 int main(int argc, char *argv[])
 {
-  std::cout << "Native-wasm v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
+  std::cout << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
   std::cout << std::endl;
 
   path testdir("../spec/test/core");
@@ -21,6 +21,7 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
+  testfiles = { "../spec/test/core/binary.wast" };
   std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
 
   for(auto file : testfiles)
@@ -43,7 +44,7 @@ int main(int argc, char *argv[])
     }
   }
   
-  char c;
-  std::cin >> c;
+  std::cout << "Finished running tests, press enter to exit." << std::endl;
+  getchar();
   return 0;
 }

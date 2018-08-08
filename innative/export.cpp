@@ -12,6 +12,7 @@
 #include <stdio.h>
 
 using namespace innative;
+using namespace utility;
 
 Environment* innative::CreateEnvironment(unsigned int flags, unsigned int modules, unsigned int maxthreads)
 {
@@ -54,11 +55,11 @@ void innative::DestroyEnvironment(Environment* env)
 
 void innative::LoadModule(Environment* env, size_t index, void* data, uint64_t size, const char* name, int* err)
 {
-  Stream s = { (uint8_t*)data, size, 0 };
+  parse::Stream s = { (uint8_t*)data, size, 0 };
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
     *err = innative::wat::ParseWatModule(*env, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
   else
-    *err = ParseModule(s, env->modules[index], ByteArray{ (varuint32)strlen(name), (uint8_t*)name });
+    *err = ParseModule(s, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)));
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
 }
 
@@ -142,26 +143,16 @@ enum IR_ERROR innative::Compile(Environment* env, const char* file)
   for(size_t i = 0; i < env->n_modules; ++i)
   {
     int r;
-    khiter_t iter = kh_put_modules(env->modulemap, (const char*)env->modules[i].name.bytes, &r);
+    khiter_t iter = kh_put_modules(env->modulemap, env->modules[i].name.str(), &r);
     if(!r)
       return ERR_FATAL_DUPLICATE_MODULE_NAME;
     kh_val(env->modulemap, iter) = i;
   }
 
-  ValidateEnvironment(*env);
+  validate::ValidateEnvironment(*env);
   if(env->errors)
   {
-    // Reverse error list so it appears in chronological order
-    auto cur = env->errors;
-    ValidationError* prev = nullptr;
-    while(cur != 0)
-    {
-      auto next = cur->next;
-      cur->next = prev;
-      prev = cur;
-      cur = next;
-    }
-    env->errors = prev;
+    internal::ReverseErrorList(env->errors); // Reverse error list so it appears in chronological order
     return ERR_VALIDATION_ERROR;
   }
 
@@ -196,7 +187,7 @@ void* innative::LoadCache(int flags, const char* file)
 }
 
 // Return pointers to all our internal functions
-void innative_runtime(NWExports* exports)
+void innative_runtime(IRExports* exports)
 {
   exports->CreateEnvironment = &CreateEnvironment;
   exports->AddModule = &AddModule;

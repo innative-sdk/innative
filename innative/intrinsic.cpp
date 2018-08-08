@@ -12,18 +12,18 @@ llvm::Function* innative::code::IR_Intrinsic_ToC(llvm::Function* f, struct code:
     f = llvm::Function::Create(
       llvm::FunctionType::get(context.builder.getInt64Ty(), { context.builder.getInt64Ty() }, false),
       llvm::Function::InternalLinkage,
-      "nw-intrinsic:to_c",
+      "innative-intrinsic:to_c",
       context.llvm);
     f->setCallingConv(llvm::CallingConv::Fast);
     return f;
   }
 
-  assert(context.n_memory > 0);
-  if(context.n_memory > 0)
+  assert(context.memories.size() > 0);
+  if(context.memories.size() > 0)
   {
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context.context, "to_block", f);
     context.builder.SetInsertPoint(bb);
-    context.builder.CreateRet(context.builder.CreateAdd(context.builder.CreatePtrToInt(context.builder.CreateLoad(context.linearmemory[0]), context.builder.getInt64Ty()), f->args().begin(), "", true, true));
+    context.builder.CreateRet(context.builder.CreateAdd(context.builder.CreatePtrToInt(context.builder.CreateLoad(context.memories[0]), context.builder.getInt64Ty()), f->args().begin(), "", true, true));
   }
   return f;
 }
@@ -35,18 +35,18 @@ llvm::Function* innative::code::IR_Intrinsic_FromC(llvm::Function* f, struct cod
     f = llvm::Function::Create(
       llvm::FunctionType::get(context.builder.getInt64Ty(), { context.builder.getInt64Ty() }, false),
       llvm::Function::InternalLinkage,
-      "nw-intrinsic:from_c",
+      "innative-intrinsic:from_c",
       context.llvm);
     f->setCallingConv(llvm::CallingConv::Fast);
     return f;
   }
 
-  assert(context.n_memory > 0);
-  if(context.n_memory > 0)
+  assert(context.memories.size() > 0);
+  if(context.memories.size() > 0)
   {
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context.context, "from_block", f);
     context.builder.SetInsertPoint(bb);
-    context.builder.CreateRet(context.builder.CreateSub(context.builder.CreatePtrToInt(context.builder.CreateLoad(context.linearmemory[0]), context.builder.getInt64Ty()), f->args().begin(), "", true, true));
+    context.builder.CreateRet(context.builder.CreateSub(context.builder.CreatePtrToInt(context.builder.CreateLoad(context.memories[0]), context.builder.getInt64Ty()), f->args().begin(), "", true, true));
   }
   return f;
 }

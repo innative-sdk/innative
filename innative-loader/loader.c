@@ -25,7 +25,7 @@
 
 struct WinPass
 {
-  NWExports* exports;
+  IRExports* exports;
   Environment* env;
   int* err;
 };
@@ -90,7 +90,7 @@ int main(int argc, char** argv)
 {
   // First we load the runtime using whatever runtime function was linked.
   // This will either be an embedded runtime, or a stub function that dynamically loads a DLL.
-  NWExports exports;
+  IRExports exports;
   innative_runtime(&exports);
   unsigned int flags = 0; //ENV_MULTITHREADED;
   unsigned int maxthreads = 0;
