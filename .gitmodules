@@ -1,3 +1,3 @@
 [submodule "spec"]
 	path = spec
-	url = https://github.com/WebAssembly/spec.git
+	url = https://github.com/Black-Sphere-Studios/spec

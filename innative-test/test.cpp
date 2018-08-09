@@ -9,6 +9,7 @@ using namespace std::filesystem;
 
 int main(int argc, char *argv[])
 {
+  innative_set_work_dir_to_bin();
   std::cout << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
   std::cout << std::endl;
 
@@ -21,7 +22,7 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  testfiles = { "../spec/test/core/binary.wast" };
+  testfiles = { "../spec/test/core/align.wast" };
   std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
 
   for(auto file : testfiles)

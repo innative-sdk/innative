@@ -159,31 +159,37 @@ enum IR_ERROR innative::Compile(Environment* env, const char* file)
   return CompileEnvironment(env, file);
 }
 
-enum IR_ERROR innative::Run(void* cache)
+IR_Entrypoint innative::LoadFunction(void* cache, const char* module_name, const char* function, const FunctionSig* sig)
 {
-  if(!cache)
-    return ERR_FATAL_NULL_POINTER;
-  IR_Entrypoint func = (IR_Entrypoint)LoadDLLFunction(cache, IR_ENTRYPOINT);
-  if(!func)
-    return ERR_FATAL_NULL_POINTER;
-  (*func)();
-  return ERR_SUCCESS;
+  if(!function)
+  {
+    if(sig && !validate::MatchFunctionSig(*sig, FunctionSig{ TE_func }))
+      return nullptr;
+    return (IR_Entrypoint)LoadDLLFunction(cache, IR_ENTRYPOINT);
+  }
+
+  //if(sig && !validate::MatchFunctionSig(*sig, FunctionSig{ TE_func }))
+  //  return nullptr;
+  return (IR_Entrypoint)LoadDLLFunction(cache, utility::MergeName(module_name, function).c_str());
+}
+void* innative::LoadGlobal(void* cache, const char* module_name, const char* export_name)
+{
+  //if(sig && !validate::MatchFunctionSig(*sig, FunctionSig{ TE_func }))
+  //  return nullptr;
+  return LoadDLLFunction(cache, utility::MergeName(module_name, export_name).c_str());
 }
 
-void* innative::LoadCache(int flags, const char* file)
+void* innative::LoadAssembly(int flags, const char* file)
 {
   Path path(file != nullptr ? Path(file) : GetProgramPath() + IR_EXTENSION);
   void* handle = LoadDLL(path.Get().c_str());
   if(!handle)
     return 0;
-  IR_GetCPUInfo func = (IR_GetCPUInfo)LoadDLLFunction(handle, IR_GETCPUINFO);
-  if(!func)
-    return 0;
-  uintcpuinfo target;
-  (*func)(target);
-  uintcpuinfo source;
-  GetCPUInfo(source, flags);
-  return memcmp(target, source, sizeof(uintcpuinfo)) ? 0 : handle;
+  // TODO: return 0 if this isn't an exact CPU info match
+  //uintcpuinfo source;
+  //GetCPUInfo(source, flags);
+  //return memcmp(target, source, sizeof(uintcpuinfo)) ? 0 : handle;
+  return handle;
 }
 
 // Return pointers to all our internal functions
@@ -195,7 +201,12 @@ void innative_runtime(IRExports* exports)
   exports->WaitForLoad = &WaitForLoad;
   exports->AddEmbedding = &AddEmbedding;
   exports->Compile = &Compile;
-  exports->Run = &Run;
-  exports->LoadCache = &LoadCache;
+  exports->LoadFunction = &LoadFunction;
+  exports->LoadGlobal = &LoadGlobal;
+  exports->LoadAssembly = &LoadAssembly;
   exports->DestroyEnvironment = &DestroyEnvironment;
+}
+void innative_set_work_dir_to_bin()
+{
+  SetWorkingDir(GetProgramPath().Get().c_str());
 }

@@ -36,7 +36,7 @@ namespace innative {
     };
 
     // UTF8 validator based off the official unicode C validator source
-    bool ValidateIdentifier(ByteArray& b)
+    bool ValidateIdentifier(const ByteArray& b)
     {
       varuint32 i = 0;
       char a;
@@ -109,7 +109,7 @@ namespace innative {
       } while(!((std::atomic<ValidationError*>&)errors).compare_exchange_weak(err->next, err, std::memory_order_release, std::memory_order_relaxed));
     }
 
-    void ValidateFunctionSig(FunctionSig& sig, Environment& env, Module* m)
+    void ValidateFunctionSig(const FunctionSig& sig, Environment& env, Module* m)
     {
       if(sig.form == TE_func)
       {
@@ -120,7 +120,7 @@ namespace innative {
         AppendError(env.errors, m, ERR_UNKNOWN_SIGNATURE_TYPE, "Illegal function type %hhi encountered: only -0x20 allowed", sig.form);
     }
 
-    bool MatchFunctionSig(FunctionSig& a, FunctionSig& b)
+    bool MatchFunctionSig(const FunctionSig& a, const FunctionSig& b)
     {
       if(a.form != b.form || a.n_params != b.n_params || a.n_returns != b.n_returns)
         return false;
@@ -136,7 +136,7 @@ namespace innative {
       return true;
     }
 
-    void ValidateImport(Import& imp, Environment& env, Module* m)
+    void ValidateImport(const Import& imp, Environment& env, Module* m)
     {
       if(!ValidateIdentifier(imp.module_name))
         AppendError(env.errors, m, ERR_INVALID_IDENTIFIER, "Identifier not valid UTF8: %s", imp.module_name.str());
@@ -266,26 +266,26 @@ namespace innative {
       }
     }
 
-    void ValidateFunction(varuint32& decl, Environment& env, Module* m)
+    void ValidateFunction(const varuint32& decl, Environment& env, Module* m)
     {
       if(decl >= m->type.n_functions)
         AppendError(env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid function declaration type index: %u", decl);
     }
 
-    void ValidateLimits(ResizableLimits& limits, Environment& env, Module* m)
+    void ValidateLimits(const ResizableLimits& limits, Environment& env, Module* m)
     {
-      if(limits.maximum < limits.minimum)
+      if((limits.flags&WASM_LIMIT_HAS_MAXIMUM) && limits.maximum < limits.minimum)
         AppendError(env.errors, m, ERR_INVALID_LIMITS, "Limits maximum (%u) cannot be smaller than minimum (%u)", limits.maximum, limits.minimum);
     }
 
-    void ValidateTable(TableDesc& table, Environment& env, Module* m)
+    void ValidateTable(const TableDesc& table, Environment& env, Module* m)
     {
       if(table.element_type != TE_anyfunc)
         AppendError(env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Table element type is %hhi: only anyfunc allowed.", table.element_type);
       ValidateLimits(table.resizable, env, m);
     }
 
-    void ValidateMemory(MemoryDesc& mem, Environment& env, Module* m)
+    void ValidateMemory(const MemoryDesc& mem, Environment& env, Module* m)
     {
       ValidateLimits(mem.limits, env, m);
     }
@@ -415,7 +415,7 @@ namespace innative {
         AppendError(env.errors, m, ERR_INVALID_FUNCTION_INDEX, "callee was %u, which is an invalid function index.", callee);
     }
 
-    void ValidateInstruction(Instruction& ins, Stack<varsint7>& values, Stack<ControlBlock>& control, varuint32 n_locals, varsint7* locals, Environment& env, Module* m)
+    void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<ControlBlock>& control, varuint32 n_locals, varsint7* locals, Environment& env, Module* m)
     {
       switch(ins.opcode)
       {
@@ -678,7 +678,7 @@ namespace innative {
       }
     }
 
-    varsint7 ValidateInitializer(Instruction& ins, Environment& env, Module* m)
+    varsint7 ValidateInitializer(const Instruction& ins, Environment& env, Module* m)
     {
       switch(ins.opcode)
       {
@@ -700,14 +700,14 @@ namespace innative {
       return TE_i32;
     }
 
-    void ValidateGlobal(GlobalDecl& decl, Environment& env, Module* m)
+    void ValidateGlobal(const GlobalDecl& decl, Environment& env, Module* m)
     {
       varsint7 type = ValidateInitializer(decl.init, env, m);
       if(type != decl.desc.type)
         AppendError(env.errors, m, ERR_INVALID_GLOBAL_TYPE, "The global initializer has type %hhi, must be the same as the description type %hhi.", type, decl.desc.type);
     }
 
-    void ValidateExport(Export& e, Environment& env, Module* m)
+    void ValidateExport(const Export& e, Environment& env, Module* m)
     {
       ValidateIdentifier(e.name);
 
@@ -740,7 +740,7 @@ namespace innative {
       }
     }
 
-    varsint32 EvalInitializerI32(Instruction& ins, Environment& env, Module* m)
+    varsint32 EvalInitializerI32(const Instruction& ins, Environment& env, Module* m)
     {
       switch(ins.opcode)
       {
@@ -776,7 +776,7 @@ namespace innative {
       return 0;
     }
 
-    void ValidateTableOffset(TableInit& init, Environment& env, Module* m)
+    void ValidateTableOffset(const TableInit& init, Environment& env, Module* m)
     {
       varsint7 type = ValidateInitializer(init.offset, env, m);
       if(type != TE_i32)
@@ -805,7 +805,7 @@ namespace innative {
       values.SetLimit(block.limit); // Reset old limit value
     }
 
-    void ValidateFunctionBody(FunctionSig& sig, FunctionBody& body, Environment& env, Module* m)
+    void ValidateFunctionBody(const FunctionSig& sig, const FunctionBody& body, Environment& env, Module* m)
     {
       Instruction* cur = body.body;
       Stack<ControlBlock> control; // control-flow stack that must be closed by end instructions
@@ -880,7 +880,7 @@ namespace innative {
         AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Expected end instruction to terminate function body, got %hhu instead.", cur[body.n_body - 1].opcode);
     }
 
-    void ValidateDataOffset(DataInit& init, Environment& env, Module* m)
+    void ValidateDataOffset(const DataInit& init, Environment& env, Module* m)
     {
       varsint7 type = ValidateInitializer(init.offset, env, m);
       if(type != TE_i32)
@@ -897,8 +897,8 @@ namespace innative {
       }
     }
 
-    template<class T, void(*VALIDATE)(T&, Environment&, Module*)>
-    void ValidateSection(T* a, varuint32 n, Environment& env, Module* m)
+    template<class T, void(*VALIDATE)(const T&, Environment&, Module*)>
+    void ValidateSection(const T* a, varuint32 n, Environment& env, Module* m)
     {
       for(varuint32 i = 0; i < n; ++i)
         VALIDATE(a[i], env, m);
@@ -980,7 +980,7 @@ namespace innative {
         ValidateModule(env, env.modules[i]);
     }
 
-    bool ValidateSectionOrder(uint32& sections, varuint7 opcode)
+    bool ValidateSectionOrder(const uint32& sections, varuint7 opcode)
     {
       return (sections & ((~0) << opcode)) == 0;
     }

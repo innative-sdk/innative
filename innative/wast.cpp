@@ -58,7 +58,7 @@ static kh_assertion_t* assertionhash = GenAssertions({
   },
 {
   "alignment",
-  "alignment",
+  "alignment must not be larger than natural",
   "out of bounds memory access",
   "unexpected end",
   "magic header not detected",
@@ -150,22 +150,19 @@ bool MatchFuncSig(FunctionSig sig)
   return MatchFuncSig<R, Args...>(sig);
 }
 
-void SetTempName(Environment& env, Module* m)
+void SetTempName(Environment& env, Module& m)
 {
   char buf[30] = { 'm', 0 };
   ITOA(env.n_modules, buf + 1, 29, 10);
   size_t len = strlen(buf);
-  m->name.resize(len, true);
-  tmemcpy((char*)m->name.get(), len, buf, len);
+  m.name.resize(len, true);
+  tmemcpy((char*)m.name.get(), len, buf, len);
 }
-int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mapping, Module*& last, void*& cache)
+int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mapping, Module& m)
 {
   EXPECTED(tokens, TOKEN_MODULE, ERR_WAT_EXPECTED_MODULE);
   int r;
 
-  cache = 0;
-  env.modules = trealloc<Module>(env.modules, ++env.n_modules);
-  last = &env.modules[env.n_modules - 1];
   if(tokens[0].id == TOKEN_BINARY || (tokens.Size() > 1 && tokens[1].id == TOKEN_BINARY))
   {
     std::string tempname("m");
@@ -183,10 +180,10 @@ int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
       if(r = WatString(binary, tokens.Pop()))
         return r;
     parse::Stream s = { binary.get(), binary.size(), 0 };
-    if(r = parse::ParseModule(s, *last, ByteArray((uint8_t*)name.pos, (varuint32)name.len)))
+    if(r = parse::ParseModule(s, m, ByteArray((uint8_t*)name.pos, (varuint32)name.len)))
       return r;
     if(name.id == TOKEN_NAME) // Override name if it exists
-      if(r = WatName(last->name, name))
+      if(r = WatName(m.name, name))
         return r;
   }
   else if(tokens[0].id == TOKEN_QUOTE || (tokens.Size() > 1 && tokens[1].id == TOKEN_QUOTE))
@@ -197,24 +194,24 @@ int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
     while(tokens.Peek().id == TOKEN_STRING)
       if(r = WatString(quote, tokens.Pop()))
         return r;
-    if(r = ParseWatModule(env, *last, quote.get(), quote.size(), StringRef{ name.pos, name.len }))
+    if(r = ParseWatModule(env, m, quote.get(), quote.size(), StringRef{ name.pos, name.len }))
       return r;
     if(name.id == TOKEN_NAME) // Override name if it exists
-      if(r = WatName(last->name, name))
+      if(r = WatName(m.name, name))
         return r;
   }
-  else if(r = WatModule(env, *last, tokens, StringRef{ 0,0 }))
+  else if(r = WatModule(env, m, tokens, StringRef{ 0,0 }))
     return r;
 
-  if(last->name.size() > 0)
+  if(m.name.size() > 0)
   {
-    khiter_t iter = kh_put_modules(mapping, last->name.str(), &r);
+    khiter_t iter = kh_put_modules(mapping, m.name.str(), &r);
     if(!r)
       return ERR_FATAL_DUPLICATE_MODULE_NAME;
     kh_val(mapping, iter) = (varuint32)env.n_modules - 1;
   }
   else // If the module has no name, we must assign a temporary one
-    SetTempName(env, last);
+    SetTempName(env, m);
   return ERR_SUCCESS;
 }
 
@@ -470,11 +467,19 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
     {
     case TOKEN_MODULE:
     {
-      if(r = ParseWastModule(env, tokens, mapping, last, cache))
+      Token t = tokens[0];
+      env.modules = trealloc<Module>(env.modules, ++env.n_modules);
+      last = &env.modules[env.n_modules - 1];
+
+      if(r = ParseWastModule(env, tokens, mapping, *last))
         return r;
       validate::ValidateModule(env, *last);
       if(env.errors)
+      {
+        //validate::ValidateModule(env, *last);
         return ERR_VALIDATION_ERROR;
+      }
+
       break;
     }
     case TOKEN_REGISTER:
@@ -518,13 +523,15 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_MODULE) // Check if we're actually trapping on a module load
       {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-        if(r = ParseWastModule(env, tokens, mapping, last, cache))
+        env.modules = trealloc<Module>(env.modules, ++env.n_modules); // We temporarily add this module to the environment, but don't set the "last" module to it
+        if(r = ParseWastModule(env, tokens, mapping, env.modules[env.n_modules - 1]))
           return r;
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
         r = CompileScript(env, "wast.dll", cache);
+        --env.n_modules; // Remove the module from the environment to avoid poisoning other compilations
         if(r != ERR_RUNTIME_TRAP)
-          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
+          AppendError(errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
         EXPECTED(tokens, TOKEN_STRING, ERR_WAT_EXPECTED_STRING);
       }
       else
@@ -616,7 +623,8 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
     {
       Token t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-      int code = ParseWastModule(env, tokens, mapping, last, cache);
+      Module m;
+      int code = ParseWastModule(env, tokens, mapping, m);
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
       ByteArray err;
@@ -626,7 +634,7 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       string assertcode = GetAssertionString(code);
 
       if(STRICMP(assertcode.c_str(), err.str()))
-        AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead", WatLineNumber(start, t.pos), err.str(), assertcode.c_str());
+        AppendError(errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead", WatLineNumber(start, t.pos), err.str(), assertcode.c_str());
       break;
     }
     case TOKEN_ASSERT_INVALID:
@@ -634,7 +642,8 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
     {
       Token t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-      int code = ParseWastModule(env, tokens, mapping, last, cache);
+      Module m;
+      int code = ParseWastModule(env, tokens, mapping, m);
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
       ByteArray err;
@@ -644,16 +653,19 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       string assertcode = GetAssertionString(code);
 
       if(code != ERR_SUCCESS)
-        AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected module parsing success, but got '%s' instead", WatLineNumber(start, t.pos), assertcode.c_str());
+        AppendError(errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected module parsing success, but got '%s' instead", WatLineNumber(start, t.pos), assertcode.c_str());
 
-      validate::ValidateModule(env, *last);
+      validate::ValidateModule(env, m);
       code = ERR_SUCCESS;
       if(env.errors)
         code = env.errors->code;
       assertcode = GetAssertionString(code);
-      if(STRICMP(assertcode.c_str(), err.str()))
-        AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead", WatLineNumber(start, t.pos), err.str(), assertcode.c_str());
       env.errors = 0;
+      if(STRICMP(assertcode.c_str(), err.str()))
+      {
+        AppendError(errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead", WatLineNumber(start, t.pos), err.str(), assertcode.c_str());
+        validate::ValidateModule(env, m);
+      }
       break;
     }
     case TOKEN_ASSERT_EXHAUSTION:

@@ -310,7 +310,7 @@ namespace innative {
       return kh_exist2(h, iter) ? kh_val(h, iter) : (uint8_t)0xFF;
     }
 
-    varuint32 ModuleFunctionType(Module& m, varuint32 index)
+    varuint32 ModuleFunctionType(const Module& m, varuint32 index)
     {
       if(index < m.importsection.functions)
         return m.importsection.imports[index].func_desc.sig_index;
@@ -320,7 +320,7 @@ namespace innative {
       return (varuint32)~0;
     }
 
-    FunctionSig* ModuleFunction(Module& m, varuint32 index)
+    FunctionSig* ModuleFunction(const Module& m, varuint32 index)
     {
       if(index < m.importsection.functions)
         return &m.type.functions[m.importsection.imports[index].func_desc.sig_index];
@@ -329,7 +329,7 @@ namespace innative {
         return &m.type.functions[m.function.funcdecl[index]];
       return 0;
     }
-    TableDesc* ModuleTable(Module& m, varuint32 index)
+    TableDesc* ModuleTable(const Module& m, varuint32 index)
     {
       size_t i = index + m.importsection.functions; // Shift index to table section
       if(i < m.importsection.tables)
@@ -339,7 +339,7 @@ namespace innative {
         return &m.table.tables[i];
       return 0;
     }
-    MemoryDesc* ModuleMemory(Module& m, varuint32 index)
+    MemoryDesc* ModuleMemory(const Module& m, varuint32 index)
     {
       size_t i = index + m.importsection.tables; // Shift index to memory section
       if(i < m.importsection.memory)
@@ -349,7 +349,7 @@ namespace innative {
         return &m.memory.memory[i];
       return 0;
     }
-    GlobalDesc* ModuleGlobal(Module& m, varuint32 index)
+    GlobalDesc* ModuleGlobal(const Module& m, varuint32 index)
     {
       size_t i = index + m.importsection.memory; // Shift index to globals section
       if(i < m.importsection.globals)
@@ -359,7 +359,7 @@ namespace innative {
         return &m.global.globals[i].desc;
       return 0;
     }
-    std::pair<Module*, Export*> ResolveExport(Environment& env, Import& imp)
+    std::pair<Module*, Export*> ResolveExport(const Environment& env, const Import& imp)
     {
       khint_t iter = kh_get_modules(env.modulemap, imp.module_name.str());
       if(iter == kh_end(env.modulemap))

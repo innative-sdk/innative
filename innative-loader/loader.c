@@ -94,10 +94,10 @@ int main(int argc, char** argv)
   innative_runtime(&exports);
   unsigned int flags = 0; //ENV_MULTITHREADED;
   unsigned int maxthreads = 0;
-  void* cache = (*exports.LoadCache)(flags, "out.cache");
+  void* assembly = (*exports.LoadAssembly)(flags | ENV_ASSEMBLY_MATCH_CPUINFO, "out.cache");
 
   // Before doing anything, check if we have a cached version available
-  if(!cache)
+  if(!assembly)
   {
     // Count WASM module payloads.
 #ifdef IR_PLATFORM_WIN32
@@ -181,14 +181,19 @@ int main(int argc, char** argv)
 
     // Destroy environment now that compilation is complete
     (*exports.DestroyEnvironment)(env);
-    cache = (*exports.LoadCache)(flags, "out.cache");
+    assembly = (*exports.LoadAssembly)(flags | ENV_ASSEMBLY_MATCH_CPUINFO, "out.cache");
   }
 
-  if(!cache)
+  if(!assembly)
     return ERR_FATAL_NULL_POINTER;
 
-  // Run the resulting code and return any errors
-  return (*exports.Run)(cache);
+  // Load the entry point and execute it
+  IR_Entrypoint start = (*exports.LoadFunction)(assembly, 0, 0, 0);
+  if(!start)
+    return ERR_INVALID_START_FUNCTION;
+  
+  (*start)();
+  return ERR_SUCCESS;
 }
 
 #ifdef IR_PLATFORM_WIN32

@@ -8,13 +8,13 @@
 
 namespace innative {
   namespace validate {
-    bool ValidateIdentifier(ByteArray& bytes);
+    bool ValidateIdentifier(const ByteArray& bytes);
     bool ValidateValueType(varsint7 type);
     void ValidateEnvironment(Environment& env);
     void ValidateModule(Environment& env, Module& m);
-    bool ValidateSectionOrder(uint32& sections, varuint7 opcode);
-    bool MatchFunctionSig(FunctionSig& a, FunctionSig& b);
-    varsint32 EvalInitializerI32(Instruction& ins, Environment& env, Module* m);
+    bool ValidateSectionOrder(const uint32& sections, varuint7 opcode);
+    bool MatchFunctionSig(const FunctionSig& a, const  FunctionSig& b);
+    varsint32 EvalInitializerI32(const Instruction& ins, Environment& env, Module* m);
     void AppendError(ValidationError*& errors, Module* m, int code, const char* fmt, ...);
   }
 }

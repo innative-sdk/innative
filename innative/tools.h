@@ -17,8 +17,9 @@ namespace innative {
   void WaitForLoad(struct __WASM_ENVIRONMENT* env);
   enum IR_ERROR AddEmbedding(struct __WASM_ENVIRONMENT* env, int tag, void* data, uint64_t size);
   enum IR_ERROR Compile(struct __WASM_ENVIRONMENT* env, const char* file);
-  enum IR_ERROR Run(void* cache);
-  void* LoadCache(int flags, const char* file);
+  IR_Entrypoint LoadFunction(void* cache, const char* module_name, const char* function, const FunctionSig* sig);
+  void* LoadGlobal(void* cache, const char* module_name, const char* export_name);
+  void* LoadAssembly(int flags, const char* file);
 }
 
 #endif

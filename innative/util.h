@@ -172,15 +172,15 @@ namespace innative {
     template<class T>
     T* tmalloc(size_t n) { return internal::GreedyAllocBytes::allocateT<T>(n); }
 
-    IR_FORCEINLINE bool ModuleHasSection(Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
+    IR_FORCEINLINE bool ModuleHasSection(const Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
     inline std::string MergeStrings(const char* a, const char* b) { return std::string(!a ? "" : a) + b; }
 
-    varuint32 ModuleFunctionType(Module& m, varuint32 index);
-    FunctionSig* ModuleFunction(Module& m, varuint32 index);
-    TableDesc* ModuleTable(Module& m, varuint32 index);
-    MemoryDesc* ModuleMemory(Module& m, varuint32 index);
-    GlobalDesc* ModuleGlobal(Module& m, varuint32 index);
-    std::pair<Module*, Export*> ResolveExport(Environment& env, Import& imp);
+    varuint32 ModuleFunctionType(const Module& m, varuint32 index);
+    FunctionSig* ModuleFunction(const Module& m, varuint32 index);
+    TableDesc* ModuleTable(const Module& m, varuint32 index);
+    MemoryDesc* ModuleMemory(const Module& m, varuint32 index);
+    GlobalDesc* ModuleGlobal(const Module& m, varuint32 index);
+    std::pair<Module*, Export*> ResolveExport(const Environment& env, const Import& imp);
     Path GetProgramPath();
     Path GetWorkingDir();
     bool SetWorkingDir(const char* path);
@@ -210,7 +210,7 @@ namespace innative {
       return MergeName((const char*)module_name, (const char*)export_name); // Otherwise do a standard merge
     }
 
-    IR_FORCEINLINE std::string CanonImportName(Import& imp)
+    IR_FORCEINLINE std::string CanonImportName(const Import& imp)
     {
       return CanonImportName(imp.module_name.str(), imp.export_name.str());
     }

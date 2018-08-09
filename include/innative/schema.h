@@ -410,6 +410,7 @@ enum WASM_ENVIRONMENT_FLAGS
   ENV_OPTIMIZE_ANALYSIS = (1 << 7),
   ENV_OPTIMIZE_VECTORIZE = (1 << 8),
   ENV_OPTIMIZE_ALL = ENV_OPTIMIZE_INLINE| ENV_OPTIMIZE_ANALYSIS| ENV_OPTIMIZE_VECTORIZE,
+  ENV_ASSEMBLY_MATCH_CPUINFO = (1 << 30), // Requires LoadAssembly to match this machine's exact cpuinfo type before loading.
 };
 
 typedef struct __WASM_BYTE_ARRAY

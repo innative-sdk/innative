@@ -75,9 +75,14 @@ int innative_compile_file(const char* file, const char* out, unsigned int flags,
 
   // Destroy environment now that compilation is complete
   DestroyEnvironment(env);
-  //cache = LoadCache(flags);
-
-  return Run(0);
+  void* assembly = LoadAssembly(flags, out);
+  if(!assembly)
+    return ERR_FATAL_FILE_ERROR;
+  IR_Entrypoint start = LoadFunction(assembly, 0, 0, 0);
+  if(!start)
+    return ERR_INVALID_START_FUNCTION;
+  (*start)();
+  return ERR_SUCCESS;
 }
 int innative_build_loader(struct _IR_CHUNK* chunks, const char* out, bool dynamic)
 {
@@ -114,16 +119,16 @@ int innative_compile_script(const char* file, unsigned int flags, ValidationErro
 
   err = wat::ParseWast(*env, data_module.get(), sz);
 
-  if(err < 0)
-  {
-    fprintf(stderr, "Error loading modules: %i\n", err);
-    return err;
-  }
-
   if(errors)
   {
     *errors = env->errors;
     env->errors = 0;
+  }
+
+  if(err < 0)
+  {
+    fprintf(stderr, "Error loading modules: %i\n", err);
+    return err;
   }
 
   // Destroy environment

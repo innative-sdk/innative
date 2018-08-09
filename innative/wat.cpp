@@ -519,6 +519,7 @@ namespace innative {
       FunctionSig sig = { 0 };
       int r = WatTypeInner(tokens, sig, 0);
       *index = state.m.type.n_functions;
+      state.m.knownsections |= (1 << WASM_SECTION_TYPE);
       if(r = AppendArray<FunctionSig>(sig, state.m.type.functions, state.m.type.n_functions))
         return r;
 
@@ -540,6 +541,7 @@ namespace innative {
         if(m.importsection.imports[j].kind > i.kind)
           *index = j;
 
+      m.knownsections |= (1 << WASM_SECTION_IMPORT);
       if((m.importsection.n_import - *index - 1) > 0) // Move things out of the way if we aren't at the end of the array
         memmove(m.importsection.imports + *index + 1, m.importsection.imports + *index, (m.importsection.n_import - *index - 1) * sizeof(Import));
 
@@ -616,6 +618,7 @@ namespace innative {
         else
         {
           sig = state.m.type.n_functions;
+          state.m.knownsections |= (1 << WASM_SECTION_TYPE);
           return !r ? AppendArray<FunctionSig>(func, state.m.type.functions, state.m.type.n_functions) : r;
         }
       }
@@ -623,6 +626,7 @@ namespace innative {
       if(sig == (varuint32)~0) // If we still don't have a type, this is an empty type we need to add
       {
         sig = state.m.type.n_functions;
+        state.m.knownsections |= (1 << WASM_SECTION_TYPE);
         return AppendArray<FunctionSig>(FunctionSig{ TE_func }, state.m.type.functions, state.m.type.n_functions);
       }
 
@@ -956,7 +960,8 @@ namespace innative {
 
         // Expressions are folded instructions, so we must unfold them before inserting the operator
         while(tokens[0].id != TOKEN_CLOSE)
-          WatExpression(state, tokens, f, sig, index);
+          if(r = WatExpression(state, tokens, f, sig, index))
+            return r;
 
         if(r = AppendArray<Instruction>(op, f.body, f.n_body)) // Now we append the operator
           return r;
@@ -1069,6 +1074,7 @@ namespace innative {
         e.index = *index; // This is fine because you can only import OR export on a declaration statement
         if(r = WatString(e.name, tokens.Pop()))
           return r;
+        m.knownsections |= (1 << WASM_SECTION_EXPORT);
         if(r = AppendArray<Export>(e, m.exportsection.exports, m.exportsection.n_exports))
           return r;
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
@@ -1176,9 +1182,11 @@ namespace innative {
       if(r = AppendArray(Instruction{ OP_end }, body.body, body.n_body))
         return r;
 
+      state.m.knownsections |= (1 << WASM_SECTION_FUNCTION);
       if(r = AppendArray(sig, state.m.function.funcdecl, state.m.function.n_funcdecl))
         return r;
 
+      state.m.knownsections |= (1 << WASM_SECTION_CODE);
       return AppendArray(body, state.m.code.funcbody, state.m.code.n_funcbody);
     }
 
@@ -1258,6 +1266,7 @@ namespace innative {
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       }
 
+      state.m.knownsections |= (1 << WASM_SECTION_TABLE);
       return AppendArray(table, state.m.table.tables, state.m.table.n_tables);
     }
 
@@ -1320,6 +1329,7 @@ namespace innative {
       if(r = WatInitializer(state, tokens, g.init))
         return r;
 
+      state.m.knownsections |= (1 << WASM_SECTION_GLOBAL);
       return AppendArray(g, state.m.global.globals, state.m.global.n_globals);
     }
 
@@ -1361,6 +1371,7 @@ namespace innative {
       else if(r = WatMemoryDesc(mem, tokens))
         return r;
 
+      state.m.knownsections |= (1 << WASM_SECTION_MEMORY);
       return AppendArray(mem, state.m.memory.memory, state.m.memory.n_memory);
     }
 
@@ -1472,6 +1483,7 @@ namespace innative {
         return assert(false), ERR_WAT_EXPECTED_KIND;
       }
 
+      state.m.knownsections |= (1 << WASM_SECTION_EXPORT);
       return AppendArray(e, state.m.exportsection.exports, state.m.exportsection.n_exports);
     }
 
@@ -1516,6 +1528,7 @@ namespace innative {
           return assert(false), ERR_WAT_INVALID_VAR;
       }
 
+      state.m.knownsections |= (1 << WASM_SECTION_ELEMENT);
       return AppendArray(e, state.m.element.elements, state.m.element.n_elements);
     }
 
@@ -1533,6 +1546,7 @@ namespace innative {
         WatString(d.data, tokens.Pop());
       }
 
+      state.m.knownsections |= (1 << WASM_SECTION_DATA);
       return AppendArray(d, state.m.data.data, state.m.data.n_data);
     }
 
@@ -1576,6 +1590,7 @@ namespace innative {
         switch(t.id) // This initial pass is for types only
         {
         case TOKEN_TYPE:
+          m.knownsections |= (1 << (1 << WASM_SECTION_TYPE));
           if(r = WatIndexProcess<WatType>(state, tokens, state.typehash))
             return r;
           break;
@@ -1665,10 +1680,10 @@ namespace innative {
             return r;
           break;
         case TOKEN_START:
+          m.knownsections |= (1 << (1 << WASM_SECTION_START));
           if(tokens[0].id != TOKEN_INTEGER && tokens[0].id != TOKEN_NAME)
             return assert(false), ERR_WAT_EXPECTED_VAR;
           m.start = WatGetFromHash(state.funchash, tokens.Pop());
-          m.knownsections |= (1 << WASM_SECTION_START);
           if(m.start == (varuint32)~0)
             return assert(false), ERR_WAT_INVALID_VAR;
           break;
