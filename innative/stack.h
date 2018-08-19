@@ -6,6 +6,7 @@
 
 #include <malloc.h>
 #include <assert.h>
+#include <memory.h>
 
 namespace innative {
   // Implements a simple stack that can temporarily restrict how far it can be shrunk

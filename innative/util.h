@@ -14,16 +14,16 @@
 #include <utility>
 
 #define IR_INIT_FUNCTION "_innative_internal_start"
-#define kh_exist2(h, x) ((iter < kh_end(h)) && kh_exist(h, iter))
+#define kh_exist2(h, x) ((x < kh_end(h)) && kh_exist(h, x))
 
 namespace innative {
-  extern const char* IR_ENTRYPOINT;
-  extern const char* IR_GETCPUINFO;
-  extern const char* IR_EXTENSION;
-  extern const char* IR_ENV_EXTENSION;
-  extern const char* IR_GLUE_STRING;
-
   namespace utility {
+    extern const char* IR_ENTRYPOINT;
+    extern const char* IR_GETCPUINFO;
+    extern const char* IR_EXTENSION;
+    extern const char* IR_ENV_EXTENSION;
+    extern const char* IR_GLUE_STRING;
+
     extern const char OPNAMES[][20];
     typedef int uintcpuinfo[5];
 
@@ -99,8 +99,8 @@ namespace innative {
     // Single threaded greedy allocator
     struct GreedyAllocBytes
     {
-      inline static void* allocate(std::size_t n) 
-      { 
+      inline static void* allocate(std::size_t n)
+      {
         if(cur + n >= max)
         {
           max = (cur + n) * 2;
@@ -167,14 +167,14 @@ namespace innative {
     {
       return reinterpret_cast<T*>(realloc(p, sz * sizeof(T)));
     }
-    uint8_t GetInstruction(StringRef s);
 
     template<class T>
-    T* tmalloc(size_t n) { return internal::GreedyAllocBytes::allocateT<T>(n); }
+    inline T* tmalloc(size_t n) { return internal::GreedyAllocBytes::allocateT<T>(n); }
 
     IR_FORCEINLINE bool ModuleHasSection(const Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
     inline std::string MergeStrings(const char* a, const char* b) { return std::string(!a ? "" : a) + b; }
 
+    uint8_t GetInstruction(StringRef s);
     varuint32 ModuleFunctionType(const Module& m, varuint32 index);
     FunctionSig* ModuleFunction(const Module& m, varuint32 index);
     TableDesc* ModuleTable(const Module& m, varuint32 index);

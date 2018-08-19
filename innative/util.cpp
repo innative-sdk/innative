@@ -32,17 +32,17 @@
 using std::string;
 
 namespace innative {
-  const char* IR_ENTRYPOINT = "__innative_main_func";
-  const char* IR_GETCPUINFO = "__innative_getcpuinfo";
-  const char* IR_EXTENSION = ".ir-cache";
-  const char* IR_ENV_EXTENSION = ".ir-env-cache";
-  const char* IR_GLUE_STRING = "_WASM_";
-
   size_t internal::GreedyAllocBytes::cur = 0;
   size_t internal::GreedyAllocBytes::max = 0;
   void* internal::GreedyAllocBytes::mem = 0;
 
   namespace utility {
+    const char* IR_ENTRYPOINT = "__innative_main_func";
+    const char* IR_GETCPUINFO = "__innative_getcpuinfo";
+    const char* IR_EXTENSION = ".ir-cache";
+    const char* IR_ENV_EXTENSION = ".ir-env-cache";
+    const char* IR_GLUE_STRING = "_WASM_";
+
     KHASH_INIT(opnames, StringRef, uint8_t, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal)
 
     const char OPNAMES[][20] = {
@@ -424,7 +424,6 @@ namespace innative {
 #error TODO
 #endif
     }
-
 
     string StrFormat(const char* fmt, ...)
     {

@@ -326,14 +326,9 @@ void PushResult(code::BlockResult** root, llvmVal* result, BB* block)
 // Adds current value stack to target branch according to that branch's signature, but doesn't pop them.
 IR_ERROR AddBranch(code::Block& target, code::Context& context)
 {
-  if(target.sig != TE_void)
-  {
-    if(context.values.Size() != 1 || !CheckType(WASM_TYPE_ENCODING(target.sig), context.values.Peek())) // Verify stack
-      return assert(false), ERR_INVALID_VALUE_STACK;
-    PushResult(&target.results, context.values.Peek(), context.builder.GetInsertBlock()); // Push result
-  }
-  else if(context.values.Size() > 0)
+  if(context.values.Size() < 1 || !CheckType(WASM_TYPE_ENCODING(target.sig), context.values.Peek())) // We only verify the type, not the entire stack
     return assert(false), ERR_INVALID_VALUE_STACK;
+  PushResult(&target.results, context.values.Peek(), context.builder.GetInsertBlock()); // Push result
 
   return ERR_SUCCESS;
 }
@@ -378,6 +373,12 @@ IR_ERROR CompileIfBlock(varsint7 sig, code::Context& context)
   if(context.values.Size() < 1)
     return assert(false), ERR_INVALID_VALUE_STACK;
 
+  if(!context.values.Peek()) // If we're in an unreachable segment, just push another placeholder on to the stack
+  {
+    context.values.Push(nullptr);
+    return ERR_SUCCESS;
+  }
+
   llvmVal* cond = context.values.Pop();
 
   if(!CheckType(TE_i32, cond))
@@ -401,7 +402,15 @@ IR_ERROR CompileElseBlock(code::Context& context)
     return assert(false), ERR_IF_ELSE_MISMATCH;
 
   // Instead of popping and pushing a new control label, we just re-purpose the existing one. This preserves the value stack results.
-  AddBranch(context.control.Peek(), context); // Add the true block's results to itself
+  if(context.control.Peek().sig != TE_void)
+  {
+    if(context.values.Size() != 1 || !CheckType(WASM_TYPE_ENCODING(context.control.Peek().sig), context.values.Peek())) // Verify stack
+      return assert(false), ERR_INVALID_VALUE_STACK;
+    PushResult(&context.control.Peek().results, context.values.Peek(), context.builder.GetInsertBlock()); // Push result
+  }
+  else if(context.values.Size() > 0)
+    return assert(false), ERR_INVALID_VALUE_STACK;
+
   while(context.values.Size()) // Reset value stack
     context.values.Pop();
 
@@ -415,23 +424,27 @@ IR_ERROR CompileElseBlock(code::Context& context)
   return ERR_SUCCESS;
 }
 
+void ClearValueStack(code::Context& context)
+{
+  while(context.values.Size() > 0)
+    context.values.Pop();
+}
+
 IR_ERROR CompileReturn(code::Context& context, varsint7 sig)
 {
   if(sig == TE_void)
-  {
-    if(context.values.Size() > 0)
-      return assert(false), ERR_INVALID_VALUE_STACK;
     context.builder.CreateRetVoid();
-  }
   else
   {
-    if(context.values.Size() != 1)
+    if(context.values.Size() < 1)
       return assert(false), ERR_INVALID_VALUE_STACK;
     if(!CheckType(WASM_TYPE_ENCODING(sig), context.values.Peek()))
       return assert(false), ERR_INVALID_TYPE;
     context.builder.CreateRet(context.values.Peek());
   }
 
+  ClearValueStack(context);
+  context.values.Push(nullptr); // Push polymorphic placeholder
   return ERR_SUCCESS;
 }
 
@@ -447,14 +460,21 @@ IR_ERROR CompileEndBlock(code::Context& context)
         return assert(false), ERR_END_MISMATCH;
 
       IR_ERROR err = PopLabel(context);
+      if(context.values.Size() > 0 && !context.values.Peek())
+      {
+        context.values.Pop();
+        return err;  // In this case, the end of the function itself is unreachable code, so we can't generate a return statement
+      }
       if(err >= 0)
         err = CompileReturn(context, sig);
-      if(err >= 0 && sig != TE_void)
-        context.values.Pop();
       return err;
     }
     return assert(false), ERR_END_MISMATCH;
   }
+  if(context.values.Size() > 0 && !context.values.Peek()) // Pop off one polymorphic placeholder
+    context.values.Pop();
+  if(!context.values.Size() || context.values.Peek() != nullptr) // If we're still in unreachable code, just bail out
+    return ERR_SUCCESS;
   context.builder.CreateBr(context.control.Peek().block); // Branch into next block
   BindLabel(context.control.Peek().block, context);
 
@@ -503,6 +523,7 @@ IR_ERROR CompileBranch(varuint32 depth, code::Context& context)
 
   code::Block& target = context.control[depth];
   context.builder.CreateBr(target.block);
+  ClearValueStack(context);
   return (target.type != OP_loop) ? AddBranch(target, context) : ERR_SUCCESS; // Branches targeting loops just throw all their values away, so we don't need to build PHI nodes.
 }
 
@@ -533,6 +554,7 @@ IR_ERROR CompileBranchTable(varuint32 n_table, varuint32* table, varuint32 def, 
   if(context.values.Size() < 1)
     return assert(false), ERR_INVALID_VALUE_STACK;
   llvmVal* index = context.values.Pop();
+  ClearValueStack(context);
 
   if(!CheckType(TE_i32, index))
     return assert(false), ERR_INVALID_TYPE;
@@ -767,20 +789,38 @@ IR_ERROR CompileMemGrow(code::Context& context, const char* name)
 
 IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
 {
+  if(context.values.Peek() == nullptr) // If we have a polymorphic type on top we're in unreachable code so just skip all non-control operators
+  {
+    switch(ins.opcode)
+    {
+    case OP_block:
+    case OP_loop:
+    case OP_if:
+    case OP_end:
+      break;
+    default:
+      return ERR_SUCCESS;
+    }
+  }
   switch(ins.opcode)
   {
   case OP_unreachable:
     context.builder.CreateUnreachable();
+    ClearValueStack(context);
     return CompileTrap(context);
   case OP_nop:
     return ERR_SUCCESS;
   case OP_block:
     PushLabel("block", ins.immediates[0]._varsint7, OP_block, nullptr, context);
+    if(context.values.Size() > 0 && !context.values.Peek())
+      context.values.Push(nullptr);
     return ERR_SUCCESS;
   case OP_loop:
     PushLabel("loop", ins.immediates[0]._varsint7, OP_loop, nullptr, context);
     context.builder.CreateBr(context.control.Peek().block); // Branch into next block
     BindLabel(context.control.Peek().block, context);
+    if(context.values.Size() > 0 && !context.values.Peek())
+      context.values.Push(nullptr);
     return ERR_SUCCESS;
   case OP_if:
     return CompileIfBlock(ins.immediates[0]._varsint7, context);
@@ -1223,13 +1263,6 @@ IR_ERROR CompileFunctionBody(Func* fn, FunctionSig& sig, FunctionBody& body, cod
   return ERR_SUCCESS;
 }
 
-const char* GlobalName(varuint32 i)
-{
-  static char buf[30] = { 0 };
-  ITOA(i, buf, 30, 10);
-  return buf;
-}
-
 llvm::GlobalVariable* CreateGlobal(code::Context& context, llvmTy* ty, bool isconst, bool external, const Twine& name, llvm::Constant* init = 0)
 {
   return new llvm::GlobalVariable(
@@ -1469,8 +1502,8 @@ IR_ERROR CompileModule(Environment* env, code::Context& context)
   for(varuint32 i = 0; i < context.m.memory.n_memory; ++i)
   {
     auto type = context.builder.getInt8PtrTy(0);
-    auto sz = CInt::get(context.context, APInt(64, context.m.memory.memory[i].limits.minimum, true));
-    auto max = CInt::get(context.context, APInt(64, (context.m.memory.memory[i].limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? context.m.memory.memory[i].limits.maximum : 0, true));
+    auto sz = CInt::get(context.context, APInt(64, ((uint64_t)context.m.memory.memory[i].limits.minimum) << 16, true));
+    auto max = CInt::get(context.context, APInt(64, (context.m.memory.memory[i].limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? (((uint64_t)context.m.memory.memory[i].limits.maximum) << 16) : 0ULL, true));
     context.memories.push_back(CreateGlobal(context, type, false, false, MergeName(context.m.name.str(), "linearmemory#", i), llvm::ConstantPointerNull::get(type)));
 
     CallInst* call = context.builder.CreateCall(context.memgrow, { llvm::ConstantPointerNull::get(type), sz, max });
@@ -1656,207 +1689,209 @@ IR_ERROR OutputObjectFile(code::Context& ctx, const char* out)
   return ERR_SUCCESS;
 }
 
-IR_ERROR CompileEnvironment(Environment* env, const char* filepath)
-{
-  Path file(filepath);
-  Path workdir = GetWorkingDir();
-  Path programpath = GetProgramPath();
-  SetWorkingDir(programpath.BaseDir().Get().c_str());
-  utility::DeferLambda<std::function<void()>> defer([&]() { SetWorkingDir(workdir.Get().c_str()); });
-
-  if(!file.IsAbsolute())
-    file = workdir + file;
-  
-  llvm::LLVMContext context;
-  llvm::IRBuilder<> builder(context);
-  code::Context* start = nullptr;
-  IR_ERROR err = ERR_SUCCESS;
-  code::Context* ctx = tmalloc<code::Context>(env->n_modules);
-  string triple = llvm::sys::getDefaultTargetTriple();
-
-  // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
-  llvm::InitializeAllTargetInfos();
-  llvm::InitializeAllTargets();
-  llvm::InitializeAllTargetMCs();
-  llvm::InitializeAllAsmParsers();
-  llvm::InitializeAllAsmPrinters();
-
-  string Error;
-  auto arch = llvm::TargetRegistry::lookupTarget(triple, Error);
-
-  if(!arch)
+namespace innative {
+  IR_ERROR CompileEnvironment(Environment* env, const char* filepath)
   {
-    llvm::errs() << Error;
-    return assert(false), ERR_FATAL_UNKNOWN_TARGET;
-  }
+    Path file(filepath);
+    Path workdir = GetWorkingDir();
+    Path programpath = GetProgramPath();
+    SetWorkingDir(programpath.BaseDir().Get().c_str());
+    utility::DeferLambda<std::function<void()>> defer([&]() { SetWorkingDir(workdir.Get().c_str()); });
 
-  auto CPU = "generic";
-  auto Features = "";
+    if(!file.IsAbsolute())
+      file = workdir + file;
 
-  llvm::TargetOptions opt;
-  auto RM = llvm::Optional<llvm::Reloc::Model>();
-  auto machine = arch->createTargetMachine(triple, CPU, Features, opt, RM);
+    llvm::LLVMContext context;
+    llvm::IRBuilder<> builder(context);
+    code::Context* start = nullptr;
+    IR_ERROR err = ERR_SUCCESS;
+    code::Context* ctx = tmalloc<code::Context>(env->n_modules);
+    string triple = llvm::sys::getDefaultTargetTriple();
 
-  for(varuint32 i = 0; i < env->n_modules; ++i)
-  {
-    new(ctx + i) code::Context{ *env, env->modules[i], context, 0, builder, machine };
-    if((err = CompileModule(env, ctx[i])) < 0)
-      return err;
+    // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
+    llvm::InitializeAllTargetInfos();
+    llvm::InitializeAllTargets();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllAsmParsers();
+    llvm::InitializeAllAsmPrinters();
 
-    // If module has a start function, create a main entry point function
-    if(ctx[i].start != nullptr)
+    string Error;
+    auto arch = llvm::TargetRegistry::lookupTarget(triple, Error);
+
+    if(!arch)
     {
-      if(start != nullptr)
-        return assert(false), ERR_MULTIPLE_ENTRY_POINTS;
-      start = ctx + i;
-    }
-  }
-
-  uint64_t eflags = env->flags;
-
-  if(!env->n_modules)
-    return ERR_FATAL_INVALID_MODULE;
-
-  // Initialize all modules and call start function (if it exists)
-  if(!start) // We always create an initialization function, even for DLLs, to do proper initialization of modules
-    start = &ctx[0];
-  if(start->start == nullptr)
-    eflags |= ENV_DLL; // We can't compile an EXE without an entry point
-
-  FuncTy* mainTy = FuncTy::get(builder.getVoidTy(), false);
-#ifdef IR_PLATFORM_WIN32
-  if(eflags&ENV_DLL)
-    mainTy = FuncTy::get(builder.getInt32Ty(), {builder.getInt8PtrTy(), start->intptrty, builder.getInt8PtrTy() }, false);
-#endif
-
-  Func* main = Func::Create(mainTy, Func::ExternalLinkage, IR_INIT_FUNCTION);
-#ifdef IR_PLATFORM_WIN32
-  if(eflags&ENV_DLL)
-    main->setCallingConv(llvm::CallingConv::X86_StdCall);
-#endif
-
-  BB* initblock = BB::Create(context, "start_entry", main);
-  builder.SetInsertPoint(initblock);
-  for(size_t i = 0; i < env->n_modules; ++i)
-  {
-    if(ctx + i == start)
-      builder.CreateCall(ctx[i].init, {});
-    else
-    {
-      Func* stub = Func::Create(ctx[i].init->getFunctionType(),
-        ctx[i].init->getLinkage(),
-        ctx[i].init->getName(),
-        start->llvm); // Create function prototype in main module
-      builder.CreateCall(stub, {});
-    }
-  }
-  if(start->start != nullptr)
-    builder.CreateCall(start->start, {});
-
-#ifdef IR_PLATFORM_WIN32
-  if(eflags&ENV_DLL)
-    builder.CreateRet(builder.getInt32(1));
-  else
-#endif
-    builder.CreateRetVoid();
-
-  start->llvm->getFunctionList().push_back(main);
-
-  // Reverify module
-  std::error_code EC;
-  llvm::raw_fd_ostream dest(1, false, true);
-  if(llvm::verifyModule(*start->llvm, &dest))
-    return assert(false), ERR_FATAL_INVALID_MODULE;
-  llvm::raw_fd_ostream dest2(string(start->llvm->getName()) + ".llvm", EC, llvm::sys::fs::F_None);
-  start->llvm->print(dest2, nullptr);
-
-  // Annotate functions
-  AnnotateFunctions(env, ctx);
-
-  // Optimize all modules
-  for(size_t i = 0; i < env->n_modules; ++i)
-  {
-  }
-
-  {
-    // Write all in-memory environments to cache files
-    vector<string> cache;
-    vector<const char*> linkargs = { "innative", "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO", "/nodefaultlib", "/MANIFEST", "/MANIFEST:embed", "/SUBSYSTEM:CONSOLE", "/VERBOSE", "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT", "/MACHINE:X64", "/machine:x64" };
-
-#ifdef IR_PLATFORM_WIN32
-    linkargs.push_back("/ENTRY:" IR_INIT_FUNCTION);
-#else
-    linkargs.push_back("-init " IR_INIT_FUNCTION); // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
-#endif
-
-    if(eflags&ENV_DLL)
-      linkargs.push_back("/DLL");
-    if(eflags&ENV_DEBUG)
-      linkargs.push_back("/DEBUG");
-
-    for(size_t i = 0; i < env->n_modules; ++i)
-    {
-      for(auto& f : ctx[i].functions)
-        if(f.exported != nullptr)
-          cache.push_back(("/EXPORT:" + f.exported->getName()).str().c_str());
-
-      for(auto& t : ctx[i].tables)
-        if(t->getLinkage() == llvm::GlobalValue::ExternalLinkage)
-          cache.push_back(("/EXPORT:" + t->getName() + ",DATA").str().c_str());
-
-      for(auto& m : ctx[i].memories)
-        if(m->getLinkage() == llvm::GlobalValue::ExternalLinkage)
-          cache.push_back(("/EXPORT:" + m->getName() + ",DATA").str().c_str());
-
-      for(auto& g : ctx[i].globals)
-        if(g->getLinkage() == llvm::GlobalValue::ExternalLinkage)
-          cache.push_back(("/EXPORT:" + g->getName() + ",DATA").str().c_str());
+      llvm::errs() << Error;
+      return assert(false), ERR_FATAL_UNKNOWN_TARGET;
     }
 
-    for(Embedding* cur = env->embeddings; cur != nullptr; cur = cur->next)
+    auto CPU = "generic";
+    auto Features = "";
+
+    llvm::TargetOptions opt;
+    auto RM = llvm::Optional<llvm::Reloc::Model>();
+    auto machine = arch->createTargetMachine(triple, CPU, Features, opt, RM);
+
+    for(varuint32 i = 0; i < env->n_modules; ++i)
     {
-      if(cur->size > 0) // If the size is greater than 0, this is an in-memory embedding
+      new(ctx + i) code::Context{ *env, env->modules[i], context, 0, builder, machine };
+      if((err = CompileModule(env, ctx[i])) < 0)
+        return err;
+
+      // If module has a start function, create a main entry point function
+      if(ctx[i].start != nullptr)
       {
-        cache.push_back(std::to_string(reinterpret_cast<size_t>(cur)) + IR_ENV_EXTENSION + ".lib");
-        FILE* f;
-        FOPEN(f, cache.back().c_str(), "wb");
-        if(!f)
-          return assert(false), ERR_FATAL_FILE_ERROR;
-
-        fwrite(cur->data, 1, cur->size, f);
-        fclose(f);
+        if(start != nullptr)
+          return assert(false), ERR_MULTIPLE_ENTRY_POINTS;
+        start = ctx + i;
       }
-      else
-        linkargs.push_back((const char*)cur->data);
     }
-    for(auto& v : cache)
-      linkargs.push_back(v.c_str());
 
-    vector<string> targets = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.BaseDir().Get(), "/LIBPATH:" + workdir.Get() };
+    uint64_t eflags = env->flags;
 
-    // Generate object code
+    if(!env->n_modules)
+      return ERR_FATAL_INVALID_MODULE;
+
+    // Initialize all modules and call start function (if it exists)
+    if(!start) // We always create an initialization function, even for DLLs, to do proper initialization of modules
+      start = &ctx[0];
+    if(start->start == nullptr)
+      eflags |= ENV_DLL; // We can't compile an EXE without an entry point
+
+    FuncTy* mainTy = FuncTy::get(builder.getVoidTy(), false);
+#ifdef IR_PLATFORM_WIN32
+    if(eflags&ENV_DLL)
+      mainTy = FuncTy::get(builder.getInt32Ty(), { builder.getInt8PtrTy(), start->intptrty, builder.getInt8PtrTy() }, false);
+#endif
+
+    Func* main = Func::Create(mainTy, Func::ExternalLinkage, IR_INIT_FUNCTION);
+#ifdef IR_PLATFORM_WIN32
+    if(eflags&ENV_DLL)
+      main->setCallingConv(llvm::CallingConv::X86_StdCall);
+#endif
+
+    BB* initblock = BB::Create(context, "start_entry", main);
+    builder.SetInsertPoint(initblock);
     for(size_t i = 0; i < env->n_modules; ++i)
     {
-      assert(ctx[i].m.name.get() != 0);
-      targets.emplace_back(MergeStrings(ctx[i].m.name.str(), ".o"));
-      OutputObjectFile(ctx[i], targets.back().c_str());
+      if(ctx + i == start)
+        builder.CreateCall(ctx[i].init, {});
+      else
+      {
+        Func* stub = Func::Create(ctx[i].init->getFunctionType(),
+          ctx[i].init->getLinkage(),
+          ctx[i].init->getName(),
+          start->llvm); // Create function prototype in main module
+        builder.CreateCall(stub, {});
+      }
+    }
+    if(start->start != nullptr)
+      builder.CreateCall(start->start, {});
+
+#ifdef IR_PLATFORM_WIN32
+    if(eflags&ENV_DLL)
+      builder.CreateRet(builder.getInt32(1));
+    else
+#endif
+      builder.CreateRetVoid();
+
+    start->llvm->getFunctionList().push_back(main);
+
+    // Reverify module
+    std::error_code EC;
+    llvm::raw_fd_ostream dest(1, false, true);
+    if(llvm::verifyModule(*start->llvm, &dest))
+      return assert(false), ERR_FATAL_INVALID_MODULE;
+    llvm::raw_fd_ostream dest2(string(start->llvm->getName()) + ".llvm", EC, llvm::sys::fs::F_None);
+    start->llvm->print(dest2, nullptr);
+
+    // Annotate functions
+    AnnotateFunctions(env, ctx);
+
+    // Optimize all modules
+    for(size_t i = 0; i < env->n_modules; ++i)
+    {
     }
 
-    for(auto& v : targets)
-      linkargs.push_back(v.c_str());
-
-    // Link object code
-    llvm::raw_fd_ostream dest(1, false, true);
-    if(!lld::coff::link(linkargs, false, dest))
     {
+      // Write all in-memory environments to cache files
+      vector<string> cache;
+      vector<const char*> linkargs = { "innative", "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO", "/nodefaultlib", "/MANIFEST", "/MANIFEST:embed", "/SUBSYSTEM:CONSOLE", "/VERBOSE", "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT", "/MACHINE:X64", "/machine:x64" };
+
+#ifdef IR_PLATFORM_WIN32
+      linkargs.push_back("/ENTRY:" IR_INIT_FUNCTION);
+#else
+      linkargs.push_back("-init " IR_INIT_FUNCTION); // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
+#endif
+
+      if(eflags&ENV_DLL)
+        linkargs.push_back("/DLL");
+      if(eflags&ENV_DEBUG)
+        linkargs.push_back("/DEBUG");
+
+      for(size_t i = 0; i < env->n_modules; ++i)
+      {
+        for(auto& f : ctx[i].functions)
+          if(f.exported != nullptr)
+            cache.push_back(("/EXPORT:" + f.exported->getName()).str().c_str());
+
+        for(auto& t : ctx[i].tables)
+          if(t->getLinkage() == llvm::GlobalValue::ExternalLinkage)
+            cache.push_back(("/EXPORT:" + t->getName() + ",DATA").str().c_str());
+
+        for(auto& m : ctx[i].memories)
+          if(m->getLinkage() == llvm::GlobalValue::ExternalLinkage)
+            cache.push_back(("/EXPORT:" + m->getName() + ",DATA").str().c_str());
+
+        for(auto& g : ctx[i].globals)
+          if(g->getLinkage() == llvm::GlobalValue::ExternalLinkage)
+            cache.push_back(("/EXPORT:" + g->getName() + ",DATA").str().c_str());
+      }
+
+      for(Embedding* cur = env->embeddings; cur != nullptr; cur = cur->next)
+      {
+        if(cur->size > 0) // If the size is greater than 0, this is an in-memory embedding
+        {
+          cache.push_back(std::to_string(reinterpret_cast<size_t>(cur)) + IR_ENV_EXTENSION + ".lib");
+          FILE* f;
+          FOPEN(f, cache.back().c_str(), "wb");
+          if(!f)
+            return assert(false), ERR_FATAL_FILE_ERROR;
+
+          fwrite(cur->data, 1, cur->size, f);
+          fclose(f);
+        }
+        else
+          linkargs.push_back((const char*)cur->data);
+      }
+      for(auto& v : cache)
+        linkargs.push_back(v.c_str());
+
+      vector<string> targets = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.BaseDir().Get(), "/LIBPATH:" + workdir.Get() };
+
+      // Generate object code
+      for(size_t i = 0; i < env->n_modules; ++i)
+      {
+        assert(ctx[i].m.name.get() != 0);
+        targets.emplace_back(MergeStrings(ctx[i].m.name.str(), ".o"));
+        OutputObjectFile(ctx[i], targets.back().c_str());
+      }
+
+      for(auto& v : targets)
+        linkargs.push_back(v.c_str());
+
+      // Link object code
+      llvm::raw_fd_ostream dest(1, false, true);
+      if(!lld::coff::link(linkargs, false, dest))
+      {
+        for(auto& v : cache)
+          std::remove(v.c_str());
+        return assert(false), ERR_FATAL_LINK_ERROR;
+      }
+      // Delete cache files
       for(auto& v : cache)
         std::remove(v.c_str());
-      return assert(false), ERR_FATAL_LINK_ERROR;
     }
-    // Delete cache files
-    for(auto& v : cache)
-      std::remove(v.c_str());
-  }
 
-  return ERR_SUCCESS;
+    return ERR_SUCCESS;
+  }
 }

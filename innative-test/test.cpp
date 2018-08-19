@@ -22,19 +22,19 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  testfiles = { "../spec/test/core/align.wast" };
+  testfiles = { "../spec/test/core/br_table.wast" };
   std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
 
   for(auto file : testfiles)
   {
     ValidationError* errors = 0;
     int r = innative_compile_script(file.generic_u8string().data(), ENV_DEBUG | ENV_STRICT, &errors);
-    if(r)
-      std::cout << "Error running script " << file << ": " << r << std::endl;
     if(!r && !errors)
       std::cout << file << ": SUCCESS" << std::endl;
     else
     {
+      if(r)
+        std::cout << "Error running script " << file << ": " << r << std::endl;
       std::cout << file << ": FAILED" << std::endl;
       while(errors != 0)
       {
@@ -44,8 +44,8 @@ int main(int argc, char *argv[])
       std::cout << std::endl;
     }
   }
-  
-  std::cout << "Finished running tests, press enter to exit." << std::endl;
+
+  std::cout << std::endl << "Finished running tests, press enter to exit." << std::endl;
   getchar();
   return 0;
 }

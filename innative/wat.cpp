@@ -6,58 +6,18 @@
 #include "parse.h"
 #include "validate.h"
 #include <vector>
-#include <regex>
-
-#define LEXER_DIGIT "0-9"
-#define LEXER_HEXDIGIT "a-fA-F0-9"
-#define LEXER_LETTER "A-Za-z"
-#define LEXER_PLUSMINUS "[+-]?"
-#define LEXER_NUM "[" LEXER_DIGIT "](_?[" LEXER_DIGIT "])*"
-#define LEXER_HEXNUM "[" LEXER_HEXDIGIT "](_?[" LEXER_HEXDIGIT "])*"
 
 using std::string;
-using std::regex;
-using std::regex_search;
 using std::numeric_limits;
 
+using namespace innative;
+using namespace utility;
+
+KHASH_INIT(tokens, StringRef, wat::TokenID, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal)
+
 namespace innative {
-  using namespace utility;
-
   namespace wat {
-    WatState::WatState(Module& mod) : m(mod)
-    {
-      typehash = kh_init_indexname();
-      funchash = kh_init_indexname();
-      tablehash = kh_init_indexname();
-      memoryhash = kh_init_indexname();
-      globalhash = kh_init_indexname();
-    }
-    WatState::~WatState()
-    {
-      kh_destroy_indexname(typehash);
-      kh_destroy_indexname(funchash);
-      kh_destroy_indexname(tablehash);
-      kh_destroy_indexname(memoryhash);
-      kh_destroy_indexname(globalhash);
-    }
-    varuint7 WatState::GetJump(Token var)
-    {
-      if(var.id == TOKEN_INTEGER && var.i < numeric_limits<varuint7>::max())
-        return (varuint7)var.i;
-      if(var.id == TOKEN_NAME)
-      {
-        utility::StringRef r = { var.pos, var.len };
-        for(varuint7 i = 0; i < stack.Size(); ++i)
-          if(stack[i] == r)
-            return i;
-      }
-
-      return (varuint7)~0;
-    }
-
-    KHASH_INIT(tokens, StringRef, TokenID, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal)
-
-      static kh_inline khint_t kh_hash_token(const Token& t)
+    static kh_inline khint_t kh_hash_token(const Token& t)
     {
       const char* s = t.pos;
       const char* end = t.pos + t.len;
@@ -76,9 +36,9 @@ namespace innative {
       return !memcmp(a.pos, b.pos, a.len);
     }
 
-    __KHASH_IMPL(indexname, kh_inline, Token, varuint32, 1, kh_hash_token, kh_equal_token)
+    __KHASH_IMPL(indexname, kh_inline, Token, varuint32, 1, kh_hash_token, kh_equal_token);
 
-      kh_tokens_t* GenTokenHash(std::initializer_list<const char*> list)
+    kh_tokens_t* GenTokenHash(std::initializer_list<const char*> list)
     {
       kh_tokens_t* h = kh_init_tokens();
 
@@ -99,17 +59,208 @@ namespace innative {
       "assert_return_canonical_nan", "assert_return_arithmetic_nan", "assert_trap", "assert_malformed", "assert_invalid",
       "assert_unlinkable", "assert_exhaustion", "script", "input", "output" });
 
+    const char* CheckTokenINF(const char* s, const char* end, std::string* target)
+    {
+      if(s >= end)
+        return 0;
+
+      const char* begin = s;
+      if(s[0] == '-' || s[0] == '+')
+        ++s;
+      int i;
+      for(i = 0; i < 3 && s < end; ++i)
+      {
+        if(s[i] != "inf"[i] && s[i] != "INF"[i])
+          return 0;
+      }
+      if(i != 3)
+        return 0;
+      s += 3;
+      if(target)
+        target->assign(begin, s - begin);
+      return s;
+    }
+
+    const char* CheckTokenNAN(const char* s, const char* end, std::string* target)
+    {
+      if(s >= end)
+        return 0;
+
+      const char* begin = s;
+      if(s[0] == '-' || s[0] == '+')
+        ++s;
+      int i;
+      for(i = 0; i < 3 && s < end; ++i)
+      {
+        if(s[i] != "nan"[i] && s[i] != "NAN"[i])
+          return 0;
+      }
+      if(i != 3)
+        return 0;
+      s += 3;
+      if(target)
+        target->assign(begin, s - begin);
+      if(s >= end)
+        return s;
+
+      for(i = 0; i < 3 && s < end; ++i)
+      {
+        if(s[i] != ":0x"[i])
+          return s;
+      }
+      s += i;
+
+      while(s < end && isxdigit(*s)) ++s;
+
+      if(target)
+      {
+        target->assign(begin, s - begin);
+        target->append(1, ')');
+        target->replace((target->at(0) != 'n') ? 4 : 3, 1, 1, '(');
+      }
+
+      return s;
+    }
+
     static string numbuf;
+
+    template<typename T, typename... Args>
+    int ResolveTokenNumber(const Token& token, T(*fn)(const char*, char**, Args...), T& out, Args... args)
+    {
+      numbuf.clear();
+      for(size_t i = 0; i < token.len; ++i)
+      {
+        if(token.pos[i] == '_')
+        {
+          if(!i || !isxdigit(token.pos[i - 1])) // If it's a _, it's valid only if the previous character is a valid hexdigit.
+            return ERR_WAT_INVALID_TOKEN;
+        }
+        else // otherwise, only add all non-underscore characters
+          numbuf += token.pos[i];
+      }
+
+      errno = 0;
+      char* end;
+      out = (*fn)(numbuf.c_str(), &end, args...);
+      if(errno == ERANGE)
+        return ERR_WAT_OUT_OF_RANGE;
+      return (errno != 0 || (end - numbuf.c_str()) != token.len) ? ERR_WAT_INVALID_TOKEN : ERR_SUCCESS;
+    }
+
+    int ResolveTokenf32(const Token& token, float32& out)
+    {
+      if(CheckTokenNAN(token.pos, token.pos + token.len, &numbuf) != 0 || CheckTokenINF(token.pos, token.pos + token.len, &numbuf) != 0)
+      {
+        char* last;
+        out = strtof(numbuf.c_str(), &last);
+        return (last - numbuf.c_str()) == numbuf.size() ? ERR_SUCCESS : ERR_WAT_INVALID_TOKEN;
+      }
+      return ResolveTokenNumber<float32>(token, &strtof, out);
+    }
+
+    int ResolveTokenf64(const Token& token, float64& out) 
+    {
+      if(CheckTokenNAN(token.pos, token.pos + token.len, &numbuf) != 0 || CheckTokenINF(token.pos, token.pos + token.len, &numbuf) != 0)
+      {
+        char* last;
+        out = strtod(numbuf.c_str(), &last);
+        return (last - numbuf.c_str()) == numbuf.size() ? ERR_SUCCESS : ERR_WAT_INVALID_TOKEN;
+      }
+      return ResolveTokenNumber<float64>(token, &strtod, out);
+    }
+
+    int ResolveTokeni64(const Token& token, varsint64& out)
+    {
+      unsigned long long buf;
+      if(token.len > 0 && token.pos[0] == '-')
+        return ResolveTokenNumber<long long>(token, strtoll, out, 0);
+      int r = ResolveTokenNumber<unsigned long long>(token, strtoull, buf, 0);
+      out = buf;
+      return r;
+    }
+
+    int ResolveTokenu64(const Token& token, varuint64& out)
+    {
+      if(token.len > 0 && token.pos[0] == '-')
+        return ERR_WAT_OUT_OF_RANGE;
+      return ResolveTokeni64(token, reinterpret_cast<varsint64&>(out));
+    }
+
+    int ResolveTokeni32(const Token& token, varsint32& out)
+    {
+      varsint64 buf;
+      int r = ResolveTokeni64(token, buf);
+      if(r)
+        return r;
+      if((buf < std::numeric_limits<varsint32>::min()) || (buf > (varsint64)std::numeric_limits<varuint32>::max()))
+        return ERR_WAT_OUT_OF_RANGE;
+
+      out = (varsint32)buf;
+      return ERR_SUCCESS;
+    }
+
+    int ResolveTokenu32(const Token& token, varuint32& out)
+    {
+      varsint64 buf;
+      int r = ResolveTokeni64(token, buf);
+      if(r)
+        return r;
+      if((buf < 0) || (buf > (varsint64)std::numeric_limits<varuint32>::max()))
+        return ERR_WAT_OUT_OF_RANGE;
+
+      out = (varsint32)buf;
+      return ERR_SUCCESS;
+    }
+
+    template<typename T, int (*FN)(const Token&, T&)>
+    T ResolveInlineToken(const Token& token)
+    {
+      T t;
+      int r = (*FN)(token, t);
+      return !r ? t : (T)~0;
+    }
+
+    WatState::WatState(Environment& e, Module& mod) : m(mod), env(e)
+    {
+      typehash = kh_init_indexname();
+      funchash = kh_init_indexname();
+      tablehash = kh_init_indexname();
+      memoryhash = kh_init_indexname();
+      globalhash = kh_init_indexname();
+    }
+    WatState::~WatState()
+    {
+      kh_destroy_indexname(typehash);
+      kh_destroy_indexname(funchash);
+      kh_destroy_indexname(tablehash);
+      kh_destroy_indexname(memoryhash);
+      kh_destroy_indexname(globalhash);
+    }
+
+    varuint32 WatState::GetJump(Token var)
+    {
+      if(var.id == TOKEN_NUMBER)
+        return ResolveInlineToken<varuint32, &ResolveTokenu32>(var);
+      if(var.id == TOKEN_NAME)
+      {
+        utility::StringRef r = { var.pos, var.len };
+        for(varuint32 i = 0; i < stack.Size(); ++i)
+          if(stack[i] == r)
+            return i;
+      }
+
+      return (varuint32)~0;
+    }
 
     void TokenizeWAT(Queue<Token>& tokens, const char* s, const char* end)
     {
-      static const regex::flag_type REGEX_CONFIG = std::regex_constants::ECMAScript | std::regex_constants::optimize;
-      static const std::regex_constants::match_flag_type REGEX_MATCH = std::regex_constants::match_not_null | std::regex_constants::match_continuous;
-      static regex regex_INT(LEXER_PLUSMINUS "(0x" LEXER_HEXNUM "|" LEXER_NUM ")", REGEX_CONFIG);
-      static regex regex_NAME("[$][-" LEXER_LETTER LEXER_DIGIT "_.+*/\\~=<>!?@#$%&|:'`^]+", REGEX_CONFIG);
-      static regex regex_FLOAT(LEXER_PLUSMINUS LEXER_NUM "[.](" LEXER_NUM ")?([eE]" LEXER_PLUSMINUS LEXER_NUM ")?", REGEX_CONFIG);
-      static regex regex_HEXFLOAT(LEXER_PLUSMINUS "0x" LEXER_HEXNUM "[.](" LEXER_HEXNUM ")?([pP]" LEXER_PLUSMINUS LEXER_HEXNUM ")?", REGEX_CONFIG);
-      static regex regex_NANFLOAT(LEXER_PLUSMINUS "[nN][aA][nN](:0x" LEXER_HEXNUM ")?", REGEX_CONFIG);
+      //static const regex::flag_type REGEX_CONFIG = std::regex_constants::ECMAScript | std::regex_constants::optimize | std::regex_constants::nosubs;
+      //static const std::regex_constants::match_flag_type REGEX_MATCH = std::regex_constants::match_not_null | std::regex_constants::match_continuous;
+      //static regex regex_INT(LEXER_PLUSMINUS "(0x" LEXER_HEXNUM "|" LEXER_NUM ")", REGEX_CONFIG);
+      //static regex regex_NAME("[$][-" LEXER_LETTER LEXER_DIGIT "_.+*/\\~=<>!?@#$%&|:'`^]+", REGEX_CONFIG);
+      //static regex regex_FLOAT(LEXER_PLUSMINUS LEXER_NUM "([.](" LEXER_NUM ")?([eE]" LEXER_PLUSMINUS LEXER_NUM ")?|[eE]" LEXER_PLUSMINUS LEXER_NUM ")", REGEX_CONFIG);
+      //static regex regex_HEXFLOAT(LEXER_PLUSMINUS "0x" LEXER_HEXNUM "([.](" LEXER_HEXNUM ")?([pP]" LEXER_PLUSMINUS LEXER_HEXNUM ")?|[pP]" LEXER_PLUSMINUS LEXER_HEXNUM ")", REGEX_CONFIG);
+      //static regex regex_NANFLOAT(LEXER_PLUSMINUS "[nN][aA][nN](:0x" LEXER_HEXNUM ")?", std::regex_constants::ECMAScript | std::regex_constants::optimize);
 
       while(s < end)
       {
@@ -194,16 +345,54 @@ namespace innative {
         }
         case '$': // A name
         {
-          std::match_results<const char*, internal::GreedyAlloc<std::sub_match<const char*>>> results;
-          if(regex_search<const char*>(s, end, results, regex_NAME, REGEX_MATCH))
+          Token t = { TOKEN_NAME, s + 1, 0 };
+
+          // We avoid using a regex here because extremely long names are still technically valid but can overwhelm the standard C++ regex evaluator
+          while(s < end)
           {
-            assert(results[0].first == s);
-            Token t = { TOKEN_NAME, results[0].first + 1 };
-            t.len = results[0].length() - 1;
-            tokens.Push(t);
-            s = const_cast<char*>(results[0].second);
+            ++s;
+            switch(*s)
+            {
+            case '!':
+            case '#':
+            case '$':
+            case '%':
+            case '&':
+            case '\'':
+            case '*':
+            case '+':
+            case '-':
+            case '.':
+            case '/':
+            case ':':
+            case '<':
+            case '=':
+            case '>':
+            case '?':
+            case '@':
+            case '\\':
+            case '^':
+            case '_':
+            case '`':
+            case '|':
+            case '~':
+              t.len++;
+              continue;
+            default:
+              if(isalnum(s[0]))
+              {
+                t.len++;
+                continue;
+              }
+            }
             break;
-          } // If the search fails, fall through and just start trying other regexes. It will eventually be classified as an invalid token.
+          }
+
+          if(!t.len) // Empty names are invalid
+            t.id = TOKEN_NONE;
+
+          tokens.Push(t);
+          break;
         }
         case '-':
         case '+':
@@ -218,84 +407,63 @@ namespace innative {
         case '8':
         case '9': // Either an integer or a float
         {
-          std::match_results<const char*, internal::GreedyAlloc<std::sub_match<const char*>>> results;
-          if(regex_search<const char*>(s, end, results, regex_HEXFLOAT, REGEX_MATCH) || regex_search<const char*>(s, end, results, regex_FLOAT, REGEX_MATCH))
+          const char* last = s;
+          if(!(last = CheckTokenNAN(s, end, 0)) && !(last = CheckTokenINF(s, end, 0))) // Check if this is an NaN or an INF
           {
-            Token t = { TOKEN_FLOAT, s };
-            errno = 0;
-            t.f = strtod(results[0].str().data(), NULL); // This can handle both normal and hex float format
-            if(errno == ERANGE)
-              t.id = TOKEN_NONE;
-
-            tokens.Push(t);
-            s = const_cast<char*>(results[0].second);
-            break;
+            last = s; // If it's not an NAN, estimate what the number is
+            if(last[0] == '-' || last[0] == '+')
+              ++last;
+            if(last + 2 < end && last[0] == '0' && last[1] == 'x')
+              last += 2;
+            if(last >= end || !isxdigit(last[0]))
+            {
+              tokens.Push(Token{ TOKEN_NONE, s, last - s });
+              break;
+            }
+            while(last < end && (isalnum(last[0]) || last[0] == '.' || last[0] == '_'))
+              ++last;
           }
-          if(regex_search<const char*>(s, end, results, regex_INT, REGEX_MATCH))
-          {
-            errno = 0;
-            tokens.Push(Token{ TOKEN_INTEGER, s, (int64_t)strtoll(results[0].str().data(), NULL, 10) });
-            if(errno == ERANGE)
-              tokens.Back().id = TOKEN_NONE;
-
-            s = const_cast<char*>(results[0].second);
-            break;
-          } // Fall through to attempt something else
+          tokens.Push(Token{ TOKEN_NUMBER, s, last - s });
+          s = last;
+          break;
         }
         default:
         {
-          // Check if this is an NaN first
-          std::match_results<const char*, internal::GreedyAlloc<std::sub_match<const char*>>> results;
-          if(regex_search<const char*>(s, end, results, regex_NANFLOAT, REGEX_MATCH))
-          {
-            Token t = { TOKEN_FLOAT, s };
-            string nan("NAN("); // Construct a valid NAN(0xFFFF) string to be interpreted by strtod
-
-            switch(results[0].first[0]) // Prepend sign if it exists
-            {
-            case '+':
-            case '-':
-              nan.insert(0, 1, results[0].first[0]);
-              break;
-            }
-
-            if(results.length() > 0) // If digits are specified, add them, otherwise generate a quiet NAN
-              nan += results[1].str().substr(1);
-            nan += ')';
-
-            errno = 0;
-            t.f = strtod(nan.data(), NULL);
-            if(errno == ERANGE)
-              t.id = TOKEN_NONE;
-            tokens.Push(t);
-            s = const_cast<char*>(results[0].second);
-            break;
-          }
-
           const char* begin = s;
-
-          while(s < end && s[0] != ' ' && s[0] != '\n' && s[0] != '\r' && s[0] != '\t' && s[0] != '\f' && s[0] != '=' && s[0] != ')' && s[0] != '(' && s[0] != ';')
-            ++s;
-
-          StringRef ref = { begin, static_cast<size_t>(s - begin) };
-          khiter_t iter = kh_get_tokens(tokenhash, ref);
-          if(kh_exist2(tokenhash, iter))
-            tokens.Push(Token{ kh_val(tokenhash, iter), begin });
+          if((begin = CheckTokenNAN(s, end, 0)) != 0 || (begin = CheckTokenINF(s, end, 0)) != 0) // Check if this is an NaN
+          {
+            tokens.Push(Token{ TOKEN_NUMBER, s, begin - s });
+            s = begin;
+          }
           else
           {
-            uint8_t op = GetInstruction(ref);
-            if(op != 0xFF)
-              tokens.Push(Token{ TOKEN_OPERATOR, begin, (int64_t)op });
+            begin = s;
+
+            while(s < end && s[0] != ' ' && s[0] != '\n' && s[0] != '\r' && s[0] != '\t' && s[0] != '\f' && s[0] != '=' && s[0] != ')' && s[0] != '(' && s[0] != ';')
+              ++s;
+
+            StringRef ref = { begin, static_cast<size_t>(s - begin) };
+            khiter_t iter = kh_get_tokens(tokenhash, ref);
+            if(kh_exist2(tokenhash, iter))
+              tokens.Push(Token{ kh_val(tokenhash, iter), begin });
             else
             {
-              assert(false);
-              tokens.Push(Token{ TOKEN_NONE, begin, (int64_t)ref.len });
+              uint8_t op = GetInstruction(ref);
+              if(op != 0xFF)
+                tokens.Push(Token{ TOKEN_OPERATOR, begin, (int64_t)op });
+              else
+              {
+                assert(false);
+                tokens.Push(Token{ TOKEN_NONE, begin, (int64_t)ref.len });
+              }
             }
+            if(*s == '=')
+              ++s;
           }
-          if(*s == '=')
-            ++s;
         }
         }
+        if(tokens.Size() > 0)
+          assert(tokens.Peek().id < TOKEN_TOTALCOUNT);
       }
     }
 
@@ -459,55 +627,61 @@ namespace innative {
       return AppendArray<varsint7>(ty, a, n);
     }
 
-    int WatTypeInner(Queue<Token>& tokens, FunctionSig& sig, const char*** names)
+    int WatTypeInner(Queue<Token>& tokens, FunctionSig& sig, const char*** names, bool anonymous)
     {
       sig.form = TE_func;
       int r;
-      while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && (tokens[1].id == TOKEN_PARAM || tokens[1].id == TOKEN_RESULT))
+      while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_PARAM)
       {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+        EXPECTED(tokens, TOKEN_PARAM, ERR_WAT_EXPECTED_TOKEN);
 
-        switch(tokens.Pop().id)
+        if(tokens.Peek().id == TOKEN_NAME)
         {
-        case TOKEN_PARAM:
-          if(tokens.Peek().id == TOKEN_NAME)
+          if(anonymous)
+            return ERR_WAT_UNEXPECTED_NAME;
+          if(names) // You are legally allowed to put parameter names in typedefs in WAT, but the names are thrown away.
           {
-            if(names) // You are legally allowed to put parameter names in typedefs in WAT, but the names are thrown away.
-            {
-              if(tokens.Peek().len >= numeric_limits<varuint32>::max())
-                return assert(false), ERR_WAT_OUT_OF_RANGE;
-              varuint32 len = (varuint32)tokens.Peek().len;
-              char* s = tmalloc<char>(len + 1);
-              tmemcpy(s, len + 1, tokens.Peek().pos, len);
-              s[len] = 0;
+            if(tokens.Peek().len >= numeric_limits<varuint32>::max())
+              return assert(false), ERR_WAT_OUT_OF_RANGE;
+            varuint32 len = (varuint32)tokens.Peek().len;
+            char* s = tmalloc<char>(len + 1);
+            tmemcpy(s, len + 1, tokens.Peek().pos, len);
+            s[len] = 0;
 
-              len = sig.n_params;
-              if(r = AppendArray<const char*>(s, *names, len))
-                return r;
-            }
-            tokens.Pop();
+            len = sig.n_params;
+            if(r = AppendArray<const char*>(s, *names, len))
+              return r;
+          }
+          tokens.Pop();
+          if(r = AddWatValType(tokens.Pop().id, sig.params, sig.n_params))
+            return r;
+        }
+        else
+        {
+          while(tokens.Peek().id != TOKEN_CLOSE)
             if(r = AddWatValType(tokens.Pop().id, sig.params, sig.n_params))
               return r;
-          }
-          else
-          {
-            while(tokens.Peek().id != TOKEN_CLOSE)
-              if(r = AddWatValType(tokens.Pop().id, sig.params, sig.n_params))
-                return r;
-          }
-          break;
-        case TOKEN_RESULT:
-          while(tokens.Peek().id != TOKEN_CLOSE)
-            if(r = AddWatValType(tokens.Pop().id, sig.returns, sig.n_returns))
-              return r;
-          break;
-        default:
-          return assert(false), ERR_WAT_EXPECTED_TOKEN;
         }
 
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       }
 
+      while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_RESULT)
+      {
+        EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+        EXPECTED(tokens, TOKEN_RESULT, ERR_WAT_EXPECTED_TOKEN);
+
+        while(tokens.Peek().id != TOKEN_CLOSE)
+          if(r = AddWatValType(tokens.Pop().id, sig.returns, sig.n_returns))
+            return r;
+
+        EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      }
+
+      // We detect this special case because otherwise it can turn into a "type mismatch" error, which is very confusing
+      if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_PARAM)
+        return ERR_WAT_EXPECTED_OPERATOR;
       return ERR_SUCCESS;
     }
 
@@ -517,7 +691,7 @@ namespace innative {
       EXPECTED(tokens, TOKEN_FUNC, ERR_WAT_EXPECTED_FUNC);
 
       FunctionSig sig = { 0 };
-      int r = WatTypeInner(tokens, sig, 0);
+      int r = WatTypeInner(tokens, sig, 0, false);
       *index = state.m.type.n_functions;
       state.m.knownsections |= (1 << WASM_SECTION_TYPE);
       if(r = AppendArray<FunctionSig>(sig, state.m.type.functions, state.m.type.n_functions))
@@ -572,8 +746,8 @@ namespace innative {
 
     varuint32 WatGetFromHash(kh_indexname_t* hash, const Token& t)
     {
-      if(t.id == TOKEN_INTEGER && t.i < numeric_limits<varuint32>::max())
-        return (varuint32)t.i;
+      if(t.id == TOKEN_NUMBER)
+        return ResolveInlineToken<varuint32, &ResolveTokenu32>(t);
       else if(t.id == TOKEN_NAME)
       {
         khiter_t iter = kh_get_indexname(hash, t);
@@ -593,13 +767,13 @@ namespace innative {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
         EXPECTED(tokens, TOKEN_TYPE, ERR_WAT_EXPECTED_TYPE);
 
-        if(tokens.Peek().id != TOKEN_INTEGER && tokens.Peek().id != TOKEN_NAME)
+        if(tokens.Peek().id != TOKEN_NUMBER && tokens.Peek().id != TOKEN_NAME)
           return assert(false), ERR_WAT_EXPECTED_VAR;
 
         sig = WatGetFromHash(state.typehash, tokens.Pop());
 
-        if(sig > state.m.type.n_functions)
-          return assert(false), ERR_WAT_INVALID_TYPE;
+        if(sig >= state.m.type.n_functions)
+          AppendError(state.env.errors, &state.m, ERR_WAT_UNKNOWN_TYPE, "Invalid type signature %u", sig);
 
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       }
@@ -608,18 +782,20 @@ namespace innative {
       {
         // Create a type to match this function signature
         FunctionSig func = { 0 };
-        int r = WatTypeInner(tokens, func, names);
+        int r = WatTypeInner(tokens, func, names, !names);
+        if(r)
+          return r;
 
         if(sig != (varuint32)~0) // If we already have a type, compare the two types and make sure they are identical
         {
-          if(!validate::MatchFunctionSig(state.m.type.functions[sig], func))
-            return assert(false), ERR_WAT_TYPE_MISMATCH;
+          if(sig < state.m.type.n_functions && !MatchFunctionSig(state.m.type.functions[sig], func))
+            return ERR_WAT_TYPE_MISMATCH;
         }
         else
         {
           sig = state.m.type.n_functions;
           state.m.knownsections |= (1 << WASM_SECTION_TYPE);
-          return !r ? AppendArray<FunctionSig>(func, state.m.type.functions, state.m.type.n_functions) : r;
+          return AppendArray<FunctionSig>(func, state.m.type.functions, state.m.type.n_functions);
         }
       }
 
@@ -661,8 +837,8 @@ namespace innative {
 
     varuint32 WatGetLocal(FunctionBody& f, FunctionSig& sig, const Token& t)
     {
-      if(t.id == TOKEN_INTEGER && t.i < numeric_limits<varuint32>::max())
-        return (varuint32)t.i;
+      if(t.id == TOKEN_NUMBER)
+        return ResolveInlineToken<varuint32, &ResolveTokenu32>(t);
       else if(t.id == TOKEN_NAME)
       {
         string n(t.pos, t.len);
@@ -681,33 +857,20 @@ namespace innative {
 
     int WatConstantOperator(WatState& state, Queue<Token>& tokens, Instruction& op)
     {
+      int r = ERR_SUCCESS;
       switch(op.opcode)
       {
       case OP_i32_const:
-        if(tokens.Peek().id != TOKEN_INTEGER)
-          return assert(false), ERR_WAT_EXPECTED_INTEGER;
-        op.immediates[0]._varsint32 = (varsint32)tokens.Pop().i;
+        r = ResolveTokeni32(tokens.Pop(), op.immediates[0]._varsint32);
         break;
       case OP_i64_const:
-        if(tokens.Peek().id != TOKEN_INTEGER)
-          return assert(false), ERR_WAT_EXPECTED_INTEGER;
-        op.immediates[0]._varsint64 = tokens.Pop().i;
+        r = ResolveTokeni64(tokens.Pop(), op.immediates[0]._varsint64);
         break;
       case OP_f32_const:
-        if(tokens.Peek().id == TOKEN_INTEGER)
-          op.immediates[0]._float32 = (float32)tokens.Pop().i;
-        else if(tokens.Peek().id == TOKEN_FLOAT)
-          op.immediates[0]._float32 = (float32)tokens.Pop().f;
-        else
-          return assert(false), ERR_WAT_EXPECTED_FLOAT;
+        r = ResolveTokenf32(tokens.Pop(), op.immediates[0]._float32);
         break;
       case OP_f64_const:
-        if(tokens.Peek().id == TOKEN_INTEGER)
-          op.immediates[0]._float64 = (float64)tokens.Pop().i;
-        else if(tokens.Peek().id == TOKEN_FLOAT)
-          op.immediates[0]._float64 = tokens.Pop().f;
-        else
-          return assert(false), ERR_WAT_EXPECTED_FLOAT;
+        r = ResolveTokenf64(tokens.Pop(), op.immediates[0]._float64);
         break;
       case OP_get_global: // For constant initializers, this has to be an import, and thus must always already exist by the time we reach it.
         op.immediates[0]._varuint32 = WatGetFromHash(state.globalhash, tokens.Pop());
@@ -718,12 +881,12 @@ namespace innative {
         return assert(false), ERR_WAT_INVALID_INITIALIZER;
       }
 
-      return ERR_SUCCESS;
+      return r;
     }
-    int WatOperator(WatState& state, Queue<Token>& tokens, Instruction& op, FunctionBody& f, FunctionSig& sig, varuint32 index)
+    int WatOperator(WatState& state, Queue<Token>& tokens, Instruction& op, FunctionBody& f, FunctionSig& sig, DeferWatAction& defer)
     {
       if(tokens.Peek().id != TOKEN_OPERATOR)
-        return assert(false), ERR_WAT_EXPECTED_OPERATOR;
+        return ERR_WAT_EXPECTED_OPERATOR;
 
       int r;
       if(tokens.Peek().i > 0xFF)
@@ -736,8 +899,8 @@ namespace innative {
         return assert(false), ERR_FATAL_UNKNOWN_INSTRUCTION;
       case OP_br:
       case OP_br_if:
-        op.immediates[0]._varuint7 = state.GetJump(tokens.Pop());
-        if(op.immediates[0]._varuint7 == (varuint7)~0)
+        op.immediates[0]._varuint32 = state.GetJump(tokens.Pop());
+        if(op.immediates[0]._varuint32 == (varuint32)~0)
           return assert(false), ERR_WAT_EXPECTED_VAR;
         break;
       case OP_get_local:
@@ -750,7 +913,7 @@ namespace innative {
       case OP_get_global:
       case OP_set_global:
       case OP_call:
-        state.defer.Push(DeferWatAction{ op.opcode, tokens.Pop(), index, f.n_body });
+        defer = DeferWatAction{ op.opcode, tokens.Pop(), 0, 0 };
         break;
       case OP_i32_const:
       case OP_i64_const:
@@ -762,13 +925,13 @@ namespace innative {
       case OP_br_table:
         do
         {
-          varuint7 jump = state.GetJump(tokens.Pop());
-          if(jump == (varuint7)~0)
+          varuint32 jump = state.GetJump(tokens.Pop());
+          if(jump == (varuint32)~0)
             return assert(false), ERR_WAT_EXPECTED_VAR;
 
           if(r = AppendArray<varuint32>(jump, op.immediates[0].table, op.immediates[0].n_table))
             return r;
-        } while(tokens.Peek().id == TOKEN_NAME || tokens.Peek().id == TOKEN_INTEGER);
+        } while(tokens.Peek().id == TOKEN_NAME || tokens.Peek().id == TOKEN_NUMBER);
 
         op.immediates[1]._varuint32 = op.immediates[0].table[--op.immediates[0].n_table]; // Remove last jump from table and make it the default
         break;
@@ -802,19 +965,14 @@ namespace innative {
         if(tokens.Peek().id == TOKEN_OFFSET)
         {
           tokens.Pop();
-          if(tokens.Peek().id != TOKEN_INTEGER)
-            return assert(false), ERR_WAT_EXPECTED_INTEGER;
-          op.immediates[1]._varuptr = tokens.Pop().i;
+          if(r = ResolveTokenu64(tokens.Pop(), op.immediates[1]._varuptr))
+            return assert(false), r;
         }
         if(tokens.Peek().id == TOKEN_ALIGN)
         {
           tokens.Pop();
-          if(tokens.Peek().id != TOKEN_INTEGER)
-            return assert(false), ERR_WAT_EXPECTED_INTEGER;
-          if(tokens.Peek().i >= numeric_limits<memflags>::max())
-            return assert(false), ERR_WAT_OUT_OF_RANGE;
-
-          op.immediates[0]._memflags = (memflags)tokens.Pop().i;
+          if(r = ResolveTokenu32(tokens.Pop(), op.immediates[0]._memflags))
+            return assert(false), r;
           if(op.immediates[0]._memflags == 0 || !IsPowerOfTwo(op.immediates[0]._memflags)) // Ensure this alignment is exactly a power of two
             return ERR_WAT_INVALID_ALIGNMENT;
           op.immediates[0]._memflags = Power2Log2(op.immediates[0]._memflags); // Calculate proper power of two
@@ -955,7 +1113,8 @@ namespace innative {
       default:
       {
         Instruction op;
-        if(r = WatOperator(state, tokens, op, f, sig, index))
+        DeferWatAction defer = { 0 };
+        if(r = WatOperator(state, tokens, op, f, sig, defer))
           return r;
 
         // Expressions are folded instructions, so we must unfold them before inserting the operator
@@ -963,6 +1122,8 @@ namespace innative {
           if(r = WatExpression(state, tokens, f, sig, index))
             return r;
 
+        if(defer.id) // Only perform the defer after we evaluate the folded instructions, so f.n_body is correct
+          state.defer.Push(DeferWatAction{ defer.id, defer.t, index, f.n_body });
         if(r = AppendArray<Instruction>(op, f.body, f.n_body)) // Now we append the operator
           return r;
         break;
@@ -1052,8 +1213,12 @@ namespace innative {
       default:
       {
         Instruction op;
-        if(r = WatOperator(state, tokens, op, f, sig, index))
+        DeferWatAction defer = { 0 };
+        if(r = WatOperator(state, tokens, op, f, sig, defer))
           return r;
+
+        if(defer.id)
+          state.defer.Push(DeferWatAction{ defer.id, defer.t, index, f.n_body });
         return AppendArray<Instruction>(op, f.body, f.n_body);
       }
       }
@@ -1067,7 +1232,7 @@ namespace innative {
       if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_EXPORT)
       {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-        EXPECTED(tokens, TOKEN_EXPORT, ERR_WAT_EXPECTED_TOKEN);
+        EXPECTED(tokens, TOKEN_EXPORT, ERR_WAT_EXPECTED_EXPORT);
 
         Export e = { };
         e.kind = kind;
@@ -1082,7 +1247,7 @@ namespace innative {
       else if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_IMPORT)
       {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-        EXPECTED(tokens, TOKEN_IMPORT, ERR_WAT_EXPECTED_TOKEN);
+        EXPECTED(tokens, TOKEN_IMPORT, ERR_WAT_EXPECTED_IMPORT);
 
         Import i;
         if(r = WatString(i.module_name, tokens.Pop()))
@@ -1109,10 +1274,10 @@ namespace innative {
 
     int WatLocalAppend(FunctionBody& body, Queue<Token>& tokens)
     {
-      varuint7 local = WatValType(tokens.Pop().id);
+      varsint7 local = WatValType(tokens.Pop().id);
       if(!local)
         return assert(false), ERR_WAT_EXPECTED_VALTYPE;
-      return AppendArray<varuint7>(local, body.locals, body.n_locals);
+      return AppendArray<varsint7>(local, body.locals, body.n_locals);
     }
 
     int WatFunction(WatState& state, Queue<Token>& tokens, varuint32* index, StringRef name)
@@ -1192,15 +1357,13 @@ namespace innative {
 
     int WatResizableLimits(ResizableLimits& limits, Queue<Token>& tokens)
     {
-      if(tokens.Peek().id != TOKEN_INTEGER || tokens.Peek().i >= numeric_limits<varuint32>::max())
-        return assert(false), ERR_WAT_EXPECTED_INTEGER;
-      limits.minimum = (varuint32)tokens.Pop().i;
-
-      if(tokens.Peek().id == TOKEN_INTEGER)
+      int r = ResolveTokenu32(tokens.Pop(), limits.minimum);
+      if(r)
+        return r;
+      if(tokens.Peek().id == TOKEN_NUMBER)
       {
-        if(tokens.Peek().i >= numeric_limits<varuint32>::max())
-          return assert(false), ERR_WAT_OUT_OF_RANGE;
-        limits.maximum = (varuint32)tokens.Pop().i;
+        if(r = ResolveTokenu32(tokens.Pop(), limits.maximum))
+          return r;
         limits.flags = 1;
       }
 
@@ -1233,7 +1396,7 @@ namespace innative {
       TableDesc table = { 0 };
       switch(tokens.Peek().id)
       {
-      case TOKEN_INTEGER:
+      case TOKEN_NUMBER:
         if(r = WatTableDesc(table, tokens))
           return r;
         break;
@@ -1241,29 +1404,9 @@ namespace innative {
         EXPECTED(tokens, TOKEN_ANYFUNC, ERR_WAT_EXPECTED_ANYFUNC);
 
         table.element_type = TE_anyfunc;
-
-        EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-        EXPECTED(tokens, TOKEN_ELEM, ERR_WAT_EXPECTED_ELEM);
-
-        {
-          TableInit init = { 0 };
-          init.index = *index;
-          init.offset = Instruction{ OP_i32_const, 0 };
-
-          while(tokens.Peek().id != TOKEN_CLOSE)
-          {
-            varuint32 f = WatGetFromHash(state.funchash, tokens.Pop());
-            if(f == (varuint32)~0)
-              return assert(false), ERR_WAT_INVALID_VAR;
-            if(r = AppendArray(f, init.elems, init.n_elems))
-              return r;
-          }
-
-          table.resizable.minimum = init.n_elems;
-          table.resizable.flags = 0;
-        }
-
-        EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+        table.resizable.flags = 0;
+        state.defer.Push(DeferWatAction{ -TOKEN_ELEM, {TOKEN_NONE}, tokens.GetPosition(), *index });
+        SkipSection(tokens); // Defer element section to after we know we've loaded everything.
       }
 
       state.m.knownsections |= (1 << WASM_SECTION_TABLE);
@@ -1489,7 +1632,7 @@ namespace innative {
 
     int WatElemData(WatState& state, Queue<Token>& tokens, varuint32& index, Instruction& op, kh_indexname_t* hash)
     {
-      if(tokens[0].id == TOKEN_INTEGER || tokens[0].id == TOKEN_NAME)
+      if(tokens[0].id == TOKEN_NUMBER || tokens[0].id == TOKEN_NAME)
         index = WatGetFromHash(hash, tokens.Pop());
 
       if(index == ~0)
@@ -1514,13 +1657,8 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatElem(WatState& state, Queue<Token>& tokens)
+    int WatElem(WatState& state, TableInit& e, Queue<Token>& tokens)
     {
-      TableInit e = { 0 };
-      int r;
-      if(r = WatElemData(state, tokens, e.index, e.offset, state.tablehash))
-        return r;
-
       while(tokens[0].id != TOKEN_CLOSE)
       {
         AppendArray(WatGetFromHash(state.funchash, tokens.Pop()), e.elems, e.n_elems);
@@ -1579,7 +1717,7 @@ namespace innative {
         if(r = WatName(m.name, tokens.Pop()))
           return r;
 
-      WatState state(m);
+      WatState state(env, m);
 
       Token t;
       size_t restore = tokens.GetPosition();
@@ -1590,7 +1728,7 @@ namespace innative {
         switch(t.id) // This initial pass is for types only
         {
         case TOKEN_TYPE:
-          m.knownsections |= (1 << (1 << WASM_SECTION_TYPE));
+          m.knownsections |= (1 << WASM_SECTION_TYPE);
           if(r = WatIndexProcess<WatType>(state, tokens, state.typehash))
             return r;
           break;
@@ -1672,16 +1810,21 @@ namespace innative {
             return r;
           break;
         case TOKEN_ELEM:
-          if(r = WatElem(state, tokens))
+        {
+          TableInit init = { 0 };
+          if(r = WatElemData(state, tokens, init.index, init.offset, state.tablehash))
+            return r;
+          if(r = WatElem(state, init, tokens))
             return r;
           break;
+        }
         case TOKEN_DATA:
           if(r = WatData(state, tokens))
             return r;
           break;
         case TOKEN_START:
-          m.knownsections |= (1 << (1 << WASM_SECTION_START));
-          if(tokens[0].id != TOKEN_INTEGER && tokens[0].id != TOKEN_NAME)
+          m.knownsections |= (1 << WASM_SECTION_START);
+          if(tokens[0].id != TOKEN_NUMBER && tokens[0].id != TOKEN_NAME)
             return assert(false), ERR_WAT_EXPECTED_VAR;
           m.start = WatGetFromHash(state.funchash, tokens.Pop());
           if(m.start == (varuint32)~0)
@@ -1694,28 +1837,51 @@ namespace innative {
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       }
 
-      // Process all deferred actions
-      while(state.defer.Size() > 0)
-      {
+      auto procRef = [](WatState& state, Module& m, varuint32 e) {
         if(state.defer[0].func < m.importsection.functions || state.defer[0].func >= m.code.n_funcbody + m.importsection.functions)
-          return assert(false), ERR_INVALID_FUNCTION_INDEX;
-        varuint32 e;
-        switch(state.defer[0].id)
-        {
-        case OP_get_global:
-        case OP_set_global:
-          e = WatGetFromHash(state.globalhash, state.defer[0].t);
-          break;
-        case OP_call:
-          e = WatGetFromHash(state.funchash, state.defer[0].t);
-          break;
-        default:
-          return assert(false), ERR_WAT_INVALID_TOKEN;
-        }
+          return ERR_INVALID_FUNCTION_INDEX;
         auto& f = m.code.funcbody[state.defer[0].func - m.importsection.functions];
         if(state.defer[0].index >= f.n_body)
           return ERR_INVALID_FUNCTION_BODY;
         f.body[state.defer[0].index].immediates[0]._varuint32 = e;
+        return ERR_SUCCESS;
+      };
+
+      // Process all deferred actions
+      while(state.defer.Size() > 0)
+      {
+        switch(state.defer[0].id)
+        {
+        case -TOKEN_ELEM:
+        {
+          size_t restore = tokens.GetPosition();
+          tokens.SetPosition(state.defer[0].func);
+
+          TableInit init = { 0 };
+          init.index = state.defer[0].index;
+          init.offset = Instruction{ OP_i32_const, 0 };
+
+          EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+          EXPECTED(tokens, TOKEN_ELEM, ERR_WAT_EXPECTED_ELEM);
+          r = WatElem(state, init, tokens);
+          EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+
+          state.m.table.tables[state.defer[0].index].resizable.minimum = init.n_elems;
+          tokens.SetPosition(restore);
+        }
+        break;
+        case OP_get_global:
+        case OP_set_global:
+          r = procRef(state, m, WatGetFromHash(state.globalhash, state.defer[0].t));
+          break;
+        case OP_call:
+          r = procRef(state, m, WatGetFromHash(state.funchash, state.defer[0].t));
+          break;
+        default:
+          return assert(false), ERR_WAT_INVALID_TOKEN;
+        }
+        if(r)
+          return assert(false), r;
         state.defer.Pop();
       }
 
@@ -1728,6 +1894,29 @@ namespace innative {
       return 0;
     }
 
+    // Checks for parse errors in the tokenization process
+    int CheckWatTokens(ValidationError*& errors, Queue<Token>& tokens, const char* start)
+    {
+      int r = ERR_SUCCESS;
+      for(size_t i = 0; i < tokens.Size(); ++i)
+      {
+        switch(tokens[i].id)
+        {
+        case TOKEN_NONE:
+          AppendError(errors, nullptr, ERR_WAT_INVALID_TOKEN, "[%zu] Invalid token: %s", WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
+          break;
+        case TOKEN_RANGE_ERROR:
+          AppendError(errors, nullptr, ERR_WAT_OUT_OF_RANGE, "[%zu] Constant out of range: %s", WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
+          break;
+        default:
+          continue;
+        }
+        r = ERR_WAT_INVALID_TOKEN;
+      }
+
+      return r;
+    }
+
     int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, StringRef name)
     {
       Queue<Token> tokens;
@@ -1736,14 +1925,17 @@ namespace innative {
       if(!tokens.Size())
         return ERR_FATAL_INVALID_MODULE;
 
+      int r = CheckWatTokens(env.errors, tokens, (char*)data);
+      if(r != ERR_SUCCESS)
+        return r;
+
       // If we don't detect (module, just assume it's an inline module
       if(tokens[0].id != TOKEN_OPEN || tokens[1].id != TOKEN_MODULE)
         return WatModule(env, m, tokens, name);
 
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       EXPECTED(tokens, TOKEN_MODULE, ERR_WAT_EXPECTED_MODULE);
-      int r = WatModule(env, m, tokens, name);
-      if(!r)
+      if(!(r = WatModule(env, m, tokens, name)))
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       return r;
     }

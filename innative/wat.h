@@ -63,12 +63,14 @@ namespace innative {
       TOKEN_SCRIPT,
       TOKEN_INPUT,
       TOKEN_OUTPUT,
-      TOKEN_INTEGER, // General tokens
-      TOKEN_FLOAT,
+      TOKEN_NUMBER,
+      TOKEN_NAN,
       TOKEN_STRING,
       TOKEN_NAME, // Same as string but more restricted
       TOKEN_OPERATOR, // Represents all operators other than the control flow ones above
       TOKEN_COMMENT,
+      TOKEN_RANGE_ERROR,
+      TOKEN_TOTALCOUNT,
     };
 
     struct Token
@@ -95,10 +97,11 @@ namespace innative {
 
     struct WatState
     {
-      WatState(Module& mod);
+      WatState(Environment& e, Module& mod);
       ~WatState();
-      varuint7 GetJump(Token var);
+      varuint32 GetJump(Token var);
 
+      Environment& env;
       Module& m;
       Queue<DeferWatAction> defer;
       Stack<utility::StringRef> stack;
@@ -119,11 +122,12 @@ namespace innative {
     int WatName(ByteArray& name, const Token& t);
     int WatModule(Environment& env, Module& m, Queue<Token>& tokens, utility::StringRef name);
     size_t WatLineNumber(const char* start, const char* pos);
+    int CheckWatTokens(ValidationError*& errors, Queue<Token>& tokens, const char* start);
 
     IR_FORCEINLINE int WatString(ByteArray& str, const Token& t)
     {
       if(t.id != TOKEN_STRING)
-        return assert(false), ERR_WAT_EXPECTED_STRING;
+        return ERR_WAT_EXPECTED_STRING;
       return WatString(str, utility::StringRef{ t.pos, t.len });
     }
 

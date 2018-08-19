@@ -149,7 +149,7 @@ enum IR_ERROR innative::Compile(Environment* env, const char* file)
     kh_val(env->modulemap, iter) = i;
   }
 
-  validate::ValidateEnvironment(*env);
+  ValidateEnvironment(*env);
   if(env->errors)
   {
     internal::ReverseErrorList(env->errors); // Reverse error list so it appears in chronological order
@@ -163,18 +163,18 @@ IR_Entrypoint innative::LoadFunction(void* cache, const char* module_name, const
 {
   if(!function)
   {
-    if(sig && !validate::MatchFunctionSig(*sig, FunctionSig{ TE_func }))
+    if(sig && !MatchFunctionSig(*sig, FunctionSig{ TE_func }))
       return nullptr;
     return (IR_Entrypoint)LoadDLLFunction(cache, IR_ENTRYPOINT);
   }
 
-  //if(sig && !validate::MatchFunctionSig(*sig, FunctionSig{ TE_func }))
+  //if(sig && !MatchFunctionSig(*sig, FunctionSig{ TE_func }))
   //  return nullptr;
   return (IR_Entrypoint)LoadDLLFunction(cache, utility::MergeName(module_name, function).c_str());
 }
 void* innative::LoadGlobal(void* cache, const char* module_name, const char* export_name)
 {
-  //if(sig && !validate::MatchFunctionSig(*sig, FunctionSig{ TE_func }))
+  //if(sig && !MatchFunctionSig(*sig, FunctionSig{ TE_func }))
   //  return nullptr;
   return LoadDLLFunction(cache, utility::MergeName(module_name, export_name).c_str());
 }

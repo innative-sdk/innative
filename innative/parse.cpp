@@ -9,10 +9,10 @@
 __KHASH_IMPL(exports, kh_inline, kh_cstr_t, varuint32, 1, kh_str_hash_func, kh_str_hash_equal);
 __KHASH_IMPL(modules, kh_inline, kh_cstr_t, size_t, 1, kh_str_hash_func, kh_str_hash_equal);
 
-namespace innative {
-  using namespace validate;
-  using namespace utility;
+using namespace innative;
+using namespace utility;
 
+namespace innative {
   namespace parse {
     IR_FORCEINLINE IR_ERROR ParseVarUInt32(Stream& s, varuint32& target) { IR_ERROR err; target = static_cast<varuint32>(s.DecodeLEB128(err, 32, false)); return err; }
     IR_FORCEINLINE IR_ERROR ParseVarSInt7(Stream& s, varsint7& target) { IR_ERROR err; target = static_cast<varsint7>(s.DecodeLEB128(err, 7, true)); return err; }
@@ -482,7 +482,7 @@ namespace innative {
             return ERR_FATAL_TOO_MANY_LOCALS; // Ensure we don't overflow the local count
           f.n_locals += locals[i].count;
         }
-        f.locals = tmalloc<varuint7>(f.n_locals);
+        f.locals = tmalloc<varsint7>(f.n_locals);
         f.n_locals = 0;
         for(uint64_t i = 0; i < n_locals; ++i)
           for(uint64_t j = 0; j < locals[i].count; ++j)

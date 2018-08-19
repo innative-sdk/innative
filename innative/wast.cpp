@@ -14,9 +14,9 @@ using namespace innative;
 using namespace wat;
 using namespace utility;
 using std::string;
-using validate::AppendError;
 
 KHASH_INIT(assertion, int, const char*, 1, kh_int_hash_func, kh_int_hash_equal)
+KHASH_INIT(stringmap, const char*, const char*, 1, kh_str_hash_funcins, kh_str_hash_insequal)
 
 kh_assertion_t* GenAssertions(std::initializer_list<int> code, std::initializer_list<const char*> msg)
 {
@@ -47,14 +47,19 @@ static kh_assertion_t* assertionhash = GenAssertions({
   ERR_FATAL_TOO_MANY_LOCALS,
   ERR_IMPORT_EXPORT_MISMATCH,
   ERR_INVALID_BLOCK_SIGNATURE,
-  ERR_IMPORT_EXPORT_MISMATCH,
+  ERR_EMPTY_VALUE_STACK,
+  ERR_INVALID_VALUE_STACK,
+  ERR_INVALID_TYPE,
   ERR_WAT_TYPE_MISMATCH,
+  ERR_WAT_UNKNOWN_TYPE,
   ERR_WAT_LABEL_MISMATCH,
   ERR_INVALID_BRANCH_DEPTH,
   ERR_INVALID_FUNCTION_INDEX,
   ERR_INVALID_TABLE_INDEX,
   ERR_WAT_OUT_OF_RANGE,
   ERR_PARSE_UNEXPECTED_EOF,
+  ERR_WAT_EXPECTED_OPERATOR,
+  ERR_WAT_UNEXPECTED_NAME,
   },
 {
   "alignment",
@@ -71,18 +76,42 @@ static kh_assertion_t* assertionhash = GenAssertions({
   "type mismatch",
   "type mismatch",
   "type mismatch",
+  "type mismatch",
+  "inline function type",
+  "unknown type",
   "mismatching label",
   "unknown label",
   "unknown function",
-  "unknown function 0",
+  "unknown table",
   "constant out of range",
   "unexpected end",
+  "unexpected token",
+  "unexpected token",
   //"invalid section id", 
   //"length out of bounds",
   //"function and code section have inconsistent lengths", "data segment does not fit", "unknown memory 0", "elements segment does not fit",
   //"constant expression required", "duplicate export name", "unknown table", "unknown memory", "unknown operator", "unexpected token",
   //"undefined element", "unknown local", "invalid mutability", "incompatible import type", "unknown import", "integer overflow"
 });
+
+kh_stringmap_t* GenStringMap(std::initializer_list<const char*> map)
+{
+  kh_stringmap_t* h = kh_init_stringmap();
+
+  int r;
+  assert(!(map.size() % 2));
+  for(auto m = map.begin(); m != map.end(); ++m)
+  {
+    auto iter = kh_put_stringmap(h, *m, &r);
+    kh_val(h, iter) = *++m;
+  }
+
+  return h;
+}
+
+static kh_stringmap_t* assertmap = GenStringMap({
+  "unknown function 0", "unknown function"
+  });
 
 size_t GetMapping(kh_modules_t* mapping, const Token& t)
 {
@@ -100,7 +129,7 @@ void CrashHandler(int)
 int CompileScript(Environment& env, const char* out, void*& cache)
 {
   int r;
-  validate::ValidateEnvironment(env);
+  ValidateEnvironment(env);
   if(env.errors)
     return ERR_VALIDATION_ERROR;
   return ERR_SUCCESS;
@@ -152,12 +181,11 @@ bool MatchFuncSig(FunctionSig sig)
 
 void SetTempName(Environment& env, Module& m)
 {
-  char buf[30] = { 'm', 0 };
-  ITOA(env.n_modules, buf + 1, 29, 10);
-  size_t len = strlen(buf);
-  m.name.resize(len, true);
-  tmemcpy((char*)m.name.get(), len, buf, len);
+  auto buf = std::string("m") + std::to_string(env.n_modules);
+  m.name.resize(buf.size(), true);
+  tmemcpy((char*)m.name.get(), m.name.size(), buf.data(), buf.size());
 }
+
 int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mapping, Module& m)
 {
   EXPECTED(tokens, TOKEN_MODULE, ERR_WAT_EXPECTED_MODULE);
@@ -174,7 +202,7 @@ int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
       name.len = tempname.size();
     }
 
-    EXPECTED(tokens, TOKEN_BINARY, ERR_WAT_EXPECTED_TOKEN);
+    EXPECTED(tokens, TOKEN_BINARY, ERR_WAT_EXPECTED_BINARY);
     ByteArray binary;
     while(tokens.Peek().id == TOKEN_STRING)
       if(r = WatString(binary, tokens.Pop()))
@@ -189,7 +217,7 @@ int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
   else if(tokens[0].id == TOKEN_QUOTE || (tokens.Size() > 1 && tokens[1].id == TOKEN_QUOTE))
   {
     Token name = GetWatNameToken(tokens);
-    EXPECTED(tokens, TOKEN_QUOTE, ERR_WAT_EXPECTED_TOKEN);
+    EXPECTED(tokens, TOKEN_QUOTE, ERR_WAT_EXPECTED_QUOTE);
     ByteArray quote;
     while(tokens.Peek().id == TOKEN_STRING)
       if(r = WatString(quote, tokens.Pop()))
@@ -298,7 +326,7 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_modules_t* mappin
     std::vector<Instruction> params;
     while(tokens.Peek().id == TOKEN_OPEN)
     {
-      WatState st(*m);
+      WatState st(env, *m);
       params.emplace_back();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       if(r = WatInitializer(st, tokens, params.back()))
@@ -427,17 +455,19 @@ inline string GetAssertionString(int code)
   {
     khiter_t iter = kh_get_assertion(assertionhash, code);
     if(!kh_exist2(assertionhash, iter))
-    {
-      assertcode = "[unknown error code ";
-      char buf[32] = { 0 };
-      ITOA(code, buf, 32, 16);
-      assertcode += buf;
-      assertcode += "]";
-    }
+      assertcode = "[unknown error code " + std::to_string(code) + "]";
     else
       assertcode = kh_val(assertionhash, iter);
   }
   return assertcode;
+}
+
+inline const char* MapAssertionString(const char* s)
+{
+  khiter_t i = kh_get_stringmap(assertmap, s);
+  if(kh_exist2(assertmap, i))
+    return kh_val(assertmap, i);
+  return s;
 }
 
 // This parses an entire extended WAT testing script into an environment
@@ -448,14 +478,13 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
   TokenizeWAT(tokens, start, (char*)data + sz);
   ValidationError* errors = nullptr;
 
-  for(size_t i = 0; i < tokens.Size(); ++i)
-    if(!tokens[i].id)
-      AppendError(errors, nullptr, ERR_WAT_INVALID_TOKEN, "[%zu] Invalid token: %s", WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
+  int r = CheckWatTokens(env.errors, tokens, start);
+  if(r)
+    return r;
 
   if(env.errors)
     return ERR_WAT_INVALID_TOKEN;
 
-  int r;
   kh_modules_t* mapping = kh_init_modules(); // This is a special mapping for all modules using the module name itself, not just registered ones.
   Module* last = 0; // For anything not providing a module name, this was the most recently defined module.
   void* cache = 0;
@@ -473,7 +502,7 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
 
       if(r = ParseWastModule(env, tokens, mapping, *last))
         return r;
-      validate::ValidateModule(env, *last);
+      ValidateModule(env, *last);
       if(env.errors)
       {
         //validate::ValidateModule(env, *last);
@@ -560,7 +589,7 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       }
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       Instruction value;
-      WatState state(*last);
+      WatState state(env, *last);
 
       switch(t.id)
       {
@@ -633,7 +662,7 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
 
       string assertcode = GetAssertionString(code);
 
-      if(STRICMP(assertcode.c_str(), err.str()))
+      if(STRICMP(assertcode.c_str(), MapAssertionString(err.str())))
         AppendError(errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead", WatLineNumber(start, t.pos), err.str(), assertcode.c_str());
       break;
     }
@@ -655,17 +684,15 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       if(code != ERR_SUCCESS)
         AppendError(errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected module parsing success, but got '%s' instead", WatLineNumber(start, t.pos), assertcode.c_str());
 
-      validate::ValidateModule(env, m);
+      if(!env.errors) // Only do additional validation if we didn't find validation errors during the parsing process that must trump our normal validation
+        ValidateModule(env, m);
       code = ERR_SUCCESS;
       if(env.errors)
         code = env.errors->code;
       assertcode = GetAssertionString(code);
       env.errors = 0;
-      if(STRICMP(assertcode.c_str(), err.str()))
-      {
+      if(STRICMP(assertcode.c_str(), MapAssertionString(err.str())))
         AppendError(errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead", WatLineNumber(start, t.pos), err.str(), assertcode.c_str());
-        validate::ValidateModule(env, m);
-      }
       break;
     }
     case TOKEN_ASSERT_EXHAUSTION:
@@ -690,7 +717,10 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       break;
     }
     default:
-      return ERR_WAT_EXPECTED_TOKEN;
+    {
+      Token t = tokens.Pop();
+      return assert(false), ERR_WAT_EXPECTED_TOKEN;
+    }
     }
 
     EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
