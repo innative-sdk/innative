@@ -35,7 +35,7 @@ namespace innative {
       llvm::BasicBlock* block; // Label
       size_t limit; // Limit of value stack
       varsint7 sig; // Block signature
-      uint8_t type; // instruction that pushed this label
+      uint8_t op; // instruction that pushed this label
       BlockResult* results; // Holds alternative branch results targeting this block
     };
 

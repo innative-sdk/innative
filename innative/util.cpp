@@ -313,17 +313,17 @@ namespace innative {
     varuint32 ModuleFunctionType(const Module& m, varuint32 index)
     {
       if(index < m.importsection.functions)
-        return m.importsection.imports[index].func_desc.sig_index;
+        return m.importsection.imports[index].func_desc.type_index;
       index -= m.importsection.functions;
       if(index < m.function.n_funcdecl)
         return m.function.funcdecl[index];
       return (varuint32)~0;
     }
 
-    FunctionSig* ModuleFunction(const Module& m, varuint32 index)
+    FunctionType* ModuleFunction(const Module& m, varuint32 index)
     {
       if(index < m.importsection.functions)
-        return &m.type.functions[m.importsection.imports[index].func_desc.sig_index];
+        return &m.type.functions[m.importsection.imports[index].func_desc.type_index];
       index -= m.importsection.functions;
       if(index < m.function.n_funcdecl)
         return &m.type.functions[m.function.funcdecl[index]];
@@ -342,16 +342,16 @@ namespace innative {
     MemoryDesc* ModuleMemory(const Module& m, varuint32 index)
     {
       size_t i = index + m.importsection.tables; // Shift index to memory section
-      if(i < m.importsection.memory)
+      if(i < m.importsection.memories)
         return &m.importsection.imports[i].mem_desc;
-      i -= m.importsection.memory;
-      if(i < m.memory.n_memory)
-        return &m.memory.memory[i];
+      i -= m.importsection.memories;
+      if(i < m.memory.n_memories)
+        return &m.memory.memories[i];
       return 0;
     }
     GlobalDesc* ModuleGlobal(const Module& m, varuint32 index)
     {
-      size_t i = index + m.importsection.memory; // Shift index to globals section
+      size_t i = index + m.importsection.memories; // Shift index to globals section
       if(i < m.importsection.globals)
         return &m.importsection.imports[i].global_desc;
       i -= m.importsection.globals;
@@ -359,6 +359,13 @@ namespace innative {
         return &m.global.globals[i].desc;
       return 0;
     }
+    //Export* ModuleExport(const Module& m, varuint32 index, WASM_KIND kind)
+    //{
+    //  for(varuint32 i = 0; i < m.exportsection.n_exports; ++i)
+    //    if(m.exportsection.exports[i].kind == kind && m.exportsection.exports[i].index == index)
+    //      return m.exportsection.exports + i;
+    //  return 0;
+    //}
     std::pair<Module*, Export*> ResolveExport(const Environment& env, const Import& imp)
     {
       khint_t iter = kh_get_modules(env.modulemap, imp.module_name.str());

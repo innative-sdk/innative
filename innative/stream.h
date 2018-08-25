@@ -9,7 +9,7 @@
 #include <memory.h>
 
 namespace innative {
-  namespace parse {
+  namespace utility {
     // We just read the entire payload into memory, so this re-implements trivial stream operations without C++ stream overhead
     struct Stream
     {

@@ -4,7 +4,7 @@
 #include "stream.h"
 
 using namespace innative;
-using namespace parse;
+using namespace utility;
 
 uint64_t Stream::DecodeLEB128(IR_ERROR& err, unsigned int maxbits, bool sign)
 {

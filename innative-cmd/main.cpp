@@ -6,8 +6,8 @@
 
 int main(int argc, char *argv[])
 {
-  //int r = innative_compile_script("../spec/test/core/align.wast", ENV_DEBUG | ENV_STRICT);
-  int r = innative_compile_file("test.wast", "out.exe", ENV_DEBUG|ENV_STRICT|ENV_ENABLE_WAT, false, 0, 0);
+  //int err = innative_compile_script("../spec/test/core/align.wast", ENV_DEBUG | ENV_STRICT);
+  int err = innative_compile_file("test.wast", "out.exe", ENV_DEBUG|ENV_STRICT|ENV_ENABLE_WAT, false, 0, 0);
   getchar();
-  return r;
+  return err;
 }

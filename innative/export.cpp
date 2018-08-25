@@ -55,11 +55,11 @@ void innative::DestroyEnvironment(Environment* env)
 
 void innative::LoadModule(Environment* env, size_t index, void* data, uint64_t size, const char* name, int* err)
 {
-  parse::Stream s = { (uint8_t*)data, size, 0 };
+  Stream s = { (uint8_t*)data, size, 0 };
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
     *err = innative::wat::ParseWatModule(*env, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
   else
-    *err = ParseModule(s, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)));
+    *err = ParseModule(s, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
 }
 
@@ -98,7 +98,7 @@ void innative::AddModule(Environment* env, void* data, uint64_t size, const char
     LoadModule(env, index, data, size, name, err);
 }
 
-void innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name, const FunctionSig* sig)
+void innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name, const FunctionType* ftype)
 {
   if(!env->whitelist)
     env->whitelist = kh_init_modulepair();
@@ -110,7 +110,7 @@ void innative::AddWhitelist(Environment* env, const char* module_name, const cha
 
   int r;
   auto iter = kh_put_modulepair(env->whitelist, whitelist, &r);
-  kh_val(env->whitelist, iter) = !sig ? FunctionSig{ TE_NONE, 0, 0, 0, 0 } : *sig;
+  kh_val(env->whitelist, iter) = !ftype ? FunctionType{ TE_NONE, 0, 0, 0, 0 } : *ftype;
 }
 
 void innative::WaitForLoad(Environment* env)
@@ -159,22 +159,22 @@ enum IR_ERROR innative::Compile(Environment* env, const char* file)
   return CompileEnvironment(env, file);
 }
 
-IR_Entrypoint innative::LoadFunction(void* cache, const char* module_name, const char* function, const FunctionSig* sig)
+IR_Entrypoint innative::LoadFunction(void* cache, const char* module_name, const char* function, const FunctionType* ftype)
 {
   if(!function)
   {
-    if(sig && !MatchFunctionSig(*sig, FunctionSig{ TE_func }))
+    if(ftype && !MatchFunctionType(*ftype, FunctionType{ TE_func }))
       return nullptr;
     return (IR_Entrypoint)LoadDLLFunction(cache, IR_ENTRYPOINT);
   }
 
-  //if(sig && !MatchFunctionSig(*sig, FunctionSig{ TE_func }))
+  //if(sig && !MatchFunctionType(*sig, FunctionType{ TE_func }))
   //  return nullptr;
   return (IR_Entrypoint)LoadDLLFunction(cache, utility::MergeName(module_name, function).c_str());
 }
 void* innative::LoadGlobal(void* cache, const char* module_name, const char* export_name)
 {
-  //if(sig && !MatchFunctionSig(*sig, FunctionSig{ TE_func }))
+  //if(sig && !MatchFunctionType(*sig, FunctionType{ TE_func }))
   //  return nullptr;
   return LoadDLLFunction(cache, utility::MergeName(module_name, export_name).c_str());
 }

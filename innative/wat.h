@@ -93,7 +93,8 @@ namespace innative {
       uint64_t index;
     };
 
-    KHASH_DECLARE(indexname, Token, varuint32);
+    KHASH_DECLARE(indexname, utility::StringRef, varuint32);
+    KHASH_DECLARE(tokens, utility::StringRef, wat::TokenID);
 
     struct WatState
     {
@@ -115,12 +116,12 @@ namespace innative {
 #define EXPECTED(t, e, err) if((t).Size() == 0 || (t).Pop().id != (e)) return assert(false), (err)
 
     int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, utility::StringRef name);
-    int WatString(ByteArray& str, utility::StringRef t);
-    void SkipSection(Queue<Token>& tokens);
+    int WatString(ByteArray& str, utility::StringRef ref);
+    void SkipSection(Queue<Token>& tokens, int count = 1);
     int WatInitializer(WatState& state, Queue<Token>& tokens, Instruction& op);
     void TokenizeWAT(Queue<Token>& tokens, const char* s, const char* end);
     int WatName(ByteArray& name, const Token& t);
-    int WatModule(Environment& env, Module& m, Queue<Token>& tokens, utility::StringRef name);
+    int WatModule(Environment& env, Module& m, Queue<Token>& tokens, utility::StringRef name, Token& internalname);
     size_t WatLineNumber(const char* start, const char* pos);
     int CheckWatTokens(ValidationError*& errors, Queue<Token>& tokens, const char* start);
 

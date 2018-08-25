@@ -176,7 +176,7 @@ namespace innative {
 
     uint8_t GetInstruction(StringRef s);
     varuint32 ModuleFunctionType(const Module& m, varuint32 index);
-    FunctionSig* ModuleFunction(const Module& m, varuint32 index);
+    FunctionType* ModuleFunction(const Module& m, varuint32 index);
     TableDesc* ModuleTable(const Module& m, varuint32 index);
     MemoryDesc* ModuleMemory(const Module& m, varuint32 index);
     GlobalDesc* ModuleGlobal(const Module& m, varuint32 index);

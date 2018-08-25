@@ -13,11 +13,11 @@ namespace innative {
   void DestroyEnvironment(struct __WASM_ENVIRONMENT* env);
   void LoadModule(struct __WASM_ENVIRONMENT* env, size_t index, void* data, uint64_t size, const char* name, int* err);
   void AddModule(struct __WASM_ENVIRONMENT* env, void* data, uint64_t size, const char* name, int* err);
-  void AddWhitelist(struct __WASM_ENVIRONMENT* env, const char* module_name, const char* export_name, const FunctionSig* sig);
+  void AddWhitelist(struct __WASM_ENVIRONMENT* env, const char* module_name, const char* export_name, const FunctionType* ftype);
   void WaitForLoad(struct __WASM_ENVIRONMENT* env);
   enum IR_ERROR AddEmbedding(struct __WASM_ENVIRONMENT* env, int tag, void* data, uint64_t size);
   enum IR_ERROR Compile(struct __WASM_ENVIRONMENT* env, const char* file);
-  IR_Entrypoint LoadFunction(void* cache, const char* module_name, const char* function, const FunctionSig* sig);
+  IR_Entrypoint LoadFunction(void* cache, const char* module_name, const char* function, const FunctionType* ftype);
   void* LoadGlobal(void* cache, const char* module_name, const char* export_name);
   void* LoadAssembly(int flags, const char* file);
 }

@@ -17,11 +17,11 @@ extern "C" {
     {
       Environment* (*CreateEnvironment)(unsigned int flags, unsigned int modules, unsigned int maxthreads);
       void(*AddModule)(Environment* env, void* data, uint64_t size, const char* name, int* err); // If size is 0, data points to a null terminated UTF8 file path
-      void(*AddWhitelist)(Environment* env, const char* module_name, const char* export_name, const FunctionSig* sig);
+      void(*AddWhitelist)(Environment* env, const char* module_name, const char* export_name, const FunctionType* sig);
       void(*WaitForLoad)(Environment* env);
       enum IR_ERROR(*AddEmbedding)(Environment* env, int tag, void* data, uint64_t size); // If size is 0, data points to a null terminated UTF8 file path
       enum IR_ERROR(*Compile)(Environment* env, const char* file);
-      IR_Entrypoint(*LoadFunction)(void* cache, const char* module_name, const char* function, const FunctionSig* sig); // if function is null, loads the entrypoint function
+      IR_Entrypoint(*LoadFunction)(void* cache, const char* module_name, const char* function, const FunctionType* sig); // if function is null, loads the entrypoint function
       void*(*LoadGlobal)(void* cache, const char* module_name, const char* export_name);
       void*(*LoadAssembly)(int flags, const char* file);
       void(*DestroyEnvironment)(Environment* env);
@@ -43,7 +43,7 @@ extern "C" {
     {
       const char* module_name;
       const char* export_name;
-      FunctionSig sig;
+      FunctionType sig;
     };
 
     IR_COMPILER_DLLEXPORT extern int innative_compile_script(const char* file, unsigned int flags, ValidationError** errors);

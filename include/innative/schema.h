@@ -25,10 +25,9 @@ typedef int64_t varsint64;
 typedef uint64_t varuptr;
 typedef float float32;
 typedef double float64;
-typedef varuint32 memflags;
 
-const uint32 WASM_MAGIC_COOKIE = 0x6d736100;
-const uint32 WASM_MAGIC_VERSION = 0x01;
+static const uint32 WASM_MAGIC_COOKIE = 0x6d736100;
+static const uint32 WASM_MAGIC_VERSION = 0x01;
 
 // Maximum number of immediates used by any instruction
 #define MAX_IMMEDIATES 2
@@ -385,6 +384,7 @@ enum IR_ERROR
   ERR_WAT_EXPECTED_BINARY,
   ERR_WAT_EXPECTED_QUOTE,
   ERR_WAT_INVALID_TOKEN,
+  ERR_WAT_INVALID_NUMBER,
   ERR_WAT_INVALID_IMPORT_ORDER,
   ERR_WAT_INVALID_ALIGNMENT,
   ERR_WAT_INVALID_NAME,
@@ -458,7 +458,6 @@ typedef union __WASM_IMMEDIATE
   varsint64 _varsint64;
   float32 _float32;
   float64 _float64;
-  memflags _memflags;
   varuptr _varuptr;
   struct { varuint32 n_table; varuint32* table; };
 } Immediate;
@@ -469,14 +468,14 @@ typedef struct __WASM_INSTRUCTION
   Immediate immediates[MAX_IMMEDIATES];
 } Instruction;
 
-typedef struct __WASM_FUNC_SIG
+typedef struct __WASM_FUNCTION_TYPE
 {
   varsint7 form;
   varsint7* params;
   varuint32 n_params;
   varsint7* returns;
   varuint32 n_returns;
-} FunctionSig;
+} FunctionType;
 
 typedef struct __WASM_RESIZABLE_LIMITS
 {
@@ -511,9 +510,9 @@ typedef struct __WASM_GLOBAL_DECL
 typedef struct __WASM_FUNCTION_DESC
 {
 #ifdef  __cplusplus
-  inline __WASM_FUNCTION_DESC() : sig_index(0), param_names(nullptr) {}
+  inline __WASM_FUNCTION_DESC() : type_index(0), param_names(nullptr) {}
 #endif
-  varuint32 sig_index;
+  varuint32 type_index;
   Identifier debug_name;
   const char** param_names; // Always the size of n_params from the signature
 } FunctionDesc;
@@ -546,8 +545,8 @@ typedef struct __WASM_TABLE_INIT
 {
   varuint32 index;
   Instruction offset;
-  varuint32 n_elems;
-  varuint32* elems;
+  varuint32 n_elements;
+  varuint32* elements;
 } TableInit;
 
 typedef struct __WASM_FUNCTION_BODY
@@ -587,14 +586,14 @@ typedef struct __WASM_MODULE
   struct TypeSection
   {
     varuint32 n_functions;
-    FunctionSig* functions;
+    FunctionType* functions;
   } type;
 
   struct ImportSection
   {
     varuint32 functions;
     varuint32 tables;
-    varuint32 memory;
+    varuint32 memories;
     union
     {
       varuint32 globals;
@@ -617,8 +616,8 @@ typedef struct __WASM_MODULE
 
   struct MemorySection
   {
-    varuint32 n_memory;
-    MemoryDesc* memory;
+    varuint32 n_memories;
+    MemoryDesc* memories;
   } memory;
 
   struct GlobalSection
@@ -675,7 +674,7 @@ typedef struct __WASM_EMBEDDING
   struct __WASM_EMBEDDING* next;
 } Embedding;
 
-KHASH_DECLARE(modulepair, kh_cstr_t, FunctionSig);
+KHASH_DECLARE(modulepair, kh_cstr_t, FunctionType);
 
 typedef struct __WASM_ENVIRONMENT
 {
