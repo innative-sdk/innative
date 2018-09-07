@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  testfiles = { "../spec/test/core/func.wast" };
+  testfiles = { "../spec/test/core/func_ptrs.wast" };
   std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
   //testfiles.erase(testfiles.begin(), testfiles.begin() + 25);
 

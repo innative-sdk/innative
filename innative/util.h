@@ -4,7 +4,7 @@
 #ifndef __UTIL_H__IR__
 #define __UTIL_H__IR__
 
-#include "innative/schema.h"
+#include "constants.h"
 #include "stream.h"
 #include "path.h"
 #include <string>
@@ -13,18 +13,10 @@
 #include <assert.h>
 #include <utility>
 
-#define IR_INIT_FUNCTION "_innative_internal_start"
 #define kh_exist2(h, x) ((x < kh_end(h)) && kh_exist(h, x))
 
 namespace innative {
   namespace utility {
-    extern const char* IR_ENTRYPOINT;
-    extern const char* IR_GETCPUINFO;
-    extern const char* IR_EXTENSION;
-    extern const char* IR_ENV_EXTENSION;
-    extern const char* IR_GLUE_STRING;
-
-    extern const char OPNAMES[][20];
     typedef int uintcpuinfo[5];
 
     struct StringRef

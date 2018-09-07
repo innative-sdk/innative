@@ -35,7 +35,7 @@ int innative_compile_file(const char* file, const char* out, unsigned int flags,
   auto data_module = utility::LoadFile(file, sz);
   Path name(file);
 
-  if(sz > 0) 
+  if(sz > 0)
     AddModule(env, data_module.get(), sz, name.RemoveExtension().Get().c_str(), &err);
   else
     err = -1;

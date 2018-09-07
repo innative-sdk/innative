@@ -193,11 +193,13 @@
     <ClCompile Include="compile.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="constants.cpp" />
     <ClCompile Include="export.cpp" />
     <ClCompile Include="intrinsic.cpp" />
     <ClCompile Include="optimize.cpp" />
     <ClCompile Include="parse.cpp" />
     <ClCompile Include="schema.cpp" />
+    <ClCompile Include="serialize.cpp" />
     <ClCompile Include="stream.cpp" />
     <ClCompile Include="tools.cpp" />
     <ClCompile Include="util.cpp" />
@@ -211,11 +213,13 @@
     <ClInclude Include="..\include\innative\innative.h" />
     <ClInclude Include="..\include\innative\schema.h" />
     <ClInclude Include="compile.h" />
+    <ClInclude Include="constants.h" />
     <ClInclude Include="intrinsic.h" />
     <ClInclude Include="optimize.h" />
     <ClInclude Include="parse.h" />
     <ClInclude Include="path.h" />
     <ClInclude Include="queue.h" />
+    <ClInclude Include="serialize.h" />
     <ClInclude Include="stack.h" />
     <ClInclude Include="stream.h" />
     <ClInclude Include="tools.h" />

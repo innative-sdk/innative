@@ -64,12 +64,13 @@ namespace innative {
       TOKEN_INPUT,
       TOKEN_OUTPUT,
       TOKEN_NUMBER,
-      TOKEN_NAN,
       TOKEN_STRING,
       TOKEN_NAME, // Same as string but more restricted
       TOKEN_OPERATOR, // Represents all operators other than the control flow ones above
       TOKEN_COMMENT,
       TOKEN_RANGE_ERROR,
+      TOKEN_INTEGER, // Explicit integer/float are only used as a shortcut when generating token lists
+      TOKEN_FLOAT,
       TOKEN_TOTALCOUNT,
     };
 
@@ -124,7 +125,8 @@ namespace innative {
     int WatModule(Environment& env, Module& m, Queue<Token>& tokens, utility::StringRef name, Token& internalname);
     size_t WatLineNumber(const char* start, const char* pos);
     int CheckWatTokens(ValidationError*& errors, Queue<Token>& tokens, const char* start);
-
+    const char* GetTokenString(TokenID token);
+      
     IR_FORCEINLINE int WatString(ByteArray& str, const Token& t)
     {
       if(t.id != TOKEN_STRING)

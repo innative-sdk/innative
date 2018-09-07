@@ -26,9 +26,6 @@ typedef uint64_t varuptr;
 typedef float float32;
 typedef double float64;
 
-static const uint32 WASM_MAGIC_COOKIE = 0x6d736100;
-static const uint32 WASM_MAGIC_VERSION = 0x01;
-
 // Maximum number of immediates used by any instruction
 #define MAX_IMMEDIATES 2
 
@@ -389,7 +386,6 @@ enum IR_ERROR
   ERR_WAT_INVALID_ALIGNMENT,
   ERR_WAT_INVALID_NAME,
   ERR_WAT_INVALID_VAR,
-  ERR_WAT_INVALID_INITIALIZER,
   ERR_WAT_INVALID_TYPE,
   ERR_WAT_INVALID_LOCAL,
   ERR_WAT_UNKNOWN_TYPE,

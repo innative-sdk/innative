@@ -5,6 +5,7 @@
 #define __TOOLS_H__IR__
 
 #include <stdint.h>
+#include <ostream>
 
 struct __WASM_ENVIRONMENT;
 
@@ -20,6 +21,7 @@ namespace innative {
   IR_Entrypoint LoadFunction(void* cache, const char* module_name, const char* function, const FunctionType* ftype);
   void* LoadGlobal(void* cache, const char* module_name, const char* export_name);
   void* LoadAssembly(int flags, const char* file);
+  void DumpModule(std::ostream& stream, Module& mod);
 }
 
-#endif
+#endif  

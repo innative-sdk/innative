@@ -5,7 +5,9 @@
 #include "util.h"
 #include "parse.h"
 #include "validate.h"
-#include <vector>
+
+#include "serialize.h"
+#include <iostream>
 
 using std::string;
 using std::numeric_limits;
@@ -16,28 +18,38 @@ using namespace utility;
 namespace innative {
   namespace wat {
     __KHASH_IMPL(indexname, kh_inline, StringRef, varuint32, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
-    __KHASH_IMPL(tokens, kh_inline, StringRef, wat::TokenID, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
+    __KHASH_IMPL(tokens, kh_inline, StringRef, TokenID, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
 
-    kh_tokens_t* GenTokenHash(std::initializer_list<const char*> list)
+    template<int LEN>
+    inline const char* __getTokenString(TokenID token, const char* (&list)[LEN])
+    {
+      return token < LEN ? list[token] : 0;
+    }
+
+    template<int LEN>
+    inline kh_tokens_t* GenTokenHash(const char* (&list)[LEN])
     {
       kh_tokens_t* h = kh_init_tokens();
 
       TokenID count = 0;
       int r;
-      for(const char* s : list)
+      for(int i = 0; i < LEN; ++i)
       {
-        auto iter = kh_put_tokens(h, StringRef{ s, strlen(s) }, &r);
+        auto iter = kh_put_tokens(h, StringRef{ list[i], strlen(list[i]) }, &r);
         kh_val(h, iter) = ++count;
       }
 
       return h;
     }
 
-    static kh_tokens_t* tokenhash = GenTokenHash({ "(", ")", "module", "import", "type", "start", "func", "global", "table", "memory", "export",
+    static const char* tokenlist[] = { "(", ")", "module", "import", "type", "start", "func", "global", "table", "memory", "export",
       "data", "elem", "offset", "align", "local", "result", "param", "i32", "i64", "f32", "f64", "anyfunc", "mut", "block", "loop",
       "if", "then", "else", "end", /* script extensions */ "binary", "quote", "register", "invoke", "get", "assert_return",
       "assert_return_canonical_nan", "assert_return_arithmetic_nan", "assert_trap", "assert_malformed", "assert_invalid",
-      "assert_unlinkable", "assert_exhaustion", "script", "input", "output" });
+      "assert_unlinkable", "assert_exhaustion", "script", "input", "output" };
+    static kh_tokens_t* tokenhash = GenTokenHash(tokenlist);
+
+    const char* GetTokenString(TokenID token) { return __getTokenString(token - 1, tokenlist); }
 
     const char* CheckTokenINF(const char* s, const char* end, std::string* target)
     {
@@ -238,14 +250,6 @@ namespace innative {
 
     void TokenizeWAT(Queue<Token>& tokens, const char* s, const char* end)
     {
-      //static const regex::flag_type REGEX_CONFIG = std::regex_constants::ECMAScript | std::regex_constants::optimize | std::regex_constants::nosubs;
-      //static const std::regex_constants::match_flag_type REGEX_MATCH = std::regex_constants::match_not_null | std::regex_constants::match_continuous;
-      //static regex regex_INT(LEXER_PLUSMINUS "(0x" LEXER_HEXNUM "|" LEXER_NUM ")", REGEX_CONFIG);
-      //static regex regex_NAME("[$][-" LEXER_LETTER LEXER_DIGIT "_.+*/\\~=<>!?@#$%&|:'`^]+", REGEX_CONFIG);
-      //static regex regex_FLOAT(LEXER_PLUSMINUS LEXER_NUM "([.](" LEXER_NUM ")?([eE]" LEXER_PLUSMINUS LEXER_NUM ")?|[eE]" LEXER_PLUSMINUS LEXER_NUM ")", REGEX_CONFIG);
-      //static regex regex_HEXFLOAT(LEXER_PLUSMINUS "0x" LEXER_HEXNUM "([.](" LEXER_HEXNUM ")?([pP]" LEXER_PLUSMINUS LEXER_HEXNUM ")?|[pP]" LEXER_PLUSMINUS LEXER_HEXNUM ")", REGEX_CONFIG);
-      //static regex regex_NANFLOAT(LEXER_PLUSMINUS "[nN][aA][nN](:0x" LEXER_HEXNUM ")?", std::regex_constants::ECMAScript | std::regex_constants::optimize);
-
       while(s < end)
       {
         while(s < end && (s[0] == ' ' || s[0] == '\n' || s[0] == '\r' || s[0] == '\t' || s[0] == '\f'))
@@ -745,11 +749,11 @@ namespace innative {
     }
 
     // This looks for an identical existing type and returns that ID if it exists, or inserts the signature as a new type
-    int MergeFunctionType(WatState& state, const FunctionType& sig, varuint32& out)
+    int MergeFunctionType(WatState& state, const FunctionType& ftype, varuint32& out)
     {
       for(uint64_t i = 0; i < state.m.type.n_functions; ++i) // The WASM spec requires we look for the lowest possible matching index
       {
-        if(MatchFunctionType(state.m.type.functions[i], sig))
+        if(MatchFunctionType(state.m.type.functions[i], ftype))
         {
           out = i;
           return ERR_SUCCESS;
@@ -758,7 +762,7 @@ namespace innative {
 
       out = state.m.type.n_functions;
       state.m.knownsections |= (1 << WASM_SECTION_TYPE);
-      return AppendArray<FunctionType>(sig, state.m.type.functions, state.m.type.n_functions);
+      return AppendArray<FunctionType>(ftype, state.m.type.functions, state.m.type.n_functions);
     }
 
     int WatTypeUse(WatState& state, Queue<Token>& tokens, varuint32& sig, const char*** names, bool anonymous)
@@ -877,7 +881,7 @@ namespace innative {
           return assert(false), ERR_WAT_INVALID_VAR;
         break;
       default:
-        return assert(false), ERR_WAT_INVALID_INITIALIZER;
+        return ERR_INVALID_INITIALIZER;
       }
 
       return err;
@@ -1279,36 +1283,6 @@ namespace innative {
       return AppendArray<varsint7>(local, body.locals, body.n_locals);
     }
 
-    int WatFunctionPreType(WatState& state, Queue<Token>& tokens)
-    {
-      if(tokens.Peek().id == TOKEN_NAME)
-        tokens.Pop();
-
-      while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_EXPORT)
-      {
-        EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-        SkipSection(tokens);
-        EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
-      }
-
-      if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_IMPORT)
-      {
-        EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-        SkipSection(tokens);
-        EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
-      }
-
-      // Only try to pre-parse the function type if it does NOT have a named type reference.
-      int err = ERR_SUCCESS;
-      if(!tokens.Size() || tokens[0].id != TOKEN_OPEN || tokens[1].id != TOKEN_TYPE)
-      {
-        varuint32 sig;
-        err = WatTypeUse(state, tokens, sig, 0, false);
-      }
-      SkipSection(tokens);
-      return err;
-    }
-
     int WatFunction(WatState& state, Queue<Token>& tokens, varuint32* index, StringRef name)
     {
       int err;
@@ -1442,27 +1416,43 @@ namespace innative {
       return AppendArray(table, state.m.table.tables, state.m.table.n_tables);
     }
 
+    int WatInitializerInstruction(WatState& state, Queue<Token>& tokens, Instruction& op)
+    {
+      int err;
+      FunctionBody blank = { 0 };
+      FunctionType typeblank = { 0 };
+
+      while(tokens.Peek().id != TOKEN_CLOSE)
+      {
+        if(err = WatInstruction(state, tokens, blank, typeblank, 0))
+          return err;
+      }
+
+      if(blank.n_body != 1)
+        AppendError(state.env.errors, 0, ERR_INVALID_INITIALIZER, "Only one instruction is allowed as an initializer");
+
+      if(blank.n_body > 0)
+        op = blank.body[0];
+      else
+        return assert(false), ERR_WAT_EXPECTED_OPERATOR;
+
+      return ERR_SUCCESS;
+    }
+
     int WatInitializer(WatState& state, Queue<Token>& tokens, Instruction& op)
     {
       bool nested = tokens.Peek().id == TOKEN_OPEN;
       if(nested)
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
 
-      if(tokens.Peek().id != TOKEN_OPERATOR)
-        return assert(false), ERR_WAT_EXPECTED_OPERATOR;
-
-      int err;
-      if(tokens.Peek().i > 0xFF)
-        return ERR_WAT_OUT_OF_RANGE;
-      op.opcode = (uint8_t)tokens.Pop().i;
-
-      if(err = WatConstantOperator(state, tokens, op))
+      int err = WatInitializerInstruction(state, tokens, op);
+      if(err != 0)
         return err;
 
       if(nested)
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       if(tokens.Peek().id != TOKEN_CLOSE)
-        return assert(false), ERR_WAT_INVALID_INITIALIZER;
+        return assert(false), ERR_INVALID_INITIALIZER;
 
       return ERR_SUCCESS;
     }
@@ -1589,7 +1579,7 @@ namespace innative {
       {
       case TOKEN_FUNC:
         i.kind = WASM_KIND_FUNCTION;
-        if(err = WatName(i.func_desc.debug_name, name))
+        if(name.id == TOKEN_NAME && (err = WatName(i.func_desc.debug_name, name)))
           return err;
         if(err = WatTypeUse(state, tokens, i.func_desc.type_index, &i.func_desc.param_names, false))
           return err;
@@ -1692,11 +1682,8 @@ namespace innative {
           EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
         }
 
-        int err;
-        if(tokens.Peek().i > 0xFF)
-          return ERR_WAT_OUT_OF_RANGE;
-        op = { (uint8_t)tokens.Pop().i };
-        if(err = WatConstantOperator(state, tokens, op))
+        int err = WatInitializerInstruction(state, tokens, op);
+        if(err != 0)
           return err;
 
         if(offset)
@@ -1779,10 +1766,6 @@ namespace innative {
           if(err = WatIndexProcess<WatFunctionType>(state, tokens, state.typehash))
             return err;
           break;
-        case TOKEN_FUNC:
-          if(err = WatFunctionPreType(state, tokens))
-            return err;
-          break;
         default:
           SkipSection(tokens);
           break;
@@ -1801,11 +1784,11 @@ namespace innative {
         case TOKEN_FUNC:
         {
           khiter_t iter = kh_end(state.funchash);
-          if(tokens.Peek().id == TOKEN_NAME)
+          Token name = GetWatNameToken(tokens);
+          if(name.id == TOKEN_NAME)
           {
             int r;
-            Token tmp = tokens.Pop();
-            iter = kh_put_indexname(state.funchash, StringRef{ tmp.pos, tmp.len }, &r);
+            iter = kh_put_indexname(state.funchash, StringRef{ name.pos, name.len }, &r);
             if(!r)
               return assert(false), ERR_WAT_DUPLICATE_NAME;
           }
@@ -1816,6 +1799,14 @@ namespace innative {
           varuint32 index;
           if(err = WatFunction(state, tokens, &index, ref))
             return err;
+
+          if(name.id == TOKEN_NAME)
+          {
+            if(index < m.importsection.functions)
+              WatName(m.importsection.imports[index].func_desc.debug_name, name);
+            else if(index - m.importsection.functions < m.code.n_funcbody)
+              WatName(m.code.funcbody[index - m.importsection.functions].debug_name, name);
+          }
 
           if(iter != kh_end(state.funchash))
             kh_val(state.funchash, iter) = index;
@@ -1939,6 +1930,13 @@ namespace innative {
       }
 
       m.exports = kh_init_exports();
+
+      {
+        Queue<Token> auxtokens;
+        TokenizeModule(auxtokens, m);
+        WriteTokens(auxtokens, std::cout);
+      }
+
       return ParseExportFixup(m, env.errors);
     }
 

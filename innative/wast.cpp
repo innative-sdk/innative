@@ -72,6 +72,9 @@ namespace innative {
       ERR_INVALID_TABLE_INDEX,
       ERR_WAT_INVALID_NUMBER,
       ERR_WAT_INVALID_TOKEN,
+      ERR_INVALID_INITIALIZER,
+      ERR_INVALID_GLOBAL_TYPE,
+      ERR_INVALID_TABLE_TYPE,
       },
 {
   "alignment",
@@ -108,8 +111,11 @@ namespace innative {
   "unknown table",
   "unknown operator",
   "unknown operator",
-  //"data segment does not fit", "unknown memory 0", "elements segment does not fit",
-  //"constant expression required", , , , "unknown operator", "unexpected token",
+  "constant expression required",
+  "type mismatch",
+  "type mismatch",
+
+  //, , , , "unknown operator", "unexpected token",
   //"undefined element", "unknown local", "invalid mutability", "incompatible import type", "unknown import", "integer overflow"
 });
 
@@ -319,11 +325,11 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_indexname_t* mapp
     if(!kh_exist2(m->exports, iter))
       return ERR_INVALID_FUNCTION_INDEX;
     Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
-    if(e.kind != WASM_KIND_FUNCTION || e.index >= m->function.n_funcdecl || m->function.funcdecl[e.index] >= m->type.n_functions)
-      return ERR_INVALID_FUNCTION_INDEX;
 
     // Dig up the exported function signature from the module and assemble a C function pointer from it
-    FunctionType& sig = m->type.functions[m->function.funcdecl[e.index]];
+    FunctionType* ftype = (e.kind != WASM_KIND_FUNCTION) ? nullptr : ModuleFunction(*m, e.index);
+    if(!ftype)
+      return ERR_INVALID_FUNCTION_INDEX;
 
     std::vector<Instruction> params;
     while(tokens.Peek().id == TOKEN_OPEN)
@@ -336,9 +342,9 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_indexname_t* mapp
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
     }
 
-    if(params.size() != sig.n_params)
+    if(params.size() != ftype->n_params)
       return ERR_SIGNATURE_MISMATCH;
-    for(varuint32 i = 0; i < sig.n_params; ++i)
+    for(varuint32 i = 0; i < ftype->n_params; ++i)
     {
       varsint7 ty = TE_NONE;
       switch(params[i].opcode)
@@ -349,7 +355,7 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_indexname_t* mapp
       case OP_f64_const: ty = TE_f64; break;
       }
 
-      if(sig.params[i] != ty)
+      if(ftype->params[i] != ty)
         return ERR_INVALID_TYPE;
     }
 
@@ -358,10 +364,10 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_indexname_t* mapp
       //return ERR_INVALID_FUNCTION_INDEX;
       return ERR_RUNTIME_TRAP;
 
-    if(!sig.n_returns)
+    if(!ftype->n_returns)
       result.type = TE_void;
     else
-      result.type = (WASM_TYPE_ENCODING)sig.returns[0];
+      result.type = (WASM_TYPE_ENCODING)ftype->returns[0];
 
     // Call the function and set the correct result.
     signal(SIGILL, WastCrashHandler);
@@ -369,7 +375,7 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_indexname_t* mapp
     if(jmp)
       return ERR_RUNTIME_TRAP;
 
-    switch(sig.n_params)
+    switch(ftype->n_params)
     {
     case 0: GenWastFunctionCall(f, result); break;
     case 1: GenWastFunctionCall(f, result, params[0]); break;
@@ -508,7 +514,7 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       ValidateModule(env, *last);
       if(env.errors)
       {
-        //validate::ValidateModule(env, *last);
+        ValidateModule(env, *last);
         return ERR_VALIDATION_ERROR;
       }
 

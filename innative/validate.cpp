@@ -24,30 +24,30 @@ namespace innative {
       varsint7 sig; // Block signature
       uint8_t type; // instruction that pushed this label
     };
-
-    static const char trailingBytesForUTF8[256] = {
-      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-      1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-      2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, 3,3,3,3,3,3,3,3,4,4,4,4,5,5,5,5
-    };
   }
 }
 
 // UTF8 validator based off the official unicode C validator source
 bool innative::ValidateIdentifier(const ByteArray& b)
 {
+  static const char trailingBytesForUTF8[256] = {
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, 3,3,3,3,3,3,3,3,4,4,4,4,5,5,5,5
+  };
+
   varuint32 i = 0;
   char a;
   char c;
   while(i < b.size())
   {
     c = b[i];
-    int length = internal::trailingBytesForUTF8[c] + 1;
+    int length = trailingBytesForUTF8[c] + 1;
     varuint32 index = i + length;
     if(index > b.size())
       return false;
@@ -814,12 +814,14 @@ void innative::ValidateTableOffset(const TableInit& init, Environment& env, Modu
   varsint7 type = ValidateInitializer(init.offset, env, m);
   if(type != TE_i32)
     AppendError(env.errors, m, ERR_INVALID_TABLE_TYPE, "Expected table offset instruction type of i32, got %hhi instead.", type);
-
+   
   TableDesc* table = ModuleTable(*m, init.index);
   if(!table)
     AppendError(env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", init.index);
   else if(table->element_type == TE_anyfunc)
   {
+    if(type != TE_i32) // We cannot verify the offset if it's the wrong type
+      return; 
     varsint32 offset = EvalInitializerI32(init.offset, env, m);
     if(offset + init.n_elements > table->resizable.minimum)
       AppendError(env.errors, m, ERR_INVALID_TABLE_OFFSET, "Offset (%i) plus element count (%u) exceeds minimum table length (%u)", offset, init.n_elements, table->resizable.minimum);
