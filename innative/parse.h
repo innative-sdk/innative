@@ -4,7 +4,7 @@
 #ifndef __PARSE_H__IR__
 #define __PARSE_H__IR__
 
-#include "util.h"
+#include "stream.h"
 
 namespace innative {
   IR_ERROR ParseByteArray(utility::Stream& s, ByteArray& section, bool terminator);

@@ -94,7 +94,7 @@ namespace innative {
       index -= m.importsection.functions;
       if(index < m.function.n_funcdecl)
         return &m.type.functions[m.function.funcdecl[index]];
-      return 0;
+      return nullptr;
     }
     TableDesc* ModuleTable(const Module& m, varuint32 index)
     {
@@ -104,7 +104,7 @@ namespace innative {
       i -= m.importsection.tables;
       if(i < m.table.n_tables)
         return &m.table.tables[i];
-      return 0;
+      return nullptr;
     }
     MemoryDesc* ModuleMemory(const Module& m, varuint32 index)
     {
@@ -114,7 +114,7 @@ namespace innative {
       i -= m.importsection.memories;
       if(i < m.memory.n_memories)
         return &m.memory.memories[i];
-      return 0;
+      return nullptr;
     }
     GlobalDesc* ModuleGlobal(const Module& m, varuint32 index)
     {
@@ -124,7 +124,7 @@ namespace innative {
       i -= m.importsection.globals;
       if(i < m.global.n_globals)
         return &m.global.globals[i].desc;
-      return 0;
+      return nullptr;
     }
     //Export* ModuleExport(const Module& m, varuint32 index, WASM_KIND kind)
     //{
@@ -137,11 +137,11 @@ namespace innative {
     {
       khint_t iter = kh_get_modules(env.modulemap, imp.module_name.str());
       if(iter == kh_end(env.modulemap))
-        return { 0,0 };
+        return { nullptr,nullptr };
 
       size_t i = kh_value(env.modulemap, iter);
       if(i >= env.n_modules)
-        return { 0,0 };
+        return { nullptr,nullptr };
 
       iter = kh_get_exports(env.modules[i].exports, imp.export_name.str());
       if(iter == kh_end(env.modules[i].exports))

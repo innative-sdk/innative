@@ -47,13 +47,13 @@ llvmTy* GetLLVMType(varsint7 type, code::Context& context)
   }
 
   assert(false);
-  return 0;
+  return nullptr;
 }
 
 FuncTy* GetFunctionType(FunctionType& signature, code::Context& context)
 {
   if(signature.n_returns > 1)
-    return 0;
+    return nullptr;
   llvmTy* ret = (signature.n_returns > 0) ? GetLLVMType(signature.returns[0], context) : llvmTy::getVoidTy(context.context);
 
   if(signature.n_params > 0)
@@ -305,7 +305,7 @@ void BindLabel(BB* block, code::Context& context)
     context.builder.GetInsertBlock()->getParent()->getBasicBlockList().push_back(block);
     context.builder.SetInsertPoint(block);
   }
-  assert(block->getParent() != 0);
+  assert(block->getParent() != nullptr);
 }
 
 void PushResult(code::BlockResult** root, llvmVal* result, BB* block)
@@ -1243,7 +1243,7 @@ IR_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
   for(varuint32 i = 0; i < body.n_body; ++i)
   {
     IR_ERROR err = CompileInstruction(body.body[i], context);
-    if(err != ERR_SUCCESS)
+    if(err < 0)
       return err;
   }
 
@@ -1867,7 +1867,7 @@ namespace innative {
       // Generate object code
       for(size_t i = 0; i < env->n_modules; ++i)
       {
-        assert(context[i].m.name.get() != 0);
+        assert(context[i].m.name.get() != nullptr);
         targets.emplace_back(MergeStrings(context[i].m.name.str(), ".o"));
         OutputObjectFile(context[i], targets.back().c_str());
       }

@@ -75,6 +75,13 @@ namespace innative {
       ERR_INVALID_INITIALIZER,
       ERR_INVALID_GLOBAL_TYPE,
       ERR_INVALID_TABLE_TYPE,
+      ERR_INVALID_LOCAL_INDEX,
+      ERR_MULTIPLE_RETURN_VALUES,
+      ERR_INVALID_START_FUNCTION,
+      ERR_WAT_EXPECTED_VAR,
+      ERR_WAT_EXPECTED_VALTYPE,
+      ERR_INVALID_UTF8_ENCODING,
+      ERR_INVALID_DATA_SEGMENT,
       },
 {
   "alignment",
@@ -114,9 +121,13 @@ namespace innative {
   "constant expression required",
   "type mismatch",
   "type mismatch",
-
-  //, , , , "unknown operator", "unexpected token",
-  //"undefined element", "unknown local", "invalid mutability", "incompatible import type", "unknown import", "integer overflow"
+  "unknown local",
+  "invalid result arity",
+  "start function",
+  "unknown operator",
+  "unexpected token",
+  "invalid UTF-8 encoding",
+  "data segment does not fit",
 });
 
     kh_stringmap_t* GenWastStringMap(std::initializer_list<const char*> map)
@@ -235,7 +246,7 @@ int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_indexname_t* mapp
       if(err = WatName(m.name, name))
         return err;
   }
-  else if(err = WatModule(env, m, tokens, StringRef{ 0,0 }, name))
+  else if(err = WatModule(env, m, tokens, StringRef{ nullptr, 0 }, name))
     return err;
 
   if(name.id == TOKEN_NAME) // Only add this to our name mapping if an actual name token was specified, regardless of whether the module has a name.
@@ -480,11 +491,11 @@ inline const char* MapAssertionString(const char* s)
 }
 
 // This parses an entire extended WAT testing script into an environment
-int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
+int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
 {
   Queue<Token> tokens;
-  const char* start = (char*)data;
-  TokenizeWAT(tokens, start, (char*)data + sz);
+  const char* start = (const char*)data;
+  TokenizeWAT(tokens, start, (const char*)data + sz);
   ValidationError* errors = nullptr;
 
   int err = CheckWatTokens(env.errors, tokens, start);
@@ -523,13 +534,6 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
     case TOKEN_REGISTER:
     {
       tokens.Pop();
-      size_t i = ~0;
-      if(last)
-        i = last - env.modules;
-      if(tokens[0].id == TOKEN_NAME)
-        i = GetWastMapping(mapping, tokens.Pop());
-      if(i == (size_t)~0)
-        return ERR_PARSE_INVALID_NAME;
 
       ByteArray name;
       if(err = WatString(name, tokens.Pop()))
@@ -538,6 +542,14 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       khiter_t iter = kh_put_modules(env.modulemap, name.str(), &r);
       if(!r)
         return ERR_FATAL_DUPLICATE_MODULE_NAME;
+
+      size_t i = ~0;
+      if(last)
+        i = last - env.modules;
+      if(tokens[0].id == TOKEN_NAME)
+        i = GetWastMapping(mapping, tokens.Pop());
+      if(i == (size_t)~0)
+        return ERR_PARSE_INVALID_NAME;
 
       kh_val(env.modulemap, iter) = i;
       break;
@@ -556,6 +568,7 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       break;
     }
     case TOKEN_ASSERT_TRAP:
+    {
       Token t = tokens.Pop();
       if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_MODULE) // Check if we're actually trapping on a module load
       {
@@ -582,6 +595,7 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
         EXPECTED(tokens, TOKEN_STRING, ERR_WAT_EXPECTED_STRING);
       }
       break;
+    }
     case TOKEN_ASSERT_RETURN:
     case TOKEN_ASSERT_RETURN_CANONICAL_NAN:
     case TOKEN_ASSERT_RETURN_ARITHMETIC_NAN:
@@ -683,14 +697,17 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
       int code = ParseWastModule(env, tokens, mapping, m);
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
+      string assertcode = GetAssertionString(code);
+
+      if(code < 0)
+      {
+        AppendError(errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected module parsing success, but got '%s' instead", WatLineNumber(start, t.pos), assertcode.c_str());
+        return code; // A parsing failure means we cannot recover
+      }
+
       ByteArray error;
       if(err = WatString(error, tokens.Pop()))
         return err;
-
-      string assertcode = GetAssertionString(code);
-
-      if(code != ERR_SUCCESS)
-        AppendError(errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected module parsing success, but got '%s' instead", WatLineNumber(start, t.pos), assertcode.c_str());
 
       if(!env.errors) // Only do additional validation if we didn't find validation errors during the parsing process that must trump our normal validation
         ValidateModule(env, m);
@@ -726,8 +743,15 @@ int innative::wat::ParseWast(Environment& env, uint8_t* data, size_t sz)
     }
     default:
     {
-      Token t = tokens.Pop();
-      return assert(false), ERR_WAT_EXPECTED_TOKEN;
+      // If we get an unexpected token, try to parse it as an inline module
+      Token t = Token{ TOKEN_NONE };
+      env.modules = trealloc<Module>(env.modules, ++env.n_modules);
+      last = &env.modules[env.n_modules - 1];
+      tokens.SetPosition(tokens.GetPosition() - 1); // Recover the '('
+      if(err = WatModule(env, *last, tokens, StringRef{ nullptr, 0 }, t))
+        return err;
+      tokens.SetPosition(tokens.GetPosition() - 1); // Recover the ')'
+      break;
     }
     }
 

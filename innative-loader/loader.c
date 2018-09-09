@@ -125,7 +125,7 @@ int main(int argc, char** argv)
 
     // Then add each module payload to the environment, checking for any fatal errors.
 #ifdef IR_PLATFORM_WIN32
-    int err = 0;
+    int err = ERR_SUCCESS;
     struct WinPass pass = { &exports, env, &err };
 
     if(EnumResourceNamesW(NULL, L"WASM_MODULE", &EnumModule, (LONG_PTR)&pass) == FALSE)

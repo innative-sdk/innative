@@ -4,6 +4,7 @@
 #ifndef __TOOLS_H__IR__
 #define __TOOLS_H__IR__
 
+#include "innative/export.h"
 #include <stdint.h>
 #include <ostream>
 

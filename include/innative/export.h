@@ -9,7 +9,6 @@
 #ifdef  __cplusplus
 extern "C" {
 #endif
-
     typedef void(*IR_Entrypoint)();
 
     // Contains the actual runtime functions
@@ -46,7 +45,9 @@ extern "C" {
       FunctionType sig;
     };
 
-    IR_COMPILER_DLLEXPORT extern int innative_compile_script(const char* file, unsigned int flags, ValidationError** errors);
+    // Tooling functions that exist for command line utilities that always statically link to the runtime
+    IR_COMPILER_DLLEXPORT extern int innative_compile_script(const uint8_t* data, size_t sz, Environment* env);
+    IR_COMPILER_DLLEXPORT extern int innative_compile_script_file(const char* file, Environment* env);
     IR_COMPILER_DLLEXPORT extern int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const struct _IR_WHITELIST* whitelist, int n_whitelist);
     IR_COMPILER_DLLEXPORT extern int innative_build_loader(struct _IR_CHUNK* chunks, const char* out, bool dynamic);
     IR_COMPILER_DLLEXPORT extern void innative_set_work_dir_to_bin();

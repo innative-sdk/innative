@@ -4,8 +4,8 @@
 #ifndef __UTIL_H__IR__
 #define __UTIL_H__IR__
 
+#include "innative/schema.h"
 #include "constants.h"
-#include "stream.h"
 #include "path.h"
 #include <string>
 #include <math.h>
@@ -39,7 +39,7 @@ namespace innative {
     {
       auto cur = errors;
       ValidationError* prev = nullptr;
-      while(cur != 0)
+      while(cur != nullptr)
       {
         auto next = cur->next;
         cur->next = prev;
@@ -234,7 +234,7 @@ namespace innative {
 
     inline std::unique_ptr<uint8_t[]> LoadFile(const char* file, long& sz)
     {
-      FILE* f = 0;
+      FILE* f = nullptr;
       fopen_s(&f, file, "rb");
       if(!f)
         return nullptr;

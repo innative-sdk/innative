@@ -3,6 +3,8 @@
 
 #include "parse.h"
 #include "validate.h"
+#include "stream.h"
+#include "util.h"
 #include <assert.h>
 #include <algorithm>
 
@@ -623,12 +625,6 @@ IR_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m)
 IR_ERROR innative::ParseModule(Stream& s, Module& m, ByteArray name, ValidationError*& errors)
 {
   m = { 0 };
-  if(!name.size() || !ValidateIdentifier(name))
-    return ERR_PARSE_INVALID_NAME;
-  m.name.resize(name.size(), true);
-  if(!m.name.get())
-    return assert(false), ERR_FATAL_OUT_OF_MEMORY;
-  tmemcpy(m.name.get(), m.name.size(), name.get(), name.size());
 
   IR_ERROR err = ERR_SUCCESS;
   m.magic_cookie = s.ReadUInt32(err);
@@ -763,6 +759,8 @@ IR_ERROR innative::ParseModule(Stream& s, Module& m, ByteArray name, ValidationE
         m.custom[curcustom].data = s.data + s.pos;
         size_t custom = s.pos + payload;
         err = ParseIdentifier(s, m.custom[curcustom].name);
+        if(err == ERR_SUCCESS && !ValidateIdentifier(m.custom[curcustom].name)) 
+          return ERR_INVALID_UTF8_ENCODING; // An invalid UTF8 encoding for the name is an actual parse error for some reason
         if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), "name"))
           ParseNameSection(s, custom, m);
         else
@@ -773,6 +771,16 @@ IR_ERROR innative::ParseModule(Stream& s, Module& m, ByteArray name, ValidationE
       return ERR_FATAL_UNKNOWN_SECTION;
     }
   }
+
+  if(!m.name.size())
+  {
+    m.name.resize(name.size(), true);
+    if(!m.name.get())
+      return assert(false), ERR_FATAL_OUT_OF_MEMORY;
+    tmemcpy(m.name.get(), m.name.size(), name.get(), name.size());
+  }
+  if(!m.name.size() || !ValidateIdentifier(m.name))
+    return ERR_PARSE_INVALID_NAME;
 
   if(m.code.n_funcbody != m.function.n_funcdecl)
     return ERR_FUNCTION_BODY_MISMATCH;

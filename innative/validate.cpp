@@ -35,19 +35,21 @@ bool innative::ValidateIdentifier(const ByteArray& b)
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1, -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1, -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
     2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, 3,3,3,3,3,3,3,3,4,4,4,4,5,5,5,5
   };
 
   varuint32 i = 0;
-  char a;
-  char c;
+  unsigned char a;
+  unsigned char c;
   while(i < b.size())
   {
     c = b[i];
     int length = trailingBytesForUTF8[c] + 1;
+    if(!length) // This is an invalid first code point
+      return false;
     varuint32 index = i + length;
     if(index > b.size())
       return false;
@@ -129,9 +131,9 @@ bool innative::MatchFunctionType(const FunctionType& a, const FunctionType& b)
 void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
 {
   if(!ValidateIdentifier(imp.module_name))
-    AppendError(env.errors, m, ERR_INVALID_IDENTIFIER, "Identifier not valid UTF8: %s", imp.module_name.str());
+    AppendError(env.errors, m, ERR_INVALID_UTF8_ENCODING, "Identifier not valid UTF8: %s", imp.module_name.str());
   if(!ValidateIdentifier(imp.export_name))
-    AppendError(env.errors, m, ERR_INVALID_IDENTIFIER, "Identifier not valid UTF8: %s", imp.export_name.str());
+    AppendError(env.errors, m, ERR_INVALID_UTF8_ENCODING, "Identifier not valid UTF8: %s", imp.export_name.str());
 
   const char* modname = imp.module_name.str();
 
@@ -247,8 +249,6 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
     GlobalDesc* global = ModuleGlobal(env.modules[i], exp.index);
     if(!global)
       AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid exported global index %u", exp.index);
-    else if(global->mutability) // Imported globals must be immutable for right now
-      AppendError(env.errors, m, ERR_MUTABLE_GLOBAL, "Exported global %u cannot be mutable.", exp.index);
     break;
   }
   default:
@@ -317,6 +317,8 @@ void ValidateBranchSignature(varsint7 sig, Stack<varsint7>& values, Environment&
   {
     if(values.Size() > 0)
     {
+      //if(values.Size() > 2 || (values.Size() == 2 && values.Peek() != TE_POLY)) // TE_POLY can count as 0
+      //  AppendError(env.errors, m, ERR_INVALID_TYPE, "block signature expected one value, but value stack had %zu!", values.Size());
       if(values.Peek() != TE_POLY && values.Peek() != sig)
         AppendError(env.errors, m, ERR_INVALID_TYPE, "block signature expected %hhi, but value stack had %hhi instead!", sig, values.Peek());
     }
@@ -470,12 +472,19 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
     PolymorphStack(values);
     break;
   case OP_return:
+  {
+    size_t cache = control.Limit();
+    control.SetLimit(0); // A return statement is an unconditional branch to the end of the function, so we have to validate that branch
+    ValidateBranch(control.Size() - 1, values, control, env, m);
+    control.SetLimit(cache);
+
     if(control.Size() > 0)
       ValidateBranchSignature(control[0].sig, values, env, m);
     else
       AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Empty control stack at return statement.");
     PolymorphStack(values);
     break;
+  }
 
     // Call operators
   case OP_call:
@@ -502,24 +511,29 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
   case OP_get_local:
     if(ins.immediates[0]._varuint32 >= n_locals)
       AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for get_local.");
-    values.Push(locals[ins.immediates[0]._varuint32]);
+    else
+      values.Push(locals[ins.immediates[0]._varuint32]);
     break;
   case OP_set_local:
     if(ins.immediates[0]._varuint32 >= n_locals)
       AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
-    ValidatePopType(values, locals[ins.immediates[0]._varuint32], env, m);
+    else
+      ValidatePopType(values, locals[ins.immediates[0]._varuint32], env, m);
     break;
   case OP_tee_local:
     if(ins.immediates[0]._varuint32 >= n_locals)
       AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
-    ValidatePopType(values, locals[ins.immediates[0]._varuint32], env, m);
-    values.Push(locals[ins.immediates[0]._varuint32]);
+    else
+    {
+      ValidatePopType(values, locals[ins.immediates[0]._varuint32], env, m);
+      values.Push(locals[ins.immediates[0]._varuint32]);
+    }
     break;
   case OP_get_global:
   {
     GlobalDesc* desc = ModuleGlobal(*m, ins.immediates[0]._varuint32);
     if(!desc)
-      AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid global index for get_global.");
+      AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index for get_global.");
     else
       values.Push(desc->type);
   }
@@ -528,7 +542,7 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
   {
     GlobalDesc* desc = ModuleGlobal(*m, ins.immediates[0]._varuint32);
     if(!desc)
-      AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid global index for get_global.");
+      AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index for get_global.");
     else
       ValidatePopType(values, desc->type, env, m);
   }
@@ -722,8 +736,8 @@ varsint7 innative::ValidateInitializer(const Instruction& ins, Environment& env,
   case OP_get_global:
     if(!ModuleGlobal(*m, ins.immediates[0]._varuint32))
       AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid global index for get_global.");
-    else if(ins.immediates[0]._varuint32 < m->importsection.globals)
-      return m->importsection.imports[ins.immediates[0]._varuint32].global_desc.type;
+    else if(ins.immediates[0]._varuint32 + m->importsection.memories < m->importsection.globals)
+      return m->importsection.imports[ins.immediates[0]._varuint32 + m->importsection.memories].global_desc.type;
     else
       AppendError(env.errors, m, ERR_INVALID_INITIALIZER, "A get_global initializer must be an import.", ins.opcode);
     return TE_i32;
@@ -742,7 +756,8 @@ void innative::ValidateGlobal(const GlobalDecl& decl, Environment& env, Module* 
 
 void innative::ValidateExport(const Export& e, Environment& env, Module* m)
 {
-  ValidateIdentifier(e.name);
+  if(!ValidateIdentifier(e.name))
+    AppendError(env.errors, m, ERR_INVALID_UTF8_ENCODING, "Identifier not valid UTF8: %s", e.name.str());
 
   switch(e.kind)
   {
@@ -763,8 +778,6 @@ void innative::ValidateExport(const Export& e, Environment& env, Module* m)
     GlobalDesc* g = ModuleGlobal(*m, e.index);
     if(!g)
       AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index %u", e.index);
-    else if(g->mutability)
-      AppendError(env.errors, m, ERR_MUTABLE_GLOBAL, "Exported global %s index %u should not be mutable.", e.name.str(), e.index);
     break;
   }
   default:
@@ -834,14 +847,14 @@ void innative::ValidateTableOffset(const TableInit& init, Environment& env, Modu
     AppendError(env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Invalid table element type %hhi", table->element_type);
 }
 
-void ValidateEndBlock(internal::ControlBlock block, Stack<varsint7>& values, Environment& env, Module* m)
+void ValidateEndBlock(internal::ControlBlock block, Stack<varsint7>& values, Environment& env, Module* m, bool restore)
 {
   ValidateSignature(block.sig, values, env, m);
 
   // Replace the value stack with the expected signature
   while(values.Size())
     values.Pop();
-  if(block.sig != TE_void)
+  if(restore && block.sig != TE_void) // Only restore the block signature if this is an end statement, not an else statement
     values.Push(block.sig);
 
   values.SetLimit(block.limit); // Reset old limit value
@@ -892,7 +905,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
       if(!control.Size())
         AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Mismatched end instruction at index %u!", i);
       else
-        ValidateEndBlock(control.Pop(), values, env, m);
+        ValidateEndBlock(control.Pop(), values, env, m, true);
       break;
     case OP_else:
       if(!control.Size())
@@ -902,7 +915,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
         internal::ControlBlock block = control.Pop();
         if(block.type != OP_if)
           AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Expected else instruction to terminate if block, but found %hhi instead.", block.type);
-        ValidateEndBlock(block, values, env, m);
+        ValidateEndBlock(block, values, env, m, false);
         control.Push({ values.Limit(), block.sig, OP_else }); // Push a new else block that must be terminated by an end instruction
         values.SetLimit(values.Size() + values.Limit());
       }
@@ -934,11 +947,11 @@ void innative::ValidateDataOffset(const DataInit& init, Environment& env, Module
     AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "Invalid memory index %u", init.index);
     memory = ModuleMemory(*m, init.index);
   }
-  else
+  else //if(init.index + m->importsection.tables >= m->importsection.memories)
   {
     varsint32 offset = EvalInitializerI32(init.offset, env, m);
     if(offset + (uint64_t)init.data.size() > (((uint64_t)memory->limits.minimum) << 16))
-      AppendError(env.errors, m, ERR_INVALID_MEMORY_OFFSET, "Offset (%i) plus element count (%u) exceeds minimum memory length (%llu)", offset, init.data.size(), (((uint64_t)memory->limits.minimum) << 16));
+      AppendError(env.errors, m, ERR_INVALID_DATA_SEGMENT, "Offset (%i) plus element count (%u) exceeds minimum memory length (%llu)", offset, init.data.size(), (((uint64_t)memory->limits.minimum) << 16));
   }
 }
 
@@ -982,8 +995,6 @@ void innative::ValidateModule(Environment& env, Module& m)
     FunctionType* f = ModuleFunction(m, m.start);
     if(f)
     {
-      if(m.start < m.importsection.functions)
-        AppendError(env.errors, &m, ERR_INVALID_START_FUNCTION, "The start function (%hhu) cannot be an imported function", m.start);
       if(f->n_params > 0 || f->n_returns > 0)
         AppendError(env.errors, &m, ERR_INVALID_START_FUNCTION, "Starting function must have no parameters and no return value, instead it has %u parameters and %u return values.", f->n_params, f->n_returns);
     }
