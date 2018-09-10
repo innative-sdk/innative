@@ -6,9 +6,6 @@
 #include "parse.h"
 #include "validate.h"
 
-#include "serialize.h"
-#include <iostream>
-
 using std::string;
 using std::numeric_limits;
 
@@ -697,14 +694,18 @@ namespace innative {
       if(m.table.n_tables > 0 || m.function.n_funcdecl > 0 || m.global.n_globals > 0 || m.memory.n_memories > 0)
         return assert(false), ERR_WAT_INVALID_IMPORT_ORDER; // If we're trying to insert an import after declaring a table/func/global/memory, fail.
 
-      *index = m.importsection.n_import;
+      *index = 0;
       if(!(m.importsection.imports = trealloc<Import>(m.importsection.imports, ++m.importsection.n_import)))
         return assert(false), ERR_FATAL_OUT_OF_MEMORY;
 
       // Find the correct index to insert into
       for(varuint32 j = 0; j < m.importsection.n_import - 1; ++j)
-        if(m.importsection.imports[j].kind > i.kind)
-          *index = j;
+      {
+        if(i.kind >= m.importsection.imports[j].kind)
+          *index = j + 1;
+        else
+          break;
+      }
 
       m.knownsections |= (1 << WASM_SECTION_IMPORT);
       if((m.importsection.n_import - *index - 1) > 0) // Move things out of the way if we aren't at the end of the array
@@ -732,6 +733,7 @@ namespace innative {
       case WASM_KIND_GLOBAL: *index -= m.importsection.memories; break;
       }
 
+      // ValidateImportOrder(m);
       return ERR_SUCCESS;
     }
 
@@ -976,8 +978,9 @@ namespace innative {
         if(tokens.Peek().id == TOKEN_OFFSET)
         {
           tokens.Pop();
-          if(err = ResolveTokenu64(tokens.Pop(), op.immediates[1]._varuptr))
-            return assert(false), err;
+          if(err = ResolveTokenu32(tokens.Pop(), op.immediates[1]._varuint32))
+          //if(err = ResolveTokenu64(tokens.Pop(), op.immediates[1]._varuptr)) // We can't do this until webassembly actually supports 64-bit
+            return err;
         }
         if(tokens.Peek().id == TOKEN_ALIGN)
         {
@@ -1935,12 +1938,6 @@ namespace innative {
       }
 
       m.exports = kh_init_exports();
-
-      /*{
-        Queue<Token> auxtokens;
-        TokenizeModule(auxtokens, m);
-        WriteTokens(auxtokens, std::cout);
-      }*/
 
       return ParseExportFixup(m, env.errors);
     }

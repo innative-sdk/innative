@@ -82,6 +82,9 @@ namespace innative {
       ERR_WAT_EXPECTED_VALTYPE,
       ERR_INVALID_UTF8_ENCODING,
       ERR_INVALID_DATA_SEGMENT,
+      ERR_INVALID_TABLE_OFFSET,
+      ERR_IMMUTABLE_GLOBAL,
+      ERR_INVALID_MUTABILITY,
       },
 {
   "alignment",
@@ -128,6 +131,9 @@ namespace innative {
   "unexpected token",
   "invalid UTF-8 encoding",
   "data segment does not fit",
+  "elements segment does not fit",
+  "global is immutable",
+  "invalid mutability",
 });
 
     kh_stringmap_t* GenWastStringMap(std::initializer_list<const char*> map)
@@ -147,6 +153,9 @@ namespace innative {
 
     static kh_stringmap_t* assertmap = GenWastStringMap({
         "unknown function 0", "unknown function",
+        "unknown memory 0", "unknown memory",
+        "unknown table 0", "unknown table",
+        "i32 constant", "constant out of range",
         "length out of bounds", "unexpected end",
       });
 
@@ -428,7 +437,8 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_indexname_t* mapp
     if(!kh_exist2(m->exports, iter))
       return ERR_INVALID_GLOBAL_INDEX;
     Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
-    if(e.kind != WASM_KIND_GLOBAL || e.index >= m->global.n_globals)
+    GlobalDesc* g = nullptr;
+    if(e.kind != WASM_KIND_GLOBAL || !(g = ModuleGlobal(*m, e.index)))
       return ERR_INVALID_GLOBAL_INDEX;
 
     void* f = LoadDLLFunction(cache, MergeName(m->name.str(), global.str()).c_str());
@@ -436,7 +446,7 @@ int ParseWastAction(Environment& env, Queue<Token>& tokens, kh_indexname_t* mapp
       return ERR_SUCCESS;
       //return ERR_INVALID_GLOBAL_INDEX;
 
-    switch(m->global.globals[e.index].desc.type)
+    switch(g->type)
     {
     case TE_i32: result.i32 = *(int32_t*)f; break;
     case TE_i64: result.i64 = *(int64_t*)f; break;

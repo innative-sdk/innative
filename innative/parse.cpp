@@ -160,8 +160,9 @@ IR_ERROR innative::ParseGlobalDesc(Stream& s, GlobalDesc& g)
   IR_ERROR err = ParseVarSInt7(s, g.type);
 
   if(err >= 0)
-    err = ParseVarUInt1(s, g.mutability);
-
+    if(err = ParseVarUInt1(s, g.mutability))
+      return ERR_INVALID_MUTABILITY; // Translate parse error to invalid mutability error
+  
   return err;
 }
 
@@ -695,7 +696,8 @@ IR_ERROR innative::ParseModule(Stream& s, Module& m, ByteArray name, ValidationE
       break;
     case WASM_SECTION_IMPORT:
     {
-      err = Parse<Import>::template Array<&ParseImport>(s, m.importsection.imports, m.importsection.n_import);
+      if(err = Parse<Import>::template Array<&ParseImport>(s, m.importsection.imports, m.importsection.n_import))
+        return err;
       std::stable_sort(m.importsection.imports, m.importsection.imports + m.importsection.n_import, [](const Import& a, const Import& b) -> bool { return a.kind < b.kind; });
 
       varuint32 num = m.importsection.n_import;
@@ -772,6 +774,9 @@ IR_ERROR innative::ParseModule(Stream& s, Module& m, ByteArray name, ValidationE
     }
   }
 
+  if(err < 0)
+    return err;
+
   if(!m.name.size())
   {
     m.name.resize(name.size(), true);
@@ -785,10 +790,7 @@ IR_ERROR innative::ParseModule(Stream& s, Module& m, ByteArray name, ValidationE
   if(m.code.n_funcbody != m.function.n_funcdecl)
     return ERR_FUNCTION_BODY_MISMATCH;
 
-  if(err == ERR_SUCCESS)
-    err = ParseExportFixup(m, errors);
-
-  return err;
+  return ParseExportFixup(m, errors);
 }
 
 IR_ERROR innative::ParseExportFixup(Module& m, ValidationError*& errors)

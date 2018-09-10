@@ -109,7 +109,7 @@ void innative::wat::TokenizeInstruction(Queue<Token>& tokens, const Module& m, c
     tokens.Back().f = ins.immediates[0]._float64;
     break;
   case OP_br_table:
-    for(int64_t i = 0; i < ins.immediates[0].n_table; ++i)
+    for(uint64_t i = 0; i < ins.immediates[0].n_table; ++i)
     {
       tokens.Push(Token{ TOKEN_INTEGER, 0, ins.immediates[0].table[i] });
     }
@@ -163,7 +163,7 @@ void innative::wat::TokenizeInstruction(Queue<Token>& tokens, const Module& m, c
 void innative::wat::PushExportToken(Queue<Token>& tokens, const Module& m, WASM_KIND kind, varuint32 index)
 {
   if(m.knownsections&(1 << WASM_SECTION_EXPORT))
-    for(int64_t i = 0; i < m.exportsection.n_exports; ++i)
+    for(uint64_t i = 0; i < m.exportsection.n_exports; ++i)
     {
       if(m.exportsection.exports[i].kind == kind && m.exportsection.exports[i].index == index)
       {
@@ -224,7 +224,7 @@ void innative::wat::TokenizeModule(Queue<Token>& tokens, const Module& m)
     if(global.mutability)
     {
       tokens.Push(Token{ TOKEN_OPEN });
-      tokens.Push(Token{ TOKEN_RESULT });
+      tokens.Push(Token{ TOKEN_MUT });
       tokens.Push(Token{ TypeEncodingToken(global.type) });
       tokens.Push(Token{ TOKEN_CLOSE });
     }

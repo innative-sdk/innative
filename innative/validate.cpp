@@ -214,13 +214,13 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
     else
     {
       if(imp.table_desc.resizable.minimum > table->resizable.minimum)
-        AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MINIMUM, "Imported table minimum (%u) greater than exported table minimum (%u).", imp.table_desc.resizable.minimum, table->resizable.minimum);
+        AppendError(env.errors, m, ERR_INVALID_IMPORT_TABLE_MINIMUM, "Imported table minimum (%u) greater than exported table minimum (%u).", imp.table_desc.resizable.minimum, table->resizable.minimum);
       if(table->resizable.flags & 1)
       {
         if(!(imp.table_desc.resizable.flags & 1))
-          AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported table doesn't have a maximum, but exported table does.");
+          AppendError(env.errors, m, ERR_INVALID_IMPORT_TABLE_MAXIMUM, "Imported table doesn't have a maximum, but exported table does.");
         else if(imp.table_desc.resizable.maximum < table->resizable.maximum)
-          AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported table maximum (%u) less than exported table maximum (%u).", imp.table_desc.resizable.maximum, table->resizable.maximum);
+          AppendError(env.errors, m, ERR_INVALID_IMPORT_TABLE_MAXIMUM, "Imported table maximum (%u) less than exported table maximum (%u).", imp.table_desc.resizable.maximum, table->resizable.maximum);
       }
     }
     break;
@@ -422,8 +422,8 @@ void ValidateFunctionSig(Stack<varsint7>& values, FunctionType& sig, Environment
 
 void ValidateIndirectCall(Stack<varsint7>& values, varuint32 sig, Environment& env, Module* m)
 {
-  if(!m->table.n_tables)
-    AppendError(env.errors, m, ERR_INVALID_TABLE_INDEX, "0 is not a valid table index because there are %u tables.", m->table.n_tables);
+  if(!ModuleTable(*m, 0))
+    AppendError(env.errors, m, ERR_INVALID_TABLE_INDEX, "0 is not a valid table index because there are 0 tables.");
 
   ValidatePopType(values, TE_i32, env, m); // Pop callee
   if(sig < m->type.n_functions)
@@ -516,13 +516,19 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
     break;
   case OP_set_local:
     if(ins.immediates[0]._varuint32 >= n_locals)
+    {
       AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
+      ValidatePopType(values, 0, env, m);
+    }
     else
       ValidatePopType(values, locals[ins.immediates[0]._varuint32], env, m);
     break;
   case OP_tee_local:
     if(ins.immediates[0]._varuint32 >= n_locals)
+    {
       AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
+      ValidatePopType(values, 0, env, m);
+    }
     else
     {
       ValidatePopType(values, locals[ins.immediates[0]._varuint32], env, m);
@@ -542,7 +548,15 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
   {
     GlobalDesc* desc = ModuleGlobal(*m, ins.immediates[0]._varuint32);
     if(!desc)
-      AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index for get_global.");
+    {
+      AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index for set_global.");
+      ValidatePopType(values, 0, env, m);
+    }
+    else if(!desc->mutability)
+    {
+      AppendError(env.errors, m, ERR_IMMUTABLE_GLOBAL, "Cannot call set_global on an immutable global.");
+      ValidatePopType(values, 0, env, m);
+    }
     else
       ValidatePopType(values, desc->type, env, m);
   }
@@ -835,8 +849,17 @@ void innative::ValidateTableOffset(const TableInit& init, Environment& env, Modu
   {
     if(type != TE_i32) // We cannot verify the offset if it's the wrong type
       return; 
+
+    // If this is imported, we use it's actual minimum value instead of the one we claim it has
+    if(init.index + m->importsection.functions < m->importsection.tables)
+    {
+      auto pair = ResolveExport(env, m->importsection.imports[init.index + m->importsection.functions]);
+      if(!pair.first || !pair.second || pair.second->kind != WASM_KIND_TABLE || !(table = ModuleTable(*pair.first, pair.second->index)))
+        AppendError(env.errors, m, ERR_INVALID_TABLE_INDEX, "Could not resolve table import %u", init.index);
+    }
+
     varsint32 offset = EvalInitializerI32(init.offset, env, m);
-    if(offset + init.n_elements > table->resizable.minimum)
+    if(offset < 0 || offset + init.n_elements > table->resizable.minimum)
       AppendError(env.errors, m, ERR_INVALID_TABLE_OFFSET, "Offset (%i) plus element count (%u) exceeds minimum table length (%u)", offset, init.n_elements, table->resizable.minimum);
 
     for(uint64_t i = 0; i < init.n_elements; ++i)
@@ -905,7 +928,11 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
       if(!control.Size())
         AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Mismatched end instruction at index %u!", i);
       else
+      {
+        if(control.Peek().type == OP_if && control.Peek().sig != TE_void)
+          AppendError(env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "If statement without else cannot have a non-void block signature, had %hhi.", control.Peek().sig);
         ValidateEndBlock(control.Pop(), values, env, m, true);
+      }
       break;
     case OP_else:
       if(!control.Size())
@@ -947,10 +974,18 @@ void innative::ValidateDataOffset(const DataInit& init, Environment& env, Module
     AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "Invalid memory index %u", init.index);
     memory = ModuleMemory(*m, init.index);
   }
-  else //if(init.index + m->importsection.tables >= m->importsection.memories)
+  else
   {
+    // If this is imported, we use it's actual minimum value instead of the one we claim it has
+    if(init.index + m->importsection.tables < m->importsection.memories)
+    {
+      auto pair = ResolveExport(env, m->importsection.imports[init.index + m->importsection.tables]);
+      if(!pair.first || !pair.second || pair.second->kind != WASM_KIND_MEMORY || !(memory = ModuleMemory(*pair.first, pair.second->index)))
+        AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "Could not resolve memory import %u", init.index);
+    }
+
     varsint32 offset = EvalInitializerI32(init.offset, env, m);
-    if(offset + (uint64_t)init.data.size() > (((uint64_t)memory->limits.minimum) << 16))
+    if(offset < 0 || offset + (uint64_t)init.data.size() > (((uint64_t)memory->limits.minimum) << 16))
       AppendError(env.errors, m, ERR_INVALID_DATA_SEGMENT, "Offset (%i) plus element count (%u) exceeds minimum memory length (%llu)", offset, init.data.size(), (((uint64_t)memory->limits.minimum) << 16));
   }
 }
@@ -962,8 +997,31 @@ void ValidateSection(const T* a, varuint32 n, Environment& env, Module* m)
     VALIDATE(a[i], env, m);
 }
 
+void innative::ValidateImportOrder(Module& m)
+{
+  int kind = 0;
+  for(uint64_t i = 0; i < m.importsection.n_import; ++i)
+  {
+    // This is a debug operation that ensures we haven't forgotten to sort imports at some point
+    assert(kind <= m.importsection.imports[i].kind);
+    kind = m.importsection.imports[i].kind;
+  }
+}
+
+//#include "serialize.h"
+//#include <iostream>
+
 void innative::ValidateModule(Environment& env, Module& m)
 {
+  ValidateImportOrder(m);
+
+  //{
+  //Queue<wat::Token> auxtokens;
+  //wat::TokenizeModule(auxtokens, m);
+  //wat::WriteTokens(auxtokens, std::cout);
+  //std::cout << std::endl;
+  //}
+  
   if(m.knownsections&(1 << WASM_SECTION_TYPE))
     ValidateSection<FunctionType, &ValidateFunctionSig>(m.type.functions, m.type.n_functions, env, &m);
 

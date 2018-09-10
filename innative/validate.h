@@ -24,6 +24,7 @@ namespace innative {
   void ValidateTableOffset(const TableInit& init, Environment& env, Module* m);
   void ValidateFunctionBody(const FunctionType& sig, const FunctionBody& body, Environment& env, Module* m);
   void ValidateDataOffset(const DataInit& init, Environment& env, Module* m);
+  void ValidateImportOrder(Module& m);
   void ValidateModule(Environment& env, Module& m);
   void ValidateEnvironment(Environment& env);
   bool ValidateSectionOrder(const uint32& sections, varuint7 opcode);
