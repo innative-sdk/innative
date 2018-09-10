@@ -203,9 +203,16 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   switch(imp.kind)
   {
   case WASM_KIND_FUNCTION:
-    if(imp.func_desc.type_index >= m->type.n_functions)
+  {
+    FunctionType* func = ModuleFunction(env.modules[i], exp.index);
+    if(!func)
+      AppendError(env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid exported function index %u", exp.index);
+    else if(imp.func_desc.type_index >= m->type.n_functions)
       AppendError(env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid imported function type index %u", imp.func_desc.type_index);
+    else if(!MatchFunctionType(m->type.functions[imp.func_desc.type_index], *func))
+      AppendError(env.errors, m, ERR_INVALID_FUNCTION_IMPORT_TYPE, "Imported function signature didn't match exported function signature.");
     break;
+  }
   case WASM_KIND_TABLE:
   {
     TableDesc* table = ModuleTable(env.modules[i], exp.index);
@@ -218,7 +225,8 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
       if(table->resizable.flags & 1)
       {
         if(!(imp.table_desc.resizable.flags & 1))
-          AppendError(env.errors, m, ERR_INVALID_IMPORT_TABLE_MAXIMUM, "Imported table doesn't have a maximum, but exported table does.");
+          break;
+          //AppendError(env.errors, m, ERR_INVALID_IMPORT_TABLE_MAXIMUM, "Imported table doesn't have a maximum, but exported table does.");
         else if(imp.table_desc.resizable.maximum < table->resizable.maximum)
           AppendError(env.errors, m, ERR_INVALID_IMPORT_TABLE_MAXIMUM, "Imported table maximum (%u) less than exported table maximum (%u).", imp.table_desc.resizable.maximum, table->resizable.maximum);
       }
@@ -237,7 +245,8 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
       if(mem->limits.flags & 1)
       {
         if(!(imp.mem_desc.limits.flags & 1))
-          AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported memory doesn't have a maximum, but exported memory does.");
+          break;
+          //AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported memory doesn't have a maximum, but exported memory does.");
         else if(imp.mem_desc.limits.maximum < mem->limits.maximum)
           AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported memory maximum (%u) less than exported memory maximum (%u).", imp.mem_desc.limits.maximum, mem->limits.maximum);
       }
@@ -249,6 +258,8 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
     GlobalDesc* global = ModuleGlobal(env.modules[i], exp.index);
     if(!global)
       AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid exported global index %u", exp.index);
+    else if(imp.global_desc.mutability != global->mutability || imp.global_desc.type != global->type)
+      AppendError(env.errors, m, ERR_INVALID_GLOBAL_IMPORT_TYPE, "Imported global type (%hhi) or mutability (%hhu) does not match exported type (%hhi) or mutability (%hhu)", imp.global_desc.type, imp.global_desc.mutability, global->type, global->mutability);
     break;
   }
   default:

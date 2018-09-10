@@ -85,6 +85,9 @@ namespace innative {
       ERR_INVALID_TABLE_OFFSET,
       ERR_IMMUTABLE_GLOBAL,
       ERR_INVALID_MUTABILITY,
+      ERR_UNKNOWN_EXPORT,
+      ERR_INVALID_GLOBAL_IMPORT_TYPE,
+      ERR_INVALID_FUNCTION_IMPORT_TYPE,
       },
 {
   "alignment",
@@ -134,6 +137,9 @@ namespace innative {
   "elements segment does not fit",
   "global is immutable",
   "invalid mutability",
+  "unknown import",
+  "incompatible import type",
+  "incompatible import type",
 });
 
     kh_stringmap_t* GenWastStringMap(std::initializer_list<const char*> map)
