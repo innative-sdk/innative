@@ -180,29 +180,35 @@ IR_ERROR innative::ParseImport(Stream& s, Import& i)
 {
   IR_ERROR err = ParseIdentifier(s, i.module_name);
 
-  if(err >= 0)
-    err = ParseIdentifier(s, i.export_name);
+  if(err < 0)
+    return err;
 
-  if(err >= 0)
-    err = ParseVarUInt7(s, i.kind);
+  if(!ValidateIdentifier(i.module_name))
+    return ERR_INVALID_UTF8_ENCODING;
 
-  if(err >= 0)
+  if(err = ParseIdentifier(s, i.export_name))
+    return err;
+
+  if(!ValidateIdentifier(i.export_name))
+    return ERR_INVALID_UTF8_ENCODING;
+
+  if(err = ParseVarUInt7(s, i.kind))
+    return err;
+
+  switch(i.kind)
   {
-    switch(i.kind)
-    {
-    case WASM_KIND_FUNCTION:
-      i.func_desc.debug_name.resize(0, false);
-      i.func_desc.param_names = 0;
-      return ParseVarUInt32(s, i.func_desc.type_index);
-    case WASM_KIND_TABLE:
-      return ParseTableDesc(s, i.table_desc);
-    case WASM_KIND_MEMORY:
-      return ParseMemoryDesc(s, i.mem_desc);
-    case WASM_KIND_GLOBAL:
-      return ParseGlobalDesc(s, i.global_desc);
-    default:
-      err = ERR_FATAL_UNKNOWN_KIND;
-    }
+  case WASM_KIND_FUNCTION:
+    i.func_desc.debug_name.resize(0, false);
+    i.func_desc.param_names = 0;
+    return ParseVarUInt32(s, i.func_desc.type_index);
+  case WASM_KIND_TABLE:
+    return ParseTableDesc(s, i.table_desc);
+  case WASM_KIND_MEMORY:
+    return ParseMemoryDesc(s, i.mem_desc);
+  case WASM_KIND_GLOBAL:
+    return ParseGlobalDesc(s, i.global_desc);
+  default:
+    err = ERR_FATAL_UNKNOWN_KIND;
   }
 
   return err;

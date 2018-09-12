@@ -170,11 +170,10 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
     if(env.cimports)
     {
       // TODO: actually enforce this
-      return;
       std::string name = CanonImportName(imp);
-      khiter_t iter = kh_get_cimport(env.cimports, name.c_str());
-      if(kh_exist2(env.cimports, iter))
-        return; // This function exists and we already have verified the signature if there was a whitelist, so just return
+      //khiter_t iter = kh_get_cimport(env.cimports, name.c_str());
+      //if(kh_exist2(env.cimports, iter))
+      //  return; // This function exists and we already have verified the signature if there was a whitelist, so just return
       if(!modname || !modname[0] || modname[0] == '!') // Blank imports must have been C imports, otherwise it could have been a failed WASM module import attempt.
         return AppendError(env.errors, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found in C library imports", name.c_str());
     }
@@ -195,7 +194,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
 
   Export& exp = env.modules[i].exportsection.exports[j];
   if(exp.kind != imp.kind)
-    return AppendError(env.errors, m, ERR_IMPORT_EXPORT_MISMATCH, "export kind (%u) does not match import kind (%u)", exp.kind, imp.kind);
+    return AppendError(env.errors, m, ERR_IMPORT_EXPORT_TYPE_MISMATCH, "export kind (%u) does not match import kind (%u)", exp.kind, imp.kind);
 
   if(exp.name != imp.export_name)
     AppendError(env.errors, m, ERR_IMPORT_EXPORT_MISMATCH, "export name (%s) does not match import name (%s)", exp.name.str(), imp.export_name.str());
@@ -1033,6 +1032,11 @@ void innative::ValidateModule(Environment& env, Module& m)
   //std::cout << std::endl;
   //}
   
+  if(ModuleTable(m, 1) != nullptr)
+    AppendError(env.errors, &m, ERR_MULTIPLE_TABLES, "Cannot have more than 1 table defined.");
+  if(ModuleMemory(m, 1) != nullptr)
+    AppendError(env.errors, &m, ERR_MULTIPLE_MEMORIES, "Cannot have more than 1 memory defined.");
+
   if(m.knownsections&(1 << WASM_SECTION_TYPE))
     ValidateSection<FunctionType, &ValidateFunctionSig>(m.type.functions, m.type.n_functions, env, &m);
 

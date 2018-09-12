@@ -692,7 +692,7 @@ namespace innative {
     int WatAppendImport(Module& m, const Import& i, varuint32* index)
     {
       if(m.table.n_tables > 0 || m.function.n_funcdecl > 0 || m.global.n_globals > 0 || m.memory.n_memories > 0)
-        return assert(false), ERR_WAT_INVALID_IMPORT_ORDER; // If we're trying to insert an import after declaring a table/func/global/memory, fail.
+        return ERR_WAT_INVALID_IMPORT_ORDER; // If we're trying to insert an import after declaring a table/func/global/memory, fail.
 
       *index = 0;
       if(!(m.importsection.imports = trealloc<Import>(m.importsection.imports, ++m.importsection.n_import)))
@@ -1253,6 +1253,8 @@ namespace innative {
         e.index = *index; // This is fine because you can only import OR export on a declaration statement
         if(err = WatString(e.name, tokens.Pop()))
           return err;
+        if(!ValidateIdentifier(e.name))
+          return ERR_INVALID_UTF8_ENCODING;
         m.knownsections |= (1 << WASM_SECTION_EXPORT);
         if(err = AppendArray<Export>(e, m.exportsection.exports, m.exportsection.n_exports))
           return err;
@@ -1266,8 +1268,13 @@ namespace innative {
         Import i;
         if(err = WatString(i.module_name, tokens.Pop()))
           return err;
+        if(!ValidateIdentifier(i.module_name))
+          return ERR_INVALID_UTF8_ENCODING;
         if(err = WatString(i.export_name, tokens.Pop()))
           return err;
+        if(!ValidateIdentifier(i.export_name))
+          return ERR_INVALID_UTF8_ENCODING;
+
         i.kind = kind;
         if(err = WatAppendImport(m, i, index))
           return err;

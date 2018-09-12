@@ -88,6 +88,15 @@ namespace innative {
       ERR_UNKNOWN_EXPORT,
       ERR_INVALID_GLOBAL_IMPORT_TYPE,
       ERR_INVALID_FUNCTION_IMPORT_TYPE,
+      ERR_WAT_INVALID_IMPORT_ORDER,
+      ERR_INVALID_IMPORT_MEMORY_MINIMUM,
+      ERR_INVALID_IMPORT_MEMORY_MAXIMUM,
+      ERR_INVALID_IMPORT_TABLE_MINIMUM,
+      ERR_INVALID_IMPORT_TABLE_MAXIMUM,
+      ERR_MULTIPLE_TABLES,
+      ERR_MULTIPLE_MEMORIES,
+      ERR_IMPORT_EXPORT_TYPE_MISMATCH,
+      ERR_UNKNOWN_MODULE,
       },
 {
   "alignment",
@@ -140,6 +149,15 @@ namespace innative {
   "unknown import",
   "incompatible import type",
   "incompatible import type",
+  "invalid import order",
+  "incompatible import type",
+  "incompatible import type",
+  "incompatible import type",
+  "incompatible import type",
+  "multiple tables",
+  "multiple memories",
+  "incompatible import type",
+  "unknown import",
 });
 
     kh_stringmap_t* GenWastStringMap(std::initializer_list<const char*> map)
@@ -163,6 +181,10 @@ namespace innative {
         "unknown table 0", "unknown table",
         "i32 constant", "constant out of range",
         "length out of bounds", "unexpected end",
+        "import after function", "invalid import order",
+        "import after global", "invalid import order",
+        "import after table", "invalid import order",
+        "import after memory", "invalid import order",
       });
 
     size_t GetWastMapping(kh_indexname_t* mapping, const Token& t)
@@ -223,6 +245,7 @@ int ParseWastModule(Environment& env, Queue<Token>& tokens, kh_indexname_t* mapp
   EXPECTED(tokens, TOKEN_MODULE, ERR_WAT_EXPECTED_MODULE);
   int err;
   Token name = { TOKEN_NONE };
+  m = { 0 }; // We have to ensure this is zeroed, because an error could occur before ParseModule is called
 
   if(tokens[0].id == TOKEN_BINARY || (tokens.Size() > 1 && tokens[1].id == TOKEN_BINARY))
   {
@@ -527,6 +550,9 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
 
   while(tokens.Size() > 0 && tokens[0].id != TOKEN_CLOSE)
   {
+    for(varuint32 i = 0; i < env.n_modules; ++i)
+      assert(env.modules[i].exports != (void*)0xcdcdcdcdcdcdcdcd);
+
     EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
     switch(tokens[0].id)
     {
