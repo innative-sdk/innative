@@ -52,7 +52,7 @@ void innative::DestroyEnvironment(Environment* env)
   free(env);
 }
 
-void innative::LoadModule(Environment* env, size_t index, void* data, uint64_t size, const char* name, int* err)
+void innative::LoadModule(Environment* env, size_t index, const void* data, uint64_t size, const char* name, int* err)
 {
   Stream s = { (uint8_t*)data, size, 0 };
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
@@ -62,7 +62,7 @@ void innative::LoadModule(Environment* env, size_t index, void* data, uint64_t s
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
 }
 
-void innative::AddModule(Environment* env, void* data, uint64_t size, const char* name, int* err)
+void innative::AddModule(Environment* env, const void* data, uint64_t size, const char* name, int* err)
 {
   if(!env || !err)
   {
@@ -118,7 +118,7 @@ void innative::WaitForLoad(Environment* env)
     std::this_thread::sleep_for(std::chrono::milliseconds(5)); // Spin until all modules loaded
 }
 
-enum IR_ERROR innative::AddEmbedding(Environment* env, int tag, void* data, uint64_t size)
+enum IR_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, uint64_t size)
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;

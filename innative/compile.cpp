@@ -782,7 +782,7 @@ IR_ERROR CompileMemGrow(code::Context& context, const char* name)
 
 IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
 {
-  if(context.values.Peek() == nullptr) // If we have a polymorphic type on top we're in unreachable code so just skip all non-control operators
+  if(context.values.Size() > 0 && !context.values.Peek()) // If we have a polymorphic type on top we're in unreachable code so just skip all non-control operators
   {
     switch(ins.opcode)
     {
@@ -1246,7 +1246,9 @@ IR_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
     if(err < 0)
       return err;
   }
-
+  
+  if(context.values.Size() > 0 && !context.values.Peek()) // Pop at most 1 polymorphic type off the stack. Any additional ones are an error.
+    context.values.Pop();
   if(body.body[body.n_body - 1].opcode != OP_end)
     return assert(false), ERR_FATAL_EXPECTED_END_INSTRUCTION;
   if(context.control.Size() > 0 || context.control.Limit() > 0)
@@ -1508,13 +1510,13 @@ IR_ERROR CompileModule(Environment* env, code::Context& context)
   // Declare global variables
   for(varuint32 i = 0; i < context.m.global.n_globals; ++i)
   {
-    context.globals[i + context.m.importsection.globals] = CreateGlobal(
+    context.globals.push_back(CreateGlobal(
       context,
       GetLLVMType(context.m.global.globals[i].desc.type, context),
       !context.m.global.globals[i].desc.mutability,
       false,
       MergeName(context.m.name.str(), "globalvariable#", i),
-      CompileInitConstant(context.m.global.globals[i].init, context));
+      CompileInitConstant(context.m.global.globals[i].init, context)));
   }
 
   // Set ENV_HOMOGENIZE_FUNCTIONS flag appropriately.
@@ -1686,6 +1688,7 @@ IR_ERROR OutputObjectFile(code::Context& context, const char* out)
 namespace innative {
   IR_ERROR CompileEnvironment(Environment* env, const char* filepath)
   {
+    llvm::LLVMContext llvm_context;
     Path file(filepath);
     Path workdir = GetWorkingDir();
     Path programpath = GetProgramPath();
@@ -1696,7 +1699,6 @@ namespace innative {
     if(!file.IsAbsolute())
       file = workdir + file;
 
-    llvm::LLVMContext llvm_context;
     llvm::IRBuilder<> builder(llvm_context);
     code::Context* start = nullptr;
     IR_ERROR err = ERR_SUCCESS;
@@ -1811,7 +1813,7 @@ namespace innative {
     {
       // Write all in-memory environments to cache files
       vector<string> cache;
-      vector<const char*> linkargs = { "innative", "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO", "/nodefaultlib", "/MANIFEST", "/MANIFEST:embed", "/SUBSYSTEM:CONSOLE", "/VERBOSE", "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT", "/MACHINE:X64", "/machine:x64" };
+      vector<const char*> linkargs = { "innative", "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO", "/nodefaultlib", /*"/MANIFEST", "/MANIFEST:embed",*/ "/SUBSYSTEM:CONSOLE", "/VERBOSE", "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT", "/MACHINE:X64", "/machine:x64" };
 
 #ifdef IR_PLATFORM_WIN32
       linkargs.push_back("/ENTRY:" IR_INIT_FUNCTION);

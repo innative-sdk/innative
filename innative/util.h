@@ -5,8 +5,8 @@
 #define __UTIL_H__IR__
 
 #include "innative/schema.h"
+#include "innative/path.h"
 #include "constants.h"
-#include "path.h"
 #include <string>
 #include <math.h>
 #include <exception>

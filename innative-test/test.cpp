@@ -45,14 +45,17 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  //testfiles = { "../spec/test/core/binary.wast" };
+  testfiles = { "../spec/test/core/address.wast" };
   target << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
   //testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
 
   for(auto file : testfiles)
   {
     Environment* env = (*exports.CreateEnvironment)(ENV_DEBUG | ENV_STRICT, 1, 0);
-    int err = innative_compile_script(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env);
+    int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
+
+    if(err >= 0)
+      err = innative_compile_script(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env);
     if(err < 0)
       return assert(false), -1; // If the environment injection fails, abort everything
 

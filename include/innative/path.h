@@ -51,6 +51,12 @@ namespace innative {
       return r;
     }
 
+    inline std::string Extension()
+    {
+      size_t pos = _path.find_last_of('.');
+      return (pos != std::string::npos) ? _path.substr(pos + 1) : std::string();
+    }
+
     // Either removes the file, if there is one, or the last directory in the path
     inline Path BaseDir()
     {

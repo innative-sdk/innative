@@ -148,10 +148,12 @@ limitations under the License.
 #define FOPEN(f, path, mode) fopen_s((&f), (path), (mode))
 #define ITOA(value, buffer, size, radix) _itoa_s(value, buffer, size, radix)
 #define STRICMP(a, b) _stricmp(a, b)
+#define STRTOK(str,delim,context) strtok_s(str,delim,context)
 #else
 #define FOPEN(f, path, mode) f = fopen(path, mode)
 #define ITOA(value, buffer, size, radix) itoa((value), (buffer), (radix))
 #define STRICMP(a, b) stricmp(a, b)
+#define STRTOK(str,delim,context) strtok_r(str,delim,context)
 #endif
 
 #endif

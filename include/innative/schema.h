@@ -672,7 +672,7 @@ typedef struct __WASM_VALIDATION_ERROR
 
 typedef struct __WASM_EMBEDDING
 {
-  void* data;
+  const void* data;
   uint64_t size; // If size is 0, data points to a null terminated UTF8 file path
   int tag; // defines the type of embedding data included, determined by the runtime. 0 is always a static library file for the current platform.
   struct __WASM_EMBEDDING* next;

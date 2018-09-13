@@ -220,10 +220,10 @@ int CompileWast(Environment& env, const char* out, void*& cache)
   ValidateEnvironment(env);
   if(env.errors)
     return ERR_VALIDATION_ERROR;
-  return ERR_SUCCESS;
   if(err = CompileEnvironment(&env, out))
     return err;
 
+  return ERR_SUCCESS;
   // Prepare to handle exceptions from the initialization
   auto dir = GetWorkingDir();
   dir.Append(out);

@@ -2,8 +2,8 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "innative/export.h"
+#include "innative/path.h"
 #include "tools.h"
-#include "path.h"
 #include "wast.h"
 #include <stdio.h>
 #include <memory>
@@ -26,7 +26,7 @@ void innative_runtime(IRExports* exports)
   exports->DestroyEnvironment = &DestroyEnvironment;
 }
 
-int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const _IR_WHITELIST* whitelist, int n_whitelist)
+int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const _IR_WHITELIST* whitelist, unsigned int n_whitelist)
 {
   // Then create the runtime environment with the module count.
   Environment* env = CreateEnvironment(flags, 1, 0);
@@ -40,7 +40,7 @@ int innative_compile_file(const char* file, const char* out, unsigned int flags,
     AddWhitelist(env, nullptr, nullptr, nullptr);
   else
   {
-    for(int i = 0; i < n_whitelist; ++i)
+    for(unsigned int i = 0; i < n_whitelist; ++i)
       AddWhitelist(env, whitelist[i].module_name, whitelist[i].export_name, &whitelist[i].sig);
   }
 
@@ -62,11 +62,7 @@ int innative_compile_file(const char* file, const char* out, unsigned int flags,
   }
 
   // Add all embedding environments that are included with this runtime
-#ifdef IR_DEBUG
-  err = AddEmbedding(env, 0, (void*)"innative-env_d.lib", 0);
-#else
-  err = AddEmbedding(env, 0, (void*)"innative-env.lib", 0);
-#endif
+  err = AddEmbedding(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
 
   if(err < 0)
   {
@@ -83,8 +79,7 @@ int innative_compile_file(const char* file, const char* out, unsigned int flags,
     for(ValidationError* err = env->errors; err != nullptr; err = err->next)
       fprintf(stderr, "Error %i: %s\n", err->code, err->error);
 
-    int i = 0;
-    scanf_s("%i", &i);
+    getchar();
     return err;
   }
 
@@ -114,13 +109,6 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env)
     fprintf(stderr, "Environment cannot be null.\n");
     return -1;
   }
-
-  // Add all embedding environments that are included with this runtime
-#ifdef IR_DEBUG
-  err = AddEmbedding(env, 0, (void*)"innative-env_d.lib", 0);
-#else
-  err = AddEmbedding(env, 0, (void*)"innative-env.lib", 0);
-#endif
 
   if(err < 0)
   {

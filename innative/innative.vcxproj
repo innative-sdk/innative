@@ -116,7 +116,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <SDLCheck>true</SDLCheck>
+      <SDLCheck>false</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)include</AdditionalIncludeDirectories>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
@@ -211,13 +211,13 @@
     <ClInclude Include="..\include\innative\export.h" />
     <ClInclude Include="..\include\innative\khash.h" />
     <ClInclude Include="..\include\innative\innative.h" />
+    <ClInclude Include="..\include\innative\path.h" />
     <ClInclude Include="..\include\innative\schema.h" />
     <ClInclude Include="compile.h" />
     <ClInclude Include="constants.h" />
     <ClInclude Include="intrinsic.h" />
     <ClInclude Include="optimize.h" />
     <ClInclude Include="parse.h" />
-    <ClInclude Include="path.h" />
     <ClInclude Include="queue.h" />
     <ClInclude Include="serialize.h" />
     <ClInclude Include="stack.h" />
