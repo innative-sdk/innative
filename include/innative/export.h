@@ -52,11 +52,7 @@ extern "C" {
     IR_COMPILER_DLLEXPORT extern int innative_build_loader(struct _IR_CHUNK* chunks, const char* out, bool dynamic);
     IR_COMPILER_DLLEXPORT extern void innative_set_work_dir_to_bin();
 
-#ifdef IR_DEBUG
-    IR_COMPILER_DLLEXPORT extern const char* INNATIVE_DEFAULT_ENVIRONMENT = "innative-env_d.lib";
-#else
-    IR_COMPILER_DLLEXPORT extern const char* INNATIVE_DEFAULT_ENVIRONMENT = "innative-env.lib";
-#endif
+    IR_COMPILER_DLLEXPORT extern const char* INNATIVE_DEFAULT_ENVIRONMENT;
 
 #ifdef  __cplusplus
 }

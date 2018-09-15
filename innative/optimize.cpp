@@ -10,7 +10,7 @@
 using namespace innative;
 
 // Generate function annotations based on dependency graph.
-IR_ERROR innative::AnnotateFunctions(Environment* env, code::Context* contexts)
+IR_ERROR innative::AnnotateFunctions(const Environment* env, code::Context* contexts)
 {
   // Go through every single function and start by considering it maximally pure, then remove 
   // tags as we walk through the code, ignoring function calls. If it has no function body,

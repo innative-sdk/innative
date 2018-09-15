@@ -550,9 +550,6 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
 
   while(tokens.Size() > 0 && tokens[0].id != TOKEN_CLOSE)
   {
-    for(varuint32 i = 0; i < env.n_modules; ++i)
-      assert(env.modules[i].exports != (void*)0xcdcdcdcdcdcdcdcd);
-
     EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
     switch(tokens[0].id)
     {

@@ -7,7 +7,7 @@
 #include "innative/schema.h"
 
 namespace innative {
-  IR_ERROR CompileEnvironment(Environment* env, const char* file);
+  IR_ERROR CompileEnvironment(const Environment* env, const char* file);
 }
 
 #endif

@@ -11,6 +11,12 @@
 
 using namespace innative;
 
+#ifdef IR_DEBUG
+const char* INNATIVE_DEFAULT_ENVIRONMENT = "innative-env_d.lib";
+#else
+const char* INNATIVE_DEFAULT_ENVIRONMENT = "innative-env.lib";
+#endif
+
 // Return pointers to all our internal functions
 void innative_runtime(IRExports* exports)
 {

@@ -156,7 +156,7 @@ int main(int argc, char *argv[])
   if(wast.size() > 0)
   {
     for(size_t i = 0; i < wast.size() && !err; ++i)
-      err = innative_compile_script(wast[i], 0, env);
+      err = innative_compile_script_file(wast[i], env);
   }
   else // Attempt to compile. If an error happens, output it and any validation errors to stderr
     err = (*exports.Compile)(env, out.c_str());

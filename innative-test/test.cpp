@@ -10,19 +10,19 @@ using namespace std::filesystem;
 
 // This defines the testing environment that we need to inject
 const char testenv[] = "(module $spectest "
-"\n  (global(export \"global_i32\") i32 i32.const 0)"
-"\n  (global(export \"global_i64\") i64 i64.const 0)"
-"\n  (global(export \"global_f32\") f32 f32.const 0)"
-"\n  (global(export \"global_f64\") f64 f64.const 0)"
-"\n  (memory(export \"memory\") 1)"
-"\n  (table(export \"table\") 10 anyfunc)"
-"\n  (func(export \"print\") (param i32))"
-"\n  (func(export \"print_i32\") (param i32))"
-"\n  (func(export \"print_i64\") (param i64))"
-"\n  (func(export \"print_f32\") (param f32))"
-"\n  (func(export \"print_f64\") (param f64))"
-"\n  (func(export \"print_i32_f32\") (param i32 f32))"
-"\n  (func(export \"print_f64_f64\") (param f64 f64))"
+"\n  (global $global_i32 (export \"global_i32\") i32 i32.const 0)"
+"\n  (global $global_i64 (export \"global_i64\") i64 i64.const 0)"
+"\n  (global $global_f32 (export \"global_f32\") f32 f32.const 0)"
+"\n  (global $global_f64 (export \"global_f64\") f64 f64.const 0)"
+"\n  (memory $memory1 (export \"memory\") 1)"
+"\n  (table $table10 (export \"table\") 10 anyfunc)"
+"\n  (func $print (export \"print\") (param i32))"
+"\n  (func $print_i32 (export \"print_i32\") (param i32))"
+"\n  (func $print_i64 (export \"print_i64\") (param i64))"
+"\n  (func $print_f32 (export \"print_f32\") (param f32))"
+"\n  (func $print_f64 (export \"print_f64\") (param f64))"
+"\n  (func $print_i32_f32 (export \"print_i32_f32\") (param i32 f32))"
+"\n  (func $print_f64_f64 (export \"print_f64_f64\") (param f64 f64))"
 "\n) (register \"spectest\" $spectest)";
 
 int main(int argc, char *argv[])

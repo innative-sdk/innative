@@ -1318,7 +1318,7 @@ llvm::Function* GetIntrinsic(Import& imp, code::Context& context)
   return nullptr;
 }
 
-IR_ERROR CompileModule(Environment* env, code::Context& context)
+IR_ERROR CompileModule(const Environment* env, code::Context& context)
 {
   context.llvm = new llvm::Module(context.m.name.str(), context.context);
   context.llvm->setTargetTriple(context.machine->getTargetTriple().getTriple());
@@ -1686,7 +1686,7 @@ IR_ERROR OutputObjectFile(code::Context& context, const char* out)
 }
 
 namespace innative {
-  IR_ERROR CompileEnvironment(Environment* env, const char* filepath)
+  IR_ERROR CompileEnvironment(const Environment* env, const char* filepath)
   {
     llvm::LLVMContext llvm_context;
     Path file(filepath);
@@ -1865,6 +1865,7 @@ namespace innative {
         linkargs.push_back(v.c_str());
 
       vector<string> targets = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.BaseDir().Get(), "/LIBPATH:" + workdir.Get() };
+      size_t target_init = targets.size();
 
       // Generate object code
       for(size_t i = 0; i < env->n_modules; ++i)
@@ -1885,9 +1886,12 @@ namespace innative {
           std::remove(v.c_str());
         return assert(false), ERR_FATAL_LINK_ERROR;
       }
+
       // Delete cache files
       for(auto& v : cache)
         std::remove(v.c_str());
+      for(; target_init < targets.size(); ++target_init)
+        std::remove(targets[target_init].c_str());
     }
 
     return ERR_SUCCESS;

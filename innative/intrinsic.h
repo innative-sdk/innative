@@ -48,7 +48,7 @@ namespace innative {
 
     struct Context
     {
-      Environment& env;
+      const Environment& env;
       Module& m;
       llvm::LLVMContext& context;
       llvm::Module* llvm;
