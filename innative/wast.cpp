@@ -223,6 +223,7 @@ int CompileWast(Environment& env, const char* out, void*& cache)
   if(err = CompileEnvironment(&env, out))
     return err;
 
+  cache = (void*)0xFFFF;
   return ERR_SUCCESS;
   // Prepare to handle exceptions from the initialization
   auto dir = GetWorkingDir();

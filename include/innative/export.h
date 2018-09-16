@@ -14,7 +14,7 @@ extern "C" {
     // Contains the actual runtime functions
     typedef struct __IR_EXPORTS
     {
-      Environment* (*CreateEnvironment)(unsigned int flags, unsigned int modules, unsigned int maxthreads);
+      Environment* (*CreateEnvironment)(unsigned int flags, unsigned int modules, unsigned int maxthreads, const char* arg0);
       void(*AddModule)(Environment* env, const void* data, uint64_t size, const char* name, int* err); // If size is 0, data points to a null terminated UTF8 file path
       void(*AddWhitelist)(Environment* env, const char* module_name, const char* export_name, const FunctionType* sig);
       void(*WaitForLoad)(Environment* env);
@@ -48,9 +48,9 @@ extern "C" {
     // Tooling functions that exist for command line utilities that always statically link to the runtime
     IR_COMPILER_DLLEXPORT extern int innative_compile_script(const uint8_t* data, size_t sz, Environment* env);
     IR_COMPILER_DLLEXPORT extern int innative_compile_script_file(const char* file, Environment* env);
-    IR_COMPILER_DLLEXPORT extern int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const struct _IR_WHITELIST* whitelist, int n_whitelist);
+    IR_COMPILER_DLLEXPORT extern int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const struct _IR_WHITELIST* whitelist, int n_whitelist, const char* arg0);
     IR_COMPILER_DLLEXPORT extern int innative_build_loader(struct _IR_CHUNK* chunks, const char* out, bool dynamic);
-    IR_COMPILER_DLLEXPORT extern void innative_set_work_dir_to_bin();
+    IR_COMPILER_DLLEXPORT extern void innative_set_work_dir_to_bin(const char* arg0);
 
     IR_COMPILER_DLLEXPORT extern const char* INNATIVE_DEFAULT_ENVIRONMENT;
 

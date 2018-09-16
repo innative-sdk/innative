@@ -32,10 +32,10 @@ void innative_runtime(IRExports* exports)
   exports->DestroyEnvironment = &DestroyEnvironment;
 }
 
-int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const _IR_WHITELIST* whitelist, unsigned int n_whitelist)
+int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const _IR_WHITELIST* whitelist, unsigned int n_whitelist, const char* arg0)
 {
   // Then create the runtime environment with the module count.
-  Environment* env = CreateEnvironment(flags, 1, 0);
+  Environment* env = CreateEnvironment(flags, 1, 0, arg0);
   if(!env)
   {
     fprintf(stderr, "Unknown error creating environment.\n");
@@ -141,7 +141,7 @@ int innative_compile_script_file(const char* file, Environment* env)
   return innative_compile_script(data_module.get(), sz, env);
 }
 
-void innative_set_work_dir_to_bin()
+void innative_set_work_dir_to_bin(const char* arg0)
 {
-  utility::SetWorkingDir(utility::GetProgramPath().Get().c_str());
+  utility::SetWorkingDir(utility::GetProgramPath(arg0).Get().c_str());
 }

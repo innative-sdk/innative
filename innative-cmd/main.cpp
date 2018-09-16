@@ -31,6 +31,8 @@ int main(int argc, char *argv[])
   unsigned int flags = ENV_ENABLE_WAT; // Always enable WAT 
   std::string out;
   std::vector<const char*> wast; // WAST files will be executed in the order they are specified, after all other modules are injected into the environment
+  const char* sdkpath = 0;
+  const char* linker = 0;
   bool run = false;
   bool generate = false;
   int err = ERR_SUCCESS;
@@ -72,6 +74,13 @@ int main(int argc, char *argv[])
         generate = true;
         break;
       case 'w': // whitelist
+        break;
+      case 'a': // animal sacrifice (specify an alternative linker)
+        linker = argv[i] + 2;
+        break;
+      case 'd': // Specify EXE directory, or any directory containing SDK libraries.
+        sdkpath = argv[i] + 2;
+        break;
       default:
         std::cout << "Unknown command line option: " << argv[i] << std::endl;
         err = -5;
@@ -107,12 +116,17 @@ int main(int argc, char *argv[])
     out = innative::Path(inputs[0]).RemoveExtension().Get() + ((flags&ENV_DLL) ? ".dll" : ".exe");
 
   // Then create the runtime environment with the module count.
-  Environment* env = (*exports.CreateEnvironment)(flags, inputs.size(), 0);
+  Environment* env = (*exports.CreateEnvironment)(flags, inputs.size(), 0, (!argc ? 0 : argv[0]));
   if(!env)
   {
     fprintf(stderr, "Unknown error creating environment.\n");
     return -2;
   }
+
+  if(sdkpath)
+    env->sdkpath = sdkpath;
+  if(linker)
+    env->linker = linker;
 
   /*if(whitelist != nullptr)
   {

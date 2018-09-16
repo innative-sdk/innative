@@ -27,12 +27,12 @@ const char testenv[] = "(module $spectest "
 
 int main(int argc, char *argv[])
 {
-  innative_set_work_dir_to_bin();
+  innative_set_work_dir_to_bin(!argc ? 0 : argv[0]);
   IRExports exports;
   innative_runtime(&exports);
 
-  std::ostream& target = std::cout;
-  //std::ofstream target("out.txt", std::fstream::binary | std::fstream::out);
+  //std::ostream& target = std::cout;
+  std::ofstream target("out.txt", std::fstream::binary | std::fstream::out);
   target << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
   target << std::endl;
 
@@ -45,13 +45,13 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  testfiles = { "../spec/test/core/address.wast" };
+  testfiles = { "../spec/test/core/align.wast" };
   target << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
   //testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
 
   for(auto file : testfiles)
   {
-    Environment* env = (*exports.CreateEnvironment)(ENV_DEBUG | ENV_STRICT, 1, 0);
+    Environment* env = (*exports.CreateEnvironment)(ENV_DEBUG | ENV_STRICT, 1, 0, (!argc ? 0 : argv[0]));
     int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
 
     if(err >= 0)

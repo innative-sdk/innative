@@ -25,8 +25,8 @@
 #include <windows.h>
 #pragma pack(pop)
 #elif defined(IR_PLATFORM_POSIX)
+#include <unistd.h>
 #include <cpuid.h>
-#error TODO
 #endif
 
 using std::string;
@@ -154,7 +154,7 @@ namespace innative {
       return { env.modules + i, env.modules[i].exportsection.exports + j };
     }
 
-    Path GetProgramPath()
+    Path GetProgramPath(const char* arg0)
     {
       string buf;
 #ifdef IR_PLATFORM_WIN32
@@ -173,7 +173,8 @@ namespace innative {
       buf.resize(GetCurrentDirectoryA(0, 0));
       buf.resize(GetCurrentDirectoryA((DWORD)buf.capacity(), const_cast<char*>(buf.data())));
 #elif defined(IR_PLATFORM_POSIX)
-#error TODO
+      buf.resize(PATH_MAX);
+      getcwd(const_cast<char*>(buf.data()), buf.capacity());
 #endif
       return Path(std::move(buf));
     }
@@ -183,7 +184,7 @@ namespace innative {
 #ifdef IR_PLATFORM_WIN32
       return SetCurrentDirectoryA(path) != 0;
 #elif defined(IR_PLATFORM_POSIX)
-#error TODO
+      return chdir(path) != 0;
 #endif
     }
 
@@ -195,7 +196,7 @@ namespace innative {
       info[5] = sysinfo.wProcessorArchitecture | (flags << 16);
       __cpuid(info, 1);
 #elif defined(IR_PLATFORM_POSIX)
-#error TODO
+      __get_cpuid(1, info + 0, info + 1, info + 2, info + 3);
 #endif
     }
 

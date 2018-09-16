@@ -13,7 +13,7 @@
 using namespace innative;
 using namespace utility;
 
-Environment* innative::CreateEnvironment(unsigned int flags, unsigned int modules, unsigned int maxthreads)
+Environment* innative::CreateEnvironment(unsigned int flags, unsigned int modules, unsigned int maxthreads, const char* arg0)
 {
   Environment* env = (Environment*)calloc(1, sizeof(Environment));
   if(env)
@@ -31,6 +31,11 @@ Environment* innative::CreateEnvironment(unsigned int flags, unsigned int module
     env->capacity = modules;
     env->flags = flags;
     env->maxthreads = maxthreads;
+    env->linker = 0;
+    auto sdkpath = GetProgramPath(arg0).Get();
+    char* tmp = tmalloc<char>(sdkpath.size() + 1);
+    tmemcpy<char>(tmp, sdkpath.size() + 1, sdkpath.c_str(), sdkpath.size() + 1);
+    env->sdkpath = tmp;
   }
   return env;
 }
@@ -180,7 +185,7 @@ void* innative::LoadGlobal(void* cache, const char* module_name, const char* exp
 
 void* innative::LoadAssembly(int flags, const char* file)
 {
-  Path path(file != nullptr ? Path(file) : GetProgramPath() + IR_EXTENSION);
+  Path path(file != nullptr ? Path(file) : GetProgramPath(0) + IR_EXTENSION);
   void* handle = LoadDLL(path.Get().c_str());
   if(!handle)
     return nullptr;

@@ -690,6 +690,8 @@ typedef struct __WASM_ENVIRONMENT
   ValidationError* errors; //A linked list of non-fatal validation errors that prevent proper execution.
   uint64_t flags;
   unsigned int maxthreads; // Max number of threads for any multithreaded action. If 0, there is no limit.
+  const char* sdkpath; // Path to look for SDK components, which usually aren't in the working directory
+  const char* linker; // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
 
   struct kh_modules_s* modulemap;
   struct kh_modulepair_s* whitelist;
