@@ -143,7 +143,6 @@ limitations under the License.
 #endif
 #endif
 
-
 #ifdef IR_COMPILER_MSC
 #define FOPEN(f, path, mode) fopen_s((&f), (path), (mode))
 #define ITOA(value, buffer, size, radix) _itoa_s(value, buffer, size, radix)

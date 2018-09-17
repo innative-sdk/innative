@@ -280,8 +280,8 @@ IR_ERROR CompileUnaryOp(code::Context& context, llvmVal* (llvm::IRBuilder<>::*op
 }
 
 // Given an intrinsic function ID, pops one unary argument off the stack and pushes the result, converting it to a Value*
-template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING TyR>
-IR_ERROR CompileUnaryIntrinsic(code::Context& context, llvm::Intrinsic::ID id, const Twine& name)
+template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING TyR, typename... Args>
+IR_ERROR CompileUnaryIntrinsic(code::Context& context, llvm::Intrinsic::ID id, const Twine& name, Args... args)
 {
   IR_ERROR err;
 
@@ -289,9 +289,12 @@ IR_ERROR CompileUnaryIntrinsic(code::Context& context, llvm::Intrinsic::ID id, c
   llvmVal *val1;
   if(err = PopType(Ty1, context, val1))
     return assert(false), err;
+
+  llvmVal* values[sizeof...(Args) + 1] = { val1, args... };
+
   Func *fn = llvm::Intrinsic::getDeclaration(context.llvm, id, { val1->getType() });
   
-  return PushReturn(context, context.builder.CreateCall(fn, { val1 }, name, nullptr));
+  return PushReturn(context, context.builder.CreateCall(fn, values, name));
 }
 
 IR_ERROR CompileSelectOp(code::Context& context, const Twine& name, llvm::Instruction* from)
@@ -377,7 +380,7 @@ void PushResult(code::BlockResult** root, llvmVal* result, BB* block)
 // Adds current value stack to target branch according to that branch's signature, but doesn't pop them.
 IR_ERROR AddBranch(code::Block& target, code::Context& context)
 {
-  if(!CheckSig(WASM_TYPE_ENCODING(target.sig), context.values)) // We only verify the type, not the entire stack
+  if(!CheckSig(target.sig, context.values)) // We only verify the type, not the entire stack
     return assert(false), ERR_INVALID_VALUE_STACK;
   if(target.sig != TE_void && context.values.Peek() != nullptr)
     PushResult(&target.results, context.values.Peek(), context.builder.GetInsertBlock()); // Push result
@@ -386,33 +389,40 @@ IR_ERROR AddBranch(code::Block& target, code::Context& context)
 }
 
 // Pops a label off the control stack, verifying that the value stack matches the signature and building PHI nodes as necessary
-IR_ERROR PopLabel(code::Context& context)
+IR_ERROR PopLabel(code::Context& context, BB* block)
 {
   varsint7 sig = context.control.Peek().sig;
+  llvmVal* push = nullptr;
   if(sig != TE_void)
   {
-    if(!CheckSig(WASM_TYPE_ENCODING(sig), context.values))
-      return assert(false), ERR_INVALID_VALUE_STACK;
+    IR_ERROR err;
+    if(err = PopType(sig, context, push))
+      return assert(false), err;
     if(context.control.Peek().results != nullptr) // If there are results from other branches, perform a PHI merge. Otherwise, leave the value stack alone
     {
       unsigned int count = 1; // Start with 1 for our current branch's values 
       for(auto i = context.control.Peek().results; i != nullptr; i = i->next)
         ++count; // Count number of additional results
 
-      llvm::PHINode* phi = context.builder.CreatePHI(context.values.Peek()->getType(), count, "phi"); // TODO: Account for multiple return values once they are added
-      phi->addIncoming(context.values.Pop(), context.builder.GetInsertBlock()); // Pop this branches values off value stack, add using proper insert block
+      llvm::PHINode* phi = context.builder.CreatePHI(push->getType(), count, "phi"); // TODO: Account for multiple return values once they are added
+      phi->addIncoming(push, block); // Pop this branches values off value stack, add using proper insert block
 
       for(auto i = context.control.Peek().results; i != nullptr; i = i->next)
         phi->addIncoming(i->v, i->b);
 
-      if(context.values.Size() > 0 && context.values.Peek() != nullptr) // All values should have been popped off value stack by now
-        return assert(false), ERR_INVALID_VALUE_STACK;
-
-      PushReturn(context, phi); // Push phi nodes on to stack
+      push = phi; // Push phi nodes on to stack
     }
   }
-  else if((context.values.Size() > 0 && context.values.Peek() != nullptr) || context.control.Peek().results != nullptr)
+  else if(context.control.Peek().results != nullptr)
     return assert(false), ERR_INVALID_VALUE_STACK;
+
+  if(context.values.Size() > 0 && !context.values.Peek()) // Pop at most 1 polymorphic type off the stack.
+    context.values.Pop();
+  if(context.values.Size() > 0) // value stack should be completely empty now
+    return assert(false), ERR_INVALID_VALUE_STACK;
+
+  if(push)
+   PushReturn(context, push);
 
   context.values.SetLimit(context.control.Peek().limit);
   context.control.Pop();
@@ -445,6 +455,8 @@ void PolymorphicStack(code::Context& context)
   while(context.values.Size() > 0)
     context.values.Pop();
   context.values.Push(nullptr);
+  BB* graveyard = BB::Create(context.context, "graveyard", context.builder.GetInsertBlock()->getParent());
+  context.builder.SetInsertPoint(graveyard);
 }
 
 IR_ERROR CompileElseBlock(code::Context& context)
@@ -453,7 +465,7 @@ IR_ERROR CompileElseBlock(code::Context& context)
     return assert(false), ERR_IF_ELSE_MISMATCH;
 
   // Instead of popping and pushing a new control label, we just re-purpose the existing one. This preserves the value stack results.
-  if(!CheckSig(WASM_TYPE_ENCODING(context.control.Peek().sig), context.values)) // Verify stack
+  if(!CheckSig(context.control.Peek().sig, context.values)) // Verify stack
     return assert(false), ERR_INVALID_VALUE_STACK;
   if(context.control.Peek().sig != TE_void && context.values.Peek() != nullptr)
     PushResult(&context.control.Peek().results, context.values.Peek(), context.builder.GetInsertBlock()); // Push result
@@ -488,7 +500,6 @@ IR_ERROR CompileReturn(code::Context& context, varsint7 sig)
     context.builder.CreateRet(val);
   }
 
-  PolymorphicStack(context);
   return ERR_SUCCESS;
 }
 
@@ -503,17 +514,14 @@ IR_ERROR CompileEndBlock(code::Context& context)
       if(context.control.Peek().op != OP_return)
         return assert(false), ERR_END_MISMATCH;
 
-      IR_ERROR err = PopLabel(context);
+      IR_ERROR err = PopLabel(context, context.builder.GetInsertBlock());
       if(err >= 0)
         err = CompileReturn(context, sig);
-      if(context.values.Size() > 0 && !context.values.Peek()) // Pop off one polymorphic placeholder
-        context.values.Pop();
       return err;
     }
     return assert(false), ERR_END_MISMATCH;
   }
-  if(context.values.Size() > 0 && !context.values.Peek()) // Pop off one polymorphic placeholder
-    context.values.Pop();
+  BB* cur = context.builder.GetInsertBlock();
   context.builder.CreateBr(context.control.Peek().block); // Branch into next block
   BindLabel(context.control.Peek().block, context);
 
@@ -530,15 +538,15 @@ IR_ERROR CompileEndBlock(code::Context& context)
     return assert(false), ERR_END_MISMATCH;
   }
 
-  return PopLabel(context);
+  IR_ERROR err = PopLabel(context, cur);
+  return err;
 }
 
-IR_ERROR CompileTrap(code::Context& context)
+void CompileTrap(code::Context& context)
 {
   auto call = context.builder.CreateCall(llvm::Intrinsic::getDeclaration(context.llvm, llvm::Intrinsic::trap), { });
   call->setDoesNotReturn();
   context.builder.CreateUnreachable();
-  return ERR_SUCCESS;
 }
 
 IR_ERROR InsertConditionalTrap(llvmVal* cond, code::Context& context)
@@ -562,8 +570,9 @@ IR_ERROR CompileBranch(varuint32 depth, code::Context& context)
 
   code::Block& target = context.control[depth];
   context.builder.CreateBr(target.block);
+  IR_ERROR err = (target.op != OP_loop) ? AddBranch(target, context) : ERR_SUCCESS; // Branches targeting loops just throw all their values away, so we don't need to build PHI nodes.
   PolymorphicStack(context);
-  return (target.op != OP_loop) ? AddBranch(target, context) : ERR_SUCCESS; // Branches targeting loops just throw all their values away, so we don't need to build PHI nodes.
+  return err;
 }
 
 IR_ERROR CompileIfBranch(varuint32 depth, code::Context& context)
@@ -592,7 +601,6 @@ IR_ERROR CompileBranchTable(varuint32 n_table, varuint32* table, varuint32 def, 
   llvmVal* index;
   if(err = PopType(TE_i32, context, index))
     return assert(false), err;
-  PolymorphicStack(context);
 
   if(def >= context.control.Size())
     return assert(false), ERR_INVALID_BRANCH_DEPTH;
@@ -610,7 +618,8 @@ IR_ERROR CompileBranchTable(varuint32 n_table, varuint32* table, varuint32 def, 
     err = (target.op != OP_loop) ? AddBranch(target, context) : ERR_SUCCESS;
   }
 
-  return err; // TODO: determine if another block is needed
+  PolymorphicStack(context);
+  return err;
 }
 
 IR_ERROR CompileCall(varuint32 index, code::Context& context)
@@ -822,14 +831,56 @@ IR_ERROR InsertTruncTrap(code::Context& context, double max, double min, llvm::T
   return ERR_SUCCESS;
 };
 
+void DumpContextState(code::Context& context)
+{
+  std::cout << "values: [";
+
+  size_t total = context.values.Size() + context.values.Limit();
+  for(size_t i = 0; i < total; ++i)
+  {
+    if(i == context.values.Limit())
+      std::cout << " |";
+    if(!context.values[i])
+      std::cout << " Poly";
+    else
+      switch(GetTypeEncoding(context.values[i]->getType()))
+      {
+      case TE_i32: std::cout << " i32"; break;
+      case TE_i64: std::cout << " i64"; break;
+      case TE_f32: std::cout << " f32"; break;
+      case TE_f64: std::cout << " f64"; break;
+      }
+  }
+
+  std::cout << " ]" << std::endl;
+  std::cout << "control: [";
+
+  for(size_t i = 0; i < context.control.Size(); ++i)
+  {
+    switch(context.control[i].sig)
+    {
+    case TE_i32: std::cout << " i32"; break;
+    case TE_i64: std::cout << " i64"; break;
+    case TE_f32: std::cout << " f32"; break;
+    case TE_f64: std::cout << " f64"; break;
+    }
+    
+    std::cout << ":" << (int)context.control[i].op;
+  }
+
+  std::cout << " ]\n" << std::endl;
+}
+
 IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
 {
+  //std::cout << OPNAMES[ins.opcode] << std::endl;
+  //DumpContextState(context);
   switch(ins.opcode)
   {
   case OP_unreachable:
-    context.builder.CreateUnreachable();
+    CompileTrap(context); // Automatically terminates block as unreachable
     PolymorphicStack(context);
-    return CompileTrap(context);
+    return ERR_SUCCESS;
   case OP_nop:
     return ERR_SUCCESS;
   case OP_block:
@@ -853,7 +904,11 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   case OP_br_table:
     return CompileBranchTable(ins.immediates[0].n_table, ins.immediates[0].table, ins.immediates[1]._varuint32, context);
   case OP_return:
-    return CompileReturn(context, context.control[context.control.Size()].sig);
+  {
+    IR_ERROR err = CompileReturn(context, context.control[context.control.Size()].sig);
+    PolymorphicStack(context);
+    return err;
+  }
 
     // Call operators
   case OP_call:
@@ -1035,9 +1090,9 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
 
     // Numeric operators
   case OP_i32_clz:
-    return CompileUnaryIntrinsic<TE_i32, TE_i32>(context, llvm::Intrinsic::ctlz, OPNAMES[ins.opcode]);
+    return CompileUnaryIntrinsic<TE_i32, TE_i32>(context, llvm::Intrinsic::ctlz, OPNAMES[ins.opcode], context.builder.getInt1(false));
   case OP_i32_ctz:
-    return CompileUnaryIntrinsic<TE_i32, TE_i32>(context, llvm::Intrinsic::cttz, OPNAMES[ins.opcode]);
+    return CompileUnaryIntrinsic<TE_i32, TE_i32>(context, llvm::Intrinsic::cttz, OPNAMES[ins.opcode], context.builder.getInt1(false));
   case OP_i32_popcnt:
     return CompileUnaryIntrinsic<TE_i32, TE_i32>(context, llvm::Intrinsic::ctpop, OPNAMES[ins.opcode]);
   case OP_i32_add:
@@ -1071,9 +1126,9 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   case OP_i32_rotr:
     return CompileRotationOp<TE_i32, false>(context, OPNAMES[ins.opcode]);
   case OP_i64_clz:
-    return CompileUnaryIntrinsic<TE_i64, TE_i64>(context, llvm::Intrinsic::ctlz, OPNAMES[ins.opcode]);
+    return CompileUnaryIntrinsic<TE_i64, TE_i64>(context, llvm::Intrinsic::ctlz, OPNAMES[ins.opcode], context.builder.getInt1(false));
   case OP_i64_ctz:
-    return CompileUnaryIntrinsic<TE_i64, TE_i64>(context, llvm::Intrinsic::cttz, OPNAMES[ins.opcode]);
+    return CompileUnaryIntrinsic<TE_i64, TE_i64>(context, llvm::Intrinsic::cttz, OPNAMES[ins.opcode], context.builder.getInt1(false));
   case OP_i64_popcnt:
     return CompileUnaryIntrinsic<TE_i64, TE_i64>(context, llvm::Intrinsic::ctpop, OPNAMES[ins.opcode]);
   case OP_i64_add:
@@ -1353,12 +1408,27 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   context.llvm->setDataLayout(context.machine->createDataLayout());
   context.intptrty = context.builder.getIntPtrTy(context.llvm->getDataLayout(), 0);
 
+  /*if(env->flags & ENV_DEBUG)
+  {
+    context.dbuilder = new llvm::DIBuilder(*context.llvm);
+    context.dcu = context.dbuilder->createCompileUnit(
+      llvm::dwarf::DW_LANG_C99,
+      context.dbuilder->createFile(context.m.name.str(), "."),
+      "inNative Runtime v" IR_VERSION_STRING,
+      (env->flags&ENV_OPTIMIZE_ALL) != 0,
+      llvm::StringRef(),
+      WASM_MAGIC_VERSION);
+
+    context.dunit = context.dbuilder->createFile(context.dcu->getFilename(), context.dcu->getDirectory());
+  }*/
+
   // Define a unique init function for performing module initialization
   context.init = Func::Create(
     FuncTy::get(context.builder.getVoidTy(), false),
     Func::ExternalLinkage,
     MergeName(context.m.name.str(), "innative_internal_init"),
     context.llvm);
+  //context.dbuilder->createFunction(context.dunit, context.init->getName(), "", context.dunit, )
 
   BB* initblock = BB::Create(
     context.context,
@@ -1673,6 +1743,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     }
   }
 
+  //if(env->flags&ENV_EMIT_LLVM)
   {
     std::error_code EC;
     llvm::raw_fd_ostream dest(string(context.llvm->getName()) + ".llvm", EC, llvm::sys::fs::F_None);

@@ -417,10 +417,11 @@ enum WASM_ENVIRONMENT_FLAGS
   ENV_DEBUG = (1 << 2), // Enables debug information
   ENV_DLL = (1 << 3), // Builds a DLL instead of an EXE
   ENV_ENABLE_WAT = (1 << 4), // Enables compiling .wat and .wast files
-  ENV_HOMOGENIZE_FUNCTIONS = (1 << 5), // Converts all exported functions to i64 types for testing
-  ENV_OPTIMIZE_INLINE = (1 << 6),
-  ENV_OPTIMIZE_ANALYSIS = (1 << 7),
-  ENV_OPTIMIZE_VECTORIZE = (1 << 8),
+  ENV_EMIT_LLVM = (1 << 5), // Emits intermediate LLVM IR files for debugging
+  ENV_HOMOGENIZE_FUNCTIONS = (1 << 6), // Converts all exported functions to i64 types for testing
+  ENV_OPTIMIZE_INLINE = (1 << 7),
+  ENV_OPTIMIZE_ANALYSIS = (1 << 8),
+  ENV_OPTIMIZE_VECTORIZE = (1 << 9),
   ENV_OPTIMIZE_ALL = ENV_OPTIMIZE_INLINE| ENV_OPTIMIZE_ANALYSIS| ENV_OPTIMIZE_VECTORIZE,
   ENV_ASSEMBLY_MATCH_CPUINFO = (1 << 30), // Requires LoadAssembly to match this machine's exact cpuinfo type before loading.
 };
@@ -470,6 +471,7 @@ typedef struct __WASM_INSTRUCTION
 {
   uint8_t opcode;
   Immediate immediates[MAX_IMMEDIATES];
+  const char* token; // Stores debug location, if applicable
 } Instruction;
 
 typedef struct __WASM_FUNCTION_TYPE
@@ -563,6 +565,7 @@ typedef struct __WASM_FUNCTION_BODY
   Identifier debug_name; // INTERNAL: debug name if it exists
   const char** local_names; // INTERNAL: debug names of locals, always the size of n_locals or NULL if it doesn't exist
   const char** param_names; // INTERNAL: debug names of parameters, always the size of n_params or NULL if it doesn't exist
+  const char* token;
 } FunctionBody;
 
 typedef struct __WASM_DATA_INIT

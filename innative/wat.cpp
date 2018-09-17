@@ -15,10 +15,10 @@ using namespace utility;
 namespace innative {
   namespace wat {
     __KHASH_IMPL(indexname, kh_inline, StringRef, varuint32, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
-    __KHASH_IMPL(tokens, kh_inline, StringRef, TokenID, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
+    __KHASH_IMPL(tokens, kh_inline, StringRef, WatTokenID, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
 
     template<int LEN>
-    inline const char* __getTokenString(TokenID token, const char* (&list)[LEN])
+    inline const char* __getTokenString(WatTokenID token, const char* (&list)[LEN])
     {
       return token < LEN ? list[token] : 0;
     }
@@ -28,7 +28,7 @@ namespace innative {
     {
       kh_tokens_t* h = kh_init_tokens();
 
-      TokenID count = 0;
+      WatTokenID count = 0;
       int r;
       for(int i = 0; i < LEN; ++i)
       {
@@ -46,7 +46,7 @@ namespace innative {
       "assert_unlinkable", "assert_exhaustion", "script", "input", "output" };
     static kh_tokens_t* tokenhash = GenTokenHash(tokenlist);
 
-    const char* GetTokenString(TokenID token) { return __getTokenString(token - 1, tokenlist); }
+    const char* GetTokenString(WatTokenID token) { return __getTokenString(token - 1, tokenlist); }
 
     const char* CheckTokenINF(const char* s, const char* end, std::string* target)
     {
@@ -114,7 +114,7 @@ namespace innative {
     static string numbuf;
 
     template<typename T, typename... Args>
-    int ResolveTokenNumber(const Token& token, T(*fn)(const char*, char**, Args...), T& out, Args... args)
+    int ResolveTokenNumber(const WatToken& token, T(*fn)(const char*, char**, Args...), T& out, Args... args)
     {
       numbuf.clear();
       int length = token.len;
@@ -140,7 +140,7 @@ namespace innative {
       return (errno != 0 || (end - numbuf.c_str()) != length) ? ERR_WAT_INVALID_NUMBER : ERR_SUCCESS;
     }
 
-    int ResolveTokenf32(const Token& token, float32& out)
+    int ResolveTokenf32(const WatToken& token, float32& out)
     {
       if(CheckTokenNAN(token.pos, token.pos + token.len, &numbuf) != nullptr || CheckTokenINF(token.pos, token.pos + token.len, &numbuf) != nullptr)
       {
@@ -151,7 +151,7 @@ namespace innative {
       return ResolveTokenNumber<float32>(token, &strtof, out);
     }
 
-    int ResolveTokenf64(const Token& token, float64& out)
+    int ResolveTokenf64(const WatToken& token, float64& out)
     {
       if(CheckTokenNAN(token.pos, token.pos + token.len, &numbuf) != nullptr || CheckTokenINF(token.pos, token.pos + token.len, &numbuf) != nullptr)
       {
@@ -162,7 +162,7 @@ namespace innative {
       return ResolveTokenNumber<float64>(token, &strtod, out);
     }
 
-    int ResolveTokeni64(const Token& token, varsint64& out)
+    int ResolveTokeni64(const WatToken& token, varsint64& out)
     {
       unsigned long long buf;
       if(token.len > 0 && token.pos[0] == '-')
@@ -172,14 +172,14 @@ namespace innative {
       return err;
     }
 
-    int ResolveTokenu64(const Token& token, varuint64& out)
+    int ResolveTokenu64(const WatToken& token, varuint64& out)
     {
       if(token.len > 0 && token.pos[0] == '-')
         return ERR_WAT_OUT_OF_RANGE;
       return ResolveTokeni64(token, reinterpret_cast<varsint64&>(out));
     }
 
-    int ResolveTokeni32(const Token& token, varsint32& out)
+    int ResolveTokeni32(const WatToken& token, varsint32& out)
     {
       varsint64 buf;
       int err = ResolveTokeni64(token, buf);
@@ -192,7 +192,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int ResolveTokenu32(const Token& token, varuint32& out)
+    int ResolveTokenu32(const WatToken& token, varuint32& out)
     {
       varsint64 buf;
       int err = ResolveTokeni64(token, buf);
@@ -205,8 +205,8 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    template<typename T, int(*FN)(const Token&, T&)>
-    T ResolveInlineToken(const Token& token)
+    template<typename T, int(*FN)(const WatToken&, T&)>
+    T ResolveInlineToken(const WatToken& token)
     {
       T t;
       int err = (*FN)(token, t);
@@ -230,7 +230,7 @@ namespace innative {
       kh_destroy_indexname(globalhash);
     }
 
-    varuint32 WatState::GetJump(Token var)
+    varuint32 WatState::GetJump(WatToken var)
     {
       if(var.id == TOKEN_NUMBER)
         return ResolveInlineToken<varuint32, &ResolveTokenu32>(var);
@@ -245,7 +245,7 @@ namespace innative {
       return (varuint32)~0;
     }
 
-    void TokenizeWAT(Queue<Token>& tokens, const char* s, const char* end)
+    void TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* end)
     {
       while(s < end)
       {
@@ -286,12 +286,12 @@ namespace innative {
           }
           else
           {
-            tokens.Push(Token{ TOKEN_OPEN, s });
+            tokens.Push(WatToken{ TOKEN_OPEN, s });
             ++s;
           }
           break;
         case ')':
-          tokens.Push(Token{ TOKEN_CLOSE, s });
+          tokens.Push(WatToken{ TOKEN_CLOSE, s });
           ++s;
           break;
         case ';': // A comment
@@ -305,7 +305,7 @@ namespace innative {
           }
           else
           {
-            tokens.Push(Token{ TOKEN_NONE });
+            tokens.Push(WatToken{ TOKEN_NONE });
             assert(false);
           }
 
@@ -320,7 +320,7 @@ namespace innative {
           while(s[0] != '"' && s + 1 < end)
             s += (s[0] == '\\' && s[1] == '"') ? 2 : 1;
 
-          Token t = { TOKEN_STRING, begin };
+          WatToken t = { TOKEN_STRING, begin };
           t.len = s - begin;
           tokens.Push(t);
 
@@ -330,7 +330,7 @@ namespace innative {
         }
         case '$': // A name
         {
-          Token t = { TOKEN_NAME, s + 1, 0 };
+          WatToken t = { TOKEN_NAME, s + 1, 0 };
 
           // We avoid using a regex here because extremely long names are still technically valid but can overwhelm the standard C++ regex evaluator
           while(s < end)
@@ -402,14 +402,14 @@ namespace innative {
               last += 2;
             if(last >= end || !isxdigit(last[0]))
             {
-              tokens.Push(Token{ TOKEN_NONE, s, last - s });
+              tokens.Push(WatToken{ TOKEN_NONE, s, last - s });
               s = last;
               break;
             }
             while(last < end && (isalnum(last[0]) || last[0] == '.' || last[0] == '_' || last[0] == '-' || last[0] == '+'))
               ++last;
           }
-          tokens.Push(Token{ TOKEN_NUMBER, s, last - s });
+          tokens.Push(WatToken{ TOKEN_NUMBER, s, last - s });
           s = last;
           break;
         }
@@ -418,7 +418,7 @@ namespace innative {
           const char* begin = s;
           if((begin = CheckTokenNAN(s, end, 0)) != 0 || (begin = CheckTokenINF(s, end, 0)) != 0) // Check if this is an NaN
           {
-            tokens.Push(Token{ TOKEN_NUMBER, s, begin - s });
+            tokens.Push(WatToken{ TOKEN_NUMBER, s, begin - s });
             s = begin;
           }
           else
@@ -431,16 +431,16 @@ namespace innative {
             StringRef ref = { begin, static_cast<size_t>(s - begin) };
             khiter_t iter = kh_get_tokens(tokenhash, ref);
             if(kh_exist2(tokenhash, iter))
-              tokens.Push(Token{ kh_val(tokenhash, iter), begin });
+              tokens.Push(WatToken{ kh_val(tokenhash, iter), begin });
             else
             {
               uint8_t op = GetInstruction(ref);
               if(op != 0xFF)
-                tokens.Push(Token{ TOKEN_OPERATOR, begin, (int64_t)op });
+                tokens.Push(WatToken{ TOKEN_OPERATOR, begin, (int64_t)op });
               else
               {
                 // assert(false);
-                tokens.Push(Token{ TOKEN_NONE, begin, (int64_t)ref.len });
+                tokens.Push(WatToken{ TOKEN_NONE, begin, (int64_t)ref.len });
               }
             }
             if(*s == '=')
@@ -570,7 +570,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatName(ByteArray& name, const Token& t)
+    int WatName(ByteArray& name, const WatToken& t)
     {
       if(t.id != TOKEN_NAME || !t.pos || !t.len)
         return assert(false), ERR_PARSE_INVALID_NAME;
@@ -592,7 +592,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    varsint7 WatValType(TokenID id)
+    varsint7 WatValType(WatTokenID id)
     {
       switch(id)
       {
@@ -605,7 +605,7 @@ namespace innative {
       return 0;
     }
 
-    int AddWatValType(TokenID id, varsint7*& a, varuint32& n)
+    int AddWatValType(WatTokenID id, varsint7*& a, varuint32& n)
     {
       varsint7 ty = WatValType(id);
       if(!ty)
@@ -613,7 +613,7 @@ namespace innative {
       return AppendArray<varsint7>(ty, a, n);
     }
 
-    int WatFunctionTypeInner(Queue<Token>& tokens, FunctionType& sig, const char*** names, bool anonymous)
+    int WatFunctionTypeInner(Queue<WatToken>& tokens, FunctionType& sig, const char*** names, bool anonymous)
     {
       sig.form = TE_func;
       int err;
@@ -671,7 +671,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatFunctionType(WatState& state, Queue<Token>& tokens, varuint32* index)
+    int WatFunctionType(WatState& state, Queue<WatToken>& tokens, varuint32* index)
     {
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       EXPECTED(tokens, TOKEN_FUNC, ERR_WAT_EXPECTED_FUNC);
@@ -737,7 +737,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    varuint32 WatGetFromHash(kh_indexname_t* hash, const Token& t)
+    varuint32 WatGetFromHash(kh_indexname_t* hash, const WatToken& t)
     {
       if(t.id == TOKEN_NUMBER)
         return ResolveInlineToken<varuint32, &ResolveTokenu32>(t);
@@ -769,7 +769,7 @@ namespace innative {
       return AppendArray<FunctionType>(ftype, state.m.type.functions, state.m.type.n_functions);
     }
 
-    int WatTypeUse(WatState& state, Queue<Token>& tokens, varuint32& sig, const char*** names, bool anonymous)
+    int WatTypeUse(WatState& state, Queue<WatToken>& tokens, varuint32& sig, const char*** names, bool anonymous)
     {
       sig = (varuint32)~0;
       if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_TYPE)
@@ -842,7 +842,7 @@ namespace innative {
       return r;
     }
 
-    varuint32 WatGetLocal(FunctionBody& f, FunctionType& sig, const Token& t)
+    varuint32 WatGetLocal(FunctionBody& f, FunctionType& sig, const WatToken& t)
     {
       if(t.id == TOKEN_NUMBER)
         return ResolveInlineToken<varuint32, &ResolveTokenu32>(t);
@@ -862,7 +862,7 @@ namespace innative {
       return (varuint32)~0;
     }
 
-    int WatConstantOperator(WatState& state, Queue<Token>& tokens, Instruction& op)
+    int WatConstantOperator(WatState& state, Queue<WatToken>& tokens, Instruction& op)
     {
       int err = ERR_SUCCESS;
       switch(op.opcode)
@@ -890,7 +890,7 @@ namespace innative {
 
       return err;
     }
-    int WatOperator(WatState& state, Queue<Token>& tokens, Instruction& op, FunctionBody& f, FunctionType& sig, DeferWatAction& defer)
+    int WatOperator(WatState& state, Queue<WatToken>& tokens, Instruction& op, FunctionBody& f, FunctionType& sig, DeferWatAction& defer)
     {
       if(tokens.Peek().id != TOKEN_OPERATOR)
         return ERR_WAT_EXPECTED_OPERATOR;
@@ -898,7 +898,8 @@ namespace innative {
       int err;
       if(tokens.Peek().i > 0xFF)
         return ERR_WAT_OUT_OF_RANGE;
-      op = { (uint8_t)tokens.Pop().i };
+      op = { (uint8_t)tokens.Peek().i };
+      op.token = tokens.Pop().pos;
 
       switch(op.opcode)
       {
@@ -998,7 +999,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    void WatLabel(WatState& state, Queue<Token>& tokens)
+    void WatLabel(WatState& state, Queue<WatToken>& tokens)
     {
       if(tokens.Peek().id == TOKEN_NAME)
       {
@@ -1009,18 +1010,18 @@ namespace innative {
         state.stack.Push(StringRef{ 0, 0 });
     }
 
-    bool CheckLabel(WatState& state, Queue<Token>& tokens)
+    bool CheckLabel(WatState& state, Queue<WatToken>& tokens)
     {
       if(tokens.Peek().id == TOKEN_NAME)
       {
-        Token t = tokens.Pop();
+        WatToken t = tokens.Pop();
         return state.stack.Peek() == StringRef{ t.pos, t.len };
       }
 
       return true;
     }
 
-    int WatBlockType(Queue<Token>& tokens, varsint7& out)
+    int WatBlockType(Queue<WatToken>& tokens, varsint7& out)
     {
       out = TE_void;
       if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_RESULT)
@@ -1045,9 +1046,9 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatInstruction(WatState& state, Queue<Token>& tokens, FunctionBody& f, FunctionType& sig, varuint32 index);
+    int WatInstruction(WatState& state, Queue<WatToken>& tokens, FunctionBody& f, FunctionType& sig, varuint32 index);
 
-    int WatExpression(WatState& state, Queue<Token>& tokens, FunctionBody& f, FunctionType& sig, varuint32 index)
+    int WatExpression(WatState& state, Queue<WatToken>& tokens, FunctionBody& f, FunctionType& sig, varuint32 index)
     {
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
 
@@ -1058,7 +1059,7 @@ namespace innative {
       case TOKEN_BLOCK:
       case TOKEN_LOOP:
       {
-        Token t = tokens.Pop();
+        WatToken t = tokens.Pop();
         WatLabel(state, tokens);
         if(err = WatBlockType(tokens, blocktype))
           return err;
@@ -1066,6 +1067,7 @@ namespace innative {
         {
           Instruction op = { t.id == TOKEN_BLOCK ? (uint8_t)OP_block : (uint8_t)OP_loop };
           op.immediates[0]._varsint7 = blocktype;
+          op.token = t.pos;
           if(err = AppendArray<Instruction>(op, f.body, f.n_body))
             return err;
         }
@@ -1074,13 +1076,15 @@ namespace innative {
           if(err = WatInstruction(state, tokens, f, sig, index))
             return err;
 
-        if(err = AppendArray<Instruction>(Instruction{ OP_end }, f.body, f.n_body))
+        Instruction op = { OP_end };
+        op.token = tokens.Peek().pos;
+        if(err = AppendArray<Instruction>(op, f.body, f.n_body))
           return err;
         state.stack.Pop();
         break;
       }
       case TOKEN_IF:
-        tokens.Pop();
+        WatToken t = tokens.Pop();
         WatLabel(state, tokens);
         if(err = WatBlockType(tokens, blocktype))
           return err;
@@ -1092,6 +1096,7 @@ namespace innative {
         {
           Instruction op = { OP_if };
           op.immediates[0]._varsint7 = blocktype;
+          op.token = t.pos;
           if(err = AppendArray<Instruction>(op, f.body, f.n_body)) // We append the if instruction _after_ the optional condition expression
             return err;
         }
@@ -1108,9 +1113,13 @@ namespace innative {
         if(tokens.Peek().id == TOKEN_OPEN) // Must be an else branch if it exists
         {
           EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+          
+          WatToken t = tokens.Peek();
+          Instruction op = { OP_else };
           EXPECTED(tokens, TOKEN_ELSE, ERR_WAT_EXPECTED_ELSE);
 
-          if(err = AppendArray<Instruction>(Instruction{ OP_else }, f.body, f.n_body))
+          op.token = t.pos;
+          if(err = AppendArray<Instruction>(op, f.body, f.n_body))
             return err;
 
           while(tokens.Peek().id != TOKEN_CLOSE)
@@ -1120,8 +1129,13 @@ namespace innative {
           EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
         }
 
-        if(err = AppendArray<Instruction>(Instruction{ OP_end }, f.body, f.n_body))
-          return err;
+        {
+          Instruction op = { OP_end };
+          op.token = tokens.Peek().pos;
+          if(err = AppendArray<Instruction>(op, f.body, f.n_body))
+            return err;
+        }
+
         state.stack.Pop();
         break;
       default:
@@ -1148,7 +1162,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatInstruction(WatState& state, Queue<Token>& tokens, FunctionBody& f, FunctionType& sig, varuint32 index)
+    int WatInstruction(WatState& state, Queue<WatToken>& tokens, FunctionBody& f, FunctionType& sig, varuint32 index)
     {
       int err;
       varsint7 blocktype;
@@ -1159,7 +1173,7 @@ namespace innative {
       case TOKEN_BLOCK:
       case TOKEN_LOOP:
       {
-        Token t = tokens.Pop();
+        WatToken t = tokens.Pop();
         WatLabel(state, tokens);
         if(err = WatBlockType(tokens, blocktype))
           return err;
@@ -1167,6 +1181,7 @@ namespace innative {
         {
           Instruction op = { t.id == TOKEN_BLOCK ? (uint8_t)OP_block : (uint8_t)OP_loop };
           op.immediates[0]._varsint7 = blocktype;
+          op.token = t.pos;
           if(err = AppendArray<Instruction>(op, f.body, f.n_body))
             return err;
         }
@@ -1180,13 +1195,18 @@ namespace innative {
         if(!CheckLabel(state, tokens))
           return ERR_WAT_LABEL_MISMATCH;
 
-        if(err = AppendArray<Instruction>(Instruction{ OP_end }, f.body, f.n_body))
-          return err;
+        {
+          Instruction op = { OP_end };
+          op.token = tokens.Peek().pos;
+          if(err = AppendArray<Instruction>(op, f.body, f.n_body))
+            return err;
+        }
+
         state.stack.Pop();
         break;
       }
       case TOKEN_IF:
-        tokens.Pop();
+        WatToken t = tokens.Pop();
         WatLabel(state, tokens);
         if(err = WatBlockType(tokens, blocktype))
           return err;
@@ -1194,6 +1214,7 @@ namespace innative {
         {
           Instruction op = { OP_if };
           op.immediates[0]._varsint7 = blocktype;
+          op.token = t.pos;
           if(err = AppendArray<Instruction>(op, f.body, f.n_body)) // We append the if instruction _after_ the optional condition expression
             return err;
         }
@@ -1202,12 +1223,15 @@ namespace innative {
           if(err = WatInstruction(state, tokens, f, sig, index))
             return err;
 
-        if(tokens.Pop().id == TOKEN_ELSE) // Handle else branch
+        t = tokens.Pop();
+        if(t.id == TOKEN_ELSE) // Handle else branch
         {
           if(!CheckLabel(state, tokens))
             return ERR_WAT_LABEL_MISMATCH;
 
-          if(err = AppendArray<Instruction>(Instruction{ OP_else }, f.body, f.n_body))
+          Instruction op = { OP_else };
+          op.token = t.pos;
+          if(err = AppendArray<Instruction>(op, f.body, f.n_body))
             return err;
 
           while(tokens.Peek().id != TOKEN_END)
@@ -1220,8 +1244,13 @@ namespace innative {
         if(!CheckLabel(state, tokens))
           return ERR_WAT_LABEL_MISMATCH;
 
-        if(err = AppendArray<Instruction>(Instruction{ OP_end }, f.body, f.n_body))
-          return err;
+        {
+          Instruction op = { OP_end };
+          op.token = tokens.Peek().pos;
+          if(err = AppendArray<Instruction>(op, f.body, f.n_body))
+            return err;
+        }
+
         state.stack.Pop();
         break;
       default:
@@ -1240,7 +1269,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatInlineImportExport(Module& m, Queue<Token>& tokens, varuint32* index, varuint7 kind, Import** out)
+    int WatInlineImportExport(Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out)
     {
       int err;
       while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_EXPORT)
@@ -1293,7 +1322,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatLocalAppend(FunctionBody& body, Queue<Token>& tokens)
+    int WatLocalAppend(FunctionBody& body, Queue<WatToken>& tokens)
     {
       varsint7 local = WatValType(tokens.Pop().id);
       if(!local)
@@ -1301,9 +1330,12 @@ namespace innative {
       return AppendArray<varsint7>(local, body.locals, body.n_locals);
     }
 
-    int WatFunction(WatState& state, Queue<Token>& tokens, varuint32* index, StringRef name)
+    int WatFunction(WatState& state, Queue<WatToken>& tokens, varuint32* index, StringRef name)
     {
       int err;
+      FunctionBody body = { 0 };
+      body.token = tokens.Peek().pos;
+
       *index = state.m.importsection.functions + state.m.function.n_funcdecl;
       Import* i = 0;
       if(err = WatInlineImportExport(state.m, tokens, index, WASM_KIND_FUNCTION, &i))
@@ -1313,7 +1345,6 @@ namespace innative {
         return WatTypeUse(state, tokens, i->func_desc.type_index, &i->func_desc.param_names, false);
 
       varuint32 sig;
-      FunctionBody body = { 0 };
       if(err = WatTypeUse(state, tokens, sig, &body.param_names, false))
         return err;
 
@@ -1365,7 +1396,9 @@ namespace innative {
           return err;
       }
       assert(state.stack.Size() == 0);
-      if(err = AppendArray(Instruction{ OP_end }, body.body, body.n_body))
+      Instruction op = { OP_end };
+      op.token = tokens.Peek().pos;
+      if(err = AppendArray(op, body.body, body.n_body))
         return err;
 
       state.m.knownsections |= (1 << WASM_SECTION_FUNCTION);
@@ -1376,7 +1409,7 @@ namespace innative {
       return AppendArray(body, state.m.code.funcbody, state.m.code.n_funcbody);
     }
 
-    int WatResizableLimits(ResizableLimits& limits, Queue<Token>& tokens)
+    int WatResizableLimits(ResizableLimits& limits, Queue<WatToken>& tokens)
     {
       int err = ResolveTokenu32(tokens.Pop(), limits.minimum);
       if(err)
@@ -1391,7 +1424,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatTableDesc(TableDesc& t, Queue<Token>& tokens)
+    int WatTableDesc(TableDesc& t, Queue<WatToken>& tokens)
     {
       int err;
       if(err = WatResizableLimits(t.resizable, tokens))
@@ -1403,7 +1436,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatTable(WatState& state, Queue<Token>& tokens, varuint32* index)
+    int WatTable(WatState& state, Queue<WatToken>& tokens, varuint32* index)
     {
       int err;
       *index = state.m.table.n_tables;
@@ -1434,7 +1467,7 @@ namespace innative {
       return AppendArray(table, state.m.table.tables, state.m.table.n_tables);
     }
 
-    int WatInitializerInstruction(WatState& state, Queue<Token>& tokens, Instruction& op, bool expr)
+    int WatInitializerInstruction(WatState& state, Queue<WatToken>& tokens, Instruction& op, bool expr)
     {
       int err;
       FunctionBody blank = { 0 };
@@ -1463,7 +1496,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatInitializer(WatState& state, Queue<Token>& tokens, Instruction& op)
+    int WatInitializer(WatState& state, Queue<WatToken>& tokens, Instruction& op)
     {
       int err = WatInitializerInstruction(state, tokens, op, false);
       if(err < 0)
@@ -1475,7 +1508,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatGlobalDesc(GlobalDesc& g, Queue<Token>& tokens)
+    int WatGlobalDesc(GlobalDesc& g, Queue<WatToken>& tokens)
     {
       if(tokens.Peek().id == TOKEN_OPEN)
       {
@@ -1497,7 +1530,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatGlobal(WatState& state, Queue<Token>& tokens, varuint32* index)
+    int WatGlobal(WatState& state, Queue<WatToken>& tokens, varuint32* index)
     {
       int err;
       *index = state.m.global.n_globals;
@@ -1519,12 +1552,12 @@ namespace innative {
       return AppendArray(g, state.m.global.globals, state.m.global.n_globals);
     }
 
-    int WatMemoryDesc(MemoryDesc& m, Queue<Token>& tokens)
+    int WatMemoryDesc(MemoryDesc& m, Queue<WatToken>& tokens)
     {
       return WatResizableLimits(m.limits, tokens);
     }
 
-    int WatMemory(WatState& state, Queue<Token>& tokens, varuint32* index)
+    int WatMemory(WatState& state, Queue<WatToken>& tokens, varuint32* index)
     {
       int err;
       *index = state.m.memory.n_memories;
@@ -1564,7 +1597,7 @@ namespace innative {
       return AppendArray(mem, state.m.memory.memories, state.m.memory.n_memories);
     }
 
-    int AddWatName(kh_indexname_t* h, Token t, varuint32 index)
+    int AddWatName(kh_indexname_t* h, WatToken t, varuint32 index)
     {
       if(t.id == TOKEN_NAME)
       {
@@ -1579,7 +1612,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatImport(WatState& state, Queue<Token>& tokens)
+    int WatImport(WatState& state, Queue<WatToken>& tokens)
     {
       Import i;
       int err;
@@ -1590,8 +1623,8 @@ namespace innative {
 
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
 
-      Token t = tokens.Pop();
-      Token name = GetWatNameToken(tokens);
+      WatToken t = tokens.Pop();
+      WatToken name = GetWatNameToken(tokens);
       kh_indexname_t* hash = 0;
       switch(t.id)
       {
@@ -1633,10 +1666,10 @@ namespace innative {
       return AddWatName(hash, name, index);
     }
 
-    template<int(*F)(WatState&, Queue<Token>&, varuint32*)>
-    int WatIndexProcess(WatState& state, Queue<Token>& tokens, kh_indexname_t* hash)
+    template<int(*F)(WatState&, Queue<WatToken>&, varuint32*)>
+    int WatIndexProcess(WatState& state, Queue<WatToken>& tokens, kh_indexname_t* hash)
     {
-      Token t = GetWatNameToken(tokens);
+      WatToken t = GetWatNameToken(tokens);
 
       int err;
       varuint32 index = (varuint32)~0;
@@ -1647,7 +1680,7 @@ namespace innative {
       return AddWatName(hash, t, index);
     }
 
-    int WatExport(WatState& state, Queue<Token>& tokens)
+    int WatExport(WatState& state, Queue<WatToken>& tokens)
     {
       Export e = {};
       int err;
@@ -1682,7 +1715,7 @@ namespace innative {
       return AppendArray(e, state.m.exportsection.exports, state.m.exportsection.n_exports);
     }
 
-    int WatElemData(WatState& state, Queue<Token>& tokens, varuint32& index, Instruction& op, kh_indexname_t* hash)
+    int WatElemData(WatState& state, Queue<WatToken>& tokens, varuint32& index, Instruction& op, kh_indexname_t* hash)
     {
       if(tokens[0].id == TOKEN_NUMBER || tokens[0].id == TOKEN_NAME)
         index = WatGetFromHash(hash, tokens.Pop());
@@ -1710,7 +1743,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatElem(WatState& state, TableInit& e, Queue<Token>& tokens)
+    int WatElem(WatState& state, TableInit& e, Queue<WatToken>& tokens)
     {
       while(tokens[0].id != TOKEN_CLOSE)
       {
@@ -1723,7 +1756,7 @@ namespace innative {
       return AppendArray(e, state.m.element.elements, state.m.element.n_elements);
     }
 
-    int WatData(WatState& state, Queue<Token>& tokens)
+    int WatData(WatState& state, Queue<WatToken>& tokens)
     {
       DataInit d = { 0 };
       int err;
@@ -1742,7 +1775,7 @@ namespace innative {
     }
 
     // Skips over an entire section of tokens by counting paranthesis, assuming they are well-formed
-    void SkipSection(Queue<Token>& tokens, int count)
+    void SkipSection(Queue<WatToken>& tokens, int count)
     {
       while(tokens.Size())
       {
@@ -1757,11 +1790,11 @@ namespace innative {
       }
     }
 
-    int WatModule(Environment& env, Module& m, Queue<Token>& tokens, StringRef name, Token& internalname)
+    int WatModule(Environment& env, Module& m, Queue<WatToken>& tokens, StringRef name, WatToken& internalname)
     {
       int err;
       m = { 0 };
-      if(name.s && (err = WatName(m.name, Token{ TOKEN_NAME, (const char*)name.s, (int64_t)name.len })))
+      if(name.s && (err = WatName(m.name, WatToken{ TOKEN_NAME, (const char*)name.s, (int64_t)name.len })))
         return err;
 
       if((tokens.Peek().id == TOKEN_NAME) && (err = WatName(m.name, internalname = tokens.Pop())))
@@ -1769,7 +1802,7 @@ namespace innative {
 
       WatState state(env, m);
 
-      Token t;
+      WatToken t;
       size_t restore = tokens.GetPosition();
       while(tokens.Size() > 0 && tokens.Peek().id != TOKEN_CLOSE)
       {
@@ -1799,7 +1832,7 @@ namespace innative {
         case TOKEN_FUNC:
         {
           khiter_t iter = kh_end(state.funchash);
-          Token name = GetWatNameToken(tokens);
+          WatToken name = GetWatNameToken(tokens);
           if(name.id == TOKEN_NAME)
           {
             int r;
@@ -1949,13 +1982,13 @@ namespace innative {
       return ParseExportFixup(m, env.errors);
     }
 
-    int WatEnvironment(Environment& env, Queue<Token>& tokens)
+    int WatEnvironment(Environment& env, Queue<WatToken>& tokens)
     {
       return 0;
     }
 
     // Checks for parse errors in the tokenization process
-    int CheckWatTokens(ValidationError*& errors, Queue<Token>& tokens, const char* start)
+    int CheckWatTokens(ValidationError*& errors, Queue<WatToken>& tokens, const char* start)
     {
       int err = ERR_SUCCESS;
       for(size_t i = 0; i < tokens.Size(); ++i)
@@ -1979,9 +2012,9 @@ namespace innative {
 
     int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, StringRef name)
     {
-      Queue<Token> tokens;
+      Queue<WatToken> tokens;
       TokenizeWAT(tokens, (char*)data, (char*)data + sz);
-      Token nametoken;
+      WatToken nametoken;
 
       if(!tokens.Size())
         return ERR_FATAL_INVALID_MODULE;

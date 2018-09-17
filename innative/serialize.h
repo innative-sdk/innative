@@ -8,15 +8,15 @@
 
 namespace innative {
   namespace wat {
-    Tokens TypeEncodingToken(varsint7 type_encoding);
-    void PushNewNameToken(Queue<Token>& tokens, const char* format, ...);
-    void PushLocalName(Queue<Token>& tokens, varuint32 index, const char** names, varuint32 num, char prefix);
-    void PushFunctionName(Queue<Token>& tokens, const Module& m, varuint32 index);
-    void PushIdentifierToken(Queue<Token>& tokens, const ByteArray& id, Tokens token = TOKEN_STRING);
-    void TokenizeInstruction(Queue<Token>& tokens, const Module& m, const Instruction& ins, const FunctionBody* body, const FunctionType* ftype);
-    void PushExportToken(Queue<Token>& tokens, const Module& m, WASM_KIND kind, varuint32 index);
-    void TokenizeModule(Queue<Token>& tokens, const Module& m);
-    void WriteTokens(Queue<Token> tokens, std::ostream& out);
+    WatTokens TypeEncodingToken(varsint7 type_encoding);
+    void PushNewNameToken(Queue<WatToken>& tokens, const char* format, ...);
+    void PushLocalName(Queue<WatToken>& tokens, varuint32 index, const char** names, varuint32 num, char prefix);
+    void PushFunctionName(Queue<WatToken>& tokens, const Module& m, varuint32 index);
+    void PushIdentifierToken(Queue<WatToken>& tokens, const ByteArray& id, WatTokens token = TOKEN_STRING);
+    void TokenizeInstruction(Queue<WatToken>& tokens, const Module& m, const Instruction& ins, const FunctionBody* body, const FunctionType* ftype);
+    void PushExportToken(Queue<WatToken>& tokens, const Module& m, WASM_KIND kind, varuint32 index);
+    void TokenizeModule(Queue<WatToken>& tokens, const Module& m);
+    void WriteTokens(Queue<WatToken> tokens, std::ostream& out);
   }
 }
 

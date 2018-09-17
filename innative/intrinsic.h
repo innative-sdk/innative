@@ -14,6 +14,7 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -55,6 +56,9 @@ namespace innative {
       llvm::IRBuilder<>& builder;
       llvm::TargetMachine* machine;
       llvm::IntegerType* intptrty;
+      llvm::DIBuilder* dbuilder;
+      llvm::DICompileUnit* dcu;
+      llvm::DIFile* dunit;
       Stack<llvm::Value*> values; // Tracks the current value stack
       Stack<Block> control; // Control flow stack
       std::vector<llvm::AllocaInst*> locals;

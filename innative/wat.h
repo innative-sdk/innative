@@ -12,9 +12,9 @@
 
 namespace innative {
   namespace wat {
-    typedef unsigned short TokenID;
+    typedef unsigned short WatTokenID;
 
-    enum Tokens : TokenID
+    enum WatTokens : WatTokenID
     {
       TOKEN_NONE = 0, // Error state
       TOKEN_OPEN, // (
@@ -74,9 +74,9 @@ namespace innative {
       TOKEN_TOTALCOUNT,
     };
 
-    struct Token
+    typedef struct __WAT_TOKEN
     {
-      TokenID id;
+      WatTokenID id;
       const char* pos;
       union
       {
@@ -84,24 +84,24 @@ namespace innative {
         double f;
         size_t len;
       };
-    };
+    } WatToken;
 
     struct DeferWatAction
     {
       int id;
-      Token t;
+      WatToken t;
       uint64_t func;
       uint64_t index;
     };
 
     KHASH_DECLARE(indexname, utility::StringRef, varuint32);
-    KHASH_DECLARE(tokens, utility::StringRef, wat::TokenID);
+    KHASH_DECLARE(tokens, utility::StringRef, WatTokenID);
 
     struct WatState
     {
       WatState(Environment& e, Module& mod);
       ~WatState();
-      varuint32 GetJump(Token var);
+      varuint32 GetJump(WatToken var);
 
       Environment& env;
       Module& m;
@@ -118,25 +118,25 @@ namespace innative {
 
     int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, utility::StringRef name);
     int WatString(ByteArray& str, utility::StringRef ref);
-    void SkipSection(Queue<Token>& tokens, int count = 1);
-    int WatInitializer(WatState& state, Queue<Token>& tokens, Instruction& op);
-    void TokenizeWAT(Queue<Token>& tokens, const char* s, const char* end);
-    int WatName(ByteArray& name, const Token& t);
-    int WatModule(Environment& env, Module& m, Queue<Token>& tokens, utility::StringRef name, Token& internalname);
+    void SkipSection(Queue<WatToken>& tokens, int count = 1);
+    int WatInitializer(WatState& state, Queue<WatToken>& tokens, Instruction& op);
+    void TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* end);
+    int WatName(ByteArray& name, const WatToken& t);
+    int WatModule(Environment& env, Module& m, Queue<WatToken>& tokens, utility::StringRef name, WatToken& internalname);
     size_t WatLineNumber(const char* start, const char* pos);
-    int CheckWatTokens(ValidationError*& errors, Queue<Token>& tokens, const char* start);
-    const char* GetTokenString(TokenID token);
+    int CheckWatTokens(ValidationError*& errors, Queue<WatToken>& tokens, const char* start);
+    const char* GetTokenString(WatTokenID token);
       
-    IR_FORCEINLINE int WatString(ByteArray& str, const Token& t)
+    IR_FORCEINLINE int WatString(ByteArray& str, const WatToken& t)
     {
       if(t.id != TOKEN_STRING)
         return ERR_WAT_EXPECTED_STRING;
       return WatString(str, utility::StringRef{ t.pos, t.len });
     }
 
-    IR_FORCEINLINE Token GetWatNameToken(Queue<Token>& tokens)
+    IR_FORCEINLINE WatToken GetWatNameToken(Queue<WatToken>& tokens)
     {
-      return (tokens.Peek().id == TOKEN_NAME) ? tokens.Pop() : Token{ TOKEN_NONE };
+      return (tokens.Peek().id == TOKEN_NAME) ? tokens.Pop() : WatToken{ TOKEN_NONE };
     }
   }
 }

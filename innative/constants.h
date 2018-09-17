@@ -4,7 +4,13 @@
 #ifndef __CONSTANTS_H__IR__
 #define __CONSTANTS_H__IR__
 
+#include "innative/innative.h"
+
+#define MAKESTRING2(x) #x
+#define MAKESTRING(x) MAKESTRING2(x)
+
 #define IR_INIT_FUNCTION "_innative_internal_start"
+#define IR_VERSION_STRING MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
 
 namespace innative {
   namespace utility {
