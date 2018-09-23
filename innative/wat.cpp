@@ -635,8 +635,8 @@ namespace innative {
             tmemcpy(s, len + 1, tokens.Peek().pos, len);
             s[len] = 0;
 
-            len = sig.n_params;
-            if(err = AppendArray<const char*>(s, *names, len))
+            varuint32 sz = sig.n_params;
+            if(err = AppendArray<const char*>(s, *names, sz))
               return err;
           }
           tokens.Pop();
@@ -646,8 +646,16 @@ namespace innative {
         else
         {
           while(tokens.Peek().id != TOKEN_CLOSE)
+          {
+            if(names)
+            {
+              varuint32 sz = sig.n_params;
+              if(err = AppendArray<const char*>(0, *names, sz))
+                return err;
+            }
             if(err = AddWatValType(tokens.Pop().id, sig.params, sig.n_params))
               return err;
+          }
         }
 
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
@@ -1368,8 +1376,8 @@ namespace innative {
           tmemcpy(s, len + 1, tokens.Peek().pos, len);
           s[len] = 0;
 
-          len = body.n_locals;
-          if(err = AppendArray<const char*>(s, body.local_names, len))
+          varuint32 sz = body.n_locals; // n_locals is the count, but we don't want to increment it yet
+          if(err = AppendArray<const char*>(s, body.local_names, sz))
             return err;
           tokens.Pop();
 
@@ -1380,6 +1388,9 @@ namespace innative {
         {
           while(tokens[0].id != TOKEN_CLOSE)
           {
+            varuint32 sz = body.n_locals; // n_locals is the count, but we don't want to increment it yet
+            if(err = AppendArray<const char*>(0, body.local_names, sz))
+              return err;
             if(err = WatLocalAppend(body, tokens))
               return err;
           }

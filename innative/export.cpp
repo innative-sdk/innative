@@ -6,6 +6,7 @@
 #include "tools.h"
 #include "wast.h"
 #include <stdio.h>
+#include <iostream>
 #include <memory>
 #include <string>
 
@@ -138,7 +139,9 @@ int innative_compile_script_file(const char* file, Environment* env)
   if(data_module.get() == nullptr)
     return ERR_FATAL_FILE_ERROR;
 
-  return innative_compile_script(data_module.get(), sz, env);
+  int err = innative_compile_script(data_module.get(), sz, env);
+  std::cout << "Finished Script: " << file << std::endl;
+  return err;
 }
 
 void innative_set_work_dir_to_bin(const char* arg0)

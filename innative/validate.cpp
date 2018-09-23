@@ -597,11 +597,15 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
   case OP_i64_store16: ValidateStore<int16_t, TE_i64>(ins.immediates[0]._varuint32, values, env, m); break;
   case OP_i64_store32: ValidateStore<int32_t, TE_i64>(ins.immediates[0]._varuint32, values, env, m); break;
   case OP_memory_size:
+    if(!ModuleMemory(*m, 0))
+      AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
     if(ins.immediates[0]._varuint1 != 0)
       AppendError(env.errors, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
     values.Push(TE_i32);
     break;
   case OP_memory_grow:
+    if(!ModuleMemory(*m, 0))
+      AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
     if(ins.immediates[0]._varuint1 != 0)
       AppendError(env.errors, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
     ValidatePopType(values, TE_i32, env, m);

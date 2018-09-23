@@ -64,7 +64,6 @@ namespace innative {
       std::vector<llvm::AllocaInst*> locals;
       std::vector<llvm::GlobalVariable*> memories;
       std::vector<llvm::GlobalVariable*> tables;
-      std::vector<llvm::GlobalVariable*> tabletypes;
       std::vector<llvm::GlobalVariable*> globals;
       std::vector<Function> functions;
       llvm::Function* init;

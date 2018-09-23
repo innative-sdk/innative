@@ -87,8 +87,8 @@ namespace innative {
       "i64.store8",            // 0x3c
       "i64.store16",           // 0x3d
       "i64.store32",           // 0x3e
-      "memory.grow",           // 0x3f
-      "memory.size",           // 0x40
+      "memory.size",           // 0x3f
+      "memory.grow",           // 0x40
 
       // Constants
       "i32.const",             // 0x41

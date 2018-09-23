@@ -116,7 +116,7 @@ int main(int argc, char** argv)
 #endif
 
     // Then create the runtime environment with the module count.
-    Environment* env = (*exports.CreateEnvironment)(flags, modules, maxthreads);
+    Environment* env = (*exports.CreateEnvironment)(flags, modules, maxthreads, argv[0]);
     if(!env)
     {
       fprintf(stderr, "Unknown error creating environment.\n");

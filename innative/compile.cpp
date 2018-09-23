@@ -208,7 +208,7 @@ bool CheckSig(varsint7 sig, const Stack<llvm::Value*>& values)
   return CheckType(sig, values.Peek());
 }
 
-IR_ERROR PopType(varsint7 ty, code::Context& context, llvm::Value*& v)
+IR_ERROR PopType(varsint7 ty, code::Context& context, llvm::Value*& v, bool peek = false)
 {
   if(ty == TE_void)
     v = 0;
@@ -228,6 +228,8 @@ IR_ERROR PopType(varsint7 ty, code::Context& context, llvm::Value*& v)
   }
   else if(!CheckType(ty, context.values.Peek()))
     return ERR_INVALID_TYPE;
+  else if(peek)
+    v = context.values.Peek();
   else
     v = context.values.Pop();
 
@@ -293,7 +295,7 @@ IR_ERROR CompileUnaryIntrinsic(code::Context& context, llvm::Intrinsic::ID id, c
   llvmVal* values[sizeof...(Args) + 1] = { val1, args... };
 
   Func *fn = llvm::Intrinsic::getDeclaration(context.llvm, id, { val1->getType() });
-  
+
   return PushReturn(context, context.builder.CreateCall(fn, values, name));
 }
 
@@ -308,15 +310,15 @@ IR_ERROR CompileSelectOp(code::Context& context, const Twine& name, llvm::Instru
 
   if(!context.values.Size())
     return ERR_INVALID_VALUE_STACK;
-  valf = context.values.Pop();
+  if(!context.values.Peek()) // If a polymorphic type is on the stack, the result is a polymorphic type, so just do nothing
+    return ERR_SUCCESS;
 
-  if(!valf) // If this is a polymorphic type, we simply push it back on because the result of the select is then simply a polymorphic type
-    return PushReturn(context, nullptr);
+  valf = context.values.Pop();
 
   if(err = PopType(GetTypeEncoding(valf->getType()), context, valt))
     return assert(false), err;
 
-  return PushReturn(context, context.builder.CreateSelect(cond, valt, valf, name, from));
+  return PushReturn(context, context.builder.CreateSelect(context.builder.CreateICmpNE(cond, context.builder.getInt32(0)), valt, valf, name, from));
 }
 
 template<WASM_TYPE_ENCODING TYPE, bool LEFT>
@@ -362,11 +364,11 @@ BB* PushLabel(const char* name, varsint7 sig, uint8_t opcode, Func* fnptr, code:
 
 void BindLabel(BB* block, code::Context& context)
 {
-  if(!block->getParent())
-  {
-    context.builder.GetInsertBlock()->getParent()->getBasicBlockList().push_back(block);
-    context.builder.SetInsertPoint(block);
-  }
+  if(block->getParent() != nullptr) // Because this always happens after a branch, even if we have nothing to bind to, we must create a new block for LLVM
+    block = BB::Create(context.context, "bind_block", nullptr);
+
+  context.builder.GetInsertBlock()->getParent()->getBasicBlockList().push_back(block);
+  context.builder.SetInsertPoint(block);
   assert(block->getParent() != nullptr);
 }
 
@@ -377,15 +379,18 @@ void PushResult(code::BlockResult** root, llvmVal* result, BB* block)
   new(*root) code::BlockResult{ result, block, next };
 }
 
-// Adds current value stack to target branch according to that branch's signature, but doesn't pop them.
+// Adds current value stack to target branch according to that branch's signature.
 IR_ERROR AddBranch(code::Block& target, code::Context& context)
 {
-  if(!CheckSig(target.sig, context.values)) // We only verify the type, not the entire stack
-    return assert(false), ERR_INVALID_VALUE_STACK;
-  if(target.sig != TE_void && context.values.Peek() != nullptr)
-    PushResult(&target.results, context.values.Peek(), context.builder.GetInsertBlock()); // Push result
-
-  return ERR_SUCCESS;
+  IR_ERROR err = ERR_SUCCESS;
+  if(target.sig != TE_void)
+  {
+    llvmVal* value;
+    err = PopType(target.sig, context, value, true);
+    if(!err)
+      PushResult(&target.results, value, context.builder.GetInsertBlock()); // Push result
+  }
+  return err;
 }
 
 // Pops a label off the control stack, verifying that the value stack matches the signature and building PHI nodes as necessary
@@ -422,7 +427,7 @@ IR_ERROR PopLabel(code::Context& context, BB* block)
     return assert(false), ERR_INVALID_VALUE_STACK;
 
   if(push)
-   PushReturn(context, push);
+    PushReturn(context, push);
 
   context.values.SetLimit(context.control.Peek().limit);
   context.control.Pop();
@@ -465,10 +470,14 @@ IR_ERROR CompileElseBlock(code::Context& context)
     return assert(false), ERR_IF_ELSE_MISMATCH;
 
   // Instead of popping and pushing a new control label, we just re-purpose the existing one. This preserves the value stack results.
-  if(!CheckSig(context.control.Peek().sig, context.values)) // Verify stack
-    return assert(false), ERR_INVALID_VALUE_STACK;
-  if(context.control.Peek().sig != TE_void && context.values.Peek() != nullptr)
-    PushResult(&context.control.Peek().results, context.values.Peek(), context.builder.GetInsertBlock()); // Push result
+  if(context.control.Peek().sig != TE_void)
+  {
+    IR_ERROR err;
+    llvmVal* value;
+    if(err = PopType(context.control.Peek().sig, context, value))
+      return assert(false), err;
+    PushResult(&context.control.Peek().results, value, context.builder.GetInsertBlock()); // Push result
+  }
 
   // Reset value stack, but ensure that we preserve a polymorphic value if we had pushed one before
   while(context.values.Size() > 1)
@@ -505,27 +514,12 @@ IR_ERROR CompileReturn(code::Context& context, varsint7 sig)
 
 IR_ERROR CompileEndBlock(code::Context& context)
 {
-  if(context.control.Size() == 0)
-  {
-    if(context.control.Limit() > 0)
-    {
-      varsint7 sig = context.control[context.control.Size()].sig;
-      context.control.SetLimit(0);
-      if(context.control.Peek().op != OP_return)
-        return assert(false), ERR_END_MISMATCH;
-
-      IR_ERROR err = PopLabel(context, context.builder.GetInsertBlock());
-      if(err >= 0)
-        err = CompileReturn(context, sig);
-      return err;
-    }
-    return assert(false), ERR_END_MISMATCH;
-  }
   BB* cur = context.builder.GetInsertBlock();
   context.builder.CreateBr(context.control.Peek().block); // Branch into next block
   BindLabel(context.control.Peek().block, context);
 
-  switch(context.control.Peek().op) // Verify source operation
+  auto cache = context.control.Peek();
+  switch(cache.op) // Verify source operation
   {
   case OP_if:
     if(context.control.Peek().sig != TE_void) // An if statement with no else statement cannot return a value
@@ -533,12 +527,16 @@ IR_ERROR CompileEndBlock(code::Context& context)
   case OP_else:
   case OP_block:
   case OP_loop:
+  case OP_return:
     break;
   default:
     return assert(false), ERR_END_MISMATCH;
   }
 
-  IR_ERROR err = PopLabel(context, cur);
+  IR_ERROR err = PopLabel(context, cur); // Pop the label to assemble the phi node before pushing it.
+  if(cache.op == OP_return)
+    CompileReturn(context, cache.sig);
+
   return err;
 }
 
@@ -592,8 +590,13 @@ IR_ERROR CompileIfBranch(varuint32 depth, code::Context& context)
 
   code::Block& target = context.control[depth];
   context.builder.CreateCondBr(cmp, target.block, block);
-  context.builder.SetInsertPoint(block); // Start inserting code into continuation.
-  return (target.op != OP_loop) ? AddBranch(target, context) : ERR_SUCCESS; // Branches targeting loops just throw all their values away, so we don't need to build PHI nodes.
+  if(target.op != OP_loop)
+  {
+    if(err = AddBranch(target, context))
+      return err;
+  }
+  context.builder.SetInsertPoint(block); // Start inserting code into continuation AFTER we add the branch, so the branch goes to the right place
+  return ERR_SUCCESS; // Branches targeting loops just throw all their values away, so we don't need to build PHI nodes.
 }
 IR_ERROR CompileBranchTable(varuint32 n_table, varuint32* table, varuint32 def, code::Context& context)
 {
@@ -684,8 +687,13 @@ IR_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
       return assert(false), err;
   }
 
+  unsigned int bytes = context.intptrty->getBitWidth() / 8;
+
   if(context.env.flags & ENV_STRICT) // In strict mode, trap if index is out of bounds
-    InsertConditionalTrap(context.builder.CreateICmpUGE(callee, context.builder.CreateIntCast(context.builder.CreateLShr(GetMemSize(context.tables[0], context), 3), context.builder.getInt32Ty(), false), "indirect_call_oob_check"), context);
+  {
+    InsertConditionalTrap(context.builder.CreateICmpUGE(callee, context.builder.CreateIntCast(context.builder.CreateLShr(GetMemSize(context.tables[0], context), ((bytes == 4) ? 2 : 3)), context.builder.getInt32Ty(), false), "indirect_call_oob_check"), context);
+    callee = context.builder.CreateShl(callee, 2); // Then double the index so we actually get the right address in strict mode
+  }
 
   // Deference global variable to get the actual array of function pointers, index into them, then dereference that array index to get the actual function pointer
   llvmVal* funcptr = context.builder.CreateLoad(context.builder.CreateGEP(context.builder.CreateLoad(context.tables[0]), callee), "indirect_call_load_func_ptr");
@@ -699,12 +707,13 @@ IR_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
 
   if(context.env.flags & ENV_STRICT) // In strict mode, trap if the expected type does not match the actual type of the function
   {
-    auto sig = context.builder.CreateLoad(context.builder.CreateGEP(context.builder.CreateLoad(context.tabletypes[0]), callee));
+    callee = context.builder.CreateAdd(callee, context.builder.getInt32(1));
+    auto sig = context.builder.CreateLoad(context.builder.CreatePointerCast(context.builder.CreateGEP(context.builder.CreateLoad(context.tables[0]), callee), llvm::Type::getInt32PtrTy(context.context)));
     InsertConditionalTrap(context.builder.CreateICmpNE(sig, context.builder.getInt32(index), "indirect_call_sig_check"), context);
   }
 
   // CreateCall will then do the final dereference of the function pointer to make the indirect call
-  CallInst* call = context.builder.CreateCall(funcptr, llvm::makeArrayRef(ArgsV, ftype.n_params), "indirect_call");
+  CallInst* call = context.builder.CreateCall(funcptr, llvm::makeArrayRef(ArgsV, ftype.n_params));
 
   if(context.env.flags & ENV_STRICT) // In strict mode, tail call optimization is not allowed
     call->setTailCallKind(CallInst::TCK_NoTail);
@@ -730,11 +739,6 @@ IR_ERROR CompileConstant(Instruction& instruction, code::Context& context, llvm:
     break;
   case OP_f64_const:
     constant = ConstantFP::get(context.context, APFloat(instruction.immediates[0]._float64));
-    break;
-  case OP_get_global:
-    if(instruction.immediates[0]._varuint32 >= context.globals.size())
-      return ERR_INVALID_GLOBAL_INDEX;
-    constant = context.globals[instruction.immediates[0]._varuint32];
     break;
   default:
     return ERR_INVALID_INITIALIZER;
@@ -812,7 +816,7 @@ IR_ERROR CompileMemGrow(code::Context& context, const char* name)
   llvmVal* old = CompileMemSize(context.memories[0], context);
 
   auto max = context.builder.getInt64((context.m.memory.memories[0].limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? context.m.memory.memories[0].limits.maximum : 0);
-  CallInst* call = context.builder.CreateCall(context.memgrow, { context.memories[0], context.builder.CreateShl(context.builder.CreateZExt(delta, context.builder.getInt64Ty()), 16), max }, name);
+  CallInst* call = context.builder.CreateCall(context.memgrow, { context.builder.CreateLoad(context.memories[0]), context.builder.CreateShl(context.builder.CreateZExt(delta, context.builder.getInt64Ty()), 16), max }, name);
 
   auto result = context.builder.CreateSelect(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), CInt::get(context.intptrty, 0)), CInt::get(context.builder.getInt32Ty(), -1, true), old);
   return PushReturn(context, result);
@@ -864,7 +868,7 @@ void DumpContextState(code::Context& context)
     case TE_f32: std::cout << " f32"; break;
     case TE_f64: std::cout << " f64"; break;
     }
-    
+
     std::cout << ":" << (int)context.control[i].op;
   }
 
@@ -905,12 +909,12 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
     return CompileBranchTable(ins.immediates[0].n_table, ins.immediates[0].table, ins.immediates[1]._varuint32, context);
   case OP_return:
   {
-    IR_ERROR err = CompileReturn(context, context.control[context.control.Size()].sig);
+    IR_ERROR err = CompileReturn(context, context.control[context.control.Size() - 1].sig);
     PolymorphicStack(context);
     return err;
   }
 
-    // Call operators
+  // Call operators
   case OP_call:
     return CompileCall(ins.immediates[0]._varuint32, context);
   case OP_call_indirect:
@@ -950,6 +954,11 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
     if(context.values.Size() < 1)
       return assert(false), ERR_INVALID_VALUE_STACK;
     context.builder.CreateStore(!context.values.Peek() ? llvm::Constant::getAllOnesValue(context.globals[ins.immediates[0]._varuint32]->getType()->getElementType()) : context.values.Pop(), context.globals[ins.immediates[0]._varuint32]);
+    return ERR_SUCCESS;
+  case OP_get_global:
+    if(ins.immediates[0]._varuint32 >= context.globals.size())
+      return ERR_INVALID_GLOBAL_INDEX;
+    PushReturn(context, context.builder.CreateLoad(context.globals[ins.immediates[0]._varuint32]));
     return ERR_SUCCESS;
 
     // Memory-related operators
@@ -1009,7 +1018,6 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   case OP_i64_const:
   case OP_f32_const:
   case OP_f64_const:
-  case OP_get_global:
   {
     llvm::Constant* constant;
     IR_ERROR err = CompileConstant(ins, context, constant);
@@ -1298,9 +1306,8 @@ IR_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
   if(sig.n_returns > 0)
     ret = sig.returns[0];
 
-  // Setup initial basic block.
-  context.builder.SetInsertPoint(PushLabel("entry", ret, OP_return, fn, context));
-  context.control.SetLimit(1); // Don't allow breaking to the function entry
+  PushLabel("exit", ret, OP_return, nullptr, context); // Setup the function exit block that wraps everything
+  context.builder.SetInsertPoint(BB::Create(context.context, "entry", fn)); // Setup initial basic block.
   context.locals.resize(0);
   context.locals.reserve(sig.n_params + body.n_locals);
   varuint32 index = 0;
@@ -1326,7 +1333,7 @@ IR_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
     if(err < 0)
       return err;
   }
-  
+
   if(context.values.Size() > 0 && !context.values.Peek()) // Pop at most 1 polymorphic type off the stack. Any additional ones are an error.
     context.values.Pop();
   if(body.body[body.n_body - 1].opcode != OP_end)
@@ -1353,13 +1360,33 @@ llvm::GlobalVariable* CreateGlobal(code::Context& context, llvmTy* ty, bool isco
     !init);
 }
 
-llvm::Constant* CompileInitConstant(Instruction& instruction, code::Context& context)
+IR_ERROR CompileInitConstant(Instruction& instruction, Module& m, code::Context& context, llvm::Constant*& out);
+
+IR_ERROR CompileInitGlobal(Module& m, varuint32 index, code::Context& context, llvm::Constant*& out)
 {
-  llvm::Constant* constant;
-  IR_ERROR err = CompileConstant(instruction, context, constant);
-  if(err < 0)
-    return nullptr;
-  return constant;
+  size_t i = index + m.importsection.memories; // Shift index to globals section
+  if(i < m.importsection.globals)
+  {
+    auto external = ResolveExport(context.env, m.importsection.imports[i]);
+    if(!external.first)
+      return ERR_UNKNOWN_MODULE;
+    if(!external.second)
+      return ERR_UNKNOWN_EXPORT;
+    if(external.second->kind != WASM_KIND_GLOBAL)
+      return ERR_INVALID_GLOBAL_IMPORT_TYPE;
+    return CompileInitGlobal(*external.first, external.second->index, context, out);
+  }
+  i -= m.importsection.globals;
+  if(i < m.global.n_globals)
+    return CompileInitConstant(m.global.globals[i].init, m, context, out);
+  return ERR_INVALID_GLOBAL_INDEX;
+}
+
+IR_ERROR CompileInitConstant(Instruction& instruction, Module& m, code::Context& context, llvm::Constant*& out)
+{
+  if(instruction.opcode == OP_get_global)
+    return CompileInitGlobal(m, instruction.immediates[0]._varuint32, context, out);
+  return CompileConstant(instruction, context, out);
 }
 
 uint64_t GetTotalSize(llvmTy* t)
@@ -1455,9 +1482,6 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
 
   context.functions.reserve(context.m.importsection.functions + context.m.function.n_funcdecl);
   context.tables.reserve(context.m.importsection.tables - context.m.importsection.functions + context.m.table.n_tables);
-  if(env->flags&ENV_STRICT)
-    context.tabletypes.reserve(context.tables.size());
-
   context.memories.reserve(context.m.importsection.memories - context.m.importsection.tables + context.m.memory.n_memories);
   context.globals.reserve(context.m.importsection.globals - context.m.importsection.memories + context.m.global.n_globals);
 
@@ -1475,6 +1499,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
         context.m.type.functions[index],
         CanonImportName(context.m.importsection.imports[i]),
         context);
+      context.functions.back().internal->setLinkage(Func::ExternalLinkage);
 
       auto e = ResolveExport(*env, context.m.importsection.imports[i]);
       if(!e.second)
@@ -1525,7 +1550,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   // Cache internal function start index
   if(context.m.function.n_funcdecl != context.m.code.n_funcbody)
     return assert(false), ERR_INVALID_FUNCTION_BODY;
-  varuint32 code_index = context.functions.size();
+  size_t code_index = context.functions.size();
 
   // Declare function prototypes
   for(varuint32 i = 0; i < context.m.function.n_funcdecl; ++i)
@@ -1556,6 +1581,8 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     uint64_t bytewidth = context.llvm->getDataLayout().getTypeAllocSize(context.tables.back()->getType());
     if(!bytewidth)
       return assert(false), ERR_INVALID_TABLE_TYPE;
+    if(env->flags&ENV_STRICT)
+      bytewidth *= 2;
 
     CallInst* call = context.builder.CreateCall(
       context.memgrow,
@@ -1567,29 +1594,6 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
 
     InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), CInt::get(context.intptrty, 0)), context);
     context.builder.CreateStore(context.builder.CreatePointerCast(call, type), context.tables.back());
-
-    if(env->flags&ENV_STRICT)
-    {
-      type = llvmTy::getInt32PtrTy(context.context);
-      context.tabletypes.push_back(CreateGlobal(
-        context,
-        type,
-        false,
-        false,
-        MergeName(context.m.name.str(), "tabletype#", i),
-        llvm::ConstantPointerNull::get(type)));
-
-      call = context.builder.CreateCall(
-        context.memgrow,
-        {
-          llvm::ConstantPointerNull::get(context.builder.getInt8PtrTy(0)),
-          context.builder.getInt64(context.m.table.tables[i].resizable.minimum * sizeof(int32_t)),
-          context.builder.getInt64((context.m.table.tables[i].resizable.flags & WASM_LIMIT_HAS_MAXIMUM) ? context.m.table.tables[i].resizable.maximum * sizeof(int32_t) : 0)
-        });
-
-      InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), CInt::get(context.intptrty, 0)), context);
-      context.builder.CreateStore(context.builder.CreatePointerCast(call, type), context.tabletypes.back());
-    }
   }
 
   // Declare linear memory spaces and allocate in init function
@@ -1605,16 +1609,22 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     context.builder.CreateStore(call, context.memories.back());
   }
 
+  IR_ERROR err;
+
   // Declare global variables
   for(varuint32 i = 0; i < context.m.global.n_globals; ++i)
   {
+    llvm::Constant* init;
+    if(err = CompileInitConstant(context.m.global.globals[i].init, context.m, context, init))
+      return err;
+
     context.globals.push_back(CreateGlobal(
       context,
       GetLLVMType(context.m.global.globals[i].desc.type, context),
       !context.m.global.globals[i].desc.mutability,
       false,
       MergeName(context.m.name.str(), "globalvariable#", i),
-      CompileInitConstant(context.m.global.globals[i].init, context)));
+      init));
   }
 
   // Set ENV_HOMOGENIZE_FUNCTIONS flag appropriately.
@@ -1627,7 +1637,6 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     switch(e.kind)
     {
     case WASM_KIND_FUNCTION:
-
       context.functions[e.index].exported = (*wrapperfn)(context.functions[e.index].imported ? context.functions[e.index].imported : context.functions[e.index].internal, MergeName(context.m.name.str(), e.name.str()), context);
       context.functions[e.index].exported->setLinkage(Func::ExternalLinkage);
       context.functions[e.index].exported->setCallingConv(llvm::CallingConv::C);
@@ -1656,7 +1665,9 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     DataInit& d = context.m.data.data[i]; // First we declare a constant array that stores the data in the EXE
     auto data = llvm::ConstantDataArray::get(context.context, llvm::makeArrayRef<uint8_t>(d.data.get(), d.data.get() + d.data.size()));
     auto val = new llvm::GlobalVariable(*context.llvm, data->getType(), true, llvm::GlobalValue::LinkageTypes::PrivateLinkage, data);
-    llvm::Constant* offset = CompileInitConstant(d.offset, context);
+    llvm::Constant* offset;
+    if(err = CompileInitConstant(d.offset, context.m, context, offset))
+      return err;
 
     // Then we create a memcpy call that copies this data to the appropriate location in the init function
     context.builder.CreateCall(fn_memcpy,
@@ -1668,7 +1679,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   }
 
   // Process element section by appending to the init function
-  for(varuint32 i = 0; i < context.m.element.n_elements; ++i)
+  for(uint64_t i = 0; i < context.m.element.n_elements; ++i)
   {
     TableInit& e = context.m.element.elements[i]; // First we declare a constant array that stores the data in the EXE
     TableDesc* t = ModuleTable(context.m, e.index);
@@ -1678,26 +1689,30 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     if(t->element_type == TE_anyfunc)
     {
       llvmTy* target = GetLLVMType(TE_anyfunc, context);
-      llvm::Constant* offset = CompileInitConstant(e.offset, context);
+      llvm::Constant* offset;
+      if(err = CompileInitConstant(e.offset, context.m, context, offset))
+        return err;
 
       // Go through and resolve all indices to function pointers
-      for(varuint32 j = 0; j < e.n_elements; ++j)
+      for(uint64_t j = 0; j < e.n_elements; ++j)
       {
         if(e.elements[j] >= context.functions.size())
           return assert(false), ERR_INVALID_FUNCTION_INDEX;
 
+        uint64_t indice = (env->flags&ENV_STRICT) ? j * 2 : j;
+
         // Store function pointer in correct table memory location
-        auto ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tables[e.index]), context.builder.CreateAdd(offset, CInt::get(offset->getType(), j, true)));
+        auto ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tables[e.index]), context.builder.CreateAdd(offset, CInt::get(offset->getType(), indice, true)));
         context.builder.CreateAlignedStore(context.builder.CreatePointerCast(context.functions[e.elements[j]].internal, target), ptr, context.llvm->getDataLayout().getPointerSize());
 
         if(env->flags&ENV_STRICT)
         {
-          ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tabletypes[e.index]), context.builder.CreateAdd(offset, CInt::get(offset->getType(), j, true)));
           varuint32 index = ModuleFunctionType(context.m, e.elements[j]);
           if(index == (varuint32)~0)
             return assert(false), ERR_INVALID_FUNCTION_INDEX;
 
-          context.builder.CreateAlignedStore(context.builder.getInt32(index), ptr, 4);
+          ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tables[e.index]), context.builder.CreateAdd(offset, CInt::get(offset->getType(), indice + 1, true)));
+          context.builder.CreateAlignedStore(context.builder.getInt32(index), context.builder.CreatePointerCast(ptr, llvm::Type::getInt32PtrTy(context.context)), 4);
         }
       }
     }
@@ -1711,7 +1726,6 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   {
     assert(!context.functions[code_index].imported);
     Func* fn = context.functions[code_index++].internal;
-    IR_ERROR err;
 
     if(fn)
     {
@@ -1978,8 +1992,31 @@ namespace innative {
         linkargs.push_back(v.c_str());
 
       // Link object code
-      /*llvm::raw_fd_ostream dest(1, false, true);
+      if(env->linker != 0)
+      {
+        std::string cmd = env->linker;
+        size_t sz = cmd.size();
+        for(auto arg : linkargs)
+          sz += strlen(arg);
+        cmd.reserve(sz + 1 + linkargs.size());
+        for(auto arg : linkargs)
+        {
+          cmd += ' ';
+          cmd += arg;
+        }
+
+        int err = system(cmd.c_str());
+        if(err != 0)
+          return assert(false), ERR_FATAL_LINK_ERROR;
+      }
+
+      /*
+      llvm::raw_fd_ostream dest(1, false, true);
+#ifdef IR_PLATFORM_WIN32
       if(!lld::coff::link(linkargs, false, dest))
+#else
+      if(!lld::elf::link(linkargs, false, dest))
+#endif
       {
         for(auto& v : cache)
           std::remove(v.c_str());

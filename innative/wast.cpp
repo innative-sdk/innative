@@ -801,6 +801,5 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
   env.errors = errors;
   if(env.errors)
     internal::ReverseErrorList(env.errors);
-  std::cout << "Finished Script" << std::endl;
   return ERR_SUCCESS;
 }
