@@ -16,7 +16,7 @@ const char testenv[] = "(module $spectest "
 "\n  (global $global_f64 (export \"global_f64\") f64 f64.const 0)"
 "\n  (memory $memory1 (export \"memory\") 1)"
 "\n  (table $table10 (export \"table\") 10 anyfunc)"
-"\n  (func $print (export \"print\") (param i32))"
+"\n  (func $print (export \"print\"))"
 "\n  (func $print_i32 (export \"print_i32\") (param i32))"
 "\n  (func $print_i64 (export \"print_i64\") (param i64))"
 "\n  (func $print_f32 (export \"print_f32\") (param f32))"
@@ -45,13 +45,14 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  testfiles = { "../spec/test/core/names.wast" };
+  testfiles = { "../spec/test/core/address.wast" };
   target << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
   //testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
 
   for(auto file : testfiles)
   {
     Environment* env = (*exports.CreateEnvironment)(ENV_DEBUG | ENV_STRICT, 1, 0, (!argc ? 0 : argv[0]));
+    env->linker = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\VC\\Tools\\MSVC\\14.14.26428\\bin\\Hostx64\\x64\\link.exe";
     int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
 
     if(err >= 0)

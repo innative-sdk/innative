@@ -29,10 +29,6 @@ typedef double float64;
 // Maximum number of immediates used by any instruction
 #define MAX_IMMEDIATES 2
 
-KHASH_DECLARE(exports, kh_cstr_t, varuint32);
-KHASH_DECLARE(cimport, kh_cstr_t, char);
-KHASH_DECLARE(modules, kh_cstr_t, size_t);
-
 enum WASM_TYPE_ENCODING
 {
   TE_i32 = -0x01,
@@ -450,6 +446,10 @@ protected:
 } ByteArray;
 
 typedef ByteArray Identifier;
+
+KHASH_DECLARE(exports, Identifier, varuint32);
+KHASH_DECLARE(cimport, Identifier, char);
+KHASH_DECLARE(modules, Identifier, size_t);
 
 typedef union __WASM_IMMEDIATE
 {

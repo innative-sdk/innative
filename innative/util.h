@@ -79,6 +79,20 @@ namespace innative {
       return h;
     }
 
+    inline khint_t __ac_X31_hash_bytearray(const ByteArray& id)
+    {
+      const char* s = id.str();
+      const char* end = s + id.size();
+      khint_t h = 0;
+      if(s < end)
+      {
+        h = *s;
+        for(++s; s < end; ++s)
+          h = (h << 5) - h + (khint_t)*s;
+      }
+      return h;
+    }
+
     // Hashes a pair of strings seperated by a null terminator
     kh_inline khint_t __ac_X31_hash_string_pair(const char *s)
     {

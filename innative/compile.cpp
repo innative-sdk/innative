@@ -13,6 +13,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "lld/Common/Driver.h"
 #include <iostream>
+#include <sstream>
 #pragma warning(pop)
 
 using namespace innative;
@@ -1852,7 +1853,7 @@ namespace innative {
       if(context[i].start != nullptr)
       {
         if(start != nullptr)
-          return assert(false), ERR_MULTIPLE_ENTRY_POINTS;
+          return ERR_MULTIPLE_ENTRY_POINTS;
         start = context + i;
       }
     }
@@ -1926,7 +1927,7 @@ namespace innative {
     {
       // Write all in-memory environments to cache files
       vector<string> cache;
-      vector<const char*> linkargs = { "innative", "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO", "/nodefaultlib", /*"/MANIFEST", "/MANIFEST:embed",*/ "/SUBSYSTEM:CONSOLE", "/VERBOSE", "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT", "/MACHINE:X64", "/machine:x64" };
+      vector<const char*> linkargs = { "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO", "/nodefaultlib", /*"/MANIFEST", "/MANIFEST:embed",*/ "/SUBSYSTEM:CONSOLE", "/VERBOSE", "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT", "/MACHINE:X64", "/machine:x64" };
 
 #ifdef IR_PLATFORM_WIN32
       linkargs.push_back("/ENTRY:" IR_INIT_FUNCTION);
@@ -1994,34 +1995,44 @@ namespace innative {
       // Link object code
       if(env->linker != 0)
       {
-        std::string cmd = env->linker;
+        std::string cmd;
+        cmd += '"'; // for windows we have to double quote the entire bloody command because system() actually calls "cmd /c <string>"
+        cmd += '"';
+        cmd += env->linker;
+        cmd += '"';
+
         size_t sz = cmd.size();
         for(auto arg : linkargs)
           sz += strlen(arg);
-        cmd.reserve(sz + 1 + linkargs.size());
+        cmd.reserve(sz + 1 + linkargs.size()*3);
         for(auto arg : linkargs)
         {
           cmd += ' ';
+          cmd += '"';
           cmd += arg;
+          cmd += '"';
         }
+
+        cmd += '"';
 
         int err = system(cmd.c_str());
         if(err != 0)
           return assert(false), ERR_FATAL_LINK_ERROR;
       }
-
-      /*
-      llvm::raw_fd_ostream dest(1, false, true);
-#ifdef IR_PLATFORM_WIN32
-      if(!lld::coff::link(linkargs, false, dest))
-#else
-      if(!lld::elf::link(linkargs, false, dest))
-#endif
+      else
       {
-        for(auto& v : cache)
-          std::remove(v.c_str());
-        return assert(false), ERR_FATAL_LINK_ERROR;
-      }*/
+        llvm::raw_fd_ostream dest(1, false, true);
+#ifdef IR_PLATFORM_WIN32
+        if(!lld::coff::link(linkargs, false, dest))
+#else
+        if(!lld::elf::link(linkargs, false, dest))
+#endif
+        {
+          for(auto& v : cache)
+            std::remove(v.c_str());
+          return assert(false), ERR_FATAL_LINK_ERROR;
+        }
+      }
 
       // Delete cache files
       for(auto& v : cache)

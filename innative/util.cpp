@@ -135,7 +135,7 @@ namespace innative {
     //}
     std::pair<Module*, Export*> ResolveExport(const Environment& env, const Import& imp)
     {
-      khint_t iter = kh_get_modules(env.modulemap, imp.module_name.str());
+      khint_t iter = kh_get_modules(env.modulemap, imp.module_name);
       if(iter == kh_end(env.modulemap))
         return { nullptr,nullptr };
 
@@ -143,7 +143,7 @@ namespace innative {
       if(i >= env.n_modules)
         return { nullptr,nullptr };
 
-      iter = kh_get_exports(env.modules[i].exports, imp.export_name.str());
+      iter = kh_get_exports(env.modules[i].exports, imp.export_name);
       if(iter == kh_end(env.modules[i].exports))
         return { env.modules + i, 0 };
 

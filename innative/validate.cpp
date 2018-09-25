@@ -11,7 +11,7 @@
 #define str_pair_hash_equal(a, b) (strcmp(a, b) == 0) && (strcmp(strchr(a, 0)+1, strchr(a, 0)+1) == 0)
 
 __KHASH_IMPL(modulepair, kh_inline, kh_cstr_t, FunctionType, 1, innative::internal::__ac_X31_hash_string_pair, str_pair_hash_equal);
-__KHASH_IMPL(cimport, kh_inline, kh_cstr_t, char, 0, kh_str_hash_func, kh_str_hash_equal);
+__KHASH_IMPL(cimport, kh_inline, Identifier, char, 0, innative::internal::__ac_X31_hash_bytearray, kh_int_hash_equal);
 
 using namespace innative;
 using namespace utility;
@@ -135,9 +135,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   if(!ValidateIdentifier(imp.export_name))
     AppendError(env.errors, m, ERR_INVALID_UTF8_ENCODING, "Identifier not valid UTF8: %s", imp.export_name.str());
 
-  const char* modname = imp.module_name.str();
-
-  khint_t iter = kh_get_modules(env.modulemap, modname); // WASM modules do not understand !CALL convention appendings, so we use the full name no matter what
+  khint_t iter = kh_get_modules(env.modulemap, imp.module_name); // WASM modules do not understand !CALL convention appendings, so we use the full name no matter what
   if(iter == kh_end(env.modulemap))
   {
     if(env.whitelist)
@@ -174,7 +172,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
       //khiter_t iter = kh_get_cimport(env.cimports, name.c_str());
       //if(kh_exist2(env.cimports, iter))
       //  return; // This function exists and we already have verified the signature if there was a whitelist, so just return
-      if(!modname || !modname[0] || modname[0] == '!') // Blank imports must have been C imports, otherwise it could have been a failed WASM module import attempt.
+      if(!imp.module_name.size() || imp.module_name.str()[0] == '!') // Blank imports must have been C imports, otherwise it could have been a failed WASM module import attempt.
         return AppendError(env.errors, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found in C library imports", name.c_str());
     }
 
@@ -184,7 +182,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   if(i >= env.n_modules)
     return AppendError(env.errors, m, ERR_UNKNOWN_MODULE, "%s module index (%u) not in range (%u)", imp.module_name.str(), i, env.n_modules);
 
-  iter = kh_get_exports(env.modules[i].exports, imp.export_name.str());
+  iter = kh_get_exports(env.modules[i].exports, imp.export_name);
   if(iter == kh_end(env.modules[i].exports))
     return AppendError(env.errors, m, ERR_UNKNOWN_EXPORT, "%s export not found", imp.export_name.str());
 
@@ -1095,14 +1093,15 @@ void innative::ValidateModule(Environment& env, Module& m)
     ValidateSection<DataInit, &ValidateDataOffset>(m.data.data, m.data.n_data, env, &m);
 }
 
+
 // Performs all post-load validation that couldn't be done during parsing
 void innative::ValidateEnvironment(Environment& env)
 {
   int tmp;
   if(!(env.flags&ENV_STRICT))
   {
-    kh_put_cimport(env.cimports, "_innative_to_c", &tmp);
-    kh_put_cimport(env.cimports, "_innative_from_c", &tmp);
+    //kh_put_cimport(env.cimports, "_innative_to_c", &tmp);
+    //kh_put_cimport(env.cimports, "_innative_from_c", &tmp);
   }
   // TODO: replace with proper lib lookup
   //kh_put_cimport(env.cimports, "_innative_internal_env_print", &tmp);

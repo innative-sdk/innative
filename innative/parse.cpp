@@ -8,12 +8,12 @@
 #include <assert.h>
 #include <algorithm>
 
-__KHASH_IMPL(exports, kh_inline, kh_cstr_t, varuint32, 1, kh_str_hash_func, kh_str_hash_equal);
-__KHASH_IMPL(modules, kh_inline, kh_cstr_t, size_t, 1, kh_str_hash_func, kh_str_hash_equal);
-
 using namespace innative;
 using namespace utility;
 using namespace internal;
+
+__KHASH_IMPL(exports, kh_inline, Identifier, varuint32, 1, __ac_X31_hash_bytearray, kh_int_hash_equal);
+__KHASH_IMPL(modules, kh_inline, Identifier, size_t, 1, __ac_X31_hash_bytearray, kh_int_hash_equal);
 
 namespace innative {
   namespace internal {
@@ -804,7 +804,7 @@ IR_ERROR innative::ParseExportFixup(Module& m, ValidationError*& errors)
   for(varuint32 i = 0; i < m.exportsection.n_exports; ++i)
   {
     int r = 0;
-    khint_t iter = kh_put_exports(m.exports, m.exportsection.exports[i].name.str(), &r);
+    khint_t iter = kh_put_exports(m.exports, m.exportsection.exports[i].name, &r);
     if(r < 0)
       return ERR_FATAL_BAD_HASH;
     if(!r)

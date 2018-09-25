@@ -147,7 +147,7 @@ enum IR_ERROR innative::Compile(Environment* env, const char* file)
   for(size_t i = 0; i < env->n_modules; ++i)
   {
     int r;
-    khiter_t iter = kh_put_modules(env->modulemap, env->modules[i].name.str(), &r);
+    khiter_t iter = kh_put_modules(env->modulemap, env->modules[i].name, &r);
     if(!r)
       return ERR_FATAL_DUPLICATE_MODULE_NAME;
     kh_val(env->modulemap, iter) = i;

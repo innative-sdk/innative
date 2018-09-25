@@ -371,7 +371,7 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
     if(err = WatString(func, tokens.Pop()))
       return err;
 
-    khiter_t iter = kh_get_exports(m->exports, func.str());
+    khiter_t iter = kh_get_exports(m->exports, func);
     if(!kh_exist2(m->exports, iter))
       return ERR_INVALID_FUNCTION_INDEX;
     Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
@@ -463,7 +463,7 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
     if(err = WatString(global, tokens.Pop()))
       return err;
 
-    khiter_t iter = kh_get_exports(m->exports, global.str());
+    khiter_t iter = kh_get_exports(m->exports, global);
     if(!kh_exist2(m->exports, iter))
       return ERR_INVALID_GLOBAL_INDEX;
     Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
@@ -579,7 +579,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
       if(err = WatString(name, tokens.Pop()))
         return err;
       int r;
-      khiter_t iter = kh_put_modules(env.modulemap, name.str(), &r);
+      khiter_t iter = kh_put_modules(env.modulemap, name, &r);
       if(!r)
         return ERR_FATAL_DUPLICATE_MODULE_NAME;
 
