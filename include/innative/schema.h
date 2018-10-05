@@ -451,6 +451,13 @@ KHASH_DECLARE(exports, Identifier, varuint32);
 KHASH_DECLARE(cimport, Identifier, char);
 KHASH_DECLARE(modules, Identifier, size_t);
 
+typedef struct __WASM_DEBUGINFO
+{
+  size_t line;
+  size_t column;
+  Identifier name; // Stored debug name, if applicable
+} DebugInfo;
+
 typedef union __WASM_IMMEDIATE
 {
   uint32 _uint32;
@@ -471,7 +478,8 @@ typedef struct __WASM_INSTRUCTION
 {
   uint8_t opcode;
   Immediate immediates[MAX_IMMEDIATES];
-  const char* token; // Stores debug location, if applicable
+  size_t line; // To keep the size small, we ONLY store line/column on instructions
+  size_t column;
 } Instruction;
 
 typedef struct __WASM_FUNCTION_TYPE
@@ -493,18 +501,21 @@ typedef struct __WASM_RESIZABLE_LIMITS
 typedef struct __WASM_MEMORY_DESC
 {
   ResizableLimits limits;
+  DebugInfo debug;
 } MemoryDesc;
 
 typedef struct __WASM_TABLE_DESC
 {
   varsint7 element_type;
   ResizableLimits resizable;
+  DebugInfo debug;
 } TableDesc;
 
 typedef struct __WASM_GLOBAL_DESC
 {
   varsint7 type;
   varuint1 mutability;
+  DebugInfo debug;
 } GlobalDesc;
 
 typedef struct __WASM_GLOBAL_DECL
@@ -519,8 +530,8 @@ typedef struct __WASM_FUNCTION_DESC
   inline __WASM_FUNCTION_DESC() : type_index(0), param_names(nullptr) {}
 #endif
   varuint32 type_index;
-  Identifier debug_name;
-  const char** param_names; // Always the size of n_params from the signature
+  DebugInfo debug;
+  DebugInfo* param_names; // Always the size of n_params from the signature
 } FunctionDesc;
 
 typedef struct __WASM_IMPORT
@@ -562,10 +573,9 @@ typedef struct __WASM_FUNCTION_BODY
   varsint7* locals;
   Instruction* body;
   varuint32 n_body; // INTERNAL: track actual number of instructions
-  Identifier debug_name; // INTERNAL: debug name if it exists
-  const char** local_names; // INTERNAL: debug names of locals, always the size of n_locals or NULL if it doesn't exist
-  const char** param_names; // INTERNAL: debug names of parameters, always the size of n_params or NULL if it doesn't exist
-  const char* token;
+  DebugInfo* local_names; // INTERNAL: debug names of locals, always the size of n_locals or NULL if it doesn't exist
+  DebugInfo* param_names; // INTERNAL: debug names of parameters, always the size of n_params or NULL if it doesn't exist
+  DebugInfo debug;
 } FunctionBody;
 
 typedef struct __WASM_DATA_INIT
@@ -663,6 +673,7 @@ typedef struct __WASM_MODULE
   CustomSection* custom;
 
   struct kh_exports_s* exports;
+  const char* path; // For debugging purposes, store path to source .wat file, if it exists.
 } Module;
 
 typedef struct __WASM_VALIDATION_ERROR

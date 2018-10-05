@@ -37,6 +37,7 @@ namespace innative {
       size_t limit; // Limit of value stack
       varsint7 sig; // Block signature
       uint8_t op; // instruction that pushed this label
+      llvm::DIScope* scope; // Debug lexical scope for this block
       BlockResult* results; // Holds alternative branch results targeting this block
     };
 
@@ -57,6 +58,12 @@ namespace innative {
       llvm::TargetMachine* machine;
       llvm::IntegerType* intptrty;
       llvm::DIBuilder* dbuilder;
+      llvm::DIType* diF32;
+      llvm::DIType* diF64;
+      llvm::DIType* diI32;
+      llvm::DIType* diI64;
+      llvm::DIType* diI1;
+      llvm::DIType* diVoid;
       llvm::DICompileUnit* dcu;
       llvm::DIFile* dunit;
       Stack<llvm::Value*> values; // Tracks the current value stack

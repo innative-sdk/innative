@@ -8,7 +8,7 @@
 
 namespace innative {
   namespace wat {
-    int ParseWast(Environment& env, const uint8_t* data, size_t sz);
+    int ParseWast(Environment& env, const uint8_t* data, size_t sz, const char* path);
   }
 }
 

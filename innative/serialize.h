@@ -10,7 +10,7 @@ namespace innative {
   namespace wat {
     WatTokens TypeEncodingToken(varsint7 type_encoding);
     void PushNewNameToken(Queue<WatToken>& tokens, const char* format, ...);
-    void PushLocalName(Queue<WatToken>& tokens, varuint32 index, const char** names, varuint32 num, char prefix);
+    void PushLocalName(Queue<WatToken>& tokens, varuint32 index, const DebugInfo* names, varuint32 num, char prefix);
     void PushFunctionName(Queue<WatToken>& tokens, const Module& m, varuint32 index);
     void PushIdentifierToken(Queue<WatToken>& tokens, const ByteArray& id, WatTokens token = TOKEN_STRING);
     void TokenizeInstruction(Queue<WatToken>& tokens, const Module& m, const Instruction& ins, const FunctionBody* body, const FunctionType* ftype);

@@ -83,6 +83,54 @@ FuncTy* GetFunctionType(FunctionType& signature, code::Context& context)
   return FuncTy::get(ret, false);
 }
 
+llvm::DIType* CreateDebugType(llvmTy* t, code::Context& context)
+{
+  if(t->isPointerTy())
+    return context.dbuilder->createPointerType(CreateDebugType(t->getPointerElementType(), context), context.intptrty->getBitWidth());
+  if(t->isFloatTy())
+    return context.diF32;
+  if(t->isDoubleTy())
+    return context.diF64;
+  if(t->isVoidTy())
+    return context.diVoid;
+  if(t->isIntegerTy() && static_cast<llvm::IntegerType*>(t)->getBitWidth() == 1)
+    return context.diI1;
+  if(t->isIntegerTy() && static_cast<llvm::IntegerType*>(t)->getBitWidth() == 32)
+    return context.diI32;
+  if(t->isIntegerTy() && static_cast<llvm::IntegerType*>(t)->getBitWidth() == 64)
+    return context.diVoid;
+
+  return nullptr;
+}
+
+void FunctionDebugInfo(llvm::Function* fn, code::Context& context, bool definition, size_t line)
+{
+  if(context.dbuilder)
+  {
+    llvm::SmallVector<llvm::Metadata*, 8> dwarfTys = { CreateDebugType(fn->getReturnType(), context) };
+    for(auto& arg : fn->args())
+      dwarfTys.push_back(CreateDebugType(arg.getType(), context));
+
+    auto subtype = context.dbuilder->createSubroutineType(
+      context.dbuilder->getOrCreateTypeArray(dwarfTys),
+      llvm::DINode::FlagZero,
+      (fn->getCallingConv() == llvm::CallingConv::C) ? llvm::dwarf::DW_CC_normal : llvm::dwarf::DW_CC_nocall);
+
+    fn->setSubprogram(context.dbuilder->createFunction(
+      context.dunit,
+      fn->getName(),
+      "",
+      context.dunit,
+      line,
+      subtype,
+      !fn->hasValidDeclarationLinkage(),
+      definition,
+      line,
+      llvm::DINode::FlagZero,
+      (context.env.flags&ENV_OPTIMIZE_ALL) != 0));
+  }
+}
+
 Func* CompileFunction(FunctionType& signature, const Twine& name, code::Context& context)
 {
   Func* fn = Func::Create(GetFunctionType(signature, context), Func::InternalLinkage, name, context.llvm);
@@ -90,18 +138,24 @@ Func* CompileFunction(FunctionType& signature, const Twine& name, code::Context&
   return fn;
 }
 
-Func* HomogenizeFunction(Func* fn, const Twine& name, code::Context& context)
+Func* HomogenizeFunction(Func* fn, const Twine& name, code::Context& context, llvm::GlobalValue::LinkageTypes linkage = Func::ExternalLinkage, llvm::CallingConv::ID callconv = llvm::CallingConv::C)
 {
   vector<llvmTy*> types; // Replace the entire function with just i64
   for(auto& arg : fn->args())
     types.push_back(context.builder.getInt64Ty());
 
-  Func* wrap = Func::Create(FuncTy::get(context.builder.getInt64Ty(), types, false), Func::ExternalLinkage, name, context.llvm);
+  Func* wrap = Func::Create(FuncTy::get(context.builder.getInt64Ty(), types, false), linkage, name, context.llvm);
+  wrap->setCallingConv(callconv);
+  FunctionDebugInfo(wrap, context, true, fn->getSubprogram()->getLine());
 
   auto prev = context.builder.GetInsertBlock();
 
   BB* bb = BB::Create(context.context, "homogenize_block", wrap);
   context.builder.SetInsertPoint(bb);
+
+  if(context.dbuilder)
+    context.builder.SetCurrentDebugLocation(llvm::DILocation::get(context.context, wrap->getSubprogram()->getLine(), 0, wrap->getSubprogram()));
+
   vector<llvmVal*> values;
   int i = 0;
   for(auto& arg : wrap->args())
@@ -140,15 +194,20 @@ Func* HomogenizeFunction(Func* fn, const Twine& name, code::Context& context)
   return wrap;
 }
 
-Func* WrapFunction(Func* fn, const Twine& name, code::Context& context)
+Func* WrapFunction(Func* fn, const Twine& name, code::Context& context, llvm::GlobalValue::LinkageTypes linkage = Func::InternalLinkage, llvm::CallingConv::ID callconv = llvm::CallingConv::Fast)
 {
-  Func* wrap = Func::Create(fn->getFunctionType(), Func::InternalLinkage, name, context.llvm);
-  wrap->setCallingConv(llvm::CallingConv::Fast);
+  Func* wrap = Func::Create(fn->getFunctionType(), linkage, name, context.llvm);
+  wrap->setCallingConv(callconv);
+  FunctionDebugInfo(wrap, context, true, fn->getSubprogram()->getLine());
 
   auto prev = context.builder.GetInsertBlock();
 
   BB* bb = BB::Create(context.context, "wrapper_block", wrap);
   context.builder.SetInsertPoint(bb);
+  
+  if(context.dbuilder)
+    context.builder.SetCurrentDebugLocation(llvm::DILocation::get(context.context, wrap->getSubprogram()->getLine(), 0, wrap->getSubprogram()));
+
   vector<llvmVal*> values;
   for(auto& arg : wrap->args())
     values.push_back(&arg);
@@ -351,11 +410,12 @@ IR_ERROR CompileRotationOp(code::Context& context, const char* name)
   return PushReturn(context, context.builder.CreateOr(l, r, name));
 }
 
-BB* PushLabel(const char* name, varsint7 sig, uint8_t opcode, Func* fnptr, code::Context& context)
+BB* PushLabel(const char* name, varsint7 sig, uint8_t opcode, Func* fnptr, code::Context& context, llvm::DIScope* scope)
 {
   BB* bb = BB::Create(context.context, name, fnptr);
-  context.control.Push(code::Block{ bb, context.values.Limit(), sig, opcode });
+  context.control.Push(code::Block{ bb, context.values.Limit(), sig, opcode, scope }); // TODO: create proper nested lexical contexts
   context.values.SetLimit(context.values.Size() + context.values.Limit()); // Set limit to current stack size to prevent a block from popping past this
+  auto test3 = llvm::cast<llvm::DILocalScope>(scope);
 
   if(context.values.Size() > 0 && !context.values.Peek()) // If we're in an unreachable segment, just push another placeholder on to the stack
     context.values.Push(nullptr);
@@ -448,7 +508,7 @@ IR_ERROR CompileIfBlock(varsint7 sig, code::Context& context)
 
   Func* parent = context.builder.GetInsertBlock()->getParent();
   BB* tblock = BB::Create(context.context, "if_true", parent);
-  BB* fblock = PushLabel("if_false", sig, OP_if, nullptr, context);
+  BB* fblock = PushLabel("if_false", sig, OP_if, nullptr, context, context.control.Peek().scope);
 
   context.builder.CreateCondBr(cmp, tblock, fblock); // Insert branch in current block
   context.builder.SetInsertPoint(tblock); // Start inserting code into true block
@@ -750,10 +810,10 @@ IR_ERROR CompileConstant(Instruction& instruction, code::Context& context, llvm:
 
 llvmVal* GetMemPointer(code::Context& context, llvmVal* base, llvm::PointerType* pointer_type, varuint7 memory, varuint32 offset)
 {
-  llvmVal* loc = context.builder.CreateAdd(base, CInt::get(context.context, APInt(32, offset, true)), "", true, true);
+  llvmVal* loc = context.builder.CreateAdd(context.builder.CreateIntCast(base, context.builder.getInt64Ty(), false), context.builder.getInt64(offset), "", true, true);
 
   if(context.env.flags&ENV_STRICT) // In strict mode, generate a check that traps if this is an invalid memory access
-    InsertConditionalTrap(context.builder.CreateICmpULE(loc, context.builder.getInt32(0), "invalid_mem_access_cond"), context);
+    InsertConditionalTrap(context.builder.CreateICmpUGE(loc, GetMemSize(context.memories[memory], context), "invalid_mem_access_cond"), context);
 
   return context.builder.CreatePointerCast(context.builder.CreateGEP(context.builder.CreateLoad(context.memories[memory]), loc), pointer_type);
 }
@@ -880,6 +940,7 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
 {
   //std::cout << OPNAMES[ins.opcode] << std::endl;
   //DumpContextState(context);
+
   switch(ins.opcode)
   {
   case OP_unreachable:
@@ -889,10 +950,10 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   case OP_nop:
     return ERR_SUCCESS;
   case OP_block:
-    PushLabel("block", ins.immediates[0]._varsint7, OP_block, nullptr, context);
+    PushLabel("block", ins.immediates[0]._varsint7, OP_block, nullptr, context, context.control.Peek().scope);
     return ERR_SUCCESS;
   case OP_loop:
-    PushLabel("loop", ins.immediates[0]._varsint7, OP_loop, nullptr, context);
+    PushLabel("loop", ins.immediates[0]._varsint7, OP_loop, nullptr, context, context.control.Peek().scope);
     context.builder.CreateBr(context.control.Peek().block); // Branch into next block
     BindLabel(context.control.Peek().block, context);
     return ERR_SUCCESS;
@@ -1306,12 +1367,15 @@ IR_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
   varsint7 ret = TE_void;
   if(sig.n_returns > 0)
     ret = sig.returns[0];
-
-  PushLabel("exit", ret, OP_return, nullptr, context); // Setup the function exit block that wraps everything
+  
+  PushLabel("exit", ret, OP_return, nullptr, context, fn->getSubprogram()); // Setup the function exit block that wraps everything
   context.builder.SetInsertPoint(BB::Create(context.context, "entry", fn)); // Setup initial basic block.
   context.locals.resize(0);
   context.locals.reserve(sig.n_params + body.n_locals);
   varuint32 index = 0;
+
+  if(context.dbuilder)
+    context.builder.SetCurrentDebugLocation(llvm::DILocation::get(context.context, body.debug.line, body.debug.column, fn->getSubprogram()));
 
   // We allocate parameters first, followed by local variables
   for(auto& arg : fn->args())
@@ -1319,17 +1383,55 @@ IR_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
     assert(index < sig.n_params);
     auto ty = GetLLVMType(sig.params[index], context);
     assert(ty == arg.getType());
-    context.locals.push_back(context.builder.CreateAlloca(ty, nullptr, (body.param_names && body.param_names[index]) ? body.param_names[index] : ""));
+    context.locals.push_back(context.builder.CreateAlloca(ty, nullptr, (body.param_names && body.param_names[index].name.size()) ? body.param_names[index].name.str() : ""));
     context.builder.CreateStore(&arg, context.locals.back()); // Store parameter (we can't use the parameter directly because wasm lets you store to parameters)
+
+    if(context.dbuilder)
+    {
+      llvm::DILocalVariable *dparam = context.dbuilder->createParameterVariable(
+        fn->getSubprogram(),
+        context.locals.back()->getName(),
+        index + 1, // the arg index starts at 1
+        context.dunit,
+        body.debug.line,
+        CreateDebugType(context.locals.back()->getType(), context),
+        true);
+
+      context.dbuilder->insertDeclare(context.locals.back(), dparam, context.dbuilder->createExpression(),
+        llvm::DebugLoc::get(body.debug.line, body.debug.column, fn->getSubprogram()),
+        context.builder.GetInsertBlock());
+    }
+
     ++index;
   }
 
   for(uint64_t i = 0; i < body.n_locals; ++i)
-    context.locals.push_back(context.builder.CreateAlloca(GetLLVMType(body.locals[i], context), nullptr, (body.local_names && body.local_names[i]) ? body.local_names[i] : ""));
+  {
+    context.locals.push_back(context.builder.CreateAlloca(GetLLVMType(body.locals[i], context), nullptr, (body.local_names && body.local_names[i].name.size()) ? body.local_names[i].name.str() : ""));
+
+    if(context.dbuilder)
+    {
+      llvm::DILocalVariable *dparam = context.dbuilder->createAutoVariable(
+        fn->getSubprogram(),
+        context.locals.back()->getName(),
+        context.dunit,
+        body.debug.line,
+        CreateDebugType(context.locals.back()->getType(), context),
+        true);
+
+      context.dbuilder->insertDeclare(context.locals.back(), dparam, context.dbuilder->createExpression(),
+        llvm::DebugLoc::get(body.debug.line, body.debug.column, fn->getSubprogram()),
+        context.builder.GetInsertBlock());
+    }
+  }
 
   // Begin iterating through the instructions until there aren't any left
   for(varuint32 i = 0; i < body.n_body; ++i)
   {
+    auto test2 = llvm::cast<llvm::DILocalScope>(context.control.Peek().scope);
+
+    if(context.dbuilder)
+      context.builder.SetCurrentDebugLocation(llvm::DILocation::get(context.context, body.body[i].line, body.body[i].column, context.control.Peek().scope));
     IR_ERROR err = CompileInstruction(body.body[i], context);
     if(err < 0)
       return err;
@@ -1346,9 +1448,27 @@ IR_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
   return ERR_SUCCESS;
 }
 
-llvm::GlobalVariable* CreateGlobal(code::Context& context, llvmTy* ty, bool isconst, bool external, const Twine& name, llvm::Constant* init = 0)
+void GenGlobalDebugInfo(llvm::GlobalVariable* v, code::Context& context, size_t line)
 {
-  return new llvm::GlobalVariable(
+  if(context.dbuilder)
+  {
+    auto expr = context.dbuilder->createExpression(llvm::SmallVector<uint64_t, 1>{ llvm::dwarf::DW_OP_deref });
+
+    v->addDebugInfo(context.dbuilder->createGlobalVariableExpression(
+      context.dcu,
+      v->getName(),
+      "",
+      context.dunit,
+      line,
+      CreateDebugType(v->getType(), context),
+      !v->hasValidDeclarationLinkage(),
+      expr));
+  }
+}
+
+llvm::GlobalVariable* CreateGlobal(code::Context& context, llvmTy* ty, bool isconst, bool external, const Twine& name, size_t line, llvm::Constant* init = 0)
+{
+  auto r = new llvm::GlobalVariable(
     *context.llvm,
     ty,
     isconst,
@@ -1359,6 +1479,9 @@ llvm::GlobalVariable* CreateGlobal(code::Context& context, llvmTy* ty, bool isco
     llvm::GlobalValue::NotThreadLocal,
     0,
     !init);
+
+  GenGlobalDebugInfo(r, context, line);
+  return r;
 }
 
 IR_ERROR CompileInitConstant(Instruction& instruction, Module& m, code::Context& context, llvm::Constant*& out);
@@ -1436,19 +1559,29 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   context.llvm->setDataLayout(context.machine->createDataLayout());
   context.intptrty = context.builder.getIntPtrTy(context.llvm->getDataLayout(), 0);
 
-  /*if(env->flags & ENV_DEBUG)
+  if(env->flags & ENV_DEBUG)
   {
+    assert(context.m.path != nullptr);
+    Path path = GetAbsolutePath(context.m.path);
     context.dbuilder = new llvm::DIBuilder(*context.llvm);
     context.dcu = context.dbuilder->createCompileUnit(
       llvm::dwarf::DW_LANG_C99,
-      context.dbuilder->createFile(context.m.name.str(), "."),
+      context.dbuilder->createFile(path.File().Get(), path.BaseDir().Get()),
       "inNative Runtime v" IR_VERSION_STRING,
       (env->flags&ENV_OPTIMIZE_ALL) != 0,
       llvm::StringRef(),
-      WASM_MAGIC_VERSION);
+      WASM_MAGIC_VERSION,
+      context.m.name.str());
+
+    context.diF32 = context.dbuilder->createBasicType("f32", 32, llvm::dwarf::DW_ATE_float);
+    context.diF64 = context.dbuilder->createBasicType("f64", 64, llvm::dwarf::DW_ATE_float);
+    context.diI32 = context.dbuilder->createBasicType("i32", 32, llvm::dwarf::DW_ATE_signed);
+    context.diI64 = context.dbuilder->createBasicType("i64", 64, llvm::dwarf::DW_ATE_signed);
+    context.diI1 = context.dbuilder->createBasicType("i1", 1, llvm::dwarf::DW_ATE_boolean);
+    context.diVoid = context.dbuilder->createUnspecifiedType("void");
 
     context.dunit = context.dbuilder->createFile(context.dcu->getFilename(), context.dcu->getDirectory());
-  }*/
+  }
 
   // Define a unique init function for performing module initialization
   context.init = Func::Create(
@@ -1456,7 +1589,15 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     Func::ExternalLinkage,
     MergeName(context.m.name.str(), "innative_internal_init"),
     context.llvm);
-  //context.dbuilder->createFunction(context.dunit, context.init->getName(), "", context.dunit, )
+  
+  llvm::DILocation* baselocation = 0;
+
+  if(context.dbuilder)
+  {
+    FunctionDebugInfo(context.init, context, true, 0);
+    baselocation = llvm::DILocation::get(context.context, context.init->getSubprogram()->getLine(), 0, context.init->getSubprogram());
+    context.builder.SetCurrentDebugLocation(baselocation);
+  }
 
   BB* initblock = BB::Create(
     context.context,
@@ -1494,8 +1635,10 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     if(context.functions.back().internal == nullptr)
     {
       auto index = context.m.importsection.imports[i].func_desc.type_index;
+      
       if(index >= context.m.type.n_functions)
         return assert(false), ERR_INVALID_TYPE_INDEX;
+
       context.functions.back().internal = CompileFunction(
         context.m.type.functions[index],
         CanonImportName(context.m.importsection.imports[i]),
@@ -1508,14 +1651,19 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
         context.functions.back().imported = context.functions.back().internal;
         context.functions.back().imported->setLinkage(Func::ExternalLinkage);
         context.functions.back().imported->setCallingConv(GetCallingConvention(context.m.importsection.imports[i]));
+        FunctionDebugInfo(context.functions.back().imported, context, false, context.m.importsection.imports[i].func_desc.debug.line);
+
+        llvm::Twine name = (context.m.importsection.imports[i].func_desc.debug.name.get()) ?
+          "@" + context.functions.back().imported->getName() + "#internal" : 
+          context.m.importsection.imports[i].func_desc.debug.name.str() + ("#" + std::to_string(i));
+        
         context.functions.back().internal = WrapFunction(
           context.functions.back().imported,
-          "@" + context.functions.back().imported->getName() + ":internal",
+          name,
           context);
-
-        if(context.m.importsection.imports[i].func_desc.debug_name.get())
-          context.functions.back().internal->setName(context.m.importsection.imports[i].func_desc.debug_name.str() + (":" + std::to_string(i)));
       }
+      else
+        FunctionDebugInfo(context.functions.back().internal, context, false, context.m.importsection.imports[i].func_desc.debug.line);
     }
   }
 
@@ -1526,7 +1674,8 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       GetLLVMType(context.m.importsection.imports[i].table_desc.element_type, context)->getPointerTo(0),
       false,
       true,
-      CanonImportName(context.m.importsection.imports[i])));
+      CanonImportName(context.m.importsection.imports[i]),
+      context.m.importsection.imports[i].table_desc.debug.line));
 
   // Import memory
   for(varuint32 i = context.m.importsection.tables; i < context.m.importsection.memories; ++i)
@@ -1535,7 +1684,8 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       context.builder.getInt8PtrTy(0),
       false,
       true,
-      CanonImportName(context.m.importsection.imports[i])));
+      CanonImportName(context.m.importsection.imports[i]),
+      context.m.importsection.imports[i].mem_desc.debug.line));
 
   // Import global variables
   for(varuint32 i = context.m.importsection.memories; i < context.m.importsection.globals; ++i)
@@ -1545,7 +1695,8 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       GetLLVMType(context.m.importsection.imports[i].global_desc.type, context),
       !context.m.importsection.imports[i].global_desc.mutability,
       true,
-      CanonImportName(context.m.importsection.imports[i])));
+      CanonImportName(context.m.importsection.imports[i]),
+      context.m.importsection.imports[i].global_desc.debug.line));
   }
 
   // Cache internal function start index
@@ -1563,9 +1714,13 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     context.functions.emplace_back();
     context.functions.back().internal = CompileFunction(
       context.m.type.functions[index],
-      "func:" + std::to_string(context.functions.size()),
+      !context.m.code.funcbody[i].debug.name.size() ? "func#" + std::to_string(context.functions.size()) : context.m.code.funcbody[i].debug.name.str(),
       context);
+    FunctionDebugInfo(context.functions.back().internal, context, true, context.m.code.funcbody[i].debug.line);
   }
+
+  if(baselocation)
+    context.builder.SetCurrentDebugLocation(baselocation);
 
   // Declare tables and allocate in init function
   for(varuint32 i = 0; i < context.m.table.n_tables; ++i)
@@ -1577,6 +1732,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       false,
       false,
       MergeName(context.m.name.str(), "table#", i),
+      context.m.table.tables[i].debug.line,
       llvm::ConstantPointerNull::get(type)));
 
     uint64_t bytewidth = context.llvm->getDataLayout().getTypeAllocSize(context.tables.back()->getType());
@@ -1600,10 +1756,11 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   // Declare linear memory spaces and allocate in init function
   for(varuint32 i = 0; i < context.m.memory.n_memories; ++i)
   {
+    MemoryDesc& mem = context.m.memory.memories[i];
     auto type = context.builder.getInt8PtrTy(0);
-    auto sz = context.builder.getInt64(((uint64_t)context.m.memory.memories[i].limits.minimum) << 16);
-    auto max = context.builder.getInt64((context.m.memory.memories[i].limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? (((uint64_t)context.m.memory.memories[i].limits.maximum) << 16) : 0ULL);
-    context.memories.push_back(CreateGlobal(context, type, false, false, MergeName(context.m.name.str(), "linearmemory#", i), llvm::ConstantPointerNull::get(type)));
+    auto sz = context.builder.getInt64(((uint64_t)mem.limits.minimum) << 16);
+    auto max = context.builder.getInt64((mem.limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? (((uint64_t)mem.limits.maximum) << 16) : 0ULL);
+    context.memories.push_back(CreateGlobal(context, type, false, false, MergeName(context.m.name.str(), "linearmemory#", i), mem.debug.line, llvm::ConstantPointerNull::get(type)));
 
     CallInst* call = context.builder.CreateCall(context.memgrow, { llvm::ConstantPointerNull::get(type), sz, max });
     InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), CInt::get(context.intptrty, 0)), context);
@@ -1625,8 +1782,12 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       !context.m.global.globals[i].desc.mutability,
       false,
       MergeName(context.m.name.str(), "globalvariable#", i),
+      context.m.global.globals[i].desc.debug.line,
       init));
   }
+
+  if(baselocation)
+    context.builder.SetCurrentDebugLocation(baselocation);
 
   // Set ENV_HOMOGENIZE_FUNCTIONS flag appropriately.
   auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &HomogenizeFunction : &WrapFunction;
@@ -1638,9 +1799,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     switch(e.kind)
     {
     case WASM_KIND_FUNCTION:
-      context.functions[e.index].exported = (*wrapperfn)(context.functions[e.index].imported ? context.functions[e.index].imported : context.functions[e.index].internal, MergeName(context.m.name.str(), e.name.str()), context);
-      context.functions[e.index].exported->setLinkage(Func::ExternalLinkage);
-      context.functions[e.index].exported->setCallingConv(llvm::CallingConv::C);
+      context.functions[e.index].exported = (*wrapperfn)(context.functions[e.index].imported ? context.functions[e.index].imported : context.functions[e.index].internal, MergeName(context.m.name.str(), e.name.str()), context, Func::ExternalLinkage, llvm::CallingConv::C);
       break;
     case WASM_KIND_TABLE:
       assert(context.tables[e.index]->getLinkage() != Func::ExternalLinkage); // We can't export other imports right now because the names blow up
@@ -1660,12 +1819,17 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     }
   }
 
+  if(baselocation)
+    context.builder.SetCurrentDebugLocation(baselocation);
+
   // Process data section by appending to the init function
   for(varuint32 i = 0; i < context.m.data.n_data; ++i)
   {
     DataInit& d = context.m.data.data[i]; // First we declare a constant array that stores the data in the EXE
     auto data = llvm::ConstantDataArray::get(context.context, llvm::makeArrayRef<uint8_t>(d.data.get(), d.data.get() + d.data.size()));
-    auto val = new llvm::GlobalVariable(*context.llvm, data->getType(), true, llvm::GlobalValue::LinkageTypes::PrivateLinkage, data);
+    auto val = new llvm::GlobalVariable(*context.llvm, data->getType(), true, llvm::GlobalValue::LinkageTypes::PrivateLinkage, data, MergeName(0, "data", i));
+    GenGlobalDebugInfo(val, context, 0);
+
     llvm::Constant* offset;
     if(err = CompileInitConstant(d.offset, context.m, context, offset))
       return err;
@@ -1722,6 +1886,9 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   // Terminate init function
   context.builder.CreateRetVoid();
 
+  //if(llvm::verifyModule(*context.llvm))
+  //  initblock = initblock;
+
   // Generate code for each function body
   for(varuint32 i = 0; i < context.m.code.n_funcbody; ++i)
   {
@@ -1730,8 +1897,6 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
 
     if(fn)
     {
-      if(context.m.code.funcbody[i].debug_name.str()) // If there is a debug name, use it, but always number the function because names are not required to be unique
-        fn->setName(Twine(context.m.code.funcbody[i].debug_name.str()) + ":" + std::to_string(i + context.m.importsection.functions));
       if(context.m.function.funcdecl[i] >= context.m.type.n_functions)
         return assert(false), ERR_INVALID_TYPE_INDEX;
       if((err = CompileFunctionBody(fn, context.m.type.functions[context.m.function.funcdecl[i]], context.m.code.funcbody[i], context)) < 0)
@@ -1757,19 +1922,6 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       v.fn = 0;
     }
   }
-
-  //if(env->flags&ENV_EMIT_LLVM)
-  {
-    std::error_code EC;
-    llvm::raw_fd_ostream dest(string(context.llvm->getName()) + ".llvm", EC, llvm::sys::fs::F_None);
-    context.llvm->print(dest, nullptr);
-  }
-
-  // Verify module
-  std::error_code EC;
-  llvm::raw_fd_ostream dest(1, false, true);
-  if(llvm::verifyModule(*context.llvm, &dest))
-    return ERR_FATAL_INVALID_MODULE;
 
   return ERR_SUCCESS;
 }
@@ -1880,6 +2032,11 @@ namespace innative {
     if(eflags&ENV_DLL)
       main->setCallingConv(llvm::CallingConv::X86_StdCall);
 #endif
+    if(start->dbuilder)
+    {
+      FunctionDebugInfo(main, *start, true, 0);
+      builder.SetCurrentDebugLocation(llvm::DILocation::get(start->context, main->getSubprogram()->getLine(), 0, main->getSubprogram()));
+    }
 
     BB* initblock = BB::Create(llvm_context, "start_entry", main);
     builder.SetInsertPoint(initblock);
@@ -1908,20 +2065,32 @@ namespace innative {
 
     start->llvm->getFunctionList().push_back(main);
 
-    // Reverify module
-    std::error_code EC;
-    llvm::raw_fd_ostream dest(1, false, true);
-    if(llvm::verifyModule(*start->llvm, &dest))
-      return assert(false), ERR_FATAL_INVALID_MODULE;
-    llvm::raw_fd_ostream dest2(string(start->llvm->getName()) + ".llvm", EC, llvm::sys::fs::F_None);
-    start->llvm->print(dest2, nullptr);
-
     // Annotate functions
     AnnotateFunctions(env, context);
 
     // Optimize all modules
     for(size_t i = 0; i < env->n_modules; ++i)
     {
+    }
+
+    // Finalize all modules
+    for(varuint32 i = 0; i < env->n_modules; ++i)
+    {
+      if(context[i].dbuilder)
+        context[i].dbuilder->finalize();
+
+      //if(env->flags&ENV_EMIT_LLVM)
+      {
+        std::error_code EC;
+        llvm::raw_fd_ostream dest(string(context[i].llvm->getName()) + ".llvm", EC, llvm::sys::fs::F_None);
+        context[i].llvm->print(dest, nullptr);
+      }
+
+      // Verify module
+      std::error_code EC;
+      llvm::raw_fd_ostream dest(1, false, true);
+      if(llvm::verifyModule(*context[i].llvm, &dest))
+        return ERR_FATAL_INVALID_MODULE;
     }
 
     {

@@ -6,6 +6,12 @@
 
 #include "innative/schema.h"
 
+#ifdef IR_DEBUG
+#define INNATIVE_DEFAULT_ENVIRONMENT "innative-env_d.lib"
+#else
+#define INNATIVE_DEFAULT_ENVIRONMENT "innative-env.lib"
+#endif
+
 #ifdef  __cplusplus
 extern "C" {
 #endif
@@ -47,12 +53,9 @@ extern "C" {
 
     // Tooling functions that exist for command line utilities that always statically link to the runtime
     IR_COMPILER_DLLEXPORT extern int innative_compile_script(const uint8_t* data, size_t sz, Environment* env);
-    IR_COMPILER_DLLEXPORT extern int innative_compile_script_file(const char* file, Environment* env);
-    IR_COMPILER_DLLEXPORT extern int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const struct _IR_WHITELIST* whitelist, int n_whitelist, const char* arg0);
+    IR_COMPILER_DLLEXPORT extern int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const struct _IR_WHITELIST* whitelist, unsigned int n_whitelist, const char* arg0);
     IR_COMPILER_DLLEXPORT extern int innative_build_loader(struct _IR_CHUNK* chunks, const char* out, bool dynamic);
     IR_COMPILER_DLLEXPORT extern void innative_set_work_dir_to_bin(const char* arg0);
-
-    IR_COMPILER_DLLEXPORT extern const char* INNATIVE_DEFAULT_ENVIRONMENT;
 
 #ifdef  __cplusplus
 }

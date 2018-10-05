@@ -175,10 +175,25 @@ namespace innative {
 #elif defined(IR_PLATFORM_POSIX)
       buf.resize(PATH_MAX);
       getcwd(const_cast<char*>(buf.data()), buf.capacity());
+#else
+#error unknown platform
 #endif
       return Path(std::move(buf));
     }
 
+    Path GetAbsolutePath(const char* path)
+    {
+      string buf;
+#ifdef IR_PLATFORM_WIN32
+      buf.resize(GetFullPathNameA(path, 0, 0, 0));
+      buf.resize(GetFullPathNameA(path, (DWORD)buf.capacity(), const_cast<char*>(buf.data()), 0));
+#elif  defined(IR_PLATFORM_POSIX)
+#error TODO
+#else
+#error unknown platform
+#endif
+      return Path(std::move(buf));
+    }
     bool SetWorkingDir(const char* path)
     {
 #ifdef IR_PLATFORM_WIN32

@@ -57,13 +57,16 @@ void innative::DestroyEnvironment(Environment* env)
   free(env);
 }
 
-void innative::LoadModule(Environment* env, size_t index, const void* data, uint64_t size, const char* name, int* err)
+void innative::LoadModule(Environment* env, size_t index, const void* data, uint64_t size, const char* name, const char* path, int* err)
 {
   Stream s = { (uint8_t*)data, size, 0 };
+  
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
     *err = innative::wat::ParseWatModule(*env, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
   else
     *err = ParseModule(s, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
+
+  env->modules[index].path = path;
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
 }
 
@@ -73,6 +76,22 @@ void innative::AddModule(Environment* env, const void* data, uint64_t size, cons
   {
     *err = ERR_FATAL_NULL_POINTER;
     return;
+  }
+
+  const char* path = nullptr;
+  std::unique_ptr<uint8_t[]> data_module;
+  if(!size)
+  {
+    long sz = 0;
+    path = (const char*)data;
+    data_module = utility::LoadFile(path, sz);
+    if(data_module.get() == nullptr)
+    {
+      *err = ERR_FATAL_FILE_ERROR;
+      return;
+    }
+    size = sz;
+    data = data_module.get();
   }
 
   if((env->flags & ENV_MULTITHREADED) != 0 && env->maxthreads > 0)
@@ -97,9 +116,9 @@ void innative::AddModule(Environment* env, const void* data, uint64_t size, cons
   }
 
   if(env->flags & ENV_MULTITHREADED)
-    std::thread(LoadModule, env, index, data, size, name, err).detach();
+    std::thread(LoadModule, env, index, data, size, name, path, err).detach();
   else
-    LoadModule(env, index, data, size, name, err);
+    LoadModule(env, index, data, size, name, path, err);
 }
 
 void innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name, const FunctionType* ftype)

@@ -18,7 +18,7 @@ namespace innative {
     explicit Path(const char* path) : _path(path) { _canonize(); }
     explicit Path(const std::string& path) : _path(path) { _canonize(); }
     explicit Path(std::string&& path) : _path(std::move(path)) { _canonize(); }
-    inline bool IsAbsolute()
+    inline bool IsAbsolute() const
     {
       const char* start = _path.c_str();
       const char* pos = strchr(start, '/');
@@ -36,14 +36,14 @@ namespace innative {
     {
       if(!path || !path[0])
         return;
-      if(path[0] != '/' && path[0] != '\\' && path[0] != '.')
+      if(path[0] != '/' && path[0] != '\\')
         _path += '/';
       _path += path;
       _canonize();
     }
 
     // If there is a file extension, removes it
-    inline Path RemoveExtension()
+    inline Path RemoveExtension() const
     {
       Path r;
       size_t pos = _path.find_last_of('.');
@@ -51,14 +51,14 @@ namespace innative {
       return r;
     }
 
-    inline std::string Extension()
+    inline std::string Extension() const
     {
       size_t pos = _path.find_last_of('.');
       return (pos != std::string::npos) ? _path.substr(pos + 1) : std::string();
     }
 
     // Either removes the file, if there is one, or the last directory in the path
-    inline Path BaseDir()
+    inline Path BaseDir() const
     {
       Path r;
       size_t pos = _path.find_last_of('/');
@@ -66,7 +66,15 @@ namespace innative {
       return r;
     }
 
-    inline std::string Get()
+    inline Path File() const
+    {
+      Path r;
+      size_t pos = _path.find_last_of('/');
+      r._path = (pos != std::string::npos) ? _path.substr(pos + 1) : std::string();
+      return r;
+    }
+
+    inline std::string Get() const
     {
       std::string r(_path);
       // Returns the path canonized to the specific operating system

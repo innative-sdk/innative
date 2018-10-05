@@ -39,11 +39,10 @@ int main(int argc, char *argv[])
   IRExports exports;
   innative_runtime(&exports);
 
-  for(int i = 0; i < argc; ++i)
+  for(int i = 1; i < argc; ++i) // skip first argument, which is the program path
   {
     if(argv[i][0] == '-')
     {
-
       switch(argv[i][1])
       {
       case 'r': // run immediately
@@ -146,7 +145,7 @@ int main(int argc, char *argv[])
 
   // Load all modules
   for(size_t i = 0; i < inputs.size(); ++i)
-    (*exports.AddModule)(env, inputs[i], 0, innative::Path(inputs[i]).RemoveExtension().Get().c_str(), &err);
+    (*exports.AddModule)(env, inputs[i], 0, innative::Path(inputs[i]).File().RemoveExtension().Get().c_str(), &err);
 
   if(err < 0)
   {
@@ -170,7 +169,7 @@ int main(int argc, char *argv[])
   if(wast.size() > 0)
   {
     for(size_t i = 0; i < wast.size() && !err; ++i)
-      err = innative_compile_script_file(wast[i], env);
+      err = innative_compile_script((const uint8_t*)wast[i], 0, env);
   }
   else // Attempt to compile. If an error happens, output it and any validation errors to stderr
     err = (*exports.Compile)(env, out.c_str());
@@ -182,6 +181,7 @@ int main(int argc, char *argv[])
     for(ValidationError* err = env->errors; err != nullptr; err = err->next)
       fprintf(stderr, "Error %i: %s\n", err->code, err->error);
 
+    getchar();
     return err;
   }
 
@@ -191,16 +191,15 @@ int main(int argc, char *argv[])
   // Automatically run the assembly, but only if there were no wast scripts (which are always executed)
   if(run && !wast.size())
   {
-    void* assembly = (*exports.LoadAssembly)(flags, out.c_str());
+    void* assembly = (*exports.LoadAssembly)(flags, out.c_str()); // This automatically calls the start function on load
     if(!assembly)
       return ERR_FATAL_FILE_ERROR;
-    IR_Entrypoint start = (*exports.LoadFunction)(assembly, 0, 0, 0);
-    if(!start)
-      return ERR_INVALID_START_FUNCTION;
-    (*start)();
+    //IR_Entrypoint start = (*exports.LoadFunction)(assembly, 0, 0, 0);
+    //if(!start)
+    //  return ERR_INVALID_START_FUNCTION;
+    //(*start)();
     return ERR_SUCCESS;
   }
 
-  getchar();
   return err;
 }

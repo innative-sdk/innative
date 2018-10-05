@@ -22,7 +22,7 @@ namespace innative {
   IR_ERROR ParseTableInit(utility::Stream& s, TableInit& init, Module& m);
   IR_ERROR ParseFunctionBody(utility::Stream& s, FunctionBody& f);
   IR_ERROR ParseDataInit(utility::Stream& s, DataInit& data);
-  IR_ERROR ParseNameSectionLocal(utility::Stream& s, size_t num, const char**& target);
+  IR_ERROR ParseNameSectionLocal(utility::Stream& s, size_t num, DebugInfo*& target);
   IR_ERROR ParseNameSection(utility::Stream& s, size_t end, Module& m);
   IR_ERROR ParseModule(utility::Stream& s, Module& module, ByteArray name, ValidationError*& errors);
   IR_ERROR ParseExportFixup(Module& module, ValidationError*& errors);

@@ -171,7 +171,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
       std::string name = CanonImportName(imp);
       //khiter_t iter = kh_get_cimport(env.cimports, name.c_str());
       //if(kh_exist2(env.cimports, iter))
-      //  return; // This function exists and we already have verified the signature if there was a whitelist, so just return
+        return; // This function exists and we already have verified the signature if there was a whitelist, so just return
       if(!imp.module_name.size() || imp.module_name.str()[0] == '!') // Blank imports must have been C imports, otherwise it could have been a failed WASM module import attempt.
         return AppendError(env.errors, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found in C library imports", name.c_str());
     }

@@ -31,8 +31,8 @@ int main(int argc, char *argv[])
   IRExports exports;
   innative_runtime(&exports);
 
-  //std::ostream& target = std::cout;
-  std::ofstream target("out.txt", std::fstream::binary | std::fstream::out);
+  std::ostream& target = std::cout;
+  //std::ofstream target("out.txt", std::fstream::binary | std::fstream::out);
   target << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
   target << std::endl;
 
@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
   for(auto file : testfiles)
   {
     Environment* env = (*exports.CreateEnvironment)(ENV_DEBUG | ENV_STRICT, 1, 0, (!argc ? 0 : argv[0]));
-    env->linker = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\VC\\Tools\\MSVC\\14.14.26428\\bin\\Hostx64\\x64\\link.exe";
+    env->linker = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\VC\\Tools\\MSVC\\14.15.26726\\bin\\Hostx64\\x64\\link.exe";
     int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
 
     if(err >= 0)
@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
     if(err < 0)
       return assert(false), -1; // If the environment injection fails, abort everything
 
-    err = innative_compile_script_file(file.generic_u8string().data(), env);
+    err = innative_compile_script((const uint8_t*)file.generic_u8string().data(), 0, env);
     if(!err && !env->errors)
       target << file << ": SUCCESS" << std::endl;
     else
@@ -77,6 +77,11 @@ int main(int argc, char *argv[])
     }
     (*exports.DestroyEnvironment)(env);
   }
+
+  // Test compiling EXE
+  // Test compiling DLL with no entry point, ensure init function is called
+  // Test compiling DLL with entry point that gets called in the init function
+  // Test compiling DLL with entry point that doesn't get called in init function
 
   std::cout << std::endl << "Finished running tests, press enter to exit." << std::endl;
   getchar();

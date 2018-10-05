@@ -207,15 +207,24 @@ namespace innative {
 
     jmp_buf jump_location;
 
-    void WastCrashHandler(int)
+    void WastCrashHandler(int sig)
     {
       longjmp(jump_location, 1);
     }
   }
 }
 
+void InvalidateCache(void*& cache)
+{
+  if(cache)
+    FreeDLL(cache);
+  cache = nullptr;
+}
+
 int CompileWast(Environment& env, const char* out, void*& cache)
 {
+  InvalidateCache(cache);
+
   int err;
   ValidateEnvironment(env);
   if(env.errors)
@@ -223,9 +232,6 @@ int CompileWast(Environment& env, const char* out, void*& cache)
   if(err = CompileEnvironment(&env, out))
     return err;
 
-  cache = (void*)0xFFFF;
-  return ERR_SUCCESS;
-  // Prepare to handle exceptions from the initialization
   auto dir = GetWorkingDir();
   dir.Append(out);
   cache = LoadDLL(dir.Get().c_str());
@@ -241,7 +247,7 @@ void SetTempName(Environment& env, Module& m)
   tmemcpy((char*)m.name.get(), m.name.size(), buf.data(), buf.size());
 }
 
-int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module& m)
+int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module& m, const char* path)
 {
   EXPECTED(tokens, TOKEN_MODULE, ERR_WAT_EXPECTED_MODULE);
   int err;
@@ -287,6 +293,7 @@ int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
   }
   else if(err = WatModule(env, m, tokens, StringRef{ nullptr, 0 }, name))
     return err;
+  m.path = path;
 
   if(name.id == TOKEN_NAME) // Only add this to our name mapping if an actual name token was specified, regardless of whether the module has a name.
   {
@@ -301,54 +308,52 @@ int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
   return ERR_SUCCESS;
 }
 
-int64_t Homogenize(const Instruction& i)
+template<int I, typename... Args>
+struct GenWastFunction
 {
-  switch(i.opcode)
+  inline static void Call(void* f, WastResult& result, const Instruction* param, Args... args)
   {
-  case OP_i32_const: return i.immediates[0]._varsint32;
-  case OP_i64_const: return i.immediates[0]._varsint64;
-  case OP_f32_const: { double d = i.immediates[0]._float32; return *(int64_t*)&d; }
-  case OP_f64_const: return *(int64_t*)&i.immediates[0]._float64;
+    switch(param[I - 1].opcode)
+    {
+    case OP_i32_const: return GenWastFunction<I - 1, int32_t, Args...>::Call(f, result, param, param[I - 1].immediates[0]._varsint32, args...);
+    case OP_i64_const: return GenWastFunction<I - 1, int64_t, Args...>::Call(f, result, param, param[I - 1].immediates[0]._varsint64, args...);
+    case OP_f32_const: return GenWastFunction<I - 1, float, Args...>::Call(f, result, param, param[I - 1].immediates[0]._float32, args...);
+    case OP_f64_const: return GenWastFunction<I - 1, double, Args...>::Call(f, result, param, param[I - 1].immediates[0]._float64, args...);
+    }
+    assert(false);
   }
-
-  assert(false);
-  return 0;
-}
-
-namespace innative {
-  namespace internal {
-    template<typename T>
-    struct HType { typedef int64_t T; };
-  }
-}
+};
 
 template<typename... Args>
-void GenWastFunctionCall(void* f, WastResult& result, Args... params)
+struct GenWastFunction<0, Args...>
 {
-  int64_t r = static_cast<int64_t(*)(typename internal::HType<Args>::T...)>(f)(Homogenize(params)...);
-  switch(result.type)
+  inline static void Call(void* f, WastResult& result, const Instruction* param, Args... args)
   {
-  case TE_i32: result.i32 = (int32_t)r; break;
-  case TE_i64: result.i64 = r; break;
-  case TE_f32: { double d = *(double*)&r; result.f32 = (float)d; break; }
-  case TE_f64: result.f64 = *(double*)&r; break;
-  default:
-    assert(false);
-    result.type = TE_NONE;
-  case TE_void:
-    break;
+    switch(result.type)
+    {
+    case TE_i32: result.i32 = static_cast<int32_t(*)(Args...)>(f)(args...); break;
+    case TE_i64: result.i64 = static_cast<int64_t(*)(Args...)>(f)(args...); break;
+    case TE_f32: result.f32 = static_cast<float(*)(Args...)>(f)(args...); break;
+    case TE_f64: result.f64 = static_cast<double(*)(Args...)>(f)(args...); break;
+    default:
+      assert(false);
+      result.type = TE_NONE;
+    case TE_void:
+      static_cast<void(*)(Args...)>(f)(args...);
+      break;
+    }
   }
-}
+};
 
-int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache, WastResult& result)
+int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache, int& counter, const std::string& path, WastResult& result)
 {
   int err;
   if(!cache) // If cache is null we need to recompile the current environment
   {
-    env.flags |= ENV_HOMOGENIZE_FUNCTIONS;
-    if(err = CompileWast(env, "wast.dll", cache))
+    //env.flags |= ENV_HOMOGENIZE_FUNCTIONS;
+    if(err = CompileWast(env, (path + std::to_string(counter++) + ".dll").c_str(), cache))
       return err;
-    //assert(cache);
+    assert(cache);
   }
 
   switch(tokens.Pop().id)
@@ -411,8 +416,7 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
 
     void* f = LoadDLLFunction(cache, MergeName(m->name.str(), func.str()).c_str());
     if(!f)
-      //return ERR_INVALID_FUNCTION_INDEX;
-      return ERR_RUNTIME_TRAP;
+      return ERR_INVALID_FUNCTION_INDEX;
 
     if(!ftype->n_returns)
       result.type = TE_void;
@@ -425,18 +429,15 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
     if(jmp)
       return ERR_RUNTIME_TRAP;
 
+    // Calculate all 4^8 = 65536 + 16384 + 4096 + 1024 + 256 + 64 + 16 + 4 = 87380 possible function call combinations
     switch(ftype->n_params)
     {
-    case 0: GenWastFunctionCall(f, result); break;
-    case 1: GenWastFunctionCall(f, result, params[0]); break;
-    case 2: GenWastFunctionCall(f, result, params[0], params[1]); break;
-    case 3: GenWastFunctionCall(f, result, params[0], params[1], params[2]); break;
-    case 4: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3]); break;
-    case 5: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4]); break;
-    case 6: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5]); break;
-    case 7: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6]); break;
-    case 8: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7]); break;
-    case 9: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7], params[8]); break;
+    case 0: GenWastFunction<0>::Call(f, result, params.data()); break;
+    case 1: GenWastFunction<1>::Call(f, result, params.data()); break;
+    case 2: GenWastFunction<2>::Call(f, result, params.data()); break;
+    case 3: GenWastFunction<3>::Call(f, result, params.data()); break;
+    case 4: GenWastFunction<4>::Call(f, result, params.data()); break;
+    case 5: GenWastFunction<5>::Call(f, result, params.data()); break;
     default:
       assert(false);
       return ERR_FATAL_UNKNOWN_KIND;
@@ -531,13 +532,15 @@ inline const char* MapAssertionString(const char* s)
 }
 
 // This parses an entire extended WAT testing script into an environment
-int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
+int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, const char* path)
 {
   Queue<WatToken> tokens;
   const char* start = (const char*)data;
   TokenizeWAT(tokens, start, (const char*)data + sz);
   ValidationError* errors = nullptr;
-
+  int counter = 0; // Even if we unload wast.dll, visual studio will keep the .pdb open forever, so we have to generate new DLLs for each new test section.
+  std::string targetpath = Path(path).File().RemoveExtension().Get(); // We also have to be sure we don't overlap with any other .wast files, so we name the DLL based on the file path.
+  
   int err = CheckWatTokens(env.errors, tokens, start);
   if(err)
     return err;
@@ -546,8 +549,8 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
     return ERR_WAT_INVALID_TOKEN;
 
   kh_indexname_t* mapping = kh_init_indexname(); // This is a special mapping for all modules using the module name itself, not just registered ones.
-  Module* last = 0; // For anything not providing a module name, this was the most recently defined module.
-  void* cache = 0;
+  Module* last = nullptr; // For anything not providing a module name, this was the most recently defined module.
+  void* cache = nullptr;
 
   while(tokens.Size() > 0 && tokens[0].id != TOKEN_CLOSE)
   {
@@ -556,11 +559,13 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
     {
     case TOKEN_MODULE:
     {
+      InvalidateCache(cache);
+     
       WatToken t = tokens[0];
       env.modules = trealloc<Module>(env.modules, ++env.n_modules);
       last = &env.modules[env.n_modules - 1];
 
-      if(err = ParseWastModule(env, tokens, mapping, *last))
+      if(err = ParseWastModule(env, tokens, mapping, *last, path))
         return err;
       ValidateModule(env, *last);
       if(env.errors)
@@ -573,6 +578,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
     }
     case TOKEN_REGISTER:
     {
+      InvalidateCache(cache);
       tokens.Pop();
 
       ByteArray name;
@@ -599,7 +605,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
     {
       WatToken t = tokens.Peek();
       WastResult result;
-      if(err = ParseWastAction(env, tokens, mapping, last, cache, result))
+      if(err = ParseWastAction(env, tokens, mapping, last, cache, counter, targetpath, result))
       {
         if(err != ERR_RUNTIME_TRAP && err != ERR_RUNTIME_INIT_ERROR)
           return err;
@@ -614,11 +620,11 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
       {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
         env.modules = trealloc<Module>(env.modules, ++env.n_modules); // We temporarily add this module to the environment, but don't set the "last" module to it
-        if(err = ParseWastModule(env, tokens, mapping, env.modules[env.n_modules - 1]))
+        if(err = ParseWastModule(env, tokens, mapping, env.modules[env.n_modules - 1], path))
           return err;
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
-        err = CompileWast(env, "wast.dll", cache);
+        err = CompileWast(env, (path + std::to_string(counter++) + ".dll").c_str(), cache);
         --env.n_modules; // Remove the module from the environment to avoid poisoning other compilations
         if(err != ERR_RUNTIME_TRAP)
           AppendError(errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
@@ -628,7 +634,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
       {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
         WastResult result;
-        err = ParseWastAction(env, tokens, mapping, last, cache, result);
+        err = ParseWastAction(env, tokens, mapping, last, cache, counter, targetpath, result);
         if(err != ERR_RUNTIME_TRAP)
           AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
@@ -643,7 +649,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
       WatToken t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       WastResult result = { TE_NONE };
-      if(err = ParseWastAction(env, tokens, mapping, last, cache, result))
+      if(err = ParseWastAction(env, tokens, mapping, last, cache, counter, targetpath, result))
       {
         if(err != ERR_RUNTIME_TRAP && err != ERR_RUNTIME_INIT_ERROR)
           return err;
@@ -687,14 +693,24 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
         case OP_f32_const:
           if(result.type != TE_f32)
             AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f32 type but got %i", WatLineNumber(start, t.pos), result.type);
+          else if(isnan(value.immediates[0]._float32)) // If this is an NAN we must match the exact bit pattern
+          {
+            if((*(uint32_t*)&value.immediates[0]._float32) != *(uint32_t*)&result.f32)
+              AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g", WatLineNumber(start, t.pos), value.immediates[0]._float32, result.f32);
+          }
           else if(result.f32 != value.immediates[0]._float32)
-            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %i but got %i", WatLineNumber(start, t.pos), value.immediates[0]._float32, result.f32);
+            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g", WatLineNumber(start, t.pos), value.immediates[0]._float32, result.f32);
           break;
         case OP_f64_const:
           if(result.type != TE_f64)
             AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f64 type but got %i", WatLineNumber(start, t.pos), result.type);
+          else if(isnan(value.immediates[0]._float64)) // If this is an NAN we must match the exact bit pattern
+          {
+            if((*(uint64_t*)&value.immediates[0]._float64) != *(uint64_t*)&result.f64)
+              AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g", WatLineNumber(start, t.pos), value.immediates[0]._float64, result.f64);
+          }
           else if(result.f64 != value.immediates[0]._float64)
-            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %i but got %i", WatLineNumber(start, t.pos), value.immediates[0]._float64, result.f64);
+            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g", WatLineNumber(start, t.pos), value.immediates[0]._float64, result.f64);
           break;
         }
         break;
@@ -715,7 +731,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
       WatToken t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       Module m;
-      int code = ParseWastModule(env, tokens, mapping, m);
+      int code = ParseWastModule(env, tokens, mapping, m, path);
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
       ByteArray error;
@@ -734,7 +750,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
       WatToken t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       Module m;
-      int code = ParseWastModule(env, tokens, mapping, m);
+      int code = ParseWastModule(env, tokens, mapping, m, path);
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
       string assertcode = GetAssertionString(code);
@@ -765,7 +781,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
       WatToken t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       WastResult result;
-      err = ParseWastAction(env, tokens, mapping, last, cache, result);
+      err = ParseWastAction(env, tokens, mapping, last, cache, counter, targetpath, result);
       if(err != ERR_RUNTIME_TRAP)
         AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected call exhaustion trap, but call succeeded", WatLineNumber(start, t.pos));
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
@@ -790,6 +806,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz)
       tokens.SetPosition(tokens.GetPosition() - 1); // Recover the '('
       if(err = WatModule(env, *last, tokens, StringRef{ nullptr, 0 }, t))
         return err;
+      last->path = path;
       tokens.SetPosition(tokens.GetPosition() - 1); // Recover the ')'
       break;
     }

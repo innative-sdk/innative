@@ -198,7 +198,7 @@ IR_ERROR innative::ParseImport(Stream& s, Import& i)
   switch(i.kind)
   {
   case WASM_KIND_FUNCTION:
-    i.func_desc.debug_name.resize(0, false);
+    i.func_desc.debug = { 0 };
     i.func_desc.param_names = 0;
     return ParseVarUInt32(s, i.func_desc.type_index);
   case WASM_KIND_TABLE:
@@ -513,7 +513,7 @@ IR_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f)
   }
   f.local_names = 0;
   f.param_names = 0;
-  f.debug_name.resize(0, false);
+  f.debug = { 0 };
 
   return err;
 }
@@ -531,7 +531,7 @@ IR_ERROR innative::ParseDataInit(Stream& s, DataInit& data)
   return err;
 }
 
-IR_ERROR innative::ParseNameSectionLocal(Stream& s, size_t num, const char**& target)
+IR_ERROR innative::ParseNameSectionLocal(Stream& s, size_t num, DebugInfo*& target)
 {
   IR_ERROR err;
   auto index = s.ReadVarUInt32(err);
@@ -544,8 +544,8 @@ IR_ERROR innative::ParseNameSectionLocal(Stream& s, size_t num, const char**& ta
   if(err >= 0 && buf.get() != nullptr)
   {
     if(!target) // Only bother allocating the debug name if there's actually a name to worry about
-      target = (const char**)calloc(num, sizeof(const char*));
-    target[index] = buf.str();
+      target = (DebugInfo*)calloc(num, sizeof(DebugInfo));
+    target[index].name = buf;
   }
   return err;
 }
@@ -577,14 +577,14 @@ IR_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m)
 
         if(index < m.importsection.functions)
         {
-          err = ParseByteArray(s, m.importsection.imports[index].func_desc.debug_name, true);
+          err = ParseByteArray(s, m.importsection.imports[index].func_desc.debug.name, true);
           continue;
         }
         index -= m.importsection.functions;
         if(index >= m.code.n_funcbody)
           return ERR_INVALID_FUNCTION_INDEX;
 
-        err = ParseByteArray(s, m.code.funcbody[index].debug_name, true);
+        err = ParseByteArray(s, m.code.funcbody[index].debug.name, true);
       }
     }
     break;

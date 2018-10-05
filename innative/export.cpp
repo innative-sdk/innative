@@ -12,12 +12,6 @@
 
 using namespace innative;
 
-#ifdef IR_DEBUG
-const char* INNATIVE_DEFAULT_ENVIRONMENT = "innative-env_d.lib";
-#else
-const char* INNATIVE_DEFAULT_ENVIRONMENT = "innative-env.lib";
-#endif
-
 // Return pointers to all our internal functions
 void innative_runtime(IRExports* exports)
 {
@@ -33,7 +27,7 @@ void innative_runtime(IRExports* exports)
   exports->DestroyEnvironment = &DestroyEnvironment;
 }
 
-int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const _IR_WHITELIST* whitelist, unsigned int n_whitelist, const char* arg0)
+int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const struct _IR_WHITELIST* whitelist, unsigned int n_whitelist, const char* arg0)
 {
   // Then create the runtime environment with the module count.
   Environment* env = CreateEnvironment(flags, 1, 0, arg0);
@@ -110,6 +104,22 @@ int innative_build_loader(struct _IR_CHUNK* chunks, const char* out, bool dynami
 int innative_compile_script(const uint8_t* data, size_t sz, Environment* env)
 {
   int err = ERR_SUCCESS;
+  char buf[40];
+  sprintf(buf, "/[memory:%p]", data);
+  const char* path = buf;
+
+  // Load the module
+  std::unique_ptr<uint8_t[]> data_module;
+  if(!sz)
+  {
+    long len;
+    path = reinterpret_cast<const char*>(data);
+    data_module = utility::LoadFile(path, len);
+    if(data_module.get() == nullptr)
+      return ERR_FATAL_FILE_ERROR;
+    data = data_module.get();
+    sz = len;
+  }
 
   if(!env)
   {
@@ -123,28 +133,17 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env)
     return err;
   }
 
-  err = wat::ParseWast(*env, data, sz);
+  err = wat::ParseWast(*env, data, sz, path);
 
   if(err < 0)
     fprintf(stderr, "Error loading modules: %i\n", err);
 
-  return err;
-}
-
-int innative_compile_script_file(const char* file, Environment* env)
-{
-  // Load the module
-  long sz = 0;
-  auto data_module = utility::LoadFile(file, sz);
-  if(data_module.get() == nullptr)
-    return ERR_FATAL_FILE_ERROR;
-
-  int err = innative_compile_script(data_module.get(), sz, env);
-  std::cout << "Finished Script: " << file << std::endl;
+  if(path)
+    std::cout << "Finished Script: " << path << std::endl;
   return err;
 }
 
 void innative_set_work_dir_to_bin(const char* arg0)
 {
-  utility::SetWorkingDir(utility::GetProgramPath(arg0).Get().c_str());
+  utility::SetWorkingDir(utility::GetProgramPath(arg0).BaseDir().Get().c_str());
 }

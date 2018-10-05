@@ -32,7 +32,7 @@ void innative::wat::PushNewNameToken(Queue<WatToken>& tokens, const char* format
   size_t len = vsnprintf(0, 0, format, args);
   char* s = tmalloc<char>(len + 1);
   vsnprintf(s, len + 1, format, args);
-  tokens.Push(WatToken{ TOKEN_NAME, s, (int64_t)len });
+  tokens.Push(WatToken{ TOKEN_NAME, s, 0, 0, (int64_t)len });
 
   va_end(args);
 }
@@ -41,9 +41,9 @@ void innative::wat::PushFunctionName(Queue<WatToken>& tokens, const Module& m, v
 {
   Identifier* name = 0;
   if(index < m.importsection.functions)
-    name = &m.importsection.imports[index].func_desc.debug_name;
+    name = &m.importsection.imports[index].func_desc.debug.name;
   else if(index - m.importsection.functions < m.code.n_funcbody)
-    name = &m.code.funcbody[index - m.importsection.functions].debug_name;
+    name = &m.code.funcbody[index - m.importsection.functions].debug.name;
 
   if(!name || !name->size())
     PushNewNameToken(tokens, "f%u", index);
@@ -53,13 +53,13 @@ void innative::wat::PushFunctionName(Queue<WatToken>& tokens, const Module& m, v
 
 void innative::wat::PushIdentifierToken(Queue<WatToken>& tokens, const ByteArray& id, WatTokens token)
 {
-  tokens.Push(WatToken{ token, id.str(), id.size() });
+  tokens.Push(WatToken{ token, id.str(), 0, 0, id.size() });
 }
 
-void innative::wat::PushLocalName(Queue<WatToken>& tokens, varuint32 index, const char** names, varuint32 num, char prefix)
+void innative::wat::PushLocalName(Queue<WatToken>& tokens, varuint32 index, const DebugInfo* names, varuint32 num, char prefix)
 {
-  if(index < num && names && names[index] != 0)
-    PushNewNameToken(tokens, names[index]);
+  if(index < num && names && names[index].name.size() != 0)
+    PushIdentifierToken(tokens, names[index].name, TOKEN_NAME);
   else
     PushNewNameToken(tokens, "%c%u", prefix, index);
 }
@@ -73,7 +73,7 @@ void innative::wat::TokenizeInstruction(Queue<WatToken>& tokens, const Module& m
     return;
   }
 
-  tokens.Push(WatToken{ TOKEN_OPERATOR, 0, ins.opcode });
+  tokens.Push(WatToken{ TOKEN_OPERATOR, 0, 0, 0, ins.opcode });
 
   switch(ins.opcode)
   {
@@ -92,13 +92,13 @@ void innative::wat::TokenizeInstruction(Queue<WatToken>& tokens, const Module& m
   case OP_set_global:
   case OP_br:
   case OP_br_if:
-    tokens.Push(WatToken{ TOKEN_INTEGER, 0, ins.immediates[0]._varuint32 });
+    tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varuint32 });
     break;
   case OP_i32_const:
-    tokens.Push(WatToken{ TOKEN_INTEGER, 0, ins.immediates[0]._varsint32 });
+    tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varsint32 });
     break;
   case OP_i64_const:
-    tokens.Push(WatToken{ TOKEN_INTEGER, 0, ins.immediates[0]._varsint64 });
+    tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varsint64 });
     break;
   case OP_f32_const:
     tokens.Push(WatToken{ TOKEN_FLOAT, 0 });
@@ -111,16 +111,16 @@ void innative::wat::TokenizeInstruction(Queue<WatToken>& tokens, const Module& m
   case OP_br_table:
     for(uint64_t i = 0; i < ins.immediates[0].n_table; ++i)
     {
-      tokens.Push(WatToken{ TOKEN_INTEGER, 0, ins.immediates[0].table[i] });
+      tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0].table[i] });
     }
 
-    tokens.Push(WatToken{ TOKEN_INTEGER, 0, ins.immediates[1]._varuint32 });
+    tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[1]._varuint32 });
     break;
   case OP_call:
     PushFunctionName(tokens, m, ins.immediates[0]._varuint32);
     break;
   case OP_call_indirect:
-    tokens.Push(WatToken{ TOKEN_INTEGER, 0, ins.immediates[0]._varuint32 });
+    tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varuint32 });
     break;
   case OP_i32_load:
   case OP_i64_load:
@@ -148,13 +148,13 @@ void innative::wat::TokenizeInstruction(Queue<WatToken>& tokens, const Module& m
     if(ins.immediates[0]._varuint32 != 0)
     {
       tokens.Push(WatToken{ TOKEN_ALIGN });
-      tokens.Push(WatToken{ TOKEN_INTEGER, 0, (1ULL << (int64_t)ins.immediates[0]._varuint32) });
+      tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, (1ULL << (int64_t)ins.immediates[0]._varuint32) });
     }
 
     if(ins.immediates[1]._varuptr != 0)
     {
       tokens.Push(WatToken{ TOKEN_OFFSET });
-      tokens.Push(WatToken{ TOKEN_INTEGER, 0, (1ULL << (int64_t)ins.immediates[1]._varuptr) });
+      tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0,  (1ULL << (int64_t)ins.immediates[1]._varuptr) });
     }
     break;
   }
@@ -181,7 +181,7 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
   tokens.Push(WatToken{ TOKEN_MODULE });
 
   if(m.name.size())
-    tokens.Push(WatToken{ TOKEN_NAME, m.name.str(), m.name.size() });
+    tokens.Push(WatToken{ TOKEN_NAME, m.name.str(), 0, 0, m.name.size() });
 
   if(m.knownsections&(1 << WASM_SECTION_TYPE))
     for(uint64_t i = 0; i < m.type.n_functions; ++i)
@@ -215,9 +215,9 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
     }
 
   auto tokenize_limits = [](Queue<WatToken>& tokens, const ResizableLimits& limits) {
-    tokens.Push(WatToken{ TOKEN_INTEGER, 0, limits.minimum });
+    tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, limits.minimum });
     if(limits.flags&WASM_LIMIT_HAS_MAXIMUM)
-      tokens.Push(WatToken{ TOKEN_INTEGER, 0, limits.maximum });
+      tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, limits.maximum });
   };
 
   auto tokenize_global = [](Queue<WatToken>& tokens, const GlobalDesc& global) {
@@ -261,8 +261,8 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
           {
             tokens.Push(WatToken{ TOKEN_OPEN });
             tokens.Push(WatToken{ TOKEN_PARAM });
-            if(imp.func_desc.param_names[j])
-              PushNewNameToken(tokens, imp.func_desc.param_names[j]);
+            if(imp.func_desc.param_names[j].name.size() > 0)
+              PushIdentifierToken(tokens, imp.func_desc.param_names[j].name, TOKEN_NAME);
             tokens.Push(WatToken{ TypeEncodingToken(fn.params[j]) });
             tokens.Push(WatToken{ TOKEN_CLOSE });
           }
@@ -342,7 +342,7 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_ELEM });
-      tokens.Push(WatToken{ TOKEN_INTEGER, 0, m.element.elements[i].index });
+      tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, m.element.elements[i].index });
 
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_OFFSET });
@@ -350,7 +350,7 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
       tokens.Push(WatToken{ TOKEN_CLOSE });
 
       for(uint64_t j = 0; j < m.element.elements[i].n_elements; ++j)
-        tokens.Push(WatToken{ TOKEN_INTEGER, 0, m.element.elements[i].elements[j] });
+        tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, m.element.elements[i].elements[j] });
 
       tokens.Push(WatToken{ TOKEN_CLOSE });
     }
@@ -412,14 +412,14 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_DATA });
-      tokens.Push(WatToken{ TOKEN_INTEGER, 0, m.data.data[i].index });
+      tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, m.data.data[i].index });
 
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_OFFSET });
       TokenizeInstruction(tokens, m, m.data.data[i].offset, 0, 0);
       tokens.Push(WatToken{ TOKEN_CLOSE });
 
-      tokens.Push(WatToken{ TOKEN_STRING, m.data.data[i].data.str(), m.data.data[i].data.size() });
+      tokens.Push(WatToken{ TOKEN_STRING, m.data.data[i].data.str(), 0, 0, m.data.data[i].data.size() });
       tokens.Push(WatToken{ TOKEN_CLOSE });
     }
 
@@ -428,10 +428,15 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
 
 void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out)
 {
-  int depth = 0;
-  int stack = 0;
+  size_t depth = 0;
+  size_t stack = 0;
+  size_t line = 0;
+
   for(size_t i = 0; i < tokens.Size(); ++i)
   {
+    assert(depth != (size_t)~0);
+    assert(stack != (size_t)~0);
+
     if(i > 0 && tokens[i - 1].id != TOKEN_OPEN && tokens[i].id != TOKEN_CLOSE)
       out << ' ';
 
@@ -479,6 +484,7 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out)
 
       if(depth == 2)
       {
+        ++line;
         out << "\n    ";
         for(int i = 0; i < stack * 2; ++i)
           out.put(' ');
@@ -502,7 +508,10 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out)
     case TOKEN_OPEN:
       ++depth;
       if(depth == 2)
+      {
+        ++line;
         out << "\n  ";
+      }
       out << GetTokenString(tokens[i].id);
       break;
     case TOKEN_CLOSE:
