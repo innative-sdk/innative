@@ -204,7 +204,7 @@ Func* WrapFunction(Func* fn, const Twine& name, code::Context& context, llvm::Gl
 
   BB* bb = BB::Create(context.context, "wrapper_block", wrap);
   context.builder.SetInsertPoint(bb);
-  
+
   if(context.dbuilder)
     context.builder.SetCurrentDebugLocation(llvm::DILocation::get(context.context, wrap->getSubprogram()->getLine(), 0, wrap->getSubprogram()));
 
@@ -813,7 +813,12 @@ llvmVal* GetMemPointer(code::Context& context, llvmVal* base, llvm::PointerType*
   llvmVal* loc = context.builder.CreateAdd(context.builder.CreateIntCast(base, context.builder.getInt64Ty(), false), context.builder.getInt64(offset), "", true, true);
 
   if(context.env.flags&ENV_STRICT) // In strict mode, generate a check that traps if this is an invalid memory access
-    InsertConditionalTrap(context.builder.CreateICmpUGE(loc, GetMemSize(context.memories[memory], context), "invalid_mem_access_cond"), context);
+    InsertConditionalTrap(
+      context.builder.CreateICmpUGT(
+        context.builder.CreateAdd(loc, context.builder.getInt64(pointer_type->getPointerElementType()->getPrimitiveSizeInBits() / 8)),
+        GetMemSize(context.memories[memory], context),
+        "invalid_mem_access_cond"),
+      context);
 
   return context.builder.CreatePointerCast(context.builder.CreateGEP(context.builder.CreateLoad(context.memories[memory]), loc), pointer_type);
 }
@@ -1367,7 +1372,7 @@ IR_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
   varsint7 ret = TE_void;
   if(sig.n_returns > 0)
     ret = sig.returns[0];
-  
+
   PushLabel("exit", ret, OP_return, nullptr, context, fn->getSubprogram()); // Setup the function exit block that wraps everything
   context.builder.SetInsertPoint(BB::Create(context.context, "entry", fn)); // Setup initial basic block.
   context.locals.resize(0);
@@ -1589,7 +1594,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     Func::ExternalLinkage,
     MergeName(context.m.name.str(), "innative_internal_init"),
     context.llvm);
-  
+
   llvm::DILocation* baselocation = 0;
 
   if(context.dbuilder)
@@ -1635,7 +1640,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     if(context.functions.back().internal == nullptr)
     {
       auto index = context.m.importsection.imports[i].func_desc.type_index;
-      
+
       if(index >= context.m.type.n_functions)
         return assert(false), ERR_INVALID_TYPE_INDEX;
 
@@ -1654,9 +1659,9 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
         FunctionDebugInfo(context.functions.back().imported, context, false, context.m.importsection.imports[i].func_desc.debug.line);
 
         llvm::Twine name = (context.m.importsection.imports[i].func_desc.debug.name.get()) ?
-          "@" + context.functions.back().imported->getName() + "#internal" : 
+          "@" + context.functions.back().imported->getName() + "#internal" :
           context.m.importsection.imports[i].func_desc.debug.name.str() + ("#" + std::to_string(i));
-        
+
         context.functions.back().internal = WrapFunction(
           context.functions.back().imported,
           name,
@@ -2173,7 +2178,7 @@ namespace innative {
         size_t sz = cmd.size();
         for(auto arg : linkargs)
           sz += strlen(arg);
-        cmd.reserve(sz + 1 + linkargs.size()*3);
+        cmd.reserve(sz + 1 + linkargs.size() * 3);
         for(auto arg : linkargs)
         {
           cmd += ' ';
