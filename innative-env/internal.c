@@ -74,9 +74,10 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, cons
   }
 }
 
+static char lookup[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+
 IR_COMPILER_DLLEXPORT extern void _innative_internal_env_print(uint64_t a)
 {
-  static char lookup[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
   char buf[25] = { 0 };
 
   int i = 0;
@@ -93,4 +94,23 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_print(uint64_t a)
 IR_COMPILER_DLLEXPORT extern void _innative_internal_env_print_compiler(uint64_t a)
 {
   _innative_internal_env_print(a);
+}
+
+IR_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned char* mem, uint64_t sz)
+{
+  static char prefix[] = "\n --- MEMORY DUMP ---\n\n";
+  char buf[256];
+  DWORD out;
+
+  WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), prefix, sizeof(prefix), &out, NULL);
+  for(uint64_t i = 0; i < sz;)
+  {
+    uint64_t j;
+    for(j = 0; j < 128 && i < sz; ++j, ++i)
+    {
+      buf[j*2] = lookup[(mem[i]&0xF0)>>4];
+      buf[j*2+1] = lookup[mem[i] & 0x0F];
+    }
+    WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buf, j*2, &out, NULL);
+  }
 }
