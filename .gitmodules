@@ -1,3 +1,6 @@
 [submodule "spec"]
 	path = spec
 	url = https://github.com/innative-sdk/spec.git
+[submodule "llvm"]
+	path = llvm
+	url = https://github.com/innative-sdk/llvm.git
