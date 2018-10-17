@@ -540,7 +540,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
   ValidationError* errors = nullptr;
   int counter = 0; // Even if we unload wast.dll, visual studio will keep the .pdb open forever, so we have to generate new DLLs for each new test section.
   std::string targetpath = Path(path).File().RemoveExtension().Get(); // We also have to be sure we don't overlap with any other .wast files, so we name the DLL based on the file path.
-  
+
   int err = CheckWatTokens(env.errors, tokens, start);
   if(err)
     return err;
@@ -560,7 +560,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
     case TOKEN_MODULE:
     {
       InvalidateCache(cache);
-     
+
       WatToken t = tokens[0];
       env.modules = trealloc<Module>(env.modules, ++env.n_modules);
       last = &env.modules[env.n_modules - 1];

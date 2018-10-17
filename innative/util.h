@@ -191,7 +191,7 @@ namespace innative {
     Path GetWorkingDir();
     bool SetWorkingDir(const char* path);
     Path GetAbsolutePath(const char* path);
-      std::string StrFormat(const char* fmt, ...);
+    std::string StrFormat(const char* fmt, ...);
     void GetCPUInfo(uintcpuinfo& info, int flags);
     void* LoadDLL(const char* path);
     void* LoadDLLFunction(void* dll, const char* name);

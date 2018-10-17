@@ -128,7 +128,7 @@ namespace innative {
     size_t WatLineNumber(const char* start, const char* pos);
     int CheckWatTokens(ValidationError*& errors, Queue<WatToken>& tokens, const char* start);
     const char* GetTokenString(WatTokenID token);
-      
+
     IR_FORCEINLINE int WatString(ByteArray& str, const WatToken& t)
     {
       if(t.id != TOKEN_STRING)

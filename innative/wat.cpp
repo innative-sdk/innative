@@ -1155,7 +1155,7 @@ namespace innative {
         if(tokens.Peek().id == TOKEN_OPEN) // Must be an else branch if it exists
         {
           EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-          
+
           WatToken t = tokens.Peek();
           Instruction op = { OP_else };
           EXPECTED(tokens, TOKEN_ELSE, ERR_WAT_EXPECTED_ELSE);

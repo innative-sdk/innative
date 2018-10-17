@@ -60,7 +60,7 @@ void innative::DestroyEnvironment(Environment* env)
 void innative::LoadModule(Environment* env, size_t index, const void* data, uint64_t size, const char* name, const char* path, int* err)
 {
   Stream s = { (uint8_t*)data, size, 0 };
-  
+
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
     *err = innative::wat::ParseWatModule(*env, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
   else

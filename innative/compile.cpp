@@ -6,6 +6,7 @@
 #define _SCL_SECURE_NO_WARNINGS
 #include "util.h"
 #include "optimize.h"
+#include "innative/export.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/TargetSelect.h"
@@ -2120,15 +2121,12 @@ namespace innative {
     }
 
     {
-      // Write all in-memory environments to cache files
       vector<string> cache;
-      vector<const char*> linkargs = { "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO", "/nodefaultlib", /*"/MANIFEST", "/MANIFEST:embed",*/ "/SUBSYSTEM:CONSOLE", "/VERBOSE", "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT", "/MACHINE:X64", "/machine:x64" };
-
 #ifdef IR_PLATFORM_WIN32
-      linkargs.push_back("/ENTRY:" IR_INIT_FUNCTION);
-#else
-      linkargs.push_back("-init " IR_INIT_FUNCTION); // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
-#endif
+      vector<const char*> linkargs = { "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO", 
+        "/nodefaultlib", /*"/MANIFEST", "/MANIFEST:embed",*/ "/SUBSYSTEM:CONSOLE", "/VERBOSE", 
+        "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT",
+        "/MACHINE:X64", "/machine:x64", "/ENTRY:" IR_INIT_FUNCTION };
 
       if(eflags&ENV_DLL)
         linkargs.push_back("/DLL");
@@ -2154,11 +2152,24 @@ namespace innative {
             cache.push_back(("/EXPORT:" + g->getName() + ",DATA").str().c_str());
       }
 
+      vector<string> targets = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.BaseDir().Get(), "/LIBPATH:" + workdir.Get() };
+#else 
+      vector<const char*> linkargs = { "-init " IR_INIT_FUNCTION }; // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
+
+      if(eflags&ENV_DLL)
+        linkargs.push_back("-shared");
+      if(!(eflags&ENV_DEBUG))
+        linkargs.push_back("--strip-debug");
+
+      vector<string> targets = { string("-o \"") + file.Get() + '"', "-L" + programpath.BaseDir().Get(), "-L" + workdir.Get() };
+#endif
+
+      // Write all in-memory environments to cache files
       for(Embedding* cur = env->embeddings; cur != nullptr; cur = cur->next)
       {
         if(cur->size > 0) // If the size is greater than 0, this is an in-memory embedding
         {
-          cache.push_back(std::to_string(reinterpret_cast<size_t>(cur)) + IR_ENV_EXTENSION + ".lib");
+          cache.push_back(IR_LIB_FLAG + std::to_string(reinterpret_cast<size_t>(cur)) + IR_ENV_EXTENSION + IR_LIB_EXTENSION);
           FILE* f;
           FOPEN(f, cache.back().c_str(), "wb");
           if(!f)
@@ -2173,7 +2184,6 @@ namespace innative {
       for(auto& v : cache)
         linkargs.push_back(v.c_str());
 
-      vector<string> targets = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.BaseDir().Get(), "/LIBPATH:" + workdir.Get() };
       size_t target_init = targets.size();
 
       // Generate object code

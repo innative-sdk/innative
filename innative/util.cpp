@@ -27,6 +27,7 @@
 #elif defined(IR_PLATFORM_POSIX)
 #include <unistd.h>
 #include <cpuid.h>
+#include <limits.h>
 #endif
 
 using std::string;
@@ -160,8 +161,8 @@ namespace innative {
 #ifdef IR_PLATFORM_WIN32
       buf.resize(MAX_PATH);
       buf.resize(GetModuleFileNameA(NULL, const_cast<char*>(buf.data()), (DWORD)buf.capacity()));
-#elif defined(IR_PLATFORM_POSIX)
-#error TODO
+#else
+      return Path(std::move(GetAbsolutePath(arg0)));
 #endif
       return Path(std::move(buf));
     }
@@ -187,8 +188,9 @@ namespace innative {
 #ifdef IR_PLATFORM_WIN32
       buf.resize(GetFullPathNameA(path, 0, 0, 0));
       buf.resize(GetFullPathNameA(path, (DWORD)buf.capacity(), const_cast<char*>(buf.data()), 0));
-#elif  defined(IR_PLATFORM_POSIX)
-#error TODO
+#elif defined(IR_PLATFORM_POSIX)
+      buf.resize(PATH_MAX);
+      buf.resize(strlen(realpath(path, const_cast<char*>(buf.data()))));
 #else
 #error unknown platform
 #endif

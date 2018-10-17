@@ -159,10 +159,9 @@ IR_ERROR innative::ParseGlobalDesc(Stream& s, GlobalDesc& g)
 {
   IR_ERROR err = ParseVarSInt7(s, g.type);
 
-  if(err >= 0)
-    if(err = ParseVarUInt1(s, g.mutability))
-      return ERR_INVALID_MUTABILITY; // Translate parse error to invalid mutability error
-  
+  if(err >= 0 && (err = ParseVarUInt1(s, g.mutability)))
+    return ERR_INVALID_MUTABILITY; // Translate parse error to invalid mutability error
+
   return err;
 }
 
@@ -767,7 +766,7 @@ IR_ERROR innative::ParseModule(Stream& s, Module& m, ByteArray name, ValidationE
         m.custom[curcustom].data = s.data + s.pos;
         size_t custom = s.pos + payload;
         err = ParseIdentifier(s, m.custom[curcustom].name);
-        if(err == ERR_SUCCESS && !ValidateIdentifier(m.custom[curcustom].name)) 
+        if(err == ERR_SUCCESS && !ValidateIdentifier(m.custom[curcustom].name))
           return ERR_INVALID_UTF8_ENCODING; // An invalid UTF8 encoding for the name is an actual parse error for some reason
         if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), "name"))
           ParseNameSection(s, custom, m);

@@ -35,7 +35,7 @@ enum WASM_TYPE_ENCODING
   TE_i64 = -0x02,
   TE_f32 = -0x03,
   TE_f64 = -0x04,
-  TE_anyfunc = -0x10, 
+  TE_anyfunc = -0x10,
   TE_func = -0x20,
   TE_void = -0x40,
 
@@ -418,7 +418,7 @@ enum WASM_ENVIRONMENT_FLAGS
   ENV_OPTIMIZE_INLINE = (1 << 7),
   ENV_OPTIMIZE_ANALYSIS = (1 << 8),
   ENV_OPTIMIZE_VECTORIZE = (1 << 9),
-  ENV_OPTIMIZE_ALL = ENV_OPTIMIZE_INLINE| ENV_OPTIMIZE_ANALYSIS| ENV_OPTIMIZE_VECTORIZE,
+  ENV_OPTIMIZE_ALL = ENV_OPTIMIZE_INLINE | ENV_OPTIMIZE_ANALYSIS | ENV_OPTIMIZE_VECTORIZE,
   ENV_ASSEMBLY_MATCH_CPUINFO = (1 << 30), // Requires LoadAssembly to match this machine's exact cpuinfo type before loading.
 };
 

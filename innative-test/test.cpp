@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
 
   path testdir("../spec/test/core");
   std::vector<path> testfiles;
-
+  
   for(auto& p : recursive_directory_iterator(testdir, directory_options::skip_permission_denied))
   {
     if(!STRICMP(p.path().extension().u8string().data(), ".wast"))
