@@ -4,7 +4,7 @@
 #include "util.h"
 #include <assert.h>
 #include <stdexcept>
-#include <intrin.h>
+#include <stdarg.h>
 
 #ifdef IR_PLATFORM_WIN32
 #pragma pack(push)
@@ -24,10 +24,12 @@
 #define NOGDI
 #include <windows.h>
 #pragma pack(pop)
+#include <intrin.h>
 #elif defined(IR_PLATFORM_POSIX)
 #include <unistd.h>
 #include <cpuid.h>
 #include <limits.h>
+#include <dlfcn.h>
 #endif
 
 using std::string;

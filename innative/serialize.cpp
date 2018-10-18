@@ -148,13 +148,13 @@ void innative::wat::TokenizeInstruction(Queue<WatToken>& tokens, const Module& m
     if(ins.immediates[0]._varuint32 != 0)
     {
       tokens.Push(WatToken{ TOKEN_ALIGN });
-      tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, (1ULL << (int64_t)ins.immediates[0]._varuint32) });
+      tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, (1LL << (int64_t)ins.immediates[0]._varuint32) });
     }
 
     if(ins.immediates[1]._varuptr != 0)
     {
       tokens.Push(WatToken{ TOKEN_OFFSET });
-      tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0,  (1ULL << (int64_t)ins.immediates[1]._varuptr) });
+      tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0,  (1LL << (int64_t)ins.immediates[1]._varuptr) });
     }
     break;
   }
@@ -214,22 +214,22 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
       tokens.Push(WatToken{ TOKEN_CLOSE });
     }
 
-  auto tokenize_limits = [](Queue<WatToken>& tokens, const ResizableLimits& limits) {
-    tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, limits.minimum });
+  auto tokenize_limits = [](Queue<WatToken>& t, const ResizableLimits& limits) {
+    t.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, limits.minimum });
     if(limits.flags&WASM_LIMIT_HAS_MAXIMUM)
-      tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, limits.maximum });
+      t.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, limits.maximum });
   };
 
-  auto tokenize_global = [](Queue<WatToken>& tokens, const GlobalDesc& global) {
+  auto tokenize_global = [](Queue<WatToken>& t, const GlobalDesc& global) {
     if(global.mutability)
     {
-      tokens.Push(WatToken{ TOKEN_OPEN });
-      tokens.Push(WatToken{ TOKEN_MUT });
-      tokens.Push(WatToken{ TypeEncodingToken(global.type) });
-      tokens.Push(WatToken{ TOKEN_CLOSE });
+      t.Push(WatToken{ TOKEN_OPEN });
+      t.Push(WatToken{ TOKEN_MUT });
+      t.Push(WatToken{ TypeEncodingToken(global.type) });
+      t.Push(WatToken{ TOKEN_CLOSE });
     }
     else
-      tokens.Push(WatToken{ TypeEncodingToken(global.type) });
+      t.Push(WatToken{ TypeEncodingToken(global.type) });
   };
 
   if(m.knownsections&(1 << WASM_SECTION_IMPORT))
@@ -486,7 +486,7 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out)
       {
         ++line;
         out << "\n    ";
-        for(int i = 0; i < stack * 2; ++i)
+        for(size_t k = 0; k < stack * 2; ++k)
           out.put(' ');
       }
       if(tokens[i].i < OPNAMECOUNT)

@@ -331,15 +331,15 @@ struct GenWastFunction<0, Args...>
   {
     switch(result.type)
     {
-    case TE_i32: result.i32 = static_cast<int32_t(*)(Args...)>(f)(args...); break;
-    case TE_i64: result.i64 = static_cast<int64_t(*)(Args...)>(f)(args...); break;
-    case TE_f32: result.f32 = static_cast<float(*)(Args...)>(f)(args...); break;
-    case TE_f64: result.f64 = static_cast<double(*)(Args...)>(f)(args...); break;
+    case TE_i32: result.i32 = ((int32_t(*)(Args...))(f))(args...); break;
+    case TE_i64: result.i64 = ((int64_t(*)(Args...))(f))(args...); break;
+    case TE_f32: result.f32 = ((float(*)(Args...))(f))(args...); break;
+    case TE_f64: result.f64 = ((double(*)(Args...))(f))(args...); break;
     default:
       assert(false);
       result.type = TE_NONE;
     case TE_void:
-      static_cast<void(*)(Args...)>(f)(args...);
+      ((void(*)(Args...))(f))(args...);
       break;
     }
   }
@@ -561,7 +561,6 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
     {
       InvalidateCache(cache);
 
-      WatToken t = tokens[0];
       env.modules = trealloc<Module>(env.modules, ++env.n_modules);
       last = &env.modules[env.n_modules - 1];
 
@@ -569,10 +568,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
         return err;
       ValidateModule(env, *last);
       if(env.errors)
-      {
-        ValidateModule(env, *last);
         return ERR_VALIDATION_ERROR;
-      }
 
       break;
     }

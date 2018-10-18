@@ -5,6 +5,7 @@
 #include "util.h"
 #include "parse.h"
 #include "validate.h"
+#include <limits>
 
 using std::string;
 using std::numeric_limits;
@@ -107,8 +108,8 @@ namespace innative {
 
     static string numbuf;
 
-    template<typename T, typename... Args>
-    int ResolveTokenNumber(const WatToken& token, T(*fn)(const char*, char**, Args...), T& out, Args... args)
+    template<typename T, typename Arg, typename... Args>
+    int ResolveTokenNumber(const WatToken& token, Arg(*fn)(const char*, char**, Args...), T& out, Args... args)
     {
       numbuf.clear();
       int length = token.len;
@@ -172,12 +173,9 @@ namespace innative {
 
     int ResolveTokeni64(const WatToken& token, varsint64& out)
     {
-      unsigned long long buf;
       if(token.len > 0 && token.pos[0] == '-')
-        return ResolveTokenNumber<long long>(token, strtoll, out, 0);
-      int err = ResolveTokenNumber<unsigned long long>(token, strtoull, buf, 0);
-      out = buf;
-      return err;
+        return ResolveTokenNumber<varsint64, long long, int>(token, strtoll, out, 0);
+      return ResolveTokenNumber<varsint64, unsigned long long, int>(token, strtoull, out, 0);
     }
 
     int ResolveTokenu64(const WatToken& token, varuint64& out)
@@ -1125,6 +1123,7 @@ namespace innative {
         break;
       }
       case TOKEN_IF:
+      {
         WatToken t = tokens.Pop();
         WatLabel(state, tokens);
         if(err = WatBlockType(tokens, blocktype))
@@ -1142,7 +1141,8 @@ namespace innative {
           if(err = AppendArray<Instruction>(op, f.body, f.n_body)) // We append the if instruction _after_ the optional condition expression
             return err;
         }
-
+      }
+      
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN); // There must always be a Then branch
         EXPECTED(tokens, TOKEN_THEN, ERR_WAT_EXPECTED_THEN);
 
@@ -1252,6 +1252,7 @@ namespace innative {
         break;
       }
       case TOKEN_IF:
+      {
         WatToken t = tokens.Pop();
         WatLabel(state, tokens);
         if(err = WatBlockType(tokens, blocktype))
@@ -1288,7 +1289,8 @@ namespace innative {
 
           EXPECTED(tokens, TOKEN_END, ERR_WAT_EXPECTED_END);
         }
-
+      }
+      
         if(!CheckLabel(state, tokens))
           return ERR_WAT_LABEL_MISMATCH;
 
@@ -1884,11 +1886,11 @@ namespace innative {
         case TOKEN_FUNC:
         {
           khiter_t iter = kh_end(state.funchash);
-          WatToken name = GetWatNameToken(tokens);
-          if(name.id == TOKEN_NAME)
+          WatToken fname = GetWatNameToken(tokens);
+          if(fname.id == TOKEN_NAME)
           {
             int r;
-            iter = kh_put_indexname(state.funchash, StringRef{ name.pos, name.len }, &r);
+            iter = kh_put_indexname(state.funchash, StringRef{ fname.pos, fname.len }, &r);
             if(!r)
               return assert(false), ERR_WAT_DUPLICATE_NAME;
           }
@@ -1900,12 +1902,12 @@ namespace innative {
           if(err = WatFunction(state, tokens, &index, ref))
             return err;
 
-          if(name.id == TOKEN_NAME)
+          if(fname.id == TOKEN_NAME)
           {
             if(index < m.importsection.functions)
-              WatName(m.importsection.imports[index].func_desc.debug.name, name);
+              WatName(m.importsection.imports[index].func_desc.debug.name, fname);
             else if(index - m.importsection.functions < m.code.n_funcbody)
-              WatName(m.code.funcbody[index - m.importsection.functions].debug.name, name);
+              WatName(m.code.funcbody[index - m.importsection.functions].debug.name, fname);
           }
 
           if(iter != kh_end(state.funchash))
@@ -1981,13 +1983,13 @@ namespace innative {
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       }
 
-      auto procRef = [](WatState& state, Module& m, varuint32 e) {
-        if(state.defer[0].func < m.importsection.functions || state.defer[0].func >= m.code.n_funcbody + m.importsection.functions)
+      auto procRef = [](WatState& s, Module& mod, varuint32 e) {
+        if(s.defer[0].func < mod.importsection.functions || s.defer[0].func >= mod.code.n_funcbody + mod.importsection.functions)
           return ERR_INVALID_FUNCTION_INDEX;
-        auto& f = m.code.funcbody[state.defer[0].func - m.importsection.functions];
-        if(state.defer[0].index >= f.n_body)
+        auto& f = mod.code.funcbody[s.defer[0].func - mod.importsection.functions];
+        if(s.defer[0].index >= f.n_body)
           return ERR_INVALID_FUNCTION_BODY;
-        f.body[state.defer[0].index].immediates[0]._varuint32 = e;
+        f.body[s.defer[0].index].immediates[0]._varuint32 = e;
         return ERR_SUCCESS;
       };
 
@@ -1998,7 +2000,7 @@ namespace innative {
         {
         case -TOKEN_ELEM:
         {
-          size_t restore = tokens.GetPosition();
+          size_t cache = tokens.GetPosition();
           tokens.SetPosition(state.defer[0].func);
 
           TableInit init = { 0 };
@@ -2011,7 +2013,7 @@ namespace innative {
           EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
           state.m.table.tables[state.defer[0].index].resizable.minimum = init.n_elements;
-          tokens.SetPosition(restore);
+          tokens.SetPosition(cache);
         }
         break;
         case OP_get_global:

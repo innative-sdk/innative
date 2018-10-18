@@ -84,7 +84,7 @@ namespace innative {
         if(r[i] == '/')
           r[i] = '\\';
       }
-#elif IR_PLATFORM_POSIX
+#elif defined(IR_PLATFORM_POSIX)
       for(size_t i = 0; i < r.size(); ++i)
       {
         if(r[i] == '\\')

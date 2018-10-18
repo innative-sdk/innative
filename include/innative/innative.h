@@ -50,6 +50,7 @@ limitations under the License.
 #define IR_COMPILER_DLLEXPORT __attribute__((dllexport))
 #define IR_COMPILER_DLLIMPORT __attribute__((dllimport))
 #define IR_COMPILER_FASTCALL __attribute__((fastcall))
+#define IR_COMPILER_NAKED __attribute__((naked))
 #define IR_FORCEINLINE __attribute__((always_inline)) inline
 #define IR_RESTRICT __restrict__
 #define IR_ALIGN(n) __attribute__((aligned(n)))
@@ -59,6 +60,7 @@ limitations under the License.
 #define IR_COMPILER_DLLEXPORT __attribute__((dllexport))
 #define IR_COMPILER_DLLIMPORT __attribute__((dllimport))
 #define IR_COMPILER_FASTCALL __attribute__((fastcall))
+#define IR_COMPILER_NAKED __attribute__((naked))
 #define IR_FORCEINLINE __attribute__((always_inline)) inline
 #define IR_RESTRICT __restrict__
 #define IR_ALIGN(n) __attribute__((aligned(n)))
@@ -145,13 +147,11 @@ limitations under the License.
 
 #ifdef IR_COMPILER_MSC
 #define FOPEN(f, path, mode) fopen_s((&f), (path), (mode))
-#define ITOA(value, buffer, size, radix) _itoa_s(value, buffer, size, radix)
 #define STRICMP(a, b) _stricmp(a, b)
 #define STRTOK(str,delim,context) strtok_s(str,delim,context)
 #else
 #define FOPEN(f, path, mode) f = fopen(path, mode)
-#define ITOA(value, buffer, size, radix) itoa((value), (buffer), (radix))
-#define STRICMP(a, b) stricmp(a, b)
+#define STRICMP(a, b) strcasecmp(a, b)
 #define STRTOK(str,delim,context) strtok_r(str,delim,context)
 #endif
 

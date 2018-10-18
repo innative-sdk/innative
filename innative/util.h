@@ -12,12 +12,17 @@
 #include <exception>
 #include <assert.h>
 #include <utility>
+#include <memory>
 
 #define kh_exist2(h, x) ((x < kh_end(h)) && kh_exist(h, x))
 
 namespace innative {
   namespace utility {
+#ifdef IR_PLATFORM_WIN32
     typedef int uintcpuinfo[5];
+#else
+    typedef unsigned int uintcpuinfo[5];
+#endif
 
     struct StringRef
     {
@@ -159,12 +164,12 @@ namespace innative {
     };
 
     template<class T>
-    inline errno_t tmemcpy(T* dest, size_t destsize, const T* src, size_t srcsize)
+    inline void tmemcpy(T* dest, size_t destsize, const T* src, size_t srcsize)
     {
 #ifdef IR_COMPILER_MSC
-      return memcpy_s(dest, destsize * sizeof(T), src, srcsize * sizeof(T));
+      memcpy_s(dest, destsize * sizeof(T), src, srcsize * sizeof(T));
 #else
-      return memcpy(dest, src, srcsize * sizeof(T));
+      memcpy(dest, src, srcsize * sizeof(T));
 #endif
     }
 
@@ -203,7 +208,7 @@ namespace innative {
       if(index >= 0)
       {
         char buf[20] = { 0 };
-        ITOA(index, buf, 20, 10);
+        snprintf(buf, 20, "%d", index);
         return !prefix ? std::string(name) + buf : (std::string(prefix) + IR_GLUE_STRING + name + buf);
       }
       return !prefix ? name : (std::string(prefix) + IR_GLUE_STRING + name);
@@ -250,7 +255,7 @@ namespace innative {
     inline std::unique_ptr<uint8_t[]> LoadFile(const char* file, long& sz)
     {
       FILE* f = nullptr;
-      fopen_s(&f, file, "rb");
+      FOPEN(f, file, "rb");
       if(!f)
         return nullptr;
       fseek(f, 0, SEEK_END);

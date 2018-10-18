@@ -50,7 +50,26 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, cons
 
 #ifdef IR_PLATFORM_WIN32
 HANDLE heap = 0;
+#elif defined(IR_PLATFORM_POSIX)
+#ifdef IR_CPU_x86_64
+IR_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2, size_t p3, size_t p4, size_t p5)
+{
+  __asm volatile(
+    "movq %rdi, %rax\n\t"
+    "movq %rsi, %rdi\n\t"
+    "movq %rdx, %rsi\n\t"
+    "movq %rcx, %rdx\n\t"
+    "movq %r8, %r10\n\t"
+    "movq %r9, %r8\n\t"
+    "movq $0, %r9\n\t"
+    "syscall");
+}
+#else
+#error unsupported architecture!
 #endif
+#endif
+
+
 
 // Platform-specific implementation of the mem.grow instruction, except it works in bytes
 IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max)
@@ -64,9 +83,9 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
 #ifdef IR_PLATFORM_WIN32
     info = HeapReAlloc(heap, HEAP_ZERO_MEMORY, info - 1, i + sizeof(uint64_t));
 #elif defined(IR_PLATFORM_POSIX)
-    uint64_t* n = mmap(NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    _innative_internal_env_memcpy(n + 1, info, info[-1]);
-    munmap(info - 1, info[-1]);
+    uint64_t* n = _innative_syscall(9, NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1);
+    _innative_internal_env_memcpy((char*)(n + 1), (char*)info, info[-1]);
+    _innative_syscall(11, info - 1, info[-1], 0, 0, 0);
     info = n;
 #else
 #error unknown platform!
@@ -79,7 +98,7 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
       heap = HeapCreate(0, i, 0);
     info = HeapAlloc(heap, HEAP_ZERO_MEMORY, i + sizeof(uint64_t));
 #elif defined(IR_PLATFORM_POSIX)
-    info = mmap(NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    info = _innative_syscall(9, NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1);
 #else
 #error unknown platform!
 #endif
@@ -97,7 +116,7 @@ void _innative_internal_write_out(const void* buf, size_t num)
   DWORD out;
   WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buf, num, &out, NULL);
 #elif defined(IR_PLATFORM_POSIX)
-  write(1, buf, num);
+  _innative_syscall(1, (void*)1, (size_t)buf, num, 0, 0);
 #else
 #error unknown platform!
 #endif
@@ -135,9 +154,9 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned 
     uint64_t j;
     for(j = 0; j < 128 && i < sz; ++j, ++i)
     {
-      buf[j*2] = lookup[(mem[i]&0xF0)>>4];
-      buf[j*2+1] = lookup[mem[i] & 0x0F];
+      buf[j * 2] = lookup[(mem[i] & 0xF0) >> 4];
+      buf[j * 2 + 1] = lookup[mem[i] & 0x0F];
     }
-    _innative_internal_write_out(buf, j*2);
+    _innative_internal_write_out(buf, j * 2);
   }
 }

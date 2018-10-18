@@ -326,7 +326,7 @@ IR_ERROR CompileBinaryIntrinsic(code::Context& context, llvm::Intrinsic::ID id, 
   if(err = PopType(Ty2, context, val2))
     return assert(false), err;
 
-  return PushReturn(context, context.builder.CreateBinaryIntrinsic(id, val1, val2, name));
+  return PushReturn(context, context.builder.CreateBinaryIntrinsic(id, val1, val2, nullptr, name));
 }
 
 // Given a function pointer to the appropriate builder function, pops one unary argument off the stack and pushes the result
@@ -1266,13 +1266,13 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   case OP_f32_sqrt:
     return CompileUnaryIntrinsic<TE_f32, TE_f32>(context, llvm::Intrinsic::sqrt, OPNAMES[ins.opcode]);
   case OP_f32_add:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFAdd, OPNAMES[ins.opcode], false);
+    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFAdd, OPNAMES[ins.opcode], nullptr);
   case OP_f32_sub:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFSub, OPNAMES[ins.opcode], false);
+    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFSub, OPNAMES[ins.opcode], nullptr);
   case OP_f32_mul:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFMul, OPNAMES[ins.opcode], false);
+    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFMul, OPNAMES[ins.opcode], nullptr);
   case OP_f32_div:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFDiv, OPNAMES[ins.opcode], false);
+    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFDiv, OPNAMES[ins.opcode], nullptr);
   case OP_f32_min:
     return CompileBinaryIntrinsic<TE_f32, TE_f32, TE_f32>(context, llvm::Intrinsic::minnum, OPNAMES[ins.opcode]);
   case OP_f32_max:
@@ -1294,13 +1294,13 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   case OP_f64_sqrt:
     return CompileUnaryIntrinsic<TE_f64, TE_f64>(context, llvm::Intrinsic::sqrt, OPNAMES[ins.opcode]);
   case OP_f64_add:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFAdd, OPNAMES[ins.opcode], false);
+    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFAdd, OPNAMES[ins.opcode], nullptr);
   case OP_f64_sub:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFSub, OPNAMES[ins.opcode], false);
+    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFSub, OPNAMES[ins.opcode], nullptr);
   case OP_f64_mul:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFMul, OPNAMES[ins.opcode], false);
+    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFMul, OPNAMES[ins.opcode], nullptr);
   case OP_f64_div:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFDiv, OPNAMES[ins.opcode], false);
+    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const Twine&, llvm::MDNode*>(context, &llvm::IRBuilder<>::CreateFDiv, OPNAMES[ins.opcode], nullptr);
   case OP_f64_min:
     return CompileBinaryIntrinsic<TE_f64, TE_f64, TE_f64>(context, llvm::Intrinsic::minnum, OPNAMES[ins.opcode]);
   case OP_f64_max:
@@ -1967,7 +1967,7 @@ IR_ERROR OutputObjectFile(code::Context& context, const char* out)
   llvm::legacy::PassManager pass;
   auto FileType = llvm::TargetMachine::CGFT_ObjectFile;
 
-  if(context.machine->addPassesToEmitFile(pass, dest, FileType))
+  if(context.machine->addPassesToEmitFile(pass, dest, nullptr, FileType))
   {
     llvm::errs() << "TheTargetMachine can't emit a file of this type";
     return assert(false), ERR_FATAL_FILE_ERROR;

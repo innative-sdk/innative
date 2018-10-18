@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <atomic>
+#include <limits>
 
 #define str_pair_hash_equal(a, b) (strcmp(a, b) == 0) && (strcmp(strchr(a, 0)+1, strchr(a, 0)+1) == 0)
 
@@ -140,16 +141,16 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   {
     if(env.whitelist)
     {
-      khiter_t iter = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.str(), "").c_str()); // Check for a wildcard match first
-      if(!kh_exist2(env.whitelist, iter))
+      khiter_t itermodule = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.str(), "").c_str()); // Check for a wildcard match first
+      if(!kh_exist2(env.whitelist, itermodule))
       {
-        khiter_t iter = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.str(), imp.export_name.str()).c_str()); // We already canonized the whitelist imports to eliminate unnecessary !C specifiers
-        if(!kh_exist2(env.whitelist, iter))
+        khiter_t iterexport = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.str(), imp.export_name.str()).c_str()); // We already canonized the whitelist imports to eliminate unnecessary !C specifiers
+        if(!kh_exist2(env.whitelist, iterexport))
           return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a whitelisted C import, nor a valid webassembly import.", imp.module_name.str(), imp.export_name.str());
         if(imp.kind != WASM_KIND_FUNCTION)
           return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a function. You can only import C functions at this time.", imp.module_name.str(), imp.export_name.str());
 
-        FunctionType& sig = kh_val(env.whitelist, iter);
+        FunctionType& sig = kh_val(env.whitelist, iterexport);
         if(sig.form != TE_NONE) // If we have a function signature, verify it
         {
           if(imp.func_desc.type_index >= m->type.n_functions)
@@ -169,8 +170,8 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
     {
       // TODO: actually enforce this
       std::string name = CanonImportName(imp);
-      //khiter_t iter = kh_get_cimport(env.cimports, name.c_str());
-      //if(kh_exist2(env.cimports, iter))
+      //khiter_t iterimport = kh_get_cimport(env.cimports, name.c_str());
+      //if(kh_exist2(env.cimports, iterimport))
         return; // This function exists and we already have verified the signature if there was a whitelist, so just return
       if(!imp.module_name.size() || imp.module_name.str()[0] == '!') // Blank imports must have been C imports, otherwise it could have been a failed WASM module import attempt.
         return AppendError(env.errors, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found in C library imports", name.c_str());
