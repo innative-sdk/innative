@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
       {
         auto raw = std::string(argv[i] + 2);
         std::transform(raw.begin(), raw.end(), raw.begin(), ::tolower);
-        auto flag = flag_map.lower_bound(raw);
+        auto flag = flag_map.find(raw);
         if(flag == flag_map.end())
         {
           std::cout << "Unknown flag: " << argv[i] + 2 << std::endl;
@@ -178,8 +178,8 @@ int main(int argc, char *argv[])
   {
     fprintf(stderr, "Compile error: %i\n", err);
 
-    for(ValidationError* err = env->errors; err != nullptr; err = err->next)
-      fprintf(stderr, "Error %i: %s\n", err->code, err->error);
+    for(ValidationError* error = env->errors; error != nullptr; error = error->next)
+      fprintf(stderr, "Error %i: %s\n", error->code, error->error);
 
     getchar();
     return err;

@@ -192,7 +192,10 @@ namespace innative {
       buf.resize(GetFullPathNameA(path, (DWORD)buf.capacity(), const_cast<char*>(buf.data()), 0));
 #elif defined(IR_PLATFORM_POSIX)
       buf.resize(PATH_MAX);
-      buf.resize(strlen(realpath(path, const_cast<char*>(buf.data()))));
+      const char* resolve = realpath(path, const_cast<char*>(buf.data()));
+      if(!resolve)
+        return Path(path);
+      buf.resize(strlen(resolve));
 #else
 #error unknown platform
 #endif

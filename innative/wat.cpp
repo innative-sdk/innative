@@ -15,8 +15,8 @@ using namespace utility;
 
 namespace innative {
   namespace wat {
-    __KHASH_IMPL(indexname, kh_inline, StringRef, varuint32, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
-    __KHASH_IMPL(tokens, kh_inline, StringRef, WatTokenID, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
+    __KHASH_IMPL(indexname, , StringRef, varuint32, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
+    __KHASH_IMPL(tokens, , StringRef, WatTokenID, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
 
     template<int LEN>
     inline const char* __getTokenString(WatTokenID token, const char* (&list)[LEN])

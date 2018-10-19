@@ -2236,8 +2236,8 @@ namespace innative {
           for(auto& v : cache)
             std::remove(v.c_str());
           return assert(false), ERR_FATAL_LINK_ERROR;
+        }
       }
-    }
 
       // Delete cache files
       for(auto& v : cache)
