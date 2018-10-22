@@ -4,6 +4,7 @@ OBJS := $(addprefix $(OBJDIR)/c/,$(C_OBJS)) $(addprefix $(OBJDIR)/cxx/,$(CXX_OBJ
 CPPFLAGS += $(foreach includedir,$(INCLUDE_DIRS),-I$(includedir)) -Wl,-rpath -Wl,. 
 LDFLAGS += $(foreach librarydir,$(LIBRARY_DIRS),-L$(librarydir))
 LDLIBS := $(foreach library,$(LIBRARIES),-l$(library)) 
+LIBFILES := $(foreach library,$(LIBRARIES),lib$(library).so) 
 LDARCHIVES := $(foreach archive,$(ARCHIVES),$(archive)) 
 
 .PHONY: all clean distclean

@@ -178,6 +178,7 @@ namespace innative {
 #elif defined(IR_PLATFORM_POSIX)
       buf.resize(PATH_MAX);
       getcwd(const_cast<char*>(buf.data()), buf.capacity());
+      buf.resize(strlen(buf.data()));
 #else
 #error unknown platform
 #endif

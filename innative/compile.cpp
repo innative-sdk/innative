@@ -1980,18 +1980,19 @@ IR_ERROR OutputObjectFile(code::Context& context, const char* out)
 
 namespace innative {
   IR_ERROR CompileEnvironment(const Environment* env, const char* filepath)
-  {
+  {    
     llvm::LLVMContext llvm_context;
     Path file(filepath);
     Path workdir = GetWorkingDir();
     Path programpath(env->sdkpath);
-
+    uint64_t eflags = env->flags;
+    
     SetWorkingDir(programpath.BaseDir().Get().c_str());
     utility::DeferLambda<std::function<void()>> defer([&]() { SetWorkingDir(workdir.Get().c_str()); });
 
     if(!file.IsAbsolute())
       file = workdir + file;
-
+    
     llvm::IRBuilder<> builder(llvm_context);
     code::Context* start = nullptr;
     IR_ERROR err = ERR_SUCCESS;
@@ -2020,6 +2021,10 @@ namespace innative {
 
     llvm::TargetOptions opt;
     auto RM = llvm::Optional<llvm::Reloc::Model>();
+#ifdef IR_PLATFORM_POSIX
+    if(eflags&ENV_DLL)
+      RM = llvm::Optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
+#endif
     auto machine = arch->createTargetMachine(triple, CPU, Features, opt, RM);
 
     for(varuint32 i = 0; i < env->n_modules; ++i)
@@ -2037,16 +2042,14 @@ namespace innative {
       }
     }
 
-    uint64_t eflags = env->flags;
-
     if(!env->n_modules)
       return ERR_FATAL_INVALID_MODULE;
 
     // Initialize all modules and call start function (if it exists)
     if(!start) // We always create an initialization function, even for DLLs, to do proper initialization of modules
       start = &context[0];
-    if(start->start == nullptr)
-      eflags |= ENV_DLL; // We can't compile an EXE without an entry point
+    if(start->start == nullptr && !(eflags&ENV_DLL))
+      return ERR_FATAL_INVALID_MODULE; // We can't compile an EXE without an entry point
 
     FuncTy* mainTy = FuncTy::get(builder.getVoidTy(), false);
 #ifdef IR_PLATFORM_WIN32
@@ -2119,7 +2122,7 @@ namespace innative {
       if(llvm::verifyModule(*context[i].llvm, &dest))
         return ERR_FATAL_INVALID_MODULE;
     }
-
+    
     {
       vector<string> cache;
 #ifdef IR_PLATFORM_WIN32
@@ -2161,7 +2164,7 @@ namespace innative {
       if(!(eflags&ENV_DEBUG))
         linkargs.push_back("--strip-debug");
 
-      vector<string> targets = { string("-o \"") + file.Get() + '"', "-L" + programpath.BaseDir().Get(), "-L" + workdir.Get() };
+      vector<string> targets = { string("-o ") + file.Get(), "-L" + programpath.BaseDir().Get(), "-L" + workdir.Get() };
 #endif
 
       // Write all in-memory environments to cache files
@@ -2200,11 +2203,16 @@ namespace innative {
       // Link object code
       if(env->linker != 0)
       {
+#ifdef IR_PLATFORM_WIN32
+        const char* quote = "\"";
+#elif defined(IR_PLATFORM_POSIX)
+        const char* quote = "";
+#endif
         std::string cmd;
-        cmd += '"'; // for windows we have to double quote the entire bloody command because system() actually calls "cmd /c <string>"
-        cmd += '"';
+        cmd += quote; // for windows we have to double quote the entire bloody command because system() actually calls "cmd /c <string>"
+        cmd += quote;
         cmd += env->linker;
-        cmd += '"';
+        cmd += quote;
 
         size_t sz = cmd.size();
         for(auto arg : linkargs)
@@ -2213,13 +2221,14 @@ namespace innative {
         for(auto arg : linkargs)
         {
           cmd += ' ';
-          cmd += '"';
+          cmd += quote;
           cmd += arg;
-          cmd += '"';
+          cmd += quote;
         }
 
-        cmd += '"';
+        cmd += quote;
 
+        std::cout << "Executing external linker command: " << cmd.c_str() << std::endl;
         int err = system(cmd.c_str());
         if(err != 0)
           return assert(false), ERR_FATAL_LINK_ERROR;
