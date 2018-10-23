@@ -45,14 +45,14 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  testfiles = { "../spec/test/core/address.wast" };
+  testfiles = { "../spec/test/core/exports.wast" };
   target << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
   //testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
 
   for(auto file : testfiles)
   {
     Environment* env = (*exports.CreateEnvironment)(ENV_DLL | ENV_DEBUG | ENV_EMIT_LLVM | ENV_STRICT, 1, 0, (!argc ? 0 : argv[0]));
-    //env->linker = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\VC\\Tools\\MSVC\\14.15.26726\\bin\\Hostx64\\x64\\link.exe";
+    env->linker = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\VC\\Tools\\MSVC\\14.15.26726\\bin\\Hostx64\\x64\\link.exe";
     int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
 
     if(err >= 0)

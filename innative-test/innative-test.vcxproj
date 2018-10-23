@@ -192,9 +192,9 @@
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>innative_d.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>innative_d.lib;lldCOFF.lib;lldCommon.lib;lldCore.lib;lldDriver.lib;lldELF.lib;lldMachO.lib;lldMinGW.lib;lldReaderWriter.lib;lldWasm.lib;lldYAML.lib;LLVMAggressiveInstCombine.lib;LLVMAnalysis.lib;LLVMAsmParser.lib;LLVMAsmPrinter.lib;LLVMBinaryFormat.lib;LLVMBitReader.lib;LLVMBitWriter.lib;LLVMCodeGen.lib;LLVMCore.lib;LLVMCoroutines.lib;LLVMCoverage.lib;LLVMDebugInfoCodeView.lib;LLVMDebugInfoDWARF.lib;LLVMDebugInfoMSF.lib;LLVMDebugInfoPDB.lib;LLVMDemangle.lib;LLVMDlltoolDriver.lib;LLVMExecutionEngine.lib;LLVMFuzzMutate.lib;LLVMGlobalISel.lib;LLVMInstCombine.lib;LLVMInstrumentation.lib;LLVMInterpreter.lib;LLVMipo.lib;LLVMIRReader.lib;LLVMLibDriver.lib;LLVMLineEditor.lib;LLVMLinker.lib;LLVMLTO.lib;LLVMMCDisassembler.lib;LLVMMCJIT.lib;LLVMMC.lib;LLVMMCParser.lib;LLVMMIRParser.lib;LLVMObjCARCOpts.lib;LLVMObject.lib;LLVMObjectYAML.lib;LLVMOption.lib;LLVMOptRemarks.lib;LLVMOrcJIT.lib;LLVMPasses.lib;LLVMProfileData.lib;LLVMRuntimeDyld.lib;LLVMScalarOpts.lib;LLVMSelectionDAG.lib;LLVMSupport.lib;LLVMSymbolize.lib;LLVMTableGen.lib;LLVMTarget.lib;LLVMTestingSupport.lib;LLVMTransformUtils.lib;LLVMVectorize.lib;LLVMWindowsManifest.lib;LLVMX86AsmParser.lib;LLVMX86AsmPrinter.lib;LLVMX86CodeGen.lib;LLVMX86Desc.lib;LLVMX86Disassembler.lib;LLVMX86Info.lib;LLVMX86Utils.lib;LLVMXRay.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>$(OutDir)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(OutDir);$(SolutionDir)bin\llvm\Debug\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -231,10 +231,10 @@
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>innative_d.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>innative_d.lib;lldCOFF.lib;lldCommon.lib;lldCore.lib;lldDriver.lib;lldELF.lib;lldMachO.lib;lldMinGW.lib;lldReaderWriter.lib;lldWasm.lib;lldYAML.lib;LLVMAggressiveInstCombine.lib;LLVMAnalysis.lib;LLVMAsmParser.lib;LLVMAsmPrinter.lib;LLVMBinaryFormat.lib;LLVMBitReader.lib;LLVMBitWriter.lib;LLVMCodeGen.lib;LLVMCore.lib;LLVMCoroutines.lib;LLVMCoverage.lib;LLVMDebugInfoCodeView.lib;LLVMDebugInfoDWARF.lib;LLVMDebugInfoMSF.lib;LLVMDebugInfoPDB.lib;LLVMDemangle.lib;LLVMDlltoolDriver.lib;LLVMExecutionEngine.lib;LLVMFuzzMutate.lib;LLVMGlobalISel.lib;LLVMInstCombine.lib;LLVMInstrumentation.lib;LLVMInterpreter.lib;LLVMipo.lib;LLVMIRReader.lib;LLVMLibDriver.lib;LLVMLineEditor.lib;LLVMLinker.lib;LLVMLTO.lib;LLVMMCDisassembler.lib;LLVMMCJIT.lib;LLVMMC.lib;LLVMMCParser.lib;LLVMMIRParser.lib;LLVMObjCARCOpts.lib;LLVMObject.lib;LLVMObjectYAML.lib;LLVMOption.lib;LLVMOptRemarks.lib;LLVMOrcJIT.lib;LLVMPasses.lib;LLVMProfileData.lib;LLVMRuntimeDyld.lib;LLVMScalarOpts.lib;LLVMSelectionDAG.lib;LLVMSupport.lib;LLVMSymbolize.lib;LLVMTableGen.lib;LLVMTarget.lib;LLVMTestingSupport.lib;LLVMTransformUtils.lib;LLVMVectorize.lib;LLVMWindowsManifest.lib;LLVMX86AsmParser.lib;LLVMX86AsmPrinter.lib;LLVMX86CodeGen.lib;LLVMX86Desc.lib;LLVMX86Disassembler.lib;LLVMX86Info.lib;LLVMX86Utils.lib;LLVMXRay.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <LargeAddressAware>true</LargeAddressAware>
-      <AdditionalLibraryDirectories>$(OutDir)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(OutDir);$(SolutionDir)bin\llvm\Debug\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -277,10 +277,10 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>innative.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>innative.lib;lldCOFF.lib;lldCommon.lib;lldCore.lib;lldDriver.lib;lldELF.lib;lldMachO.lib;lldMinGW.lib;lldReaderWriter.lib;lldWasm.lib;lldYAML.lib;LLVMAggressiveInstCombine.lib;LLVMAnalysis.lib;LLVMAsmParser.lib;LLVMAsmPrinter.lib;LLVMBinaryFormat.lib;LLVMBitReader.lib;LLVMBitWriter.lib;LLVMCodeGen.lib;LLVMCore.lib;LLVMCoroutines.lib;LLVMCoverage.lib;LLVMDebugInfoCodeView.lib;LLVMDebugInfoDWARF.lib;LLVMDebugInfoMSF.lib;LLVMDebugInfoPDB.lib;LLVMDemangle.lib;LLVMDlltoolDriver.lib;LLVMExecutionEngine.lib;LLVMFuzzMutate.lib;LLVMGlobalISel.lib;LLVMInstCombine.lib;LLVMInstrumentation.lib;LLVMInterpreter.lib;LLVMipo.lib;LLVMIRReader.lib;LLVMLibDriver.lib;LLVMLineEditor.lib;LLVMLinker.lib;LLVMLTO.lib;LLVMMCDisassembler.lib;LLVMMCJIT.lib;LLVMMC.lib;LLVMMCParser.lib;LLVMMIRParser.lib;LLVMObjCARCOpts.lib;LLVMObject.lib;LLVMObjectYAML.lib;LLVMOption.lib;LLVMOptRemarks.lib;LLVMOrcJIT.lib;LLVMPasses.lib;LLVMProfileData.lib;LLVMRuntimeDyld.lib;LLVMScalarOpts.lib;LLVMSelectionDAG.lib;LLVMSupport.lib;LLVMSymbolize.lib;LLVMTableGen.lib;LLVMTarget.lib;LLVMTestingSupport.lib;LLVMTransformUtils.lib;LLVMVectorize.lib;LLVMWindowsManifest.lib;LLVMX86AsmParser.lib;LLVMX86AsmPrinter.lib;LLVMX86CodeGen.lib;LLVMX86Desc.lib;LLVMX86Disassembler.lib;LLVMX86Info.lib;LLVMX86Utils.lib;LLVMXRay.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <LargeAddressAware>true</LargeAddressAware>
-      <AdditionalLibraryDirectories>$(OutDir)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(OutDir);$(SolutionDir)bin\llvm\MinSizeRel\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -322,9 +322,9 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>innative.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>innative.lib;lldCOFF.lib;lldCommon.lib;lldCore.lib;lldDriver.lib;lldELF.lib;lldMachO.lib;lldMinGW.lib;lldReaderWriter.lib;lldWasm.lib;lldYAML.lib;LLVMAggressiveInstCombine.lib;LLVMAnalysis.lib;LLVMAsmParser.lib;LLVMAsmPrinter.lib;LLVMBinaryFormat.lib;LLVMBitReader.lib;LLVMBitWriter.lib;LLVMCodeGen.lib;LLVMCore.lib;LLVMCoroutines.lib;LLVMCoverage.lib;LLVMDebugInfoCodeView.lib;LLVMDebugInfoDWARF.lib;LLVMDebugInfoMSF.lib;LLVMDebugInfoPDB.lib;LLVMDemangle.lib;LLVMDlltoolDriver.lib;LLVMExecutionEngine.lib;LLVMFuzzMutate.lib;LLVMGlobalISel.lib;LLVMInstCombine.lib;LLVMInstrumentation.lib;LLVMInterpreter.lib;LLVMipo.lib;LLVMIRReader.lib;LLVMLibDriver.lib;LLVMLineEditor.lib;LLVMLinker.lib;LLVMLTO.lib;LLVMMCDisassembler.lib;LLVMMCJIT.lib;LLVMMC.lib;LLVMMCParser.lib;LLVMMIRParser.lib;LLVMObjCARCOpts.lib;LLVMObject.lib;LLVMObjectYAML.lib;LLVMOption.lib;LLVMOptRemarks.lib;LLVMOrcJIT.lib;LLVMPasses.lib;LLVMProfileData.lib;LLVMRuntimeDyld.lib;LLVMScalarOpts.lib;LLVMSelectionDAG.lib;LLVMSupport.lib;LLVMSymbolize.lib;LLVMTableGen.lib;LLVMTarget.lib;LLVMTestingSupport.lib;LLVMTransformUtils.lib;LLVMVectorize.lib;LLVMWindowsManifest.lib;LLVMX86AsmParser.lib;LLVMX86AsmPrinter.lib;LLVMX86CodeGen.lib;LLVMX86Desc.lib;LLVMX86Disassembler.lib;LLVMX86Info.lib;LLVMX86Utils.lib;LLVMXRay.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>$(OutDir)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(OutDir);$(SolutionDir)bin\llvm\MinSizeRel\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

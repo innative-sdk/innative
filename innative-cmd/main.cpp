@@ -23,6 +23,23 @@ static const std::unordered_map<std::string, unsigned int> flag_map = {
   { "opt_all", ENV_OPTIMIZE_ALL },
 };
 
+void usage()
+{
+  std::cout << "Usage: innative-cmd [-r] [-f FLAG] [-l FILE] [-o FILE] [-a FILE] [-d PATH]\n"
+    "  -r : Run the compiled result immediately and display output. Requires a start function.\n"
+    "  -f : Set a supported flag to true. Flags:\n";
+ 
+  for(auto& f : flag_map)
+    std::cout << "         " << f.first << "\n";
+
+  std::cout << "\n"
+    "  -l <FILE> : Links the input files against <FILE>, which must be a static library.\n"
+    "  -o <FILE> : Sets the output path for the resulting executable or library.\n"
+    "  -a <FILE> : Specifies an alternative linker to use instead of LLD.\n"
+    "  -d <PATH> : Sets the directory that contains the SDK library and data files."
+    << std::endl;
+}
+
 int main(int argc, char *argv[])
 {
   std::vector<const char*> inputs;
@@ -96,12 +113,14 @@ int main(int argc, char *argv[])
   if(err < 0)
   {
     std::cout << "Error parsing command line arguments: " << err << ", aborting." << std::endl;
+    usage();
     return err;
   }
 
   if(!inputs.size())
   {
     std::cout << "No input files specified!" << std::endl;
+    usage();
     return -3;
   }
 

@@ -89,12 +89,12 @@ namespace innative {
         return nullptr;
       s += 3;
       if(s >= end)
-        return "0x1";
+        return end;
 
       for(i = 0; i < 3 && s < end; ++i)
       {
         if(s[i] != ":0x"[i])
-          return "0x1";
+          return s;
       }
       s += i;
 

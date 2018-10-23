@@ -107,30 +107,27 @@ llvm::DIType* CreateDebugType(llvmTy* t, code::Context& context)
 
 void FunctionDebugInfo(llvm::Function* fn, code::Context& context, bool definition, size_t line)
 {
-  if(context.dbuilder)
-  {
-    llvm::SmallVector<llvm::Metadata*, 8> dwarfTys = { CreateDebugType(fn->getReturnType(), context) };
-    for(auto& arg : fn->args())
-      dwarfTys.push_back(CreateDebugType(arg.getType(), context));
+  llvm::SmallVector<llvm::Metadata*, 8> dwarfTys = { CreateDebugType(fn->getReturnType(), context) };
+  for(auto& arg : fn->args())
+    dwarfTys.push_back(CreateDebugType(arg.getType(), context));
 
-    auto subtype = context.dbuilder->createSubroutineType(
-      context.dbuilder->getOrCreateTypeArray(dwarfTys),
-      llvm::DINode::FlagZero,
-      (fn->getCallingConv() == llvm::CallingConv::C) ? llvm::dwarf::DW_CC_normal : llvm::dwarf::DW_CC_nocall);
+  auto subtype = context.dbuilder->createSubroutineType(
+    context.dbuilder->getOrCreateTypeArray(dwarfTys),
+    llvm::DINode::FlagZero,
+    (fn->getCallingConv() == llvm::CallingConv::C) ? llvm::dwarf::DW_CC_normal : llvm::dwarf::DW_CC_nocall);
 
-    fn->setSubprogram(context.dbuilder->createFunction(
-      context.dunit,
-      fn->getName(),
-      "",
-      context.dunit,
-      line,
-      subtype,
-      !fn->hasValidDeclarationLinkage(),
-      definition,
-      line,
-      llvm::DINode::FlagZero,
-      (context.env.flags&ENV_OPTIMIZE_ALL) != 0));
-  }
+  fn->setSubprogram(context.dbuilder->createFunction(
+    context.dunit,
+    fn->getName(),
+    "",
+    context.dunit,
+    line,
+    subtype,
+    !fn->hasValidDeclarationLinkage(),
+    definition,
+    line,
+    llvm::DINode::FlagZero,
+    (context.env.flags&ENV_OPTIMIZE_ALL) != 0));
 }
 
 Func* CompileFunction(FunctionType& signature, const Twine& name, code::Context& context)
@@ -148,7 +145,8 @@ Func* HomogenizeFunction(Func* fn, const Twine& name, code::Context& context, ll
 
   Func* wrap = Func::Create(FuncTy::get(context.builder.getInt64Ty(), types, false), linkage, name, context.llvm);
   wrap->setCallingConv(callconv);
-  FunctionDebugInfo(wrap, context, true, fn->getSubprogram()->getLine());
+  if(context.dbuilder)
+    FunctionDebugInfo(wrap, context, true, fn->getSubprogram()->getLine());
 
   auto prev = context.builder.GetInsertBlock();
 
@@ -200,7 +198,8 @@ Func* WrapFunction(Func* fn, const Twine& name, code::Context& context, llvm::Gl
 {
   Func* wrap = Func::Create(fn->getFunctionType(), linkage, name, context.llvm);
   wrap->setCallingConv(callconv);
-  FunctionDebugInfo(wrap, context, true, fn->getSubprogram()->getLine());
+  if(context.dbuilder)
+    FunctionDebugInfo(wrap, context, true, fn->getSubprogram()->getLine());
 
   auto prev = context.builder.GetInsertBlock();
 
@@ -305,9 +304,9 @@ IR_ERROR CompileBinaryOp(code::Context& context, llvmVal* (llvm::IRBuilder<>::*o
 
   // Pop in reverse order
   llvmVal *val2, *val1;
-  if(err = PopType(Ty1, context, val1))
-    return assert(false), err;
   if(err = PopType(Ty2, context, val2))
+    return assert(false), err;
+  if(err = PopType(Ty1, context, val1))
     return assert(false), err;
 
   return PushReturn(context, (context.builder.*op)(val1, val2, args...));
@@ -321,9 +320,9 @@ IR_ERROR CompileBinaryIntrinsic(code::Context& context, llvm::Intrinsic::ID id, 
 
   // Pop in reverse order
   llvmVal *val2, *val1;
-  if(err = PopType(Ty1, context, val1))
-    return assert(false), err;
   if(err = PopType(Ty2, context, val2))
+    return assert(false), err;
+  if(err = PopType(Ty1, context, val1))
     return assert(false), err;
 
   return PushReturn(context, context.builder.CreateBinaryIntrinsic(id, val1, val2, nullptr, name));
@@ -417,7 +416,6 @@ BB* PushLabel(const char* name, varsint7 sig, uint8_t opcode, Func* fnptr, code:
   BB* bb = BB::Create(context.context, name, fnptr);
   context.control.Push(code::Block{ bb, context.values.Limit(), sig, opcode, scope }); // TODO: create proper nested lexical contexts
   context.values.SetLimit(context.values.Size() + context.values.Limit()); // Set limit to current stack size to prevent a block from popping past this
-  auto test3 = llvm::cast<llvm::DILocalScope>(scope);
 
   if(context.values.Size() > 0 && !context.values.Peek()) // If we're in an unreachable segment, just push another placeholder on to the stack
     context.values.Push(nullptr);
@@ -1448,8 +1446,6 @@ IR_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
   // Begin iterating through the instructions until there aren't any left
   for(varuint32 i = 0; i < body.n_body; ++i)
   {
-    auto test2 = llvm::cast<llvm::DILocalScope>(context.control.Peek().scope);
-
     if(context.dbuilder)
       context.builder.SetCurrentDebugLocation(llvm::DILocation::get(context.context, body.body[i].line, body.body[i].column, context.control.Peek().scope));
     IR_ERROR err = CompileInstruction(body.body[i], context);
@@ -1676,7 +1672,8 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
         context.functions.back().imported = context.functions.back().internal;
         context.functions.back().imported->setLinkage(Func::ExternalLinkage);
         context.functions.back().imported->setCallingConv(GetCallingConvention(context.m.importsection.imports[i]));
-        FunctionDebugInfo(context.functions.back().imported, context, false, context.m.importsection.imports[i].func_desc.debug.line);
+        if(context.dbuilder)
+          FunctionDebugInfo(context.functions.back().imported, context, false, context.m.importsection.imports[i].func_desc.debug.line);
 
         llvm::Twine name = (context.m.importsection.imports[i].func_desc.debug.name.get()) ?
           "@" + context.functions.back().imported->getName() + "#internal" :
@@ -1687,8 +1684,8 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
           name,
           context);
       }
-      else
-        FunctionDebugInfo(context.functions.back().internal, context, false, context.m.importsection.imports[i].func_desc.debug.line);
+      else if(context.dbuilder)
+          FunctionDebugInfo(context.functions.back().internal, context, false, context.m.importsection.imports[i].func_desc.debug.line);
     }
   }
 
@@ -1743,7 +1740,9 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       + "#" + std::to_string(context.functions.size())
       + "@" + context.m.name.str(),
       context);
-    FunctionDebugInfo(context.functions.back().internal, context, true, context.m.code.funcbody[i].debug.line);
+
+    if(context.dbuilder)
+      FunctionDebugInfo(context.functions.back().internal, context, true, context.m.code.funcbody[i].debug.line);
   }
 
   if(baselocation)
@@ -1823,25 +1822,36 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   for(varuint32 i = 0; i < context.m.exportsection.n_exports; ++i)
   {
     Export& e = context.m.exportsection.exports[i];
+    auto mergename = MergeName(context.m.name.str(), e.name.str());
     switch(e.kind)
     {
     case WASM_KIND_FUNCTION:
       context.functions[e.index].exported = (*wrapperfn)(context.functions[e.index].imported ? context.functions[e.index].imported : context.functions[e.index].internal, MergeName(context.m.name.str(), e.name.str()), context, Func::ExternalLinkage, llvm::CallingConv::C);
       break;
     case WASM_KIND_TABLE:
-      assert(context.tables[e.index]->getLinkage() != Func::ExternalLinkage); // We can't export other imports right now because the names blow up
+      if(context.tables[e.index]->getName() != mergename)
+      {
+        assert(context.tables[e.index]->getLinkage() != Func::ExternalLinkage); // We can't export other imports right now because the names blow up
+        context.tables[e.index]->setName(mergename);
+      }
       context.tables[e.index]->setLinkage(llvm::GlobalValue::ExternalLinkage);
-      context.tables[e.index]->setName(MergeName(context.m.name.str(), e.name.str()));
       break;
     case WASM_KIND_MEMORY:
-      assert(context.memories[e.index]->getLinkage() != Func::ExternalLinkage); // We can't export other imports right now because the names blow up
+      if(context.memories[e.index]->getName() != mergename)
+      {
+        assert(context.memories[e.index]->getLinkage() != Func::ExternalLinkage); // We can't export other imports right now because the names blow up
+        context.memories[e.index]->setName(mergename);
+      }
       context.memories[e.index]->setLinkage(llvm::GlobalValue::ExternalLinkage);
-      context.memories[e.index]->setName(MergeName(context.m.name.str(), e.name.str()));
       break;
     case WASM_KIND_GLOBAL:
-      assert(context.globals[e.index]->getLinkage() != Func::ExternalLinkage); // We can't export other imports right now because the names blow up
+      if(context.globals[e.index]->getName() != mergename)
+      {
+        auto test = context.globals[e.index]->getName();
+        assert(context.globals[e.index]->getLinkage() != Func::ExternalLinkage); // We can't export other imports right now because the names blow up
+        context.globals[e.index]->setName(mergename);
+      }
       context.globals[e.index]->setLinkage(llvm::GlobalValue::ExternalLinkage);
-      context.globals[e.index]->setName(MergeName(context.m.name.str(), e.name.str()));
       break;
     }
   }

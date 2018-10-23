@@ -774,7 +774,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
     }
     case TOKEN_ASSERT_EXHAUSTION:
     {
-      SkipSection(tokens, 0); // TODO: figure out how to do this.
+      SkipSection(tokens); // TODO: figure out how to do this.
       break;
       WatToken t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
