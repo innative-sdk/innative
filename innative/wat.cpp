@@ -76,9 +76,9 @@ namespace innative {
       if(s >= end)
         return nullptr;
 
-      const char* begin = s;
       if(s[0] == '-' || s[0] == '+')
         ++s;
+      const char* begin = s;
       int i;
       for(i = 0; i < 3 && s < end; ++i)
       {
@@ -139,9 +139,13 @@ namespace innative {
     {
       char* last;
 
+      numbuf.assign("400000"); // Hex for the first bit in the mantissa
       if(CheckTokenNAN(token.pos, token.pos + token.len, &numbuf))
       {
         *((uint32_t*)&out) = 0x7F800000UL | strtoul(numbuf.c_str(), &last, 16);
+        if(token.pos[0] == '-')
+          *((uint32_t*)&out) |= 0x80000000UL;
+
         return ERR_SUCCESS;
       }
 
@@ -157,9 +161,13 @@ namespace innative {
     {
       char* last;
 
+      numbuf.assign("8000000000000"); // Hex for the first bit in the mantissa
       if(CheckTokenNAN(token.pos, token.pos + token.len, &numbuf))
       {
         *((uint64_t*)&out) = 0x7FF0000000000000ULL | strtoull(numbuf.c_str(), &last, 16);
+        if(token.pos[0] == '-')
+          *((uint64_t*)&out) |= 0x8000000000000000ULL;
+
         return ERR_SUCCESS;
       }
 

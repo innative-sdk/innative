@@ -5,6 +5,7 @@
 #pragma warning(disable:4146)
 #define _SCL_SECURE_NO_WARNINGS
 #include "util.h"
+#include "validate.h"
 #include "optimize.h"
 #include "innative/export.h"
 #include "llvm/IR/Verifier.h"
@@ -12,6 +13,7 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/MC/SubtargetFeature.h"
 #include "lld/Common/Driver.h"
 #include <iostream>
 #include <sstream>
@@ -737,8 +739,22 @@ llvmVal* GetMemSize(llvm::GlobalVariable* target, code::Context& context)
       CInt::get(context.builder.getInt32Ty(), -1, true)));
 }
 
+// Gets the first type index that matches the given type, used as a stable type hash
+varuint32 GetFirstType(varuint32 type, code::Context& context)
+{
+  if(type < context.m.type.n_functions)
+  {
+    for(varuint32 i = 0; i < type; ++i)
+      if(MatchFunctionType(context.m.type.functions[i], context.m.type.functions[type]))
+        return i;
+  }
+
+  return type;
+}
+
 IR_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
 {
+  index = GetFirstType(index, context);
   if(index >= context.m.type.n_functions)
     return assert(false), ERR_INVALID_TYPE_INDEX;
 
@@ -759,16 +775,19 @@ IR_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
       return assert(false), err;
   }
 
-  unsigned int bytes = context.intptrty->getBitWidth() / 8;
+  uint64_t bytewidth = context.llvm->getDataLayout().getTypeAllocSize(context.tables[0]->getType()->getElementType()->getPointerElementType());
 
   if(context.env.flags & ENV_STRICT) // In strict mode, trap if index is out of bounds
   {
-    InsertConditionalTrap(context.builder.CreateICmpUGE(callee, context.builder.CreateIntCast(context.builder.CreateLShr(GetMemSize(context.tables[0], context), ((bytes == 4) ? 2 : 3)), context.builder.getInt32Ty(), false), "indirect_call_oob_check"), context);
-    callee = context.builder.CreateShl(callee, 2); // Then double the index so we actually get the right address in strict mode
+    InsertConditionalTrap(
+      context.builder.CreateICmpUGE(context.builder.CreateIntCast(callee, context.builder.getInt64Ty(), false),
+        context.builder.CreateUDiv(GetMemSize(context.tables[0], context), context.builder.getInt64(bytewidth)),
+        "indirect_call_oob_check"),
+      context);
   }
 
   // Deference global variable to get the actual array of function pointers, index into them, then dereference that array index to get the actual function pointer
-  llvmVal* funcptr = context.builder.CreateLoad(context.builder.CreateGEP(context.builder.CreateLoad(context.tables[0]), callee), "indirect_call_load_func_ptr");
+  llvmVal* funcptr = context.builder.CreateLoad(context.builder.CreateGEP(context.builder.CreateLoad(context.tables[0]), { callee, context.builder.getInt32(0) }), "indirect_call_load_func_ptr");
 
   if(context.env.flags & ENV_STRICT) // In strict mode, trap if function pointer is NULL
     InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(funcptr, context.intptrty), CInt::get(context.intptrty, 0), "indirect_call_null_check"), context);
@@ -779,8 +798,7 @@ IR_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
 
   if(context.env.flags & ENV_STRICT) // In strict mode, trap if the expected type does not match the actual type of the function
   {
-    callee = context.builder.CreateAdd(callee, context.builder.getInt32(1));
-    auto sig = context.builder.CreateLoad(context.builder.CreatePointerCast(context.builder.CreateGEP(context.builder.CreateLoad(context.tables[0]), callee), llvm::Type::getInt32PtrTy(context.context)));
+    auto sig = context.builder.CreateLoad(context.builder.CreateGEP(context.builder.CreateLoad(context.tables[0]), { callee, context.builder.getInt32(1) }));
     InsertConditionalTrap(context.builder.CreateICmpNE(sig, context.builder.getInt32(index), "indirect_call_sig_check"), context);
   }
 
@@ -903,12 +921,20 @@ IR_ERROR CompileMemGrow(code::Context& context, const char* name)
 
 IR_ERROR InsertTruncTrap(code::Context& context, double max, double min, llvm::Type* ty)
 {
+  double cast = max;
+  *reinterpret_cast<uint64_t*>(&cast) -= 1;
+  cast = min;
+  *reinterpret_cast<uint64_t*>(&cast) -= 1;
+
   if((context.env.flags & ENV_STRICT) && context.values.Size() > 0 && context.values.Peek() != nullptr)
   {
     return InsertConditionalTrap(context.builder.CreateOr(
-      //context.builder.CreateFCmpUEQ(context.values.Peek(), context.values.Peek()), // returns false if NaN
-      context.builder.CreateFCmpOGT(context.values.Peek(), ConstantFP::get(ty, max)),
-      context.builder.CreateFCmpOLT(context.values.Peek(), ConstantFP::get(ty, min))),
+      (ty->isFloatTy()
+        ? context.builder.CreateICmpEQ(context.builder.CreateAnd(context.builder.CreateBitCast(context.values.Peek(), context.builder.getInt32Ty()), context.builder.getInt32(0x7F800000)), context.builder.getInt32(0x7F800000))
+        : context.builder.CreateICmpEQ(context.builder.CreateAnd(context.builder.CreateBitCast(context.values.Peek(), context.builder.getInt64Ty()), context.builder.getInt64(0x7FF0000000000000)), context.builder.getInt64(0x7FF0000000000000))),
+      context.builder.CreateOr(
+        context.builder.CreateFCmpOGT(context.values.Peek(), ConstantFP::get(ty, max)),
+        context.builder.CreateFCmpOLT(context.values.Peek(), ConstantFP::get(ty, min)))),
       context);
   }
   return ERR_SUCCESS;
@@ -1260,7 +1286,7 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   case OP_f32_trunc:
     return CompileUnaryOp<TE_f32, TE_f32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPTrunc, context.builder.getFloatTy(), OPNAMES[ins.opcode]);
   case OP_f32_nearest: // We must round floats using IEEE 754-2008 roundToIntegralTowardZero, which rint gaurantees
-    return CompileUnaryIntrinsic<TE_f32, TE_f32>(context, llvm::Intrinsic::rint, OPNAMES[ins.opcode]);
+    return CompileUnaryIntrinsic<TE_f32, TE_f32>(context, llvm::Intrinsic::nearbyint, OPNAMES[ins.opcode]);
   case OP_f32_sqrt:
     return CompileUnaryIntrinsic<TE_f32, TE_f32>(context, llvm::Intrinsic::sqrt, OPNAMES[ins.opcode]);
   case OP_f32_add:
@@ -1288,7 +1314,7 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   case OP_f64_trunc:
     return CompileUnaryOp<TE_f64, TE_f64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPTrunc, context.builder.getDoubleTy(), OPNAMES[ins.opcode]);
   case OP_f64_nearest:
-    return CompileUnaryIntrinsic<TE_f64, TE_f64>(context, llvm::Intrinsic::rint, OPNAMES[ins.opcode]);
+    return CompileUnaryIntrinsic<TE_f64, TE_f64>(context, llvm::Intrinsic::nearbyint, OPNAMES[ins.opcode]);
   case OP_f64_sqrt:
     return CompileUnaryIntrinsic<TE_f64, TE_f64>(context, llvm::Intrinsic::sqrt, OPNAMES[ins.opcode]);
   case OP_f64_add:
@@ -1309,33 +1335,33 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
     // Conversions
   case OP_i32_wrap_i64:
     return CompileUnaryOp<TE_i64, TE_i32, llvmTy*, bool, const Twine&>(context, &llvm::IRBuilder<>::CreateIntCast, context.builder.getInt32Ty(), true, OPNAMES[ins.opcode]);
-  case OP_i32_trunc_s_f32:
-    InsertTruncTrap(context, 2147483647.0, -2147483648.0, context.builder.getFloatTy());
+  case OP_i32_trunc_s_f32: // These truncation values are specifically picked to be the largest representable 32-bit floating point value that can be safely converted.
+    InsertTruncTrap(context, 2147483520.0, -2147483650.0, context.builder.getFloatTy());
     return CompileUnaryOp<TE_f32, TE_i32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToSI, context.builder.getInt32Ty(), OPNAMES[ins.opcode]);
-  case OP_i32_trunc_u_f32:
-    InsertTruncTrap(context, 4294967295.0, 0.0, context.builder.getFloatTy());
+  case OP_i32_trunc_u_f32: // This is truncation, so values of up to -0.999999... are actually valid unsigned integers because they are truncated to 0
+    InsertTruncTrap(context, 4294967040.0, -0.999999940, context.builder.getFloatTy());
     return CompileUnaryOp<TE_f32, TE_i32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToUI, context.builder.getInt32Ty(), OPNAMES[ins.opcode]);
-  case OP_i32_trunc_s_f64:
+  case OP_i32_trunc_s_f64: // Doubles can exactly represent 32-bit integers, so the real values are used
     InsertTruncTrap(context, 2147483647.0, -2147483648.0, context.builder.getDoubleTy());
     return CompileUnaryOp<TE_f64, TE_i32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToSI, context.builder.getInt32Ty(), OPNAMES[ins.opcode]);
   case OP_i32_trunc_u_f64:
-    InsertTruncTrap(context, 4294967295.0, 0.0, context.builder.getDoubleTy());
+    InsertTruncTrap(context, 4294967295.0, -0.99999999999999989, context.builder.getDoubleTy());
     return CompileUnaryOp<TE_f64, TE_i32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToUI, context.builder.getInt32Ty(), OPNAMES[ins.opcode]);
   case OP_i64_extend_s_i32:
     return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const Twine&>(context, &llvm::IRBuilder<>::CreateIntCast, context.builder.getInt64Ty(), true, OPNAMES[ins.opcode]);
   case OP_i64_extend_u_i32:
     return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const Twine&>(context, &llvm::IRBuilder<>::CreateIntCast, context.builder.getInt64Ty(), false, OPNAMES[ins.opcode]);
   case OP_i64_trunc_s_f32:
-    InsertTruncTrap(context, 9223372036854775807.0, -9223372036854775808.0, context.builder.getFloatTy());
+    InsertTruncTrap(context, 9223371490000000000.0, -9223372040000000000.0, context.builder.getFloatTy());
     return CompileUnaryOp<TE_f32, TE_i64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToSI, context.builder.getInt64Ty(), OPNAMES[ins.opcode]);
   case OP_i64_trunc_u_f32:
-    InsertTruncTrap(context, 18446744073709551615.0, 0.0, context.builder.getFloatTy());
+    InsertTruncTrap(context, 18446743000000000000.0, -0.999999940, context.builder.getFloatTy());
     return CompileUnaryOp<TE_f32, TE_i64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToUI, context.builder.getInt64Ty(), OPNAMES[ins.opcode]);
-  case OP_i64_trunc_s_f64:
-    InsertTruncTrap(context, 9223372036854775807.0, -9223372036854775808.0, context.builder.getDoubleTy());
+  case OP_i64_trunc_s_f64: // Largest representable 64-bit floating point values that can be safely converted
+    InsertTruncTrap(context, 9223372036854774800.0, -9223372036854775800.0, context.builder.getDoubleTy());
     return CompileUnaryOp<TE_f64, TE_i64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToSI, context.builder.getInt64Ty(), OPNAMES[ins.opcode]);
   case OP_i64_trunc_u_f64:
-    InsertTruncTrap(context, 18446744073709551615.0, 0.0, context.builder.getDoubleTy());
+    InsertTruncTrap(context, 18446744073709550000.0, -0.99999999999999989, context.builder.getDoubleTy());
     return CompileUnaryOp<TE_f64, TE_i64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToUI, context.builder.getInt64Ty(), OPNAMES[ins.opcode]);
   case OP_f32_convert_s_i32:
     return CompileUnaryOp<TE_i32, TE_f32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateSIToFP, context.builder.getFloatTy(), OPNAMES[ins.opcode]);
@@ -1570,6 +1596,12 @@ llvm::Function* GetIntrinsic(Import& imp, code::Context& context)
   return nullptr;
 }
 
+// Returns a table struct containing the element_type and a type index
+llvmTy* GetTableType(varsint7 element_type, code::Context& context)
+{
+  return llvm::StructType::create({ GetLLVMType(element_type, context), GetLLVMType(TE_i32, context) });
+}
+
 IR_ERROR CompileModule(const Environment* env, code::Context& context)
 {
   context.llvm = new llvm::Module(context.m.name.str(), context.context);
@@ -1685,7 +1717,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
           context);
       }
       else if(context.dbuilder)
-          FunctionDebugInfo(context.functions.back().internal, context, false, context.m.importsection.imports[i].func_desc.debug.line);
+        FunctionDebugInfo(context.functions.back().internal, context, false, context.m.importsection.imports[i].func_desc.debug.line);
     }
   }
 
@@ -1693,7 +1725,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   for(varuint32 i = context.m.importsection.functions; i < context.m.importsection.tables; ++i)
     context.tables.push_back(CreateGlobal(
       context,
-      GetLLVMType(context.m.importsection.imports[i].table_desc.element_type, context)->getPointerTo(0),
+      GetTableType(context.m.importsection.imports[i].table_desc.element_type, context)->getPointerTo(0),
       false,
       true,
       CanonImportName(context.m.importsection.imports[i]),
@@ -1751,7 +1783,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   // Declare tables and allocate in init function
   for(varuint32 i = 0; i < context.m.table.n_tables; ++i)
   {
-    auto type = GetLLVMType(context.m.table.tables[i].element_type, context)->getPointerTo(0);
+    auto type = GetTableType(context.m.table.tables[i].element_type, context)->getPointerTo(0);
     context.tables.push_back(CreateGlobal(
       context,
       type,
@@ -1761,18 +1793,16 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       context.m.table.tables[i].debug.line,
       llvm::ConstantPointerNull::get(type)));
 
-    uint64_t bytewidth = context.llvm->getDataLayout().getTypeAllocSize(context.tables.back()->getType());
+    uint64_t bytewidth = context.llvm->getDataLayout().getTypeAllocSize(context.tables.back()->getType()->getElementType()->getPointerElementType());
     if(!bytewidth)
       return assert(false), ERR_INVALID_TABLE_TYPE;
-    if(env->flags&ENV_STRICT)
-      bytewidth *= 2;
 
     CallInst* call = context.builder.CreateCall(
       context.memgrow,
       {
         llvm::ConstantPointerNull::get(context.builder.getInt8PtrTy(0)),
         context.builder.getInt64(context.m.table.tables[i].resizable.minimum * bytewidth),
-        context.builder.getInt64((context.m.table.tables[i].resizable.flags & WASM_LIMIT_HAS_MAXIMUM) ? context.m.table.tables[i].resizable.maximum * bytewidth : 0)
+        context.builder.getInt64((context.m.table.tables[i].resizable.flags & WASM_LIMIT_HAS_MAXIMUM) ? (context.m.table.tables[i].resizable.maximum * bytewidth) : 0)
       });
 
     InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), CInt::get(context.intptrty, 0)), context);
@@ -1829,29 +1859,13 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       context.functions[e.index].exported = (*wrapperfn)(context.functions[e.index].imported ? context.functions[e.index].imported : context.functions[e.index].internal, MergeName(context.m.name.str(), e.name.str()), context, Func::ExternalLinkage, llvm::CallingConv::C);
       break;
     case WASM_KIND_TABLE:
-      if(context.tables[e.index]->getName() != mergename)
-      {
-        assert(context.tables[e.index]->getLinkage() != Func::ExternalLinkage); // We can't export other imports right now because the names blow up
-        context.tables[e.index]->setName(mergename);
-      }
-      context.tables[e.index]->setLinkage(llvm::GlobalValue::ExternalLinkage);
+      llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, mergename, context.tables[e.index]);
       break;
     case WASM_KIND_MEMORY:
-      if(context.memories[e.index]->getName() != mergename)
-      {
-        assert(context.memories[e.index]->getLinkage() != Func::ExternalLinkage); // We can't export other imports right now because the names blow up
-        context.memories[e.index]->setName(mergename);
-      }
-      context.memories[e.index]->setLinkage(llvm::GlobalValue::ExternalLinkage);
+      llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, mergename, context.memories[e.index]);
       break;
     case WASM_KIND_GLOBAL:
-      if(context.globals[e.index]->getName() != mergename)
-      {
-        auto test = context.globals[e.index]->getName();
-        assert(context.globals[e.index]->getLinkage() != Func::ExternalLinkage); // We can't export other imports right now because the names blow up
-        context.globals[e.index]->setName(mergename);
-      }
-      context.globals[e.index]->setLinkage(llvm::GlobalValue::ExternalLinkage);
+      llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, mergename, context.globals[e.index]);
       break;
     }
   }
@@ -1901,30 +1915,22 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
         if(e.elements[j] >= context.functions.size())
           return assert(false), ERR_INVALID_FUNCTION_INDEX;
 
-        uint64_t indice = (env->flags&ENV_STRICT) ? j * 2 : j;
-
         // Store function pointer in correct table memory location
-        auto ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tables[e.index]), context.builder.CreateAdd(offset, CInt::get(offset->getType(), indice, true)));
+        auto ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tables[e.index]), { context.builder.CreateAdd(offset, CInt::get(offset->getType(), j, true)), context.builder.getInt32(0) });
         context.builder.CreateAlignedStore(context.builder.CreatePointerCast(context.functions[e.elements[j]].internal, target), ptr, context.llvm->getDataLayout().getPointerSize());
 
-        if(env->flags&ENV_STRICT)
-        {
-          varuint32 index = ModuleFunctionType(context.m, e.elements[j]);
-          if(index == (varuint32)~0)
-            return assert(false), ERR_INVALID_FUNCTION_INDEX;
+        varuint32 index = GetFirstType(ModuleFunctionType(context.m, e.elements[j]), context);
+        if(index == (varuint32)~0)
+          return assert(false), ERR_INVALID_FUNCTION_INDEX;
 
-          ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tables[e.index]), context.builder.CreateAdd(offset, CInt::get(offset->getType(), indice + 1, true)));
-          context.builder.CreateAlignedStore(context.builder.getInt32(index), context.builder.CreatePointerCast(ptr, llvm::Type::getInt32PtrTy(context.context)), 4);
-        }
+        ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tables[e.index]), { context.builder.CreateAdd(offset, CInt::get(offset->getType(), j, true)), context.builder.getInt32(1) });
+        context.builder.CreateAlignedStore(context.builder.getInt32(index), ptr, 4);
       }
     }
   }
 
   // Terminate init function
   context.builder.CreateRetVoid();
-
-  //if(llvm::verifyModule(*context.llvm))
-  //  initblock = initblock;
 
   // Generate code for each function body
   for(varuint32 i = 0; i < context.m.code.n_funcbody; ++i)
@@ -1990,25 +1996,25 @@ IR_ERROR OutputObjectFile(code::Context& context, const char* out)
 
 namespace innative {
   IR_ERROR CompileEnvironment(const Environment* env, const char* filepath)
-  {    
+  {
     llvm::LLVMContext llvm_context;
     Path file(filepath);
     Path workdir = GetWorkingDir();
     Path programpath(env->sdkpath);
     uint64_t eflags = env->flags;
-    
+
     SetWorkingDir(programpath.BaseDir().Get().c_str());
     utility::DeferLambda<std::function<void()>> defer([&]() { SetWorkingDir(workdir.Get().c_str()); });
 
     if(!file.IsAbsolute())
       file = workdir + file;
-    
+
     llvm::IRBuilder<> builder(llvm_context);
     code::Context* start = nullptr;
     IR_ERROR err = ERR_SUCCESS;
 
     code::Context* context = tmalloc<code::Context>(env->n_modules);
-    string triple = llvm::sys::getDefaultTargetTriple();
+    string triple = llvm::sys::getProcessTriple();
 
     // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
     llvm::InitializeAllTargetInfos();
@@ -2026,16 +2032,22 @@ namespace innative {
       return assert(false), ERR_FATAL_UNKNOWN_TARGET;
     }
 
-    auto CPU = "generic";
-    auto Features = "";
-
     llvm::TargetOptions opt;
     auto RM = llvm::Optional<llvm::Reloc::Model>();
 #ifdef IR_PLATFORM_POSIX
-    if(eflags&ENV_DLL)
+    if(eflags&ENV_LIBRARY)
       RM = llvm::Optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
 #endif
-    auto machine = arch->createTargetMachine(triple, CPU, Features, opt, RM);
+    llvm::SubtargetFeatures subtarget_features;
+    llvm::StringMap<bool> feature_map;
+    if(llvm::sys::getHostCPUFeatures(feature_map))
+    {
+      for(auto &feature : feature_map)
+      {
+        subtarget_features.AddFeature(feature.first(), feature.second);
+      }
+    }
+    auto machine = arch->createTargetMachine(triple, llvm::sys::getHostCPUName(), subtarget_features.getString(), opt, RM, llvm::None);
 
     for(varuint32 i = 0; i < env->n_modules; ++i)
     {
@@ -2058,18 +2070,25 @@ namespace innative {
     // Initialize all modules and call start function (if it exists)
     if(!start) // We always create an initialization function, even for DLLs, to do proper initialization of modules
       start = &context[0];
-    if(start->start == nullptr && !(eflags&ENV_DLL))
+    if(start->start == nullptr && !(eflags&ENV_LIBRARY))
       return ERR_FATAL_INVALID_MODULE; // We can't compile an EXE without an entry point
 
     FuncTy* mainTy = FuncTy::get(builder.getVoidTy(), false);
 #ifdef IR_PLATFORM_WIN32
-    if(eflags&ENV_DLL)
+    if(eflags&ENV_LIBRARY)
       mainTy = FuncTy::get(builder.getInt32Ty(), { builder.getInt8PtrTy(), start->intptrty, builder.getInt8PtrTy() }, false);
 #endif
 
+    Func* exit = Func::Create(
+      FuncTy::get(builder.getVoidTy(), { builder.getInt32Ty() }, false),
+      Func::ExternalLinkage,
+      "_innative_internal_env_exit",
+      start->llvm);
+
     Func* main = Func::Create(mainTy, Func::ExternalLinkage, IR_INIT_FUNCTION);
+
 #ifdef IR_PLATFORM_WIN32
-    if(eflags&ENV_DLL)
+    if(eflags&ENV_LIBRARY)
       main->setCallingConv(llvm::CallingConv::X86_StdCall);
 #endif
     if(start->dbuilder)
@@ -2093,15 +2112,24 @@ namespace innative {
         builder.CreateCall(stub, {});
       }
     }
+
     if(start->start != nullptr)
       builder.CreateCall(start->start, {});
 
+    if(eflags&ENV_LIBRARY)
+    {
 #ifdef IR_PLATFORM_WIN32
-    if(eflags&ENV_DLL)
-      builder.CreateRet(builder.getInt32(1));
-    else
-#endif
+      builder.CreateRet(builder.getInt32(1)); // On windows, the DLL init function must always return 1
+#else
       builder.CreateRetVoid();
+#endif
+    }
+    else // If this isn't a DLL, then the init function is actual the process entry point, which must call _exit()
+    {
+      builder.CreateCall(exit, builder.getInt32(0));
+      main->setDoesNotReturn();
+      builder.CreateUnreachable(); // This function never returns
+    }
 
     start->llvm->getFunctionList().push_back(main);
 
@@ -2132,16 +2160,16 @@ namespace innative {
       if(llvm::verifyModule(*context[i].llvm, &dest))
         return ERR_FATAL_INVALID_MODULE;
     }
-    
+
     {
       vector<string> cache;
 #ifdef IR_PLATFORM_WIN32
-      vector<const char*> linkargs = { "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO", 
-        "/nodefaultlib", /*"/MANIFEST", "/MANIFEST:embed",*/ "/SUBSYSTEM:CONSOLE", "/VERBOSE", 
+      vector<const char*> linkargs = { "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO",
+        "/nodefaultlib", /*"/MANIFEST", "/MANIFEST:embed",*/ "/SUBSYSTEM:CONSOLE", "/VERBOSE",
         "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT",
         "/MACHINE:X64", "/machine:x64", "/ENTRY:" IR_INIT_FUNCTION };
 
-      if(eflags&ENV_DLL)
+      if(eflags&ENV_LIBRARY)
         linkargs.push_back("/DLL");
       if(eflags&ENV_DEBUG)
         linkargs.push_back("/DEBUG");
@@ -2166,15 +2194,17 @@ namespace innative {
       }
 
       vector<string> targets = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.BaseDir().Get(), "/LIBPATH:" + workdir.Get() };
-#else 
-      vector<const char*> linkargs = { "-init " IR_INIT_FUNCTION }; // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
+#elif defined(IR_PLATFORM_POSIX)
+      vector<const char*> linkargs = {  };
 
-      if(eflags&ENV_DLL)
+      if(eflags&ENV_LIBRARY)
         linkargs.push_back("-shared");
       if(!(eflags&ENV_DEBUG))
         linkargs.push_back("--strip-debug");
 
-      vector<string> targets = { string("-o ") + file.Get(), "-L" + programpath.BaseDir().Get(), "-L" + workdir.Get() };
+      vector<string> targets = { string("--output=") + file.Get(), "-L" + programpath.BaseDir().Get(), "-L" + workdir.Get() };
+#else 
+#error unknown platform
 #endif
 
       // Write all in-memory environments to cache files
@@ -2182,7 +2212,7 @@ namespace innative {
       {
         if(cur->size > 0) // If the size is greater than 0, this is an in-memory embedding
         {
-          cache.push_back(IR_LIB_FLAG + std::to_string(reinterpret_cast<size_t>(cur)) + IR_ENV_EXTENSION + IR_LIB_EXTENSION);
+          cache.push_back(IR_STATIC_FLAG + std::to_string(reinterpret_cast<size_t>(cur)) + IR_ENV_EXTENSION + IR_STATIC_EXTENSION);
           FILE* f;
           FOPEN(f, cache.back().c_str(), "wb");
           if(!f)
@@ -2209,6 +2239,13 @@ namespace innative {
 
       for(auto& v : targets)
         linkargs.push_back(v.c_str());
+
+#ifdef IR_PLATFORM_POSIX
+      if(eflags&ENV_LIBRARY) // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
+        linkargs.push_back("-init=" IR_INIT_FUNCTION);
+      else // If this isn't a shared library, we must specify an entry point instead of an init function
+        linkargs.push_back("--entry=" IR_INIT_FUNCTION);
+#endif
 
       // Link object code
       if(env->linker != 0)
@@ -2263,8 +2300,8 @@ namespace innative {
         std::remove(v.c_str());
       for(; target_init < targets.size(); ++target_init)
         std::remove(targets[target_init].c_str());
-  }
+    }
 
     return ERR_SUCCESS;
-}
+  }
 }

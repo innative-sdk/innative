@@ -14,7 +14,7 @@ static const std::unordered_map<std::string, unsigned int> flag_map = {
   { "strict", ENV_STRICT },
   { "multithreaded", ENV_MULTITHREADED },
   { "debug", ENV_DEBUG },
-  { "dll", ENV_DLL },
+  { "library", ENV_LIBRARY },
   { "wat", ENV_ENABLE_WAT },
   { "homogenize", ENV_HOMOGENIZE_FUNCTIONS },
   { "opt_inline", ENV_OPTIMIZE_INLINE },
@@ -34,6 +34,7 @@ void usage()
 
   std::cout << "\n"
     "  -l <FILE> : Links the input files against <FILE>, which must be a static library.\n"
+    "  -s <FILE> : Links the input files against <FILE>, which must be an ELF shared library.\n"
     "  -o <FILE> : Sets the output path for the resulting executable or library.\n"
     "  -a <FILE> : Specifies an alternative linker to use instead of LLD.\n"
     "  -d <PATH> : Sets the directory that contains the SDK library and data files."
@@ -64,7 +65,7 @@ int main(int argc, char *argv[])
       {
       case 'r': // run immediately
         run = true;
-        flags |= ENV_DLL;
+        flags |= ENV_LIBRARY;
         break;
       case 'f': // flag
       {
@@ -131,7 +132,7 @@ int main(int argc, char *argv[])
   }
 
   if(out.empty()) // If no out is specified, default to name of first input file
-    out = innative::Path(inputs[0]).RemoveExtension().Get() + ((flags&ENV_DLL) ? ".dll" : ".exe");
+    out = innative::Path(inputs[0]).RemoveExtension().Get() + ((flags&ENV_LIBRARY) ? IR_LIBRARY_EXTENSION : IR_EXE_EXTENSION);
 
   // Then create the runtime environment with the module count.
   Environment* env = (*exports.CreateEnvironment)(flags, inputs.size(), 0, (!argc ? 0 : argv[0]));

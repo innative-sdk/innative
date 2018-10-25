@@ -411,15 +411,15 @@ enum WASM_ENVIRONMENT_FLAGS
   ENV_STRICT = (1 << 0), // Enables strict mode, disabling some optimizations to strictly adhere to the standard
   ENV_MULTITHREADED = (1 << 1), // Compiles each module in parallel
   ENV_DEBUG = (1 << 2), // Enables debug information
-  ENV_DLL = (1 << 3), // Builds a DLL instead of an EXE
-  ENV_ENABLE_WAT = (1 << 4), // Enables compiling .wat and .wast files
-  ENV_EMIT_LLVM = (1 << 5), // Emits intermediate LLVM IR files for debugging
-  ENV_HOMOGENIZE_FUNCTIONS = (1 << 6), // Converts all exported functions to i64 types for testing
-  ENV_OPTIMIZE_INLINE = (1 << 7),
-  ENV_OPTIMIZE_ANALYSIS = (1 << 8),
-  ENV_OPTIMIZE_VECTORIZE = (1 << 9),
+  ENV_LIBRARY = (1 << 3), // Builds a dynamic library instead of an executable.
+  ENV_WHITELIST = (1 << 4), // Enables the C import whitelist (if the whitelist is empty, no C imports will be allowed)
+  ENV_ENABLE_WAT = (1 << 5), // Enables compiling .wat and .wast files
+  ENV_EMIT_LLVM = (1 << 6), // Emits intermediate LLVM IR files for debugging
+  ENV_HOMOGENIZE_FUNCTIONS = (1 << 7), // Converts all exported functions to i64 types for testing
+  ENV_OPTIMIZE_INLINE = (1 << 8),
+  ENV_OPTIMIZE_ANALYSIS = (1 << 9),
+  ENV_OPTIMIZE_VECTORIZE = (1 << 10),
   ENV_OPTIMIZE_ALL = ENV_OPTIMIZE_INLINE | ENV_OPTIMIZE_ANALYSIS | ENV_OPTIMIZE_VECTORIZE,
-  ENV_ASSEMBLY_MATCH_CPUINFO = (1 << 30), // Requires LoadAssembly to match this machine's exact cpuinfo type before loading.
 };
 
 typedef struct __WASM_BYTE_ARRAY

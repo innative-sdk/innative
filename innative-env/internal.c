@@ -2,7 +2,6 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "innative/export.h"
-#include <string.h>
 
 #ifdef IR_PLATFORM_WIN32
 #pragma pack(push)
@@ -64,6 +63,11 @@ IR_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1,
     "movq $0, %r9\n\t"
     "syscall");
 }
+
+const int SYSCALL_WRITE = 1;
+const int SYSCALL_MMAP = 9;
+const int SYSCALL_MREMAP = 25;
+const int SYSCALL_EXIT = 60;
 #else
 #error unsupported architecture!
 #endif
@@ -81,10 +85,7 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
 #ifdef IR_PLATFORM_WIN32
     info = HeapReAlloc(heap, HEAP_ZERO_MEMORY, info - 1, i + sizeof(uint64_t));
 #elif defined(IR_PLATFORM_POSIX)
-    uint64_t* n = _innative_syscall(9, NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1);
-    _innative_internal_env_memcpy((char*)(n + 1), (char*)info, info[-1]);
-    _innative_syscall(11, info - 1, info[-1], 0, 0, 0);
-    info = n;
+    info = _innative_syscall(SYSCALL_MREMAP, p, info[-1] + sizeof(uint64_t), i + sizeof(uint64_t), PROT_READ | PROT_WRITE);
 #else
 #error unknown platform!
 #endif
@@ -96,7 +97,7 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
       heap = HeapCreate(0, i, 0);
     info = HeapAlloc(heap, HEAP_ZERO_MEMORY, i + sizeof(uint64_t));
 #elif defined(IR_PLATFORM_POSIX)
-    info = _innative_syscall(9, NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1);
+    info = _innative_syscall(SYSCALL_MMAP, NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1);
 #else
 #error unknown platform!
 #endif
@@ -108,13 +109,23 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
   return info + 1;
 }
 
+// You cannot return from the entry point of a program, you must instead call a platform-specific syscall to terminate it.
+IR_COMPILER_DLLEXPORT extern void _innative_internal_env_exit(int status)
+{
+#ifdef IR_PLATFORM_WIN32
+  ExitProcess(status);
+#elif defined(IR_PLATFORM_POSIX)
+  _innative_syscall(SYSCALL_EXIT, status, 0, 0, 0, 0);
+#endif
+}
+
 void _innative_internal_write_out(const void* buf, size_t num)
 {
 #ifdef IR_PLATFORM_WIN32
   DWORD out;
   WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buf, num, &out, NULL);
 #elif defined(IR_PLATFORM_POSIX)
-  _innative_syscall(1, (void*)1, (size_t)buf, num, 0, 0);
+  _innative_syscall(SYSCALL_WRITE, (void*)1, (size_t)buf, num, 0, 0);
 #else
 #error unknown platform!
 #endif

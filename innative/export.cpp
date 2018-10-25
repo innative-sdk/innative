@@ -38,11 +38,11 @@ int innative_compile_file(const char* file, const char* out, unsigned int flags,
   }
 
   if(n_whitelist < 0) // This indicates we should enforce a whitelist that is empty, forbidding all C imports
-    AddWhitelist(env, nullptr, nullptr, nullptr);
+    AddWhitelist(env, nullptr, nullptr);
   else
   {
     for(unsigned int i = 0; i < n_whitelist; ++i)
-      AddWhitelist(env, whitelist[i].module_name, whitelist[i].export_name, &whitelist[i].sig);
+      AddWhitelist(env, whitelist[i].module_name, whitelist[i].export_name);
   }
 
   // Load the module
@@ -89,7 +89,7 @@ int innative_compile_file(const char* file, const char* out, unsigned int flags,
   void* assembly = LoadAssembly(flags, out);
   if(!assembly)
     return ERR_FATAL_FILE_ERROR;
-  IR_Entrypoint start = LoadFunction(assembly, 0, 0, 0);
+  IR_Entrypoint start = LoadFunction(assembly, 0, 0);
   if(!start)
     return ERR_INVALID_START_FUNCTION;
   (*start)();

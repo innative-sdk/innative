@@ -94,7 +94,7 @@ int main(int argc, char** argv)
   innative_runtime(&exports);
   unsigned int flags = 0; //ENV_MULTITHREADED;
   unsigned int maxthreads = 0;
-  void* assembly = (*exports.LoadAssembly)(flags | ENV_ASSEMBLY_MATCH_CPUINFO, "out.cache");
+  void* assembly = (*exports.LoadAssembly)(flags, "out.cache");
 
   // Before doing anything, check if we have a cached version available
   if(!assembly)
@@ -181,7 +181,7 @@ int main(int argc, char** argv)
 
     // Destroy environment now that compilation is complete
     (*exports.DestroyEnvironment)(env);
-    assembly = (*exports.LoadAssembly)(flags | ENV_ASSEMBLY_MATCH_CPUINFO, "out.cache");
+    assembly = (*exports.LoadAssembly)(flags, "out.cache");
   }
 
   if(!assembly)

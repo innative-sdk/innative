@@ -6,6 +6,7 @@
 #include "compile.h"
 #include "queue.h"
 #include "parse.h"
+#include "innative/export.h"
 #include <signal.h>
 #include <setjmp.h>
 #include <iostream>
@@ -351,7 +352,7 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
   if(!cache) // If cache is null we need to recompile the current environment
   {
     //env.flags |= ENV_HOMOGENIZE_FUNCTIONS;
-    if(err = CompileWast(env, (path + std::to_string(counter++) + ".dll").c_str(), cache))
+    if(err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache))
       return err;
     assert(cache);
   }
@@ -497,16 +498,16 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
 
 bool WastIsNaN(float f, bool canonical)
 {
-  if(!isnan(f))
+  if(!isnan(f)) 
     return false;
-  return ((*reinterpret_cast<uint32_t*>(&f) & 0b00000000010000000000000000000000U) != 0) != canonical;
+  return ((*reinterpret_cast<uint32_t*>(&f) & 0x200000U) != 0) != canonical;
 }
 
 bool WastIsNaN(double f, bool canonical)
 {
   if(!isnan(f))
     return false;
-  return ((*reinterpret_cast<uint64_t*>(&f) & 0b0000000000001000000000000000000000000000000000000000000000000000ULL) != 0) != canonical;
+  return ((*reinterpret_cast<uint64_t*>(&f) & 0x4000000000000ULL) != 0) != canonical;
 }
 
 inline string GetAssertionString(int code)
@@ -620,7 +621,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
           return err;
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
-        err = CompileWast(env, (path + std::to_string(counter++) + ".dll").c_str(), cache);
+        err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache);
         --env.n_modules; // Remove the module from the environment to avoid poisoning other compilations
         if(err != ERR_RUNTIME_TRAP)
           AppendError(errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
@@ -684,7 +685,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
           if(result.type != TE_i64)
             AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i64 type but got %i", WatLineNumber(start, t.pos), result.type);
           else if(result.i64 != value.immediates[0]._varsint64)
-            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %i but got %i", WatLineNumber(start, t.pos), value.immediates[0]._varsint64, result.i64);
+            AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %lli but got %lli", WatLineNumber(start, t.pos), value.immediates[0]._varsint64, result.i64);
           break;
         case OP_f32_const:
           if(result.type != TE_f32)
@@ -712,12 +713,15 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
         break;
       case TOKEN_ASSERT_RETURN_ARITHMETIC_NAN:
       case TOKEN_ASSERT_RETURN_CANONICAL_NAN:
+      {
+        bool canonical = t.id == TOKEN_ASSERT_RETURN_CANONICAL_NAN;
         if(result.type != TE_f32 && result.type != TE_f64)
-          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected canonical NaN but got unexpected integer %z", WatLineNumber(start, t.pos), result.i64);
-        if(result.type == TE_f32 && !WastIsNaN(result.f32, t.id == TOKEN_ASSERT_RETURN_CANONICAL_NAN))
-          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected canonical NaN but got %g", WatLineNumber(start, t.pos), result.f32);
-        if(result.type == TE_f64 && !WastIsNaN(result.f64, t.id == TOKEN_ASSERT_RETURN_CANONICAL_NAN))
-          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected canonical NaN but got %g", WatLineNumber(start, t.pos), result.f64);
+          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got unexpected integer %z", WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.i64);
+        if(result.type == TE_f32 && !WastIsNaN(result.f32, canonical))
+          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g", WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.f32);
+        if(result.type == TE_f64 && !WastIsNaN(result.f64, canonical))
+          AppendError(errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g", WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.f64);
+      }
         break;
       }
       break;

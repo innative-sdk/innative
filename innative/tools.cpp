@@ -19,7 +19,7 @@ Environment* innative::CreateEnvironment(unsigned int flags, unsigned int module
   if(env)
   {
     env->modulemap = kh_init_modules();
-    env->whitelist = nullptr;
+    env->whitelist = kh_init_modulepair();
     env->cimports = kh_init_cimport();
     env->modules = trealloc<Module>(0, modules);
     if(!env->modules)
@@ -48,9 +48,7 @@ void innative::DestroyEnvironment(Environment* env)
   for(varuint32 i = 0; i < env->n_modules; ++i)
     kh_destroy_exports(env->modules[i].exports);
 
-  if(env->whitelist)
-    kh_destroy_modulepair(env->whitelist);
-
+  kh_destroy_modulepair(env->whitelist);
   kh_destroy_modules(env->modulemap);
   kh_destroy_cimport(env->cimports);
   free(env->modules);
@@ -121,10 +119,8 @@ void innative::AddModule(Environment* env, const void* data, uint64_t size, cons
     LoadModule(env, index, data, size, name, path, err);
 }
 
-void innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name, const FunctionType* ftype)
+void innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name)
 {
-  if(!env->whitelist)
-    env->whitelist = kh_init_modulepair();
   if(!module_name || !export_name)
     return;
 
@@ -133,7 +129,7 @@ void innative::AddWhitelist(Environment* env, const char* module_name, const cha
 
   int r;
   auto iter = kh_put_modulepair(env->whitelist, whitelist, &r);
-  kh_val(env->whitelist, iter) = !ftype ? FunctionType{ TE_NONE, 0, 0, 0, 0 } : *ftype;
+  //kh_val(env->whitelist, iter) = !ftype ? FunctionType{ TE_NONE, 0, 0, 0, 0 } : *ftype;
 }
 
 void innative::WaitForLoad(Environment* env)
@@ -182,35 +178,30 @@ enum IR_ERROR innative::Compile(Environment* env, const char* file)
   return CompileEnvironment(env, file);
 }
 
-IR_Entrypoint innative::LoadFunction(void* cache, const char* module_name, const char* function, const FunctionType* ftype)
+IR_Entrypoint innative::LoadFunction(void* cache, const char* module_name, const char* function)
 {
-  if(!function)
-  {
-    if(ftype && !MatchFunctionType(*ftype, FunctionType{ TE_func }))
-      return nullptr;
-    return (IR_Entrypoint)LoadDLLFunction(cache, IR_ENTRYPOINT);
-  }
-
-  //if(sig && !MatchFunctionType(*sig, FunctionType{ TE_func }))
-  //  return nullptr;
-  return (IR_Entrypoint)LoadDLLFunction(cache, utility::MergeName(module_name, function).c_str());
+  return (IR_Entrypoint)LoadDLLFunction(cache, !function ? IR_ENTRYPOINT : utility::MergeName(module_name, function).c_str());
 }
-void* innative::LoadGlobal(void* cache, const char* module_name, const char* export_name)
+
+struct IR_TABLE
 {
-  //if(sig && !MatchFunctionType(*sig, FunctionType{ TE_func }))
-  //  return nullptr;
-  return LoadDLLFunction(cache, utility::MergeName(module_name, export_name).c_str());
+  IR_Entrypoint func;
+  varuint32 type;
+};
+
+IR_Entrypoint innative::LoadTable(void* cache, const char* module_name, const char* table, varuint32 index)
+{
+  IR_TABLE* ref = (IR_TABLE*)LoadDLLFunction(cache, utility::MergeName(module_name, table).c_str());
+  return !ref ? nullptr : ref[index].func;
+}
+
+IRGlobal* innative::LoadGlobal(void* cache, const char* module_name, const char* export_name)
+{
+  return (IRGlobal*)LoadDLLFunction(cache, utility::MergeName(module_name, export_name).c_str());
 }
 
 void* innative::LoadAssembly(int flags, const char* file)
 {
   Path path(file != nullptr ? Path(file) : GetProgramPath(0) + IR_EXTENSION);
-  void* handle = LoadDLL(path.Get().c_str());
-  if(!handle)
-    return nullptr;
-  // TODO: return nullptr if this isn't an exact CPU info match
-  //uintcpuinfo source;
-  //GetCPUInfo(source, flags);
-  //return memcmp(target, source, sizeof(uintcpuinfo)) ? 0 : handle;
-  return handle;
+  return LoadDLL(path.Get().c_str());
 }

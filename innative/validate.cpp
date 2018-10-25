@@ -139,7 +139,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   khint_t iter = kh_get_modules(env.modulemap, imp.module_name); // WASM modules do not understand !CALL convention appendings, so we use the full name no matter what
   if(iter == kh_end(env.modulemap))
   {
-    if(env.whitelist)
+    if(env.flags&ENV_WHITELIST)
     {
       khiter_t itermodule = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.str(), "").c_str()); // Check for a wildcard match first
       if(!kh_exist2(env.whitelist, itermodule))
@@ -149,21 +149,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
           return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a whitelisted C import, nor a valid webassembly import.", imp.module_name.str(), imp.export_name.str());
         if(imp.kind != WASM_KIND_FUNCTION)
           return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a function. You can only import C functions at this time.", imp.module_name.str(), imp.export_name.str());
-
-        FunctionType& sig = kh_val(env.whitelist, iterexport);
-        if(sig.form != TE_NONE) // If we have a function signature, verify it
-        {
-          if(imp.func_desc.type_index >= m->type.n_functions)
-            return AppendError(env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid imported function type index %u", imp.func_desc.type_index);
-          if(!MatchFunctionType(sig, m->type.functions[imp.func_desc.type_index]))
-            return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s does not match function signature provided by environment.", imp.module_name.str(), imp.export_name.str());
-          return;
-        }
-        else if(env.flags & ENV_STRICT) // Strict mode enforces function signatures
-          return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s has no function signature - Strict mode requires a valid function signature for all whitelisted C imports.", imp.module_name.str(), imp.export_name.str());
       }
-      else if(env.flags & ENV_STRICT) // Wildcard whitelists are not allowed in strict mode becuase we must know the function type in strict mode.
-        return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "Wildcard imports (%s) are not allowed in strict mode! Strict mode requires a valid function signature for all whitelisted C imports.", imp.module_name.str());
     }
 
     if(env.cimports)
@@ -179,6 +165,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
 
     return AppendError(env.errors, m, ERR_UNKNOWN_MODULE, "%s module not found", imp.module_name.str());
   }
+
   size_t i = kh_value(env.modulemap, iter);
   if(i >= env.n_modules)
     return AppendError(env.errors, m, ERR_UNKNOWN_MODULE, "%s module index (%u) not in range (%u)", imp.module_name.str(), i, env.n_modules);
