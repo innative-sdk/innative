@@ -5,6 +5,12 @@
 
 using namespace innative;
 
+namespace innative {
+  namespace code {
+    __KHASH_IMPL(importhash, , const char*, llvm::Function*, 1, kh_str_hash_func, kh_str_hash_equal);
+  }
+}
+
 llvm::Function* innative::code::IR_Intrinsic_ToC(llvm::Function* f, struct code::Context& context)
 {
   if(!f)

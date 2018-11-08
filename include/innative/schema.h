@@ -11,6 +11,7 @@
 #include <assert.h>
 
 #ifdef  __cplusplus
+#include <string>
 extern "C" {
 #endif
 
@@ -348,6 +349,8 @@ enum IR_ERROR
   ERR_IMPORT_EXPORT_MISMATCH,
   ERR_IMPORT_EXPORT_TYPE_MISMATCH,
   ERR_FUNCTION_BODY_MISMATCH,
+  ERR_MEMORY_MINIMUM_TOO_LARGE,
+  ERR_MEMORY_MAXIMUM_TOO_LARGE,
   ERR_IF_ELSE_MISMATCH,
   ERR_END_MISMATCH,
   ERR_SIGNATURE_MISMATCH,
@@ -408,19 +411,54 @@ enum IR_ERROR
 
 enum WASM_ENVIRONMENT_FLAGS
 {
-  ENV_STRICT = (1 << 0), // Enables strict mode, disabling some optimizations to strictly adhere to the standard
-  ENV_MULTITHREADED = (1 << 1), // Compiles each module in parallel
-  ENV_DEBUG = (1 << 2), // Enables debug information
-  ENV_LIBRARY = (1 << 3), // Builds a dynamic library instead of an executable.
-  ENV_WHITELIST = (1 << 4), // Enables the C import whitelist (if the whitelist is empty, no C imports will be allowed)
-  ENV_ENABLE_WAT = (1 << 5), // Enables compiling .wat and .wast files
-  ENV_EMIT_LLVM = (1 << 6), // Emits intermediate LLVM IR files for debugging
-  ENV_HOMOGENIZE_FUNCTIONS = (1 << 7), // Converts all exported functions to i64 types for testing
-  ENV_OPTIMIZE_INLINE = (1 << 8),
-  ENV_OPTIMIZE_ANALYSIS = (1 << 9),
-  ENV_OPTIMIZE_VECTORIZE = (1 << 10),
-  ENV_OPTIMIZE_ALL = ENV_OPTIMIZE_INLINE | ENV_OPTIMIZE_ANALYSIS | ENV_OPTIMIZE_VECTORIZE,
+  ENV_MULTITHREADED = (1 << 0), // Compiles each module in parallel
+  ENV_DEBUG = (1 << 1), // Enables debug information
+  ENV_LIBRARY = (1 << 2), // Builds a dynamic library instead of an executable.
+  ENV_WHITELIST = (1 << 3), // Enables the C import whitelist (if the whitelist is empty, no C imports will be allowed)
+  ENV_ENABLE_WAT = (1 << 4), // Enables compiling .wat and .wast files
+  ENV_EMIT_LLVM = (1 << 5), // Emits intermediate LLVM IR files for debugging
+  ENV_HOMOGENIZE_FUNCTIONS = (1 << 6), // Converts all exported functions to i64 types for testing
+  ENV_CHECK_STACK_OVERFLOW = (1 << 10),
+  ENV_CHECK_FLOAT_TRUNC = (1 << 11),
+  ENV_CHECK_MEMORY_ACCESS = (1 << 12),
+  ENV_CHECK_INDIRECT_CALL = (1 << 13),
+  ENV_DISABLE_TAIL_CALL = (1 << 14),
+  ENV_STRICT = ENV_CHECK_STACK_OVERFLOW | ENV_CHECK_FLOAT_TRUNC | ENV_CHECK_MEMORY_ACCESS | ENV_CHECK_INDIRECT_CALL | ENV_DISABLE_TAIL_CALL, // Strictly adheres to the standard, provided the optimization level does not exceed ENV_OPTIMIZE_STRICT
+  ENV_SANDBOX = ENV_CHECK_STACK_OVERFLOW | ENV_CHECK_MEMORY_ACCESS | ENV_CHECK_INDIRECT_CALL, // Performs all optimizations that do not compromise the sandbox
 };
+
+enum WASM_OPTIMIZE_FLAGS
+{
+  ENV_OPTIMIZE_FAST_MATH_NNAN = (1 << 0), // Assume no NaN
+  ENV_OPTIMIZE_FAST_MATH_NINF = (1 << 1), // Assume no Inf
+  ENV_OPTIMIZE_FAST_MATH_NSZ = (1 << 2),
+  ENV_OPTIMIZE_FAST_MATH_ARCP = (1 << 3),
+  ENV_OPTIMIZE_FAST_MATH_CONTRACT = (1 << 4),
+  ENV_OPTIMIZE_FAST_MATH_AFN = (1 << 5),
+  ENV_OPTIMIZE_FAST_MATH_REASSOC = (1 << 6),
+  ENV_OPTIMIZE_FAST_MATH = ENV_OPTIMIZE_FAST_MATH_NNAN | ENV_OPTIMIZE_FAST_MATH_NINF | ENV_OPTIMIZE_FAST_MATH_NSZ | ENV_OPTIMIZE_FAST_MATH_ARCP | ENV_OPTIMIZE_FAST_MATH_CONTRACT | ENV_OPTIMIZE_FAST_MATH_AFN | ENV_OPTIMIZE_FAST_MATH_REASSOC,
+  ENV_OPTIMIZE_ALWAYS_INLINE = (1 << 7),
+  ENV_OPTIMIZE_ARG_PROMOTION = (1 << 8),
+  ENV_OPTIMIZE_VECTORIZE = (1 << 9),
+  ENV_OPTIMIZE_CONST_MERGE = (1 << 10),
+  ENV_OPTIMIZE_CONST_PROP = (1 << 11),
+  ENV_OPTIMIZE_DCE = (1 << 12), // Dead code elimination
+  ENV_OPTIMIZE_DAE = (1 << 13), // Dead argument elimination
+  ENV_OPTIMIZE_DTE = (1 << 14), // Dead type elimination
+  ENV_OPTIMIZE_DIE = (1 << 15), // Dead instruction elimination
+  ENV_OPTIMIZE_DSE = (1 << 16), // Dead store elimination
+  ENV_OPTIMIZE_DGE = (1 << 17), // Dead global elimination
+  ENV_OPTIMIZE_STRICT = 0, // Only performs optimizations that cannot invalidate the standard
+  ENV_OPTIMIZE_ALL = ~0, // Performs all optimizations, but will never compromise the sandbox.
+};
+
+enum WASM_FEATURE_FLAGS
+{
+  ENV_FEATURE_MUTABLE_GLOBALS = (1 << 0),
+  ENV_FEATURE_ALL = ~0,
+};
+
+struct __WASM_ENVIRONMENT;
 
 typedef struct __WASM_BYTE_ARRAY
 {
@@ -431,7 +469,7 @@ typedef struct __WASM_BYTE_ARRAY
   inline const uint8_t* get() const { return bytes; }
   inline const char* str() const { return (char*)bytes; }
   inline varuint32 size() const { return n_bytes; }
-  void resize(varuint32 sz, bool terminator);
+  void resize(varuint32 sz, bool terminator, const struct __WASM_ENVIRONMENT& env);
   void discard(varuint32 sz, bool terminator);
 
   bool operator==(const __WASM_BYTE_ARRAY& r) const;
@@ -694,6 +732,8 @@ typedef struct __WASM_EMBEDDING
 
 KHASH_DECLARE(modulepair, kh_cstr_t, FunctionType);
 
+struct __WASM_ALLOCATOR;
+
 typedef struct __WASM_ENVIRONMENT
 {
   size_t n_modules; // number of completely loaded modules (for multithreading)
@@ -703,9 +743,12 @@ typedef struct __WASM_ENVIRONMENT
   Embedding* embeddings;
   ValidationError* errors; //A linked list of non-fatal validation errors that prevent proper execution.
   uint64_t flags;
+  uint64_t features;
+  uint64_t optimize;
   unsigned int maxthreads; // Max number of threads for any multithreaded action. If 0, there is no limit.
   const char* sdkpath; // Path to look for SDK components, which usually aren't in the working directory
   const char* linker; // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
+  struct __WASM_ALLOCATOR* alloc; // Stores a pointer to the allocator
 
   struct kh_modules_s* modulemap;
   struct kh_modulepair_s* whitelist;

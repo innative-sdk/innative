@@ -13,8 +13,21 @@
 #include <assert.h>
 #include <utility>
 #include <memory>
+#include <atomic>
 
 #define kh_exist2(h, x) ((x < kh_end(h)) && kh_exist(h, x))
+
+struct __WASM_ALLOCATOR
+{
+  __WASM_ALLOCATOR() : mem(0), sz(0), cur(0) {}
+  ~__WASM_ALLOCATOR();
+
+  std::atomic<void*> mem;
+  std::atomic_size_t sz;
+  std::atomic_size_t cur;
+
+  void* allocate(size_t n);
+};
 
 namespace innative {
   namespace utility {
@@ -86,7 +99,7 @@ namespace innative {
 
     inline khint_t __ac_X31_hash_bytearray(const ByteArray& id)
     {
-      const char* s = id.str();
+      const char* s = (const char*)id.get();
       const char* end = s + id.size();
       khint_t h = 0;
       if(s < end)
@@ -106,49 +119,6 @@ namespace innative {
       for(++s; *s; ++s) h = (h << 5) - h + (khint_t)*s;
       return h;
     }
-
-    // Single threaded greedy allocator
-    struct GreedyAllocBytes
-    {
-      inline static void* allocate(std::size_t n)
-      {
-        if(cur + n >= max)
-        {
-          max = (cur + n) * 2;
-          mem = malloc(max);
-          cur = 0;
-        }
-        void* r = (char*)mem + cur;
-        cur += n;
-        assert(cur < max);
-        return r;
-      }
-      template<class T>
-      static T* allocateT(std::size_t n) { return (T*)allocate(n * sizeof(T)); }
-
-      static void* mem;
-      static size_t cur;
-      static size_t max;
-    };
-
-    template <class T>
-    struct GreedyAlloc
-    {
-      typedef T value_type;
-
-      GreedyAlloc() = default;
-      template <class U>
-      constexpr GreedyAlloc(const GreedyAlloc<U>&) noexcept {}
-
-      inline T* allocate(std::size_t n) { return GreedyAllocBytes::allocateT<T>(n); }
-
-      inline void deallocate(T*, std::size_t) noexcept {}
-    };
-
-    template <class T, class U>
-    bool operator==(const GreedyAlloc<T>&, const GreedyAlloc<U>&) { return true; }
-    template <class T, class U>
-    bool operator!=(const GreedyAlloc<T>&, const GreedyAlloc<U>&) { return false; }
   }
 
   namespace utility {
@@ -180,7 +150,10 @@ namespace innative {
     }
 
     template<class T>
-    inline T* tmalloc(size_t n) { return internal::GreedyAllocBytes::allocateT<T>(n); }
+    inline T* tmalloc(const Environment& env, size_t n)
+    {
+      return reinterpret_cast<T*>(env.alloc->allocate(n * sizeof(T)));
+    }
 
     IR_FORCEINLINE bool ModuleHasSection(const Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
     inline std::string MergeStrings(const char* a, const char* b) { return std::string(!a ? "" : a) + b; }
@@ -202,29 +175,40 @@ namespace innative {
     void* LoadDLLFunction(void* dll, const char* name);
     void FreeDLL(void* dll);
 
-    // Merges two strings with the standard IR_GLUE_STRING
-    inline std::string MergeName(const char* prefix, const char* name, int index = -1)
+    // Creates a C-compatible mangled name with an optional index
+    inline std::string CanonicalName(const char* prefix, const char* name, int index = -1)
     {
+      std::string str;
       if(index >= 0)
       {
         char buf[20] = { 0 };
         snprintf(buf, 20, "%d", index);
-        return !prefix ? std::string(name) + buf : (std::string(prefix) + IR_GLUE_STRING + name + buf);
+        str = (!prefix ? std::string(name) + buf : (std::string(prefix) + IR_GLUE_STRING + name + buf));
       }
-      return !prefix ? name : (std::string(prefix) + IR_GLUE_STRING + name);
+      else
+        str = (!prefix ? name : (std::string(prefix) + IR_GLUE_STRING + name));
+
+      std::string canonical;
+      canonical.reserve(str.capacity());
+
+      for(char c : str)
+      {
+        switch(c)
+        {
+        case ' ': canonical += "--"; break;
+        default: canonical += c; break;
+        }
+      }
+
+      return canonical;
     }
 
     // Generates the correct mangled C function name
-    inline std::string CanonImportName(const void* module_name, const void* export_name)
+    inline std::string CanonImportName(const Import& imp)
     {
-      if(!module_name || strchr((const char*)module_name, '!') != nullptr) // blank imports or imports with a calling convention are always raw function names
-        return (const char*)export_name;
-      return MergeName((const char*)module_name, (const char*)export_name); // Otherwise do a standard merge
-    }
-
-    IR_FORCEINLINE std::string CanonImportName(const Import& imp)
-    {
-      return CanonImportName(imp.module_name.str(), imp.export_name.str());
+      if(!imp.module_name.size() || memchr(imp.module_name.get(), '!', imp.module_name.size()) != nullptr) // blank imports or imports with a calling convention are always raw function names
+        return CanonicalName(0, imp.export_name.str());
+      return CanonicalName(imp.module_name.str(), imp.export_name.str());
     }
 
     // Generates a whitelist string for a module and export name, which includes calling convention information

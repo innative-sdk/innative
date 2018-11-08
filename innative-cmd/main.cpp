@@ -17,10 +17,6 @@ static const std::unordered_map<std::string, unsigned int> flag_map = {
   { "library", ENV_LIBRARY },
   { "wat", ENV_ENABLE_WAT },
   { "homogenize", ENV_HOMOGENIZE_FUNCTIONS },
-  { "opt_inline", ENV_OPTIMIZE_INLINE },
-  { "opt_analysis", ENV_OPTIMIZE_ANALYSIS },
-  { "opt_vectorize", ENV_OPTIMIZE_VECTORIZE },
-  { "opt_all", ENV_OPTIMIZE_ALL },
 };
 
 void usage()
@@ -135,7 +131,7 @@ int main(int argc, char *argv[])
     out = innative::Path(inputs[0]).RemoveExtension().Get() + ((flags&ENV_LIBRARY) ? IR_LIBRARY_EXTENSION : IR_EXE_EXTENSION);
 
   // Then create the runtime environment with the module count.
-  Environment* env = (*exports.CreateEnvironment)(flags, inputs.size(), 0, (!argc ? 0 : argv[0]));
+  Environment* env = (*exports.CreateEnvironment)(flags, 0, ENV_FEATURE_ALL, inputs.size(), 0, (!argc ? 0 : argv[0]));
   if(!env)
   {
     fprintf(stderr, "Unknown error creating environment.\n");

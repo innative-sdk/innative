@@ -8,7 +8,7 @@
 
 namespace innative {
   bool ValidateIdentifier(const ByteArray& bytes);
-  void AppendError(ValidationError*& errors, Module* m, int code, const char* fmt, ...);
+  void AppendError(const Environment& env, ValidationError*& errors, Module* m, int code, const char* fmt, ...);
   void ValidateFunctionSig(const FunctionType& sig, Environment& env, Module* m);
   bool MatchFunctionType(const FunctionType& a, const FunctionType& b);
   void ValidateImport(const Import& imp, Environment& env, Module* m);

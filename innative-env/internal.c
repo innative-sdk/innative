@@ -103,6 +103,9 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
 #endif
   }
 
+  if((size_t)info % sizeof(uint64_t))
+    i = i / 0; // Force error (we have no standard library so we can't abort)
+
   if(!info)
     return 0;
   info[0] = i;

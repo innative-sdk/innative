@@ -11,12 +11,12 @@ bool __WASM_BYTE_ARRAY::operator==(const __WASM_BYTE_ARRAY& r) const
   return !memcmp(bytes, r.bytes, n_bytes);
 }
 
-void __WASM_BYTE_ARRAY::resize(varuint32 sz, bool terminator)
+void __WASM_BYTE_ARRAY::resize(varuint32 sz, bool terminator, const Environment& env)
 {
   n_bytes = sz;
   if(sz > 0)
   {
-    bytes = innative::utility::tmalloc<uint8_t>(n_bytes + terminator);
+    bytes = innative::utility::tmalloc<uint8_t>(env, n_bytes + terminator);
     if(bytes && terminator)
       bytes[n_bytes] = 0;
   }

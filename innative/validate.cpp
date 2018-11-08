@@ -82,12 +82,12 @@ bool innative::ValidateIdentifier(const ByteArray& b)
   return i == b.size(); // If these aren't exactly equal there was an expected length mismatch
 }
 
-void innative::AppendError(ValidationError*& errors, Module* m, int code, const char* fmt, ...)
+void innative::AppendError(const Environment& env, ValidationError*& errors, Module* m, int code, const char* fmt, ...)
 {
   va_list args;
   va_start(args, fmt);
   int len = vsnprintf(0, 0, fmt, args);
-  ValidationError* err = reinterpret_cast<ValidationError*>(internal::GreedyAllocBytes::allocate(sizeof(ValidationError) + len + 1));
+  ValidationError* err = reinterpret_cast<ValidationError*>(env.alloc->allocate(sizeof(ValidationError) + len + 1));
   err->error = reinterpret_cast<char*>(err + 1);
   vsnprintf(err->error, len + 1, fmt, args);
   va_end(args);
@@ -107,10 +107,10 @@ void innative::ValidateFunctionSig(const FunctionType& sig, Environment& env, Mo
   if(sig.form == TE_func)
   {
     if(sig.n_returns > 1)
-      AppendError(env.errors, m, ERR_MULTIPLE_RETURN_VALUES, "Return count of %u encountered: only 0 or 1 allowed.", sig.form);
+      AppendError(env, env.errors, m, ERR_MULTIPLE_RETURN_VALUES, "Return count of %u encountered: only 0 or 1 allowed.", sig.form);
   }
   else
-    AppendError(env.errors, m, ERR_UNKNOWN_SIGNATURE_TYPE, "Illegal function type %hhi encountered: only -0x20 allowed", sig.form);
+    AppendError(env, env.errors, m, ERR_UNKNOWN_SIGNATURE_TYPE, "Illegal function type %hhi encountered: only -0x20 allowed", sig.form);
 }
 
 bool innative::MatchFunctionType(const FunctionType& a, const FunctionType& b)
@@ -132,9 +132,9 @@ bool innative::MatchFunctionType(const FunctionType& a, const FunctionType& b)
 void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
 {
   if(!ValidateIdentifier(imp.module_name))
-    AppendError(env.errors, m, ERR_INVALID_UTF8_ENCODING, "Identifier not valid UTF8: %s", imp.module_name.str());
+    AppendError(env, env.errors, m, ERR_INVALID_UTF8_ENCODING, "Identifier not valid UTF8: %s", imp.module_name.str());
   if(!ValidateIdentifier(imp.export_name))
-    AppendError(env.errors, m, ERR_INVALID_UTF8_ENCODING, "Identifier not valid UTF8: %s", imp.export_name.str());
+    AppendError(env, env.errors, m, ERR_INVALID_UTF8_ENCODING, "Identifier not valid UTF8: %s", imp.export_name.str());
 
   khint_t iter = kh_get_modules(env.modulemap, imp.module_name); // WASM modules do not understand !CALL convention appendings, so we use the full name no matter what
   if(iter == kh_end(env.modulemap))
@@ -146,9 +146,9 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
       {
         khiter_t iterexport = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.str(), imp.export_name.str()).c_str()); // We already canonized the whitelist imports to eliminate unnecessary !C specifiers
         if(!kh_exist2(env.whitelist, iterexport))
-          return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a whitelisted C import, nor a valid webassembly import.", imp.module_name.str(), imp.export_name.str());
+          return AppendError(env, env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a whitelisted C import, nor a valid webassembly import.", imp.module_name.str(), imp.export_name.str());
         if(imp.kind != WASM_KIND_FUNCTION)
-          return AppendError(env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a function. You can only import C functions at this time.", imp.module_name.str(), imp.export_name.str());
+          return AppendError(env, env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a function. You can only import C functions at this time.", imp.module_name.str(), imp.export_name.str());
       }
     }
 
@@ -160,30 +160,30 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
       //if(kh_exist2(env.cimports, iterimport))
         return; // This function exists and we already have verified the signature if there was a whitelist, so just return
       if(!imp.module_name.size() || imp.module_name.str()[0] == '!') // Blank imports must have been C imports, otherwise it could have been a failed WASM module import attempt.
-        return AppendError(env.errors, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found in C library imports", name.c_str());
+        return AppendError(env, env.errors, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found in C library imports", name.c_str());
     }
 
-    return AppendError(env.errors, m, ERR_UNKNOWN_MODULE, "%s module not found", imp.module_name.str());
+    return AppendError(env, env.errors, m, ERR_UNKNOWN_MODULE, "%s module not found", imp.module_name.str());
   }
 
   size_t i = kh_value(env.modulemap, iter);
   if(i >= env.n_modules)
-    return AppendError(env.errors, m, ERR_UNKNOWN_MODULE, "%s module index (%u) not in range (%u)", imp.module_name.str(), i, env.n_modules);
+    return AppendError(env, env.errors, m, ERR_UNKNOWN_MODULE, "%s module index (%u) not in range (%u)", imp.module_name.str(), i, env.n_modules);
 
   iter = kh_get_exports(env.modules[i].exports, imp.export_name);
   if(iter == kh_end(env.modules[i].exports))
-    return AppendError(env.errors, m, ERR_UNKNOWN_EXPORT, "%s export not found", imp.export_name.str());
+    return AppendError(env, env.errors, m, ERR_UNKNOWN_EXPORT, "%s export not found", imp.export_name.str());
 
   varuint32 j = kh_value(env.modules[i].exports, iter);
   if(j >= env.modules[i].exportsection.n_exports)
-    return AppendError(env.errors, m, ERR_UNKNOWN_EXPORT, "%s export index (%u) not in range (%u)", imp.module_name.str(), j, env.modules[i].exportsection.n_exports);
+    return AppendError(env, env.errors, m, ERR_UNKNOWN_EXPORT, "%s export index (%u) not in range (%u)", imp.module_name.str(), j, env.modules[i].exportsection.n_exports);
 
   Export& exp = env.modules[i].exportsection.exports[j];
   if(exp.kind != imp.kind)
-    return AppendError(env.errors, m, ERR_IMPORT_EXPORT_TYPE_MISMATCH, "export kind (%u) does not match import kind (%u)", exp.kind, imp.kind);
+    return AppendError(env, env.errors, m, ERR_IMPORT_EXPORT_TYPE_MISMATCH, "export kind (%u) does not match import kind (%u)", exp.kind, imp.kind);
 
   if(exp.name != imp.export_name)
-    AppendError(env.errors, m, ERR_IMPORT_EXPORT_MISMATCH, "export name (%s) does not match import name (%s)", exp.name.str(), imp.export_name.str());
+    AppendError(env, env.errors, m, ERR_IMPORT_EXPORT_MISMATCH, "export name (%s) does not match import name (%s)", exp.name.str(), imp.export_name.str());
 
   switch(imp.kind)
   {
@@ -191,29 +191,29 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   {
     FunctionType* func = ModuleFunction(env.modules[i], exp.index);
     if(!func)
-      AppendError(env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid exported function index %u", exp.index);
+      AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid exported function index %u", exp.index);
     else if(imp.func_desc.type_index >= m->type.n_functions)
-      AppendError(env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid imported function type index %u", imp.func_desc.type_index);
+      AppendError(env, env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid imported function type index %u", imp.func_desc.type_index);
     else if(!MatchFunctionType(m->type.functions[imp.func_desc.type_index], *func))
-      AppendError(env.errors, m, ERR_INVALID_FUNCTION_IMPORT_TYPE, "Imported function signature didn't match exported function signature.");
+      AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_IMPORT_TYPE, "Imported function signature didn't match exported function signature.");
     break;
   }
   case WASM_KIND_TABLE:
   {
     TableDesc* table = ModuleTable(env.modules[i], exp.index);
     if(!table)
-      AppendError(env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid exported table index %u", exp.index);
+      AppendError(env, env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid exported table index %u", exp.index);
     else
     {
       if(imp.table_desc.resizable.minimum > table->resizable.minimum)
-        AppendError(env.errors, m, ERR_INVALID_IMPORT_TABLE_MINIMUM, "Imported table minimum (%u) greater than exported table minimum (%u).", imp.table_desc.resizable.minimum, table->resizable.minimum);
+        AppendError(env, env.errors, m, ERR_INVALID_IMPORT_TABLE_MINIMUM, "Imported table minimum (%u) greater than exported table minimum (%u).", imp.table_desc.resizable.minimum, table->resizable.minimum);
       if(table->resizable.flags & 1)
       {
         if(!(imp.table_desc.resizable.flags & 1))
           break;
-          //AppendError(env.errors, m, ERR_INVALID_IMPORT_TABLE_MAXIMUM, "Imported table doesn't have a maximum, but exported table does.");
+          //AppendError(env, env.errors, m, ERR_INVALID_IMPORT_TABLE_MAXIMUM, "Imported table doesn't have a maximum, but exported table does.");
         else if(imp.table_desc.resizable.maximum < table->resizable.maximum)
-          AppendError(env.errors, m, ERR_INVALID_IMPORT_TABLE_MAXIMUM, "Imported table maximum (%u) less than exported table maximum (%u).", imp.table_desc.resizable.maximum, table->resizable.maximum);
+          AppendError(env, env.errors, m, ERR_INVALID_IMPORT_TABLE_MAXIMUM, "Imported table maximum (%u) less than exported table maximum (%u).", imp.table_desc.resizable.maximum, table->resizable.maximum);
       }
     }
     break;
@@ -222,18 +222,22 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   {
     MemoryDesc* mem = ModuleMemory(env.modules[i], exp.index);
     if(!mem)
-      AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "Invalid exported memory index %u", exp.index);
+      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "Invalid exported memory index %u", exp.index);
     else
     {
       if(imp.mem_desc.limits.minimum > mem->limits.minimum)
-        AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MINIMUM, "Imported memory minimum (%u) greater than exported memory minimum (%u).", imp.mem_desc.limits.minimum, mem->limits.minimum);
+        AppendError(env, env.errors, m, ERR_INVALID_IMPORT_MEMORY_MINIMUM, "Imported memory minimum (%u) greater than exported memory minimum (%u).", imp.mem_desc.limits.minimum, mem->limits.minimum);
       if(mem->limits.flags & 1)
       {
         if(!(imp.mem_desc.limits.flags & 1))
           break;
-          //AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported memory doesn't have a maximum, but exported memory does.");
+          //AppendError(env, env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported memory doesn't have a maximum, but exported memory does.");
         else if(imp.mem_desc.limits.maximum < mem->limits.maximum)
-          AppendError(env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported memory maximum (%u) less than exported memory maximum (%u).", imp.mem_desc.limits.maximum, mem->limits.maximum);
+          AppendError(env, env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported memory maximum (%u) less than exported memory maximum (%u).", imp.mem_desc.limits.maximum, mem->limits.maximum);
+        if(imp.mem_desc.limits.minimum > 65536)
+          AppendError(env, env.errors, m, ERR_MEMORY_MINIMUM_TOO_LARGE, "Memory minimum cannot exceed 65536");
+        if((imp.mem_desc.limits.flags&WASM_LIMIT_HAS_MAXIMUM) && imp.mem_desc.limits.maximum > 65536)
+          AppendError(env, env.errors, m, ERR_MEMORY_MAXIMUM_TOO_LARGE, "Memory maximum cannot exceed 65536");
       }
     }
     break;
@@ -242,38 +246,42 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   {
     GlobalDesc* global = ModuleGlobal(env.modules[i], exp.index);
     if(!global)
-      AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid exported global index %u", exp.index);
+      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid exported global index %u", exp.index);
     else if(imp.global_desc.mutability != global->mutability || imp.global_desc.type != global->type)
-      AppendError(env.errors, m, ERR_INVALID_GLOBAL_IMPORT_TYPE, "Imported global type (%hhi) or mutability (%hhu) does not match exported type (%hhi) or mutability (%hhu)", imp.global_desc.type, imp.global_desc.mutability, global->type, global->mutability);
+      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_IMPORT_TYPE, "Imported global type (%hhi) or mutability (%hhu) does not match exported type (%hhi) or mutability (%hhu)", imp.global_desc.type, imp.global_desc.mutability, global->type, global->mutability);
     break;
   }
   default:
-    AppendError(env.errors, m, ERR_FATAL_UNKNOWN_KIND, "unknown export kind: %hhu", imp.kind);
+    AppendError(env, env.errors, m, ERR_FATAL_UNKNOWN_KIND, "unknown export kind: %hhu", imp.kind);
   }
 }
 
 void innative::ValidateFunction(const varuint32& decl, Environment& env, Module* m)
 {
   if(decl >= m->type.n_functions)
-    AppendError(env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid function declaration type index: %u", decl);
+    AppendError(env, env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid function declaration type index: %u", decl);
 }
 
 void innative::ValidateLimits(const ResizableLimits& limits, Environment& env, Module* m)
 {
   if((limits.flags&WASM_LIMIT_HAS_MAXIMUM) && limits.maximum < limits.minimum)
-    AppendError(env.errors, m, ERR_INVALID_LIMITS, "Limits maximum (%u) cannot be smaller than minimum (%u)", limits.maximum, limits.minimum);
+    AppendError(env, env.errors, m, ERR_INVALID_LIMITS, "Limits maximum (%u) cannot be smaller than minimum (%u)", limits.maximum, limits.minimum);
 }
 
 void innative::ValidateTable(const TableDesc& table, Environment& env, Module* m)
 {
   if(table.element_type != TE_anyfunc)
-    AppendError(env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Table element type is %hhi: only anyfunc allowed.", table.element_type);
+    AppendError(env, env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Table element type is %hhi: only anyfunc allowed.", table.element_type);
   ValidateLimits(table.resizable, env, m);
 }
 
 void innative::ValidateMemory(const MemoryDesc& mem, Environment& env, Module* m)
 {
   ValidateLimits(mem.limits, env, m);
+  if(mem.limits.minimum > 65536)
+    AppendError(env, env.errors, m, ERR_MEMORY_MINIMUM_TOO_LARGE, "Memory minimum cannot exceed 65536");
+  if((mem.limits.flags&WASM_LIMIT_HAS_MAXIMUM) && mem.limits.maximum > 65536)
+    AppendError(env, env.errors, m, ERR_MEMORY_MAXIMUM_TOO_LARGE, "Memory maximum cannot exceed 65536");
 }
 
 void innative::ValidateBlockSignature(varsint7 sig, Environment& env, Module* m)
@@ -287,19 +295,19 @@ void innative::ValidateBlockSignature(varsint7 sig, Environment& env, Module* m)
   case TE_void:
     break;
   default:
-    AppendError(env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "%hhi is not a valid block signature type.", sig);
+    AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "%hhi is not a valid block signature type.", sig);
   }
 }
 
 varsint7 ValidatePopType(innative::Stack<varsint7>& values, varsint7 type, Environment& env, Module* m)
 {
   if(values.Size() < 1)
-    AppendError(env.errors, m, ERR_EMPTY_VALUE_STACK, "Expected a value on the stack, but stack was empty.");
+    AppendError(env, env.errors, m, ERR_EMPTY_VALUE_STACK, "Expected a value on the stack, but stack was empty.");
   else if(values.Peek() != TE_POLY)
   {
     varsint7 t = values.Pop();
     if(type != 0 && t != type)
-      AppendError(env.errors, m, ERR_INVALID_TYPE, "Expected %hhi on the stack, but found %hhi.", type, t);
+      AppendError(env, env.errors, m, ERR_INVALID_TYPE, "Expected %hhi on the stack, but found %hhi.", type, t);
     return t;
   }
   else
@@ -314,12 +322,12 @@ void ValidateBranchSignature(varsint7 sig, Stack<varsint7>& values, Environment&
     if(values.Size() > 0)
     {
       //if(values.Size() > 2 || (values.Size() == 2 && values.Peek() != TE_POLY)) // TE_POLY can count as 0
-      //  AppendError(env.errors, m, ERR_INVALID_TYPE, "block signature expected one value, but value stack had %zu!", values.Size());
+      //  AppendError(env, env.errors, m, ERR_INVALID_TYPE, "block signature expected one value, but value stack had %zu!", values.Size());
       if(values.Peek() != TE_POLY && values.Peek() != sig)
-        AppendError(env.errors, m, ERR_INVALID_TYPE, "block signature expected %hhi, but value stack had %hhi instead!", sig, values.Peek());
+        AppendError(env, env.errors, m, ERR_INVALID_TYPE, "block signature expected %hhi, but value stack had %hhi instead!", sig, values.Peek());
     }
     else
-      AppendError(env.errors, m, ERR_EMPTY_VALUE_STACK, "block signature expected %hhi, but value stack was empty!", sig);
+      AppendError(env, env.errors, m, ERR_EMPTY_VALUE_STACK, "block signature expected %hhi, but value stack was empty!", sig);
   }
 }
 
@@ -328,13 +336,13 @@ void ValidateSignature(varsint7 sig, Stack<varsint7>& values, Environment& env, 
   if(sig != TE_void)
     ValidateBranchSignature(sig, values, env, m);
   else if(values.Size() > 1 || (values.Size() == 1 && values.Peek() != TE_POLY)) // TE_POLY can count as 0
-    AppendError(env.errors, m, ERR_INVALID_VALUE_STACK, "block signature was void, but stack wasn't empty!");
+    AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK, "block signature was void, but stack wasn't empty!");
 }
 
 void ValidateBranch(varuint32 depth, Stack<varsint7>& values, Stack<internal::ControlBlock>& control, Environment& env, Module* m)
 {
   if(depth >= control.Size())
-    AppendError(env.errors, m, ERR_INVALID_BRANCH_DEPTH, "Invalid branch depth: %u exceeds %zu", depth, control.Size());
+    AppendError(env, env.errors, m, ERR_INVALID_BRANCH_DEPTH, "Invalid branch depth: %u exceeds %zu", depth, control.Size());
   else if(control[depth].type != OP_loop) // A branch to a loop always has a signature of TE_void
     ValidateBranchSignature(control[depth].sig, values, env, m);
 }
@@ -362,7 +370,7 @@ void ValidateBranchTable(varuint32 n_table, varuint32* table, varuint32 def, Sta
     {
       varsint7 type = GetBlockSig(control[def]);
       if(table[i] < control.Size() && GetBlockSig(control[table[i]]) != type)
-        AppendError(env.errors, m, ERR_INVALID_TYPE, "Branch table target has type signature %hhi, but default branch has %hhi", control[table[i]].sig, control[def].sig);
+        AppendError(env, env.errors, m, ERR_INVALID_TYPE, "Branch table target has type signature %hhi, but default branch has %hhi", control[table[i]].sig, control[def].sig);
     }
   }
 }
@@ -371,9 +379,9 @@ template<typename T, WASM_TYPE_ENCODING PUSH>
 void ValidateLoad(varuint32 align, Stack<varsint7>& values, Environment& env, Module* m)
 {
   if(!ModuleMemory(*m, 0))
-    AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
+    AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
   if((1ULL << align) > sizeof(T))
-    AppendError(env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT, "Alignment of %u exceeds number of accessed bytes %i", (1 << align), sizeof(T));
+    AppendError(env, env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT, "Alignment of %u exceeds number of accessed bytes %i", (1 << align), sizeof(T));
   ValidatePopType(values, TE_i32, env, m);
   values.Push(PUSH);
 }
@@ -382,9 +390,9 @@ template<typename T, WASM_TYPE_ENCODING POP>
 void ValidateStore(varuint32 align, Stack<varsint7>& values, Environment& env, Module* m)
 {
   if(!ModuleMemory(*m, 0))
-    AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
+    AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
   if((1ULL << align) > sizeof(T))
-    AppendError(env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT, "Alignment of %u exceeds number of accessed bytes %i", (1 << align), sizeof(T));
+    AppendError(env, env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT, "Alignment of %u exceeds number of accessed bytes %i", (1 << align), sizeof(T));
   ValidatePopType(values, POP, env, m);
   ValidatePopType(values, TE_i32, env, m);
 }
@@ -410,7 +418,7 @@ void ValidateFunctionSig(Stack<varsint7>& values, FunctionType& sig, Environment
     ValidatePopType(values, sig.params[i], env, m);
 
   if(sig.n_returns > 1)
-    AppendError(env.errors, m, ERR_INVALID_FUNCTION_SIG, "Cannot return more than one value yet, tried to return %i.", sig.n_returns);
+    AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_SIG, "Cannot return more than one value yet, tried to return %i.", sig.n_returns);
 
   for(uint64_t i = 0; i < sig.n_returns; ++i)
     values.Push(sig.returns[i]);
@@ -419,13 +427,13 @@ void ValidateFunctionSig(Stack<varsint7>& values, FunctionType& sig, Environment
 void ValidateIndirectCall(Stack<varsint7>& values, varuint32 sig, Environment& env, Module* m)
 {
   if(!ModuleTable(*m, 0))
-    AppendError(env.errors, m, ERR_INVALID_TABLE_INDEX, "0 is not a valid table index because there are 0 tables.");
+    AppendError(env, env.errors, m, ERR_INVALID_TABLE_INDEX, "0 is not a valid table index because there are 0 tables.");
 
   ValidatePopType(values, TE_i32, env, m); // Pop callee
   if(sig < m->type.n_functions)
     ValidateFunctionSig(values, m->type.functions[sig], env, m);
   else
-    AppendError(env.errors, m, ERR_INVALID_FUNCTION_INDEX, "signature index was %u, which is an invalid function signature index.", sig);
+    AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "signature index was %u, which is an invalid function signature index.", sig);
 }
 
 void ValidateCall(Stack<varsint7>& values, varuint32 callee, Environment& env, Module* m)
@@ -434,7 +442,7 @@ void ValidateCall(Stack<varsint7>& values, varuint32 callee, Environment& env, M
   if(sig)
     ValidateFunctionSig(values, *sig, env, m);
   else
-    AppendError(env.errors, m, ERR_INVALID_FUNCTION_INDEX, "callee was %u, which is an invalid function index.", callee);
+    AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "callee was %u, which is an invalid function index.", callee);
 }
 
 void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<internal::ControlBlock>& control, varuint32 n_locals, varsint7* locals, Environment& env, Module* m)
@@ -477,7 +485,7 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
     if(control.Size() > 0)
       ValidateBranchSignature(control[0].sig, values, env, m);
     else
-      AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Empty control stack at return statement.");
+      AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Empty control stack at return statement.");
     PolymorphStack(values);
     break;
   }
@@ -506,14 +514,14 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
   // Variable access
   case OP_get_local:
     if(ins.immediates[0]._varuint32 >= n_locals)
-      AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for get_local.");
+      AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for get_local.");
     else
       values.Push(locals[ins.immediates[0]._varuint32]);
     break;
   case OP_set_local:
     if(ins.immediates[0]._varuint32 >= n_locals)
     {
-      AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
+      AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
       ValidatePopType(values, 0, env, m);
     }
     else
@@ -522,7 +530,7 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
   case OP_tee_local:
     if(ins.immediates[0]._varuint32 >= n_locals)
     {
-      AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
+      AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
       ValidatePopType(values, 0, env, m);
     }
     else
@@ -535,7 +543,7 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
   {
     GlobalDesc* desc = ModuleGlobal(*m, ins.immediates[0]._varuint32);
     if(!desc)
-      AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index for get_global.");
+      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index for get_global.");
     else
       values.Push(desc->type);
   }
@@ -545,12 +553,12 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
     GlobalDesc* desc = ModuleGlobal(*m, ins.immediates[0]._varuint32);
     if(!desc)
     {
-      AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index for set_global.");
+      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index for set_global.");
       ValidatePopType(values, 0, env, m);
     }
     else if(!desc->mutability)
     {
-      AppendError(env.errors, m, ERR_IMMUTABLE_GLOBAL, "Cannot call set_global on an immutable global.");
+      AppendError(env, env.errors, m, ERR_IMMUTABLE_GLOBAL, "Cannot call set_global on an immutable global.");
       ValidatePopType(values, 0, env, m);
     }
     else
@@ -584,16 +592,16 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
   case OP_i64_store32: ValidateStore<int32_t, TE_i64>(ins.immediates[0]._varuint32, values, env, m); break;
   case OP_memory_size:
     if(!ModuleMemory(*m, 0))
-      AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
+      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
     if(ins.immediates[0]._varuint1 != 0)
-      AppendError(env.errors, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
+      AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
     values.Push(TE_i32);
     break;
   case OP_memory_grow:
     if(!ModuleMemory(*m, 0))
-      AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
+      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
     if(ins.immediates[0]._varuint1 != 0)
-      AppendError(env.errors, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
+      AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
     ValidatePopType(values, TE_i32, env, m);
     values.Push(TE_i32);
     break;
@@ -735,7 +743,7 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
   case OP_f32_reinterpret_i32: ValidateUnaryOp<TE_i32, TE_f32>(values, env, m); break;
   case OP_f64_reinterpret_i64: ValidateUnaryOp<TE_i64, TE_f64>(values, env, m); break;
   default:
-    AppendError(env.errors, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "Unknown instruction code %hhu", ins.opcode);
+    AppendError(env, env.errors, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "Unknown instruction code %hhu", ins.opcode);
   }
 }
 
@@ -749,15 +757,15 @@ varsint7 innative::ValidateInitializer(const Instruction& ins, Environment& env,
   case OP_f64_const: return TE_f64;
   case OP_get_global:
     if(!ModuleGlobal(*m, ins.immediates[0]._varuint32))
-      AppendError(env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid global index for get_global.");
+      AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid global index for get_global.");
     else if(ins.immediates[0]._varuint32 + m->importsection.memories < m->importsection.globals)
       return m->importsection.imports[ins.immediates[0]._varuint32 + m->importsection.memories].global_desc.type;
     else
-      AppendError(env.errors, m, ERR_INVALID_INITIALIZER, "A get_global initializer must be an import.", ins.opcode);
+      AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER, "A get_global initializer must be an import.", ins.opcode);
     return TE_i32;
   }
 
-  AppendError(env.errors, m, ERR_INVALID_INITIALIZER, "An initializer must be a get_global or const instruction, not %hhu", ins.opcode);
+  AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER, "An initializer must be a get_global or const instruction, not %hhu", ins.opcode);
   return TE_i32;
 }
 
@@ -765,37 +773,37 @@ void innative::ValidateGlobal(const GlobalDecl& decl, Environment& env, Module* 
 {
   varsint7 type = ValidateInitializer(decl.init, env, m);
   if(type != decl.desc.type)
-    AppendError(env.errors, m, ERR_INVALID_GLOBAL_TYPE, "The global initializer has type %hhi, must be the same as the description type %hhi.", type, decl.desc.type);
+    AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_TYPE, "The global initializer has type %hhi, must be the same as the description type %hhi.", type, decl.desc.type);
 }
 
 void innative::ValidateExport(const Export& e, Environment& env, Module* m)
 {
   if(!ValidateIdentifier(e.name))
-    AppendError(env.errors, m, ERR_INVALID_UTF8_ENCODING, "Identifier not valid UTF8: %s", e.name.str());
+    AppendError(env, env.errors, m, ERR_INVALID_UTF8_ENCODING, "Identifier not valid UTF8: %s", e.name.str());
 
   switch(e.kind)
   {
   case WASM_KIND_FUNCTION:
     if(!ModuleFunction(*m, e.index))
-      AppendError(env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid function index %u", e.index);
+      AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid function index %u", e.index);
     break;
   case WASM_KIND_TABLE:
     if(!ModuleTable(*m, e.index))
-      AppendError(env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", e.index);
+      AppendError(env, env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", e.index);
     break;
   case WASM_KIND_MEMORY:
     if(!ModuleMemory(*m, e.index))
-      AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "Invalid memory index %u", e.index);
+      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "Invalid memory index %u", e.index);
     break;
   case WASM_KIND_GLOBAL:
   {
     GlobalDesc* g = ModuleGlobal(*m, e.index);
     if(!g)
-      AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index %u", e.index);
+      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index %u", e.index);
     break;
   }
   default:
-    AppendError(env.errors, m, ERR_FATAL_UNKNOWN_KIND, "The %s export has invalid kind %hhu", e.name.str(), e.kind);
+    AppendError(env, env.errors, m, ERR_FATAL_UNKNOWN_KIND, "The %s export has invalid kind %hhu", e.name.str(), e.kind);
     break;
   }
 }
@@ -814,7 +822,7 @@ varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env,
     {
       std::pair<Module*, Export*> p = ResolveExport(env, m->importsection.imports[i]);
       if(!p.second || p.second->kind != WASM_KIND_GLOBAL || p.second->index < p.first->importsection.globals)
-        AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global import %u", ins.immediates[0]._varsint32);
+        AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global import %u", ins.immediates[0]._varsint32);
       else
         return EvalInitializerI32(p.first->global.globals[p.second->index - p.first->importsection.globals].init, env, p.first);
       break;
@@ -824,13 +832,13 @@ varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env,
       global = &m->global.globals[i];
 
     if(!global)
-      AppendError(env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index %u", ins.immediates[0]._varsint32);
+      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index %u", ins.immediates[0]._varsint32);
     else
       return EvalInitializerI32(global->init, env, nullptr);
     break;
   }
   default:
-    AppendError(env.errors, m, ERR_INVALID_INITIALIZER, "Expected i32 type but got %hhu", ins.opcode);
+    AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER, "Expected i32 type but got %hhu", ins.opcode);
   }
 
   return 0;
@@ -840,11 +848,11 @@ void innative::ValidateTableOffset(const TableInit& init, Environment& env, Modu
 {
   varsint7 type = ValidateInitializer(init.offset, env, m);
   if(type != TE_i32)
-    AppendError(env.errors, m, ERR_INVALID_TABLE_TYPE, "Expected table offset instruction type of i32, got %hhi instead.", type);
+    AppendError(env, env.errors, m, ERR_INVALID_TABLE_TYPE, "Expected table offset instruction type of i32, got %hhi instead.", type);
    
   TableDesc* table = ModuleTable(*m, init.index);
   if(!table)
-    AppendError(env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", init.index);
+    AppendError(env, env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", init.index);
   else if(table->element_type == TE_anyfunc)
   {
     if(type != TE_i32) // We cannot verify the offset if it's the wrong type
@@ -855,19 +863,19 @@ void innative::ValidateTableOffset(const TableInit& init, Environment& env, Modu
     {
       auto pair = ResolveExport(env, m->importsection.imports[init.index + m->importsection.functions]);
       if(!pair.first || !pair.second || pair.second->kind != WASM_KIND_TABLE || !(table = ModuleTable(*pair.first, pair.second->index)))
-        AppendError(env.errors, m, ERR_INVALID_TABLE_INDEX, "Could not resolve table import %u", init.index);
+        AppendError(env, env.errors, m, ERR_INVALID_TABLE_INDEX, "Could not resolve table import %u", init.index);
     }
 
     varsint32 offset = EvalInitializerI32(init.offset, env, m);
     if(offset < 0 || offset + init.n_elements > table->resizable.minimum)
-      AppendError(env.errors, m, ERR_INVALID_TABLE_OFFSET, "Offset (%i) plus element count (%u) exceeds minimum table length (%u)", offset, init.n_elements, table->resizable.minimum);
+      AppendError(env, env.errors, m, ERR_INVALID_TABLE_OFFSET, "Offset (%i) plus element count (%u) exceeds minimum table length (%u)", offset, init.n_elements, table->resizable.minimum);
 
     for(uint64_t i = 0; i < init.n_elements; ++i)
       if(!ModuleFunction(*m, init.elements[i]))
-        AppendError(env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid element initializer %u function index: %u", i, init.elements[i]);
+        AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid element initializer %u function index: %u", i, init.elements[i]);
   }
   else
-    AppendError(env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Invalid table element type %hhi", table->element_type);
+    AppendError(env, env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Invalid table element type %hhi", table->element_type);
 }
 
 void ValidateEndBlock(internal::ControlBlock block, Stack<varsint7>& values, Environment& env, Module* m, bool restore)
@@ -895,12 +903,12 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
   // Calculate function locals
   if(sig.n_params > (std::numeric_limits<uint32_t>::max() - body.n_locals))
   {
-    AppendError(env.errors, m, ERR_FATAL_TOO_MANY_LOCALS, "n_local + n_params exceeds the max value of uint32!");
+    AppendError(env, env.errors, m, ERR_FATAL_TOO_MANY_LOCALS, "n_local + n_params exceeds the max value of uint32!");
     return;
   }
   varuint32 n_local = sig.n_params + body.n_locals;
 
-  varsint7* locals = tmalloc<varsint7>(n_local);
+  varsint7* locals = tmalloc<varsint7>(env, n_local);
   if(locals)
     tmemcpy<varsint7>(locals, n_local, sig.params, sig.n_params);
   n_local = sig.n_params;
@@ -910,7 +918,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
   control.Push({ values.Limit(), ret, OP_block }); // Push the function body block with the function signature
 
   if(!body.n_body)
-    return AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Cannot have an empty function body!");
+    return AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Cannot have an empty function body!");
 
   for(uint64_t i = 0; i < body.n_body; ++i)
   {
@@ -926,22 +934,22 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
       break;
     case OP_end:
       if(!control.Size())
-        AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Mismatched end instruction at index %u!", i);
+        AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Mismatched end instruction at index %u!", i);
       else
       {
         if(control.Peek().type == OP_if && control.Peek().sig != TE_void)
-          AppendError(env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "If statement without else cannot have a non-void block signature, had %hhi.", control.Peek().sig);
+          AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "If statement without else cannot have a non-void block signature, had %hhi.", control.Peek().sig);
         ValidateEndBlock(control.Pop(), values, env, m, true);
       }
       break;
     case OP_else:
       if(!control.Size())
-        AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Mismatched else instruction at index %u!", i);
+        AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Mismatched else instruction at index %u!", i);
       else
       {
         internal::ControlBlock block = control.Pop();
         if(block.type != OP_if)
-          AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Expected else instruction to terminate if block, but found %hhi instead.", block.type);
+          AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Expected else instruction to terminate if block, but found %hhi instead.", block.type);
         ValidateEndBlock(block, values, env, m, false);
         control.Push({ values.Limit(), block.sig, OP_else }); // Push a new else block that must be terminated by an end instruction
         values.SetLimit(values.Size() + values.Limit());
@@ -953,25 +961,25 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
     ValidatePopType(values, sig.returns[i], env, m);
 
   if(control.Size() > 0)
-    AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Control stack not fully terminated, off by %zu", control.Size());
+    AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Control stack not fully terminated, off by %zu", control.Size());
 
   if(values.Size() > 0 || values.Limit() > 0)
-    AppendError(env.errors, m, ERR_INVALID_VALUE_STACK, "Value stack not fully empty, off by %zu", values.Size() + values.Limit());
+    AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK, "Value stack not fully empty, off by %zu", values.Size() + values.Limit());
 
   if(cur[body.n_body - 1].opcode != OP_end)
-    AppendError(env.errors, m, ERR_INVALID_FUNCTION_BODY, "Expected end instruction to terminate function body, got %hhu instead.", cur[body.n_body - 1].opcode);
+    AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Expected end instruction to terminate function body, got %hhu instead.", cur[body.n_body - 1].opcode);
 }
 
 void innative::ValidateDataOffset(const DataInit& init, Environment& env, Module* m)
 {
   varsint7 type = ValidateInitializer(init.offset, env, m);
   if(type != TE_i32)
-    AppendError(env.errors, m, ERR_INVALID_MEMORY_TYPE, "Expected memory offset instruction type of i32, got %hhi instead.", type);
+    AppendError(env, env.errors, m, ERR_INVALID_MEMORY_TYPE, "Expected memory offset instruction type of i32, got %hhi instead.", type);
 
   MemoryDesc* memory = ModuleMemory(*m, init.index);
   if(!memory)
   {
-    AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "Invalid memory index %u", init.index);
+    AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "Invalid memory index %u", init.index);
     memory = ModuleMemory(*m, init.index);
   }
   else
@@ -981,12 +989,12 @@ void innative::ValidateDataOffset(const DataInit& init, Environment& env, Module
     {
       auto pair = ResolveExport(env, m->importsection.imports[init.index + m->importsection.tables]);
       if(!pair.first || !pair.second || pair.second->kind != WASM_KIND_MEMORY || !(memory = ModuleMemory(*pair.first, pair.second->index)))
-        AppendError(env.errors, m, ERR_INVALID_MEMORY_INDEX, "Could not resolve memory import %u", init.index);
+        AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "Could not resolve memory import %u", init.index);
     }
 
     varsint32 offset = EvalInitializerI32(init.offset, env, m);
     if(offset < 0 || offset + (uint64_t)init.data.size() > (((uint64_t)memory->limits.minimum) << 16))
-      AppendError(env.errors, m, ERR_INVALID_DATA_SEGMENT, "Offset (%i) plus element count (%u) exceeds minimum memory length (%llu)", offset, init.data.size(), (((uint64_t)memory->limits.minimum) << 16));
+      AppendError(env, env.errors, m, ERR_INVALID_DATA_SEGMENT, "Offset (%i) plus element count (%u) exceeds minimum memory length (%llu)", offset, init.data.size(), (((uint64_t)memory->limits.minimum) << 16));
   }
 }
 
@@ -1023,9 +1031,9 @@ void innative::ValidateModule(Environment& env, Module& m)
   //}
   
   if(ModuleTable(m, 1) != nullptr)
-    AppendError(env.errors, &m, ERR_MULTIPLE_TABLES, "Cannot have more than 1 table defined.");
+    AppendError(env, env.errors, &m, ERR_MULTIPLE_TABLES, "Cannot have more than 1 table defined.");
   if(ModuleMemory(m, 1) != nullptr)
-    AppendError(env.errors, &m, ERR_MULTIPLE_MEMORIES, "Cannot have more than 1 memory defined.");
+    AppendError(env, env.errors, &m, ERR_MULTIPLE_MEMORIES, "Cannot have more than 1 memory defined.");
 
   if(m.knownsections&(1 << WASM_SECTION_TYPE))
     ValidateSection<FunctionType, &ValidateFunctionSig>(m.type.functions, m.type.n_functions, env, &m);
@@ -1038,7 +1046,7 @@ void innative::ValidateModule(Environment& env, Module& m)
     ValidateSection<varuint32, &ValidateFunction>(m.function.funcdecl, m.function.n_funcdecl, env, &m);
 
     if(m.function.n_funcdecl != m.code.n_funcbody)
-      AppendError(env.errors, &m, ERR_FUNCTION_BODY_MISMATCH, "The number of function declarations (%u) does not equal the number of function bodies (%u)", m.function.n_funcdecl, m.code.n_funcbody);
+      AppendError(env, env.errors, &m, ERR_FUNCTION_BODY_MISMATCH, "The number of function declarations (%u) does not equal the number of function bodies (%u)", m.function.n_funcdecl, m.code.n_funcbody);
   }
 
   if(m.knownsections&(1 << WASM_SECTION_TABLE))
@@ -1059,10 +1067,10 @@ void innative::ValidateModule(Environment& env, Module& m)
     if(f)
     {
       if(f->n_params > 0 || f->n_returns > 0)
-        AppendError(env.errors, &m, ERR_INVALID_START_FUNCTION, "Starting function must have no parameters and no return value, instead it has %u parameters and %u return values.", f->n_params, f->n_returns);
+        AppendError(env, env.errors, &m, ERR_INVALID_START_FUNCTION, "Starting function must have no parameters and no return value, instead it has %u parameters and %u return values.", f->n_params, f->n_returns);
     }
     else
-      AppendError(env.errors, &m, ERR_INVALID_FUNCTION_INDEX, "Start module function index %u does not exist.", m.start);
+      AppendError(env, env.errors, &m, ERR_INVALID_FUNCTION_INDEX, "Start module function index %u does not exist.", m.start);
   }
 
   if(m.knownsections&(1 << WASM_SECTION_ELEMENT))

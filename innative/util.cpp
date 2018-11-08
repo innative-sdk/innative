@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <stdexcept>
 #include <stdarg.h>
+#include <algorithm>
 
 #ifdef IR_PLATFORM_WIN32
 #pragma pack(push)
@@ -30,15 +31,53 @@
 #include <cpuid.h>
 #include <limits.h>
 #include <dlfcn.h>
+#include <sys/mman.h>
 #endif
 
 using std::string;
 
-namespace innative {
-  size_t internal::GreedyAllocBytes::cur = 0;
-  size_t internal::GreedyAllocBytes::max = 0;
-  void* internal::GreedyAllocBytes::mem = 0;
+void* __WASM_ALLOCATOR::allocate(size_t n)
+{
+  size_t index = cur.fetch_add(n, std::memory_order_acq_rel);
+  size_t end = index + n;
+  size_t max;
 
+  while(end > (max = sz.load(std::memory_order_acquire)))
+  {
+    if(index <= max && end > max) // Exactly one allocation can be in this state at a time, the others will spin while waiting for the reallocation
+    {
+      n = std::max<size_t>(end, 4096) * 2;
+      void* prev = mem.load(std::memory_order_acquire);
+#ifdef IR_PLATFORM_WIN32
+      mem.exchange(!prev ? HeapAlloc(GetProcessHeap(), 0, n) : HeapReAlloc(GetProcessHeap(), HEAP_REALLOC_IN_PLACE_ONLY, prev, n), std::memory_order_release);
+#elif defined(IR_PLATFORM_POSIX)
+      mem.exchange(!prev ? mmap(0, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1) : mremap(prev, max, n, PROT_READ | PROT_WRITE), std::memory_order_release);
+#endif
+      sz.exchange(n, std::memory_order_release);
+    }
+  }
+
+  return (char*)mem.load(std::memory_order_acquire) + index;
+}
+__WASM_ALLOCATOR::~__WASM_ALLOCATOR()
+{
+  void* p = mem.load(std::memory_order_acquire);
+  if(p != nullptr)
+  {
+    size_t max = sz.load(std::memory_order_acquire);
+#ifdef IR_PLATFORM_WIN32
+    HeapFree(GetProcessHeap(), 0, p);
+#elif defined(IR_PLATFORM_POSIX)
+    munmap(p, max);
+#endif
+    mem.exchange(nullptr, std::memory_order_release);
+  }
+
+  sz.exchange(0, std::memory_order_release);
+  cur.exchange(0, std::memory_order_release);
+}
+
+namespace innative {
   namespace utility {
     KHASH_INIT(opnames, StringRef, uint8_t, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
 

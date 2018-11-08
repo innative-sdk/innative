@@ -27,10 +27,10 @@ void innative_runtime(IRExports* exports)
   exports->DestroyEnvironment = &DestroyEnvironment;
 }
 
-int innative_compile_file(const char* file, const char* out, unsigned int flags, bool dynamic, const struct _IR_WHITELIST* whitelist, unsigned int n_whitelist, const char* arg0)
+int innative_compile_file(const char* file, const char* out, uint64_t flags, uint64_t optimize, uint64_t features, bool dynamic, const struct _IR_WHITELIST* whitelist, unsigned int n_whitelist, const char* arg0)
 {
   // Then create the runtime environment with the module count.
-  Environment* env = CreateEnvironment(flags, 1, 0, arg0);
+  Environment* env = CreateEnvironment(flags, optimize, features, 1, 0, arg0);
   if(!env)
   {
     fprintf(stderr, "Unknown error creating environment.\n");
@@ -101,11 +101,15 @@ int innative_build_loader(struct _IR_CHUNK* chunks, const char* out, bool dynami
   return -1;
 }
 
-int innative_compile_script(const uint8_t* data, size_t sz, Environment* env)
+int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bool always_compile)
 {
   int err = ERR_SUCCESS;
   char buf[40];
-  sprintf(buf, "/[memory:%p]", data);
+#ifdef IR_PLATFORM_WIN32
+  sprintf(buf, "memory--%p", data);
+#else
+  sprintf(buf, "/memory--%p", data);
+#endif
   const char* path = buf;
 
   // Load the module
@@ -133,7 +137,7 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env)
     return err;
   }
 
-  err = wat::ParseWast(*env, data, sz, path);
+  err = wat::ParseWast(*env, data, sz, path, always_compile);
 
   if(err < 0)
     fprintf(stderr, "Error loading modules: %i\n", err);

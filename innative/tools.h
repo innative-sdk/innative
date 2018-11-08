@@ -11,7 +11,7 @@
 struct __WASM_ENVIRONMENT;
 
 namespace innative {
-  struct __WASM_ENVIRONMENT* CreateEnvironment(unsigned int flags, unsigned int modules, unsigned int maxthreads, const char* arg0);
+  struct __WASM_ENVIRONMENT* CreateEnvironment(uint64_t flags, uint64_t optimize, uint64_t features, unsigned int modules, unsigned int maxthreads, const char* arg0);
   void DestroyEnvironment(struct __WASM_ENVIRONMENT* env);
   void LoadModule(struct __WASM_ENVIRONMENT* env, size_t index, const void* data, uint64_t size, const char* name, const char* path, int* err);
   void AddModule(struct __WASM_ENVIRONMENT* env, const void* data, uint64_t size, const char* name, int* err);

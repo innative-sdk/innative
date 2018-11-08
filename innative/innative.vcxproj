@@ -375,6 +375,7 @@
     <ClCompile Include="constants.cpp" />
     <ClCompile Include="export.cpp" />
     <ClCompile Include="intrinsic.cpp" />
+    <ClCompile Include="lexer.cpp" />
     <ClCompile Include="optimize.cpp" />
     <ClCompile Include="parse.cpp" />
     <ClCompile Include="schema.cpp" />
@@ -395,6 +396,7 @@
     <ClInclude Include="compile.h" />
     <ClInclude Include="constants.h" />
     <ClInclude Include="intrinsic.h" />
+    <ClInclude Include="lexer.h" />
     <ClInclude Include="optimize.h" />
     <ClInclude Include="parse.h" />
     <ClInclude Include="queue.h" />

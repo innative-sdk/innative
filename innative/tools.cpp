@@ -13,7 +13,7 @@
 using namespace innative;
 using namespace utility;
 
-Environment* innative::CreateEnvironment(unsigned int flags, unsigned int modules, unsigned int maxthreads, const char* arg0)
+Environment* innative::CreateEnvironment(uint64_t flags, uint64_t optimize, uint64_t features, unsigned int modules, unsigned int maxthreads, const char* arg0)
 {
   Environment* env = (Environment*)calloc(1, sizeof(Environment));
   if(env)
@@ -22,6 +22,8 @@ Environment* innative::CreateEnvironment(unsigned int flags, unsigned int module
     env->whitelist = kh_init_modulepair();
     env->cimports = kh_init_cimport();
     env->modules = trealloc<Module>(0, modules);
+    env->alloc = new __WASM_ALLOCATOR();
+
     if(!env->modules)
     {
       free(env);
@@ -30,10 +32,12 @@ Environment* innative::CreateEnvironment(unsigned int flags, unsigned int module
 
     env->capacity = modules;
     env->flags = flags;
+    env->optimize = optimize;
+    env->features = features;
     env->maxthreads = maxthreads;
     env->linker = 0;
     auto sdkpath = GetProgramPath(arg0).Get();
-    char* tmp = tmalloc<char>(sdkpath.size() + 1);
+    char* tmp = tmalloc<char>(*env, sdkpath.size() + 1);
     tmemcpy<char>(tmp, sdkpath.size() + 1, sdkpath.c_str(), sdkpath.size() + 1);
     env->sdkpath = tmp;
   }
@@ -48,6 +52,7 @@ void innative::DestroyEnvironment(Environment* env)
   for(varuint32 i = 0; i < env->n_modules; ++i)
     kh_destroy_exports(env->modules[i].exports);
 
+  delete env->alloc;
   kh_destroy_modulepair(env->whitelist);
   kh_destroy_modules(env->modulemap);
   kh_destroy_cimport(env->cimports);
@@ -62,7 +67,7 @@ void innative::LoadModule(Environment* env, size_t index, const void* data, uint
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
     *err = innative::wat::ParseWatModule(*env, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
   else
-    *err = ParseModule(s, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
+    *err = ParseModule(s, *env, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
 
   env->modules[index].path = path;
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
@@ -124,7 +129,7 @@ void innative::AddWhitelist(Environment* env, const char* module_name, const cha
   if(!module_name || !export_name)
     return;
 
-  auto whitelist = tmalloc<char>(CanonWhitelist(module_name, export_name, nullptr));
+  auto whitelist = tmalloc<char>(*env, CanonWhitelist(module_name, export_name, nullptr));
   CanonWhitelist(module_name, export_name, whitelist);
 
   int r;
@@ -143,7 +148,7 @@ enum IR_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data
   if(!env)
     return ERR_FATAL_NULL_POINTER;
 
-  Embedding* embed = tmalloc<Embedding>(1);
+  Embedding* embed = tmalloc<Embedding>(*env, 1);
   embed->tag = tag;
   embed->data = data;
   embed->size = size;
@@ -180,7 +185,7 @@ enum IR_ERROR innative::Compile(Environment* env, const char* file)
 
 IR_Entrypoint innative::LoadFunction(void* cache, const char* module_name, const char* function)
 {
-  return (IR_Entrypoint)LoadDLLFunction(cache, !function ? IR_ENTRYPOINT : utility::MergeName(module_name, function).c_str());
+  return (IR_Entrypoint)LoadDLLFunction(cache, !function ? IR_ENTRYPOINT : utility::CanonicalName(module_name, function).c_str());
 }
 
 struct IR_TABLE
@@ -191,13 +196,13 @@ struct IR_TABLE
 
 IR_Entrypoint innative::LoadTable(void* cache, const char* module_name, const char* table, varuint32 index)
 {
-  IR_TABLE* ref = (IR_TABLE*)LoadDLLFunction(cache, utility::MergeName(module_name, table).c_str());
+  IR_TABLE* ref = (IR_TABLE*)LoadDLLFunction(cache, utility::CanonicalName(module_name, table).c_str());
   return !ref ? nullptr : ref[index].func;
 }
 
 IRGlobal* innative::LoadGlobal(void* cache, const char* module_name, const char* export_name)
 {
-  return (IRGlobal*)LoadDLLFunction(cache, utility::MergeName(module_name, export_name).c_str());
+  return (IRGlobal*)LoadDLLFunction(cache, utility::CanonicalName(module_name, export_name).c_str());
 }
 
 void* innative::LoadAssembly(int flags, const char* file)

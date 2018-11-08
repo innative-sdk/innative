@@ -24,20 +24,20 @@ WatTokens innative::wat::TypeEncodingToken(varsint7 type_encoding)
   return TOKEN_NONE;
 }
 
-void innative::wat::PushNewNameToken(Queue<WatToken>& tokens, const char* format, ...)
+void innative::wat::PushNewNameToken(const Environment& env, Queue<WatToken>& tokens, const char* format, ...)
 {
   va_list args;
   va_start(args, format);
 
   size_t len = vsnprintf(0, 0, format, args);
-  char* s = tmalloc<char>(len + 1);
+  char* s = tmalloc<char>(env, len + 1);
   vsnprintf(s, len + 1, format, args);
   tokens.Push(WatToken{ TOKEN_NAME, s, 0, 0, (int64_t)len });
 
   va_end(args);
 }
 
-void innative::wat::PushFunctionName(Queue<WatToken>& tokens, const Module& m, varuint32 index)
+void innative::wat::PushFunctionName(const Environment& env, Queue<WatToken>& tokens, const Module& m, varuint32 index)
 {
   Identifier* name = 0;
   if(index < m.importsection.functions)
@@ -46,7 +46,7 @@ void innative::wat::PushFunctionName(Queue<WatToken>& tokens, const Module& m, v
     name = &m.code.funcbody[index - m.importsection.functions].debug.name;
 
   if(!name || !name->size())
-    PushNewNameToken(tokens, "f%u", index);
+    PushNewNameToken(env, tokens, "f%u", index);
   else
     PushIdentifierToken(tokens, *name, TOKEN_NAME);
 }
@@ -56,15 +56,15 @@ void innative::wat::PushIdentifierToken(Queue<WatToken>& tokens, const ByteArray
   tokens.Push(WatToken{ token, id.str(), 0, 0, id.size() });
 }
 
-void innative::wat::PushLocalName(Queue<WatToken>& tokens, varuint32 index, const DebugInfo* names, varuint32 num, char prefix)
+void innative::wat::PushLocalName(const Environment& env, Queue<WatToken>& tokens, varuint32 index, const DebugInfo* names, varuint32 num, char prefix)
 {
   if(index < num && names && names[index].name.size() != 0)
     PushIdentifierToken(tokens, names[index].name, TOKEN_NAME);
   else
-    PushNewNameToken(tokens, "%c%u", prefix, index);
+    PushNewNameToken(env, tokens, "%c%u", prefix, index);
 }
 
-void innative::wat::TokenizeInstruction(Queue<WatToken>& tokens, const Module& m, const Instruction& ins, const FunctionBody* body, const FunctionType* ftype)
+void innative::wat::TokenizeInstruction(const Environment& env, Queue<WatToken>& tokens, const Module& m, const Instruction& ins, const FunctionBody* body, const FunctionType* ftype)
 {
   if(ins.opcode >= OPNAMECOUNT)
   {
@@ -83,9 +83,9 @@ void innative::wat::TokenizeInstruction(Queue<WatToken>& tokens, const Module& m
     if(body && ftype)
     {
       if(ins.immediates[0]._varuint32 < ftype->n_params)
-        PushLocalName(tokens, ins.immediates[0]._varuint32, body->param_names, ftype->n_params, 'p');
+        PushLocalName(env, tokens, ins.immediates[0]._varuint32, body->param_names, ftype->n_params, 'p');
       else
-        PushLocalName(tokens, ins.immediates[0]._varuint32 - ftype->n_params, body->local_names, body->n_locals, 'l');
+        PushLocalName(env, tokens, ins.immediates[0]._varuint32 - ftype->n_params, body->local_names, body->n_locals, 'l');
       break;
     } // If this isn't actually a function, just write out the integer by falling through
   case OP_get_global:
@@ -117,7 +117,7 @@ void innative::wat::TokenizeInstruction(Queue<WatToken>& tokens, const Module& m
     tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[1]._varuint32 });
     break;
   case OP_call:
-    PushFunctionName(tokens, m, ins.immediates[0]._varuint32);
+    PushFunctionName(env, tokens, m, ins.immediates[0]._varuint32);
     break;
   case OP_call_indirect:
     tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varuint32 });
@@ -175,7 +175,7 @@ void innative::wat::PushExportToken(Queue<WatToken>& tokens, const Module& m, WA
     }
 }
 
-void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
+void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& tokens, const Module& m)
 {
   tokens.Push(WatToken{ TOKEN_OPEN });
   tokens.Push(WatToken{ TOKEN_MODULE });
@@ -189,7 +189,7 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_TYPE });
 
-      PushNewNameToken(tokens, "t%u", (varuint32)i);
+      PushNewNameToken(env, tokens, "t%u", (varuint32)i);
 
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TypeEncodingToken(m.type.functions[i].form) });
@@ -247,11 +247,11 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
       {
       case WASM_KIND_FUNCTION:
         tokens.Push(WatToken{ TOKEN_FUNC });
-        PushFunctionName(tokens, m, (varuint32)i);
+        PushFunctionName(env, tokens, m, (varuint32)i);
 
         tokens.Push(WatToken{ TOKEN_OPEN });
         tokens.Push(WatToken{ TOKEN_TYPE });
-        PushNewNameToken(tokens, "t%u", imp.func_desc.type_index);
+        PushNewNameToken(env, tokens, "t%u", imp.func_desc.type_index);
         tokens.Push(WatToken{ TOKEN_CLOSE });
 
         if(imp.func_desc.param_names)
@@ -324,7 +324,7 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
       PushExportToken(tokens, m, WASM_KIND_GLOBAL, (varuint32)i);
       tokenize_global(tokens, m.global.globals[i].desc);
       tokens.Push(WatToken{ TOKEN_OPEN });
-      TokenizeInstruction(tokens, m, m.global.globals[i].init, 0, 0);
+      TokenizeInstruction(env, tokens, m, m.global.globals[i].init, 0, 0);
       tokens.Push(WatToken{ TOKEN_CLOSE });
       tokens.Push(WatToken{ TOKEN_CLOSE });
     }
@@ -333,7 +333,7 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
   {
     tokens.Push(WatToken{ TOKEN_OPEN });
     tokens.Push(WatToken{ TOKEN_START });
-    PushFunctionName(tokens, m, m.start);
+    PushFunctionName(env, tokens, m, m.start);
     tokens.Push(WatToken{ TOKEN_CLOSE });
   }
 
@@ -346,7 +346,7 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
 
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_OFFSET });
-      TokenizeInstruction(tokens, m, m.element.elements[i].offset, 0, 0);
+      TokenizeInstruction(env, tokens, m, m.element.elements[i].offset, 0, 0);
       tokens.Push(WatToken{ TOKEN_CLOSE });
 
       for(uint64_t j = 0; j < m.element.elements[i].n_elements; ++j)
@@ -359,17 +359,17 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
   {
     tokens.Push(WatToken{ TOKEN_OPEN });
     tokens.Push(WatToken{ TOKEN_FUNC });
-    PushFunctionName(tokens, m, (varuint32)(i + m.importsection.functions));
+    PushFunctionName(env, tokens, m, (varuint32)(i + m.importsection.functions));
     PushExportToken(tokens, m, WASM_KIND_FUNCTION, (varuint32)(i + m.importsection.functions));
 
     tokens.Push(WatToken{ TOKEN_OPEN });
     tokens.Push(WatToken{ TOKEN_TYPE });
-    PushNewNameToken(tokens, "t%u", m.function.funcdecl[i]);
+    PushNewNameToken(env, tokens, "t%u", m.function.funcdecl[i]);
     tokens.Push(WatToken{ TOKEN_CLOSE });
 
     if(m.function.funcdecl[i] >= m.type.n_functions)
     {
-      PushNewNameToken(tokens, "[invalid function index %u]", m.function.funcdecl[i]);
+      PushNewNameToken(env, tokens, "[invalid function index %u]", m.function.funcdecl[i]);
       continue;
     }
 
@@ -378,7 +378,7 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_PARAM });
-      PushLocalName(tokens, j, m.code.funcbody[i].param_names, fn.n_params, 'p');
+      PushLocalName(env, tokens, j, m.code.funcbody[i].param_names, fn.n_params, 'p');
       tokens.Push(WatToken{ TypeEncodingToken(fn.params[j]) });
       tokens.Push(WatToken{ TOKEN_CLOSE });
     }
@@ -395,14 +395,14 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_LOCAL });
-      PushLocalName(tokens, j, m.code.funcbody[i].local_names, m.code.funcbody[i].n_locals, 'l');
+      PushLocalName(env, tokens, j, m.code.funcbody[i].local_names, m.code.funcbody[i].n_locals, 'l');
       tokens.Push(WatToken{ TypeEncodingToken(m.code.funcbody[i].locals[j]) });
       tokens.Push(WatToken{ TOKEN_CLOSE });
     }
 
     for(uint64_t j = 0; j < m.code.funcbody[i].n_body; ++j)
     {
-      TokenizeInstruction(tokens, m, m.code.funcbody[i].body[j], &m.code.funcbody[i], &fn);
+      TokenizeInstruction(env, tokens, m, m.code.funcbody[i].body[j], &m.code.funcbody[i], &fn);
     }
     tokens.Push(WatToken{ TOKEN_CLOSE });
   }
@@ -416,7 +416,7 @@ void innative::wat::TokenizeModule(Queue<WatToken>& tokens, const Module& m)
 
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_OFFSET });
-      TokenizeInstruction(tokens, m, m.data.data[i].offset, 0, 0);
+      TokenizeInstruction(env, tokens, m, m.data.data[i].offset, 0, 0);
       tokens.Push(WatToken{ TOKEN_CLOSE });
 
       tokens.Push(WatToken{ TOKEN_STRING, m.data.data[i].data.str(), 0, 0, m.data.data[i].data.size() });

@@ -16,208 +16,6 @@ using namespace utility;
 namespace innative {
   namespace wat {
     __KHASH_IMPL(indexname, , StringRef, varuint32, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
-    __KHASH_IMPL(tokens, , StringRef, WatTokenID, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
-
-    template<int LEN>
-    inline const char* __getTokenString(WatTokenID token, const char* (&list)[LEN])
-    {
-      return token < LEN ? list[token] : 0;
-    }
-
-    template<int LEN>
-    inline kh_tokens_t* GenTokenHash(const char* (&list)[LEN])
-    {
-      kh_tokens_t* h = kh_init_tokens();
-
-      WatTokenID count = 0;
-      int r;
-      for(int i = 0; i < LEN; ++i)
-      {
-        auto iter = kh_put_tokens(h, StringRef{ list[i], strlen(list[i]) }, &r);
-        kh_val(h, iter) = ++count;
-      }
-
-      return h;
-    }
-
-    static const char* tokenlist[] = { "(", ")", "module", "import", "type", "start", "func", "global", "table", "memory", "export",
-      "data", "elem", "offset", "align", "local", "result", "param", "i32", "i64", "f32", "f64", "anyfunc", "mut", "block", "loop",
-      "if", "then", "else", "end", /* script extensions */ "binary", "quote", "register", "invoke", "get", "assert_return",
-      "assert_return_canonical_nan", "assert_return_arithmetic_nan", "assert_trap", "assert_malformed", "assert_invalid",
-      "assert_unlinkable", "assert_exhaustion", "script", "input", "output" };
-    static kh_tokens_t* tokenhash = GenTokenHash(tokenlist);
-
-    const char* GetTokenString(WatTokenID token) { return __getTokenString(token - 1, tokenlist); }
-
-    const char* CheckTokenINF(const char* s, const char* end, std::string* target)
-    {
-      if(s >= end)
-        return nullptr;
-
-      const char* begin = s;
-      if(s[0] == '-' || s[0] == '+')
-        ++s;
-      int i;
-      for(i = 0; i < 3 && s < end; ++i)
-      {
-        if(s[i] != "inf"[i] && s[i] != "INF"[i])
-          return nullptr;
-      }
-      if(i != 3)
-        return nullptr;
-      s += 3;
-      if(target)
-        target->assign(begin, s - begin);
-      return s;
-    }
-
-    const char* CheckTokenNAN(const char* s, const char* end, std::string* target)
-    {
-      if(s >= end)
-        return nullptr;
-
-      if(s[0] == '-' || s[0] == '+')
-        ++s;
-      const char* begin = s;
-      int i;
-      for(i = 0; i < 3 && s < end; ++i)
-      {
-        if(s[i] != "nan"[i] && s[i] != "NAN"[i])
-          return nullptr;
-      }
-      if(i != 3)
-        return nullptr;
-      s += 3;
-      if(s >= end)
-        return end;
-
-      for(i = 0; i < 3 && s < end; ++i)
-      {
-        if(s[i] != ":0x"[i])
-          return s;
-      }
-      s += i;
-
-      while(s < end && isxdigit(*s)) ++s;
-
-      if(target)
-        target->assign(begin + 3 + i, s - begin - 3 - i);
-
-      return s;
-    }
-
-    static string numbuf;
-
-    template<typename T, typename Arg, typename... Args>
-    int ResolveTokenNumber(const WatToken& token, Arg(*fn)(const char*, char**, Args...), T& out, Args... args)
-    {
-      numbuf.clear();
-      int length = token.len;
-      int(*digitcheck)(int) = (token.len > 2 && token.pos[0] == '0' && token.pos[1] == 'x') ? &isxdigit : &isdigit;
-      for(size_t i = 0; i < token.len; ++i)
-      {
-        if(token.pos[i] == '_')
-        {
-          if(!i || (i + 1) >= token.len || !(*digitcheck)(token.pos[i - 1]) || !(*digitcheck)(token.pos[i + 1])) // If it's a _, it's valid only if it's surrounded by valid digits
-            return ERR_WAT_INVALID_NUMBER;
-          --length; // Compensate for the character we removed from the amount we expect to consume
-        }
-        else // otherwise, only add all non-underscore characters
-          numbuf += token.pos[i];
-      }
-
-      errno = 0;
-      char* end;
-      out = (*fn)(numbuf.c_str(), &end, args...);
-      if(errno == ERANGE)
-        return ERR_WAT_OUT_OF_RANGE;
-      // assert(!(errno != 0 || (end - numbuf.c_str()) != length));
-      return (errno != 0 || (end - numbuf.c_str()) != length) ? ERR_WAT_INVALID_NUMBER : ERR_SUCCESS;
-    }
-
-    int ResolveTokenf32(const WatToken& token, float32& out)
-    {
-      char* last;
-
-      numbuf.assign("400000"); // Hex for the first bit in the mantissa
-      if(CheckTokenNAN(token.pos, token.pos + token.len, &numbuf))
-      {
-        *((uint32_t*)&out) = 0x7F800000UL | strtoul(numbuf.c_str(), &last, 16);
-        if(token.pos[0] == '-')
-          *((uint32_t*)&out) |= 0x80000000UL;
-
-        return ERR_SUCCESS;
-      }
-
-      if(CheckTokenINF(token.pos, token.pos + token.len, &numbuf) != nullptr)
-      {
-        out = strtof(numbuf.c_str(), &last);
-        return (last - numbuf.c_str()) == numbuf.size() ? ERR_SUCCESS : ERR_WAT_INVALID_NUMBER;
-      }
-      return ResolveTokenNumber<float32>(token, &strtof, out);
-    }
-
-    int ResolveTokenf64(const WatToken& token, float64& out)
-    {
-      char* last;
-
-      numbuf.assign("8000000000000"); // Hex for the first bit in the mantissa
-      if(CheckTokenNAN(token.pos, token.pos + token.len, &numbuf))
-      {
-        *((uint64_t*)&out) = 0x7FF0000000000000ULL | strtoull(numbuf.c_str(), &last, 16);
-        if(token.pos[0] == '-')
-          *((uint64_t*)&out) |= 0x8000000000000000ULL;
-
-        return ERR_SUCCESS;
-      }
-
-      if(CheckTokenINF(token.pos, token.pos + token.len, &numbuf) != nullptr)
-      {
-        out = strtod(numbuf.c_str(), &last);
-        return (last - numbuf.c_str()) == numbuf.size() ? ERR_SUCCESS : ERR_WAT_INVALID_NUMBER;
-      }
-      return ResolveTokenNumber<float64>(token, &strtod, out);
-    }
-
-    int ResolveTokeni64(const WatToken& token, varsint64& out)
-    {
-      if(token.len > 0 && token.pos[0] == '-')
-        return ResolveTokenNumber<varsint64, long long, int>(token, strtoll, out, 0);
-      return ResolveTokenNumber<varsint64, unsigned long long, int>(token, strtoull, out, 0);
-    }
-
-    int ResolveTokenu64(const WatToken& token, varuint64& out)
-    {
-      if(token.len > 0 && token.pos[0] == '-')
-        return ERR_WAT_OUT_OF_RANGE;
-      return ResolveTokeni64(token, reinterpret_cast<varsint64&>(out));
-    }
-
-    int ResolveTokeni32(const WatToken& token, varsint32& out)
-    {
-      varsint64 buf;
-      int err = ResolveTokeni64(token, buf);
-      if(err)
-        return err;
-      if((buf < std::numeric_limits<varsint32>::min()) || (buf > (varsint64)std::numeric_limits<varuint32>::max()))
-        return ERR_WAT_OUT_OF_RANGE;
-
-      out = (varsint32)buf;
-      return ERR_SUCCESS;
-    }
-
-    int ResolveTokenu32(const WatToken& token, varuint32& out)
-    {
-      varsint64 buf;
-      int err = ResolveTokeni64(token, buf);
-      if(err)
-        return err;
-      if((buf < 0) || (buf > (varsint64)std::numeric_limits<varuint32>::max()))
-        return ERR_WAT_OUT_OF_RANGE;
-
-      out = (varsint32)buf;
-      return ERR_SUCCESS;
-    }
 
     template<typename T, int(*FN)(const WatToken&, T&)>
     T ResolveInlineToken(const WatToken& token)
@@ -259,237 +57,6 @@ namespace innative {
       return (varuint32)~0;
     }
 
-    IR_FORCEINLINE const char* IncToken(const char*& s, const char* end, size_t& line, size_t& column)
-    {
-      ++s;
-      if(s + 1 < end && ((s[0] == '\r' && s[1] != '\n') || s[0] == '\n'))
-      {
-        ++line;
-        column = 0;
-      }
-      else
-        ++column;
-      return s;
-    }
-
-    void TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* end)
-    {
-      size_t line = 0;
-      size_t column = 0;
-      while(s < end)
-      {
-        while(s < end && (s[0] == ' ' || s[0] == '\n' || s[0] == '\r' || s[0] == '\t' || s[0] == '\f'))
-          IncToken(s, end, line, column);
-
-        if(s >= end)
-          break;
-
-        switch(s[0])
-        {
-        case 0:
-          assert(s < end);
-          IncToken(s, end, line, column);
-          break;
-        case '(':
-          if(s + 1 < end && s[1] == ';') // This is a comment
-          {
-            IncToken(s, end, line, column);
-            IncToken(s, end, line, column);
-            size_t depth = 1;
-            while(depth > 0 && s < end)
-            {
-              switch(*s)
-              {
-              case '(':
-                if(s + 1 < end && s[1] == ';')
-                  depth += 1;
-                IncToken(s, end, line, column);
-                break;
-              case ';':
-                if(s + 1 < end && s[1] == ')')
-                  depth -= 1;
-                IncToken(s, end, line, column);
-                break;
-              }
-              IncToken(s, end, line, column);
-            }
-          }
-          else
-          {
-            tokens.Push(WatToken{ TOKEN_OPEN, s, line, column });
-            IncToken(s, end, line, column);
-          }
-          break;
-        case ')':
-          tokens.Push(WatToken{ TOKEN_CLOSE, s, line, column });
-          IncToken(s, end, line, column);
-          break;
-        case ';': // A comment
-        {
-          if(s + 1 < end && s[1] == ';')
-          {
-            do
-            {
-              IncToken(s, end, line, column);
-            } while(s < end && s[0] != '\n');
-          }
-          else
-          {
-            tokens.Push(WatToken{ TOKEN_NONE });
-            assert(false);
-          }
-
-          if(s < end)
-            IncToken(s, end, line, column);
-
-          break;
-        }
-        case '"': // A string
-        {
-          const char* begin = IncToken(s, end, line, column);
-          while(s[0] != '"' && s + 1 < end)
-          {
-            IncToken(s, end, line, column);
-            if(s[0] == '\\' && s[1] == '"')
-              IncToken(s, end, line, column);
-          }
-
-          WatToken t = { TOKEN_STRING, begin, line };
-          t.len = s - begin;
-          tokens.Push(t);
-
-          if(s[0] == '"')
-            IncToken(s, end, line, column);
-          break;
-        }
-        case '$': // A name
-        {
-          WatToken t = { TOKEN_NAME, s + 1, line };
-
-          // We avoid using a regex here because extremely long names are still technically valid but can overwhelm the standard C++ regex evaluator
-          while(s < end)
-          {
-            IncToken(s, end, line, column);
-            switch(*s)
-            {
-            case '!':
-            case '#':
-            case '$':
-            case '%':
-            case '&':
-            case '\'':
-            case '*':
-            case '+':
-            case '-':
-            case '.':
-            case '/':
-            case ':':
-            case '<':
-            case '=':
-            case '>':
-            case '?':
-            case '@':
-            case '\\':
-            case '^':
-            case '_':
-            case '`':
-            case '|':
-            case '~':
-              t.len++;
-              continue;
-            default:
-              if(isalnum(s[0]))
-              {
-                t.len++;
-                continue;
-              }
-            }
-            break;
-          }
-
-          if(!t.len) // Empty names are invalid
-            t.id = TOKEN_NONE;
-
-          tokens.Push(t);
-          break;
-        }
-        case '-':
-        case '+':
-        case '0':
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-        case '5':
-        case '6':
-        case '7':
-        case '8':
-        case '9': // Either an integer or a float
-        {
-          const char* last = s;
-          if(!(last = CheckTokenNAN(s, end, 0)) && !(last = CheckTokenINF(s, end, 0))) // Check if this is an NaN or an INF
-          {
-            last = s; // If it's not an NAN, estimate what the number is
-            if(last[0] == '-' || last[0] == '+')
-              ++last;
-            if(last + 2 < end && last[0] == '0' && last[1] == 'x')
-              last += 2;
-            if(last >= end || !isxdigit(last[0]))
-            {
-              tokens.Push(WatToken{ TOKEN_NONE, s, line, column, last - s });
-              column += last - s;
-              s = last;
-              break;
-            }
-            while(last < end && (isalnum(last[0]) || last[0] == '.' || last[0] == '_' || last[0] == '-' || last[0] == '+'))
-              ++last;
-          }
-          tokens.Push(WatToken{ TOKEN_NUMBER, s, line, column, last - s });
-          column += last - s;
-          s = last;
-          break;
-        }
-        default:
-        {
-          const char* begin = s;
-          if((begin = CheckTokenNAN(s, end, 0)) != 0 || (begin = CheckTokenINF(s, end, 0)) != 0) // Check if this is an NaN
-          {
-            tokens.Push(WatToken{ TOKEN_NUMBER, s, line, column, begin - s });
-            column += begin - s;
-            s = begin;
-          }
-          else
-          {
-            begin = s;
-
-            while(s < end && s[0] != ' ' && s[0] != '\n' && s[0] != '\r' && s[0] != '\t' && s[0] != '\f' && s[0] != '=' && s[0] != ')' && s[0] != '(' && s[0] != ';')
-              IncToken(s, end, line, column);
-
-            StringRef ref = { begin, static_cast<size_t>(s - begin) };
-            khiter_t iter = kh_get_tokens(tokenhash, ref);
-            if(kh_exist2(tokenhash, iter))
-              tokens.Push(WatToken{ kh_val(tokenhash, iter), begin, line, column });
-            else
-            {
-              uint8_t op = GetInstruction(ref);
-              if(op != 0xFF)
-                tokens.Push(WatToken{ TOKEN_OPERATOR, begin, line, column, (int64_t)op });
-              else
-              {
-                // assert(false);
-                tokens.Push(WatToken{ TOKEN_NONE, begin, line, column, (int64_t)ref.len });
-              }
-            }
-            if(*s == '=')
-              IncToken(s, end, line, column);
-          }
-        }
-        }
-        if(tokens.Size() > 0)
-          assert(tokens.Peek().id < TOKEN_TOTALCOUNT);
-      }
-    }
-
     void WriteUTF32(uint32_t ch, ByteArray& str, varuint32& index)
     {
       static const uint32_t UNI_REPLACEMENT_CHAR = 0x0000FFFD;
@@ -525,7 +92,7 @@ namespace innative {
       index += bytesToWrite;
     }
 
-    int WatString(ByteArray& str, StringRef t)
+    int WatString(const Environment& env, ByteArray& str, StringRef t)
     {
       if(!t.s)
         return assert(false), ERR_PARSE_INVALID_NAME;
@@ -535,7 +102,7 @@ namespace innative {
       {
         index = str.size();
         varuint32 n = str.size() + t.len;
-        uint8_t* b = tmalloc<uint8_t>(n + 1);
+        uint8_t* b = tmalloc<uint8_t>(env, n + 1);
         if(!b)
           return assert(false), ERR_FATAL_OUT_OF_MEMORY;
 
@@ -543,7 +110,7 @@ namespace innative {
         new(&str) ByteArray(b, n);
       }
       else
-        str.resize(t.len, true);
+        str.resize(t.len, true, env);
 
       if(!t.len)
         return ERR_SUCCESS;
@@ -607,12 +174,12 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatName(ByteArray& name, const WatToken& t)
+    int WatName(const Environment& env, ByteArray& name, const WatToken& t)
     {
       if(t.id != TOKEN_NAME || !t.pos || !t.len)
         return assert(false), ERR_PARSE_INVALID_NAME;
 
-      name.resize(t.len, true);
+      name.resize(t.len, true, env);
       if(!name.get() || t.len > numeric_limits<varuint32>::max())
         return assert(false), ERR_FATAL_OUT_OF_MEMORY;
       tmemcpy((char*)name.get(), name.size(), t.pos, t.len);
@@ -650,7 +217,7 @@ namespace innative {
       return AppendArray<varsint7>(ty, a, n);
     }
 
-    int WatFunctionTypeInner(Queue<WatToken>& tokens, FunctionType& sig, DebugInfo** info, bool anonymous)
+    int WatFunctionTypeInner(const Environment& env, Queue<WatToken>& tokens, FunctionType& sig, DebugInfo** info, bool anonymous)
     {
       sig.form = TE_func;
       int err;
@@ -669,7 +236,7 @@ namespace innative {
             if(tokens.Peek().len >= numeric_limits<varuint32>::max())
               return assert(false), ERR_WAT_OUT_OF_RANGE;
             DebugInfo debug = { src.line, src.column };
-            WatName(debug.name, tokens.Peek());
+            WatName(env, debug.name, tokens.Peek());
 
             varuint32 sz = sig.n_params;
             if(err = AppendArray<DebugInfo>(debug, *info, sz))
@@ -721,7 +288,7 @@ namespace innative {
       EXPECTED(tokens, TOKEN_FUNC, ERR_WAT_EXPECTED_FUNC);
 
       FunctionType sig = { 0 };
-      int err = WatFunctionTypeInner(tokens, sig, 0, false);
+      int err = WatFunctionTypeInner(state.env, tokens, sig, 0, false);
       if(err != 0)
         return err;
       *index = state.m.type.n_functions;
@@ -827,7 +394,7 @@ namespace innative {
         sig = WatGetFromHash(state.typehash, tokens.Pop());
 
         if(sig >= state.m.type.n_functions)
-          AppendError(state.env.errors, &state.m, ERR_WAT_UNKNOWN_TYPE, "Invalid type signature %u", sig);
+          AppendError(state.env, state.env.errors, &state.m, ERR_WAT_UNKNOWN_TYPE, "Invalid type signature %u", sig);
 
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       }
@@ -836,7 +403,7 @@ namespace innative {
       {
         // Create a type to match this function signature
         FunctionType func = { 0 };
-        int err = WatFunctionTypeInner(tokens, func, info, anonymous);
+        int err = WatFunctionTypeInner(state.env, tokens, func, info, anonymous);
         if(err)
           return err;
 
@@ -1328,7 +895,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatInlineImportExport(Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out)
+    int WatInlineImportExport(const Environment& env, Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out)
     {
       int err;
       while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_EXPORT)
@@ -1339,7 +906,7 @@ namespace innative {
         Export e = { };
         e.kind = kind;
         e.index = *index; // This is fine because you can only import OR export on a declaration statement
-        if(err = WatString(e.name, tokens.Pop()))
+        if(err = WatString(env, e.name, tokens.Pop()))
           return err;
         if(!ValidateIdentifier(e.name))
           return ERR_INVALID_UTF8_ENCODING;
@@ -1354,11 +921,11 @@ namespace innative {
         EXPECTED(tokens, TOKEN_IMPORT, ERR_WAT_EXPECTED_IMPORT);
 
         Import i;
-        if(err = WatString(i.module_name, tokens.Pop()))
+        if(err = WatString(env, i.module_name, tokens.Pop()))
           return err;
         if(!ValidateIdentifier(i.module_name))
           return ERR_INVALID_UTF8_ENCODING;
-        if(err = WatString(i.export_name, tokens.Pop()))
+        if(err = WatString(env, i.export_name, tokens.Pop()))
           return err;
         if(!ValidateIdentifier(i.export_name))
           return ERR_INVALID_UTF8_ENCODING;
@@ -1398,7 +965,7 @@ namespace innative {
 
       *index = state.m.importsection.functions + state.m.function.n_funcdecl;
       Import* i = 0;
-      if(err = WatInlineImportExport(state.m, tokens, index, WASM_KIND_FUNCTION, &i))
+      if(err = WatInlineImportExport(state.env, state.m, tokens, index, WASM_KIND_FUNCTION, &i))
         return err;
 
       if(i) // If this is an import, assemble the aux information and abort.
@@ -1410,7 +977,7 @@ namespace innative {
 
       FunctionType& desc = state.m.type.functions[sig];
       if(name.len > 0)
-        if(err = WatString(body.debug.name, name))
+        if(err = WatString(state.env, body.debug.name, name))
           return err;
 
       // Read in all the locals
@@ -1425,7 +992,7 @@ namespace innative {
           if(tokens.Peek().len > numeric_limits<varuint32>::max())
             return assert(false), ERR_WAT_OUT_OF_RANGE;
           DebugInfo debug = { src.line, src.column };
-          WatName(debug.name, tokens.Pop());
+          WatName(state.env, debug.name, tokens.Pop());
 
           varuint32 sz = body.n_locals; // n_locals is the count, but we don't want to increment it yet
           if(err = AppendArray<DebugInfo>(debug, body.local_names, sz))
@@ -1503,7 +1070,7 @@ namespace innative {
       int err;
       *index = state.m.table.n_tables;
       Import* i = 0;
-      if(err = WatInlineImportExport(state.m, tokens, index, WASM_KIND_TABLE, &i))
+      if(err = WatInlineImportExport(state.env, state.m, tokens, index, WASM_KIND_TABLE, &i))
         return err;
 
       if(i) // If this is an import, assemble the aux information and abort.
@@ -1550,7 +1117,7 @@ namespace innative {
       }
 
       if(blank.n_body != 1)
-        AppendError(state.env.errors, 0, ERR_INVALID_INITIALIZER, "Only one instruction is allowed as an initializer");
+        AppendError(state.env, state.env.errors, 0, ERR_INVALID_INITIALIZER, "Only one instruction is allowed as an initializer");
 
       if(blank.n_body > 0)
         op = blank.body[0];
@@ -1597,7 +1164,7 @@ namespace innative {
       int err;
       *index = state.m.global.n_globals;
       Import* i = 0;
-      if(err = WatInlineImportExport(state.m, tokens, index, WASM_KIND_GLOBAL, &i))
+      if(err = WatInlineImportExport(state.env, state.m, tokens, index, WASM_KIND_GLOBAL, &i))
         return err;
 
       if(i) // If this is an import, assemble the aux information and abort.
@@ -1624,7 +1191,7 @@ namespace innative {
       int err;
       *index = state.m.memory.n_memories;
       Import* i = 0;
-      if(err = WatInlineImportExport(state.m, tokens, index, WASM_KIND_MEMORY, &i))
+      if(err = WatInlineImportExport(state.env, state.m, tokens, index, WASM_KIND_MEMORY, &i))
         return err;
 
       if(i) // If this is an import, assemble the aux information and abort.
@@ -1644,9 +1211,13 @@ namespace innative {
         {
           if(tokens[0].id != TOKEN_STRING)
             return assert(false), ERR_WAT_EXPECTED_STRING;
-          if(err = WatString(init.data, tokens.Pop()))
+          if(err = WatString(state.env, init.data, tokens.Pop()))
             return err;
         }
+
+        state.m.knownsections |= (1 << WASM_SECTION_DATA);
+        if(err = AppendArray(init, state.m.data.data, state.m.data.n_data))
+          return err;
 
         mem.limits.flags = 0;
         mem.limits.minimum = init.data.size();
@@ -1678,9 +1249,9 @@ namespace innative {
     {
       Import i;
       int err;
-      if(err = WatString(i.module_name, tokens.Pop()))
+      if(err = WatString(state.env, i.module_name, tokens.Pop()))
         return err;
-      if(err = WatString(i.export_name, tokens.Pop()))
+      if(err = WatString(state.env, i.export_name, tokens.Pop()))
         return err;
 
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
@@ -1692,7 +1263,7 @@ namespace innative {
       {
       case TOKEN_FUNC:
         i.kind = WASM_KIND_FUNCTION;
-        if(name.id == TOKEN_NAME && (err = WatName(i.func_desc.debug.name, name)))
+        if(name.id == TOKEN_NAME && (err = WatName(state.env, i.func_desc.debug.name, name)))
           return err;
         if(err = WatTypeUse(state, tokens, i.func_desc.type_index, &i.func_desc.param_names, false))
           return err;
@@ -1746,7 +1317,7 @@ namespace innative {
     {
       Export e = {};
       int err;
-      if(err = WatString(e.name, tokens.Pop()))
+      if(err = WatString(state.env, e.name, tokens.Pop()))
         return err;
 
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
@@ -1809,7 +1380,9 @@ namespace innative {
     {
       while(tokens[0].id != TOKEN_CLOSE)
       {
-        AppendArray(WatGetFromHash(state.funchash, tokens.Pop()), e.elements, e.n_elements);
+        int err = AppendArray(WatGetFromHash(state.funchash, tokens.Pop()), e.elements, e.n_elements);
+        if(err)
+          return err;
         if(e.elements[e.n_elements - 1] == (varuint32)~0)
           return assert(false), ERR_WAT_INVALID_VAR;
       }
@@ -1829,7 +1402,8 @@ namespace innative {
       {
         if(tokens[0].id != TOKEN_STRING)
           return assert(false), ERR_WAT_EXPECTED_STRING;
-        WatString(d.data, tokens.Pop());
+        if(err = WatString(state.env, d.data, tokens.Pop()))
+          return err;
       }
 
       state.m.knownsections |= (1 << WASM_SECTION_DATA);
@@ -1856,10 +1430,10 @@ namespace innative {
     {
       int err;
       m = { 0 };
-      if(name.s && (err = WatName(m.name, WatToken{ TOKEN_NAME, (const char*)name.s, 0, 0, (int64_t)name.len })))
+      if(name.s && (err = WatName(env, m.name, WatToken{ TOKEN_NAME, (const char*)name.s, 0, 0, (int64_t)name.len })))
         return err;
 
-      if((tokens.Peek().id == TOKEN_NAME) && (err = WatName(m.name, internalname = tokens.Pop())))
+      if((tokens.Peek().id == TOKEN_NAME) && (err = WatName(env, m.name, internalname = tokens.Pop())))
         return err;
 
       WatState state(env, m);
@@ -1913,9 +1487,9 @@ namespace innative {
           if(fname.id == TOKEN_NAME)
           {
             if(index < m.importsection.functions)
-              WatName(m.importsection.imports[index].func_desc.debug.name, fname);
+              WatName(env, m.importsection.imports[index].func_desc.debug.name, fname);
             else if(index - m.importsection.functions < m.code.n_funcbody)
-              WatName(m.code.funcbody[index - m.importsection.functions].debug.name, fname);
+              WatName(env, m.code.funcbody[index - m.importsection.functions].debug.name, fname);
           }
 
           if(iter != kh_end(state.funchash))
@@ -2041,7 +1615,7 @@ namespace innative {
 
       m.exports = kh_init_exports();
 
-      return ParseExportFixup(m, env.errors);
+      return ParseExportFixup(m, env.errors, env);
     }
 
     int WatEnvironment(Environment& env, Queue<WatToken>& tokens)
@@ -2050,7 +1624,7 @@ namespace innative {
     }
 
     // Checks for parse errors in the tokenization process
-    int CheckWatTokens(ValidationError*& errors, Queue<WatToken>& tokens, const char* start)
+    int CheckWatTokens(const Environment& env, ValidationError*& errors, Queue<WatToken>& tokens, const char* start)
     {
       int err = ERR_SUCCESS;
       for(size_t i = 0; i < tokens.Size(); ++i)
@@ -2058,10 +1632,10 @@ namespace innative {
         switch(tokens[i].id)
         {
         case TOKEN_NONE:
-          AppendError(errors, nullptr, ERR_WAT_INVALID_TOKEN, "[%zu] Invalid token: %s", WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
+          AppendError(env, errors, nullptr, ERR_WAT_INVALID_TOKEN, "[%zu] Invalid token: %s", WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
           break;
         case TOKEN_RANGE_ERROR:
-          AppendError(errors, nullptr, ERR_WAT_OUT_OF_RANGE, "[%zu] Constant out of range: %s", WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
+          AppendError(env, errors, nullptr, ERR_WAT_OUT_OF_RANGE, "[%zu] Constant out of range: %s", WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
           break;
         default:
           continue;
@@ -2081,7 +1655,7 @@ namespace innative {
       if(!tokens.Size())
         return ERR_FATAL_INVALID_MODULE;
 
-      int err = CheckWatTokens(env.errors, tokens, (char*)data);
+      int err = CheckWatTokens(env, env.errors, tokens, (char*)data);
       if(err < 0)
         return err;
 

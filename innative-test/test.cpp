@@ -45,22 +45,22 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  testfiles = { "../spec/test/core/f32.wast" };
+  testfiles = { "../spec/test/core/imports.wast" };
   target << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
   //testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
 
   for(auto file : testfiles)
   {
-    Environment* env = (*exports.CreateEnvironment)(ENV_LIBRARY | ENV_DEBUG | ENV_EMIT_LLVM | ENV_STRICT, 1, 0, (!argc ? 0 : argv[0]));
+    Environment* env = (*exports.CreateEnvironment)(ENV_LIBRARY | ENV_DEBUG | ENV_EMIT_LLVM | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS, 0, ENV_FEATURE_ALL, 1, 0, (!argc ? 0 : argv[0]));
     env->linker = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\VC\\Tools\\MSVC\\14.15.26726\\bin\\Hostx64\\x64\\link.exe";
     int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
 
     if(err >= 0)
-      err = innative_compile_script(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env);
+      err = innative_compile_script(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env, false);
     if(err < 0)
       return assert(false), -1; // If the environment injection fails, abort everything
 
-    err = innative_compile_script((const uint8_t*)file.generic_u8string().data(), 0, env);
+    err = innative_compile_script((const uint8_t*)file.generic_u8string().data(), 0, env, true);
     if(!err && !env->errors)
       target << file << ": SUCCESS" << std::endl;
     else

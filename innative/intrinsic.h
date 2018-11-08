@@ -7,7 +7,7 @@
 #include "innative/schema.h"
 #include "stack.h"
 #pragma warning(push)
-#pragma warning(disable:4146)
+#pragma warning(disable : 4146 4267 4141 4244 4624)
 #define _SCL_SECURE_NO_WARNINGS
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
@@ -34,6 +34,7 @@ namespace innative {
     struct Block
     {
       llvm::BasicBlock* block; // Label
+      llvm::BasicBlock* ifelse; // Label for else statement
       size_t limit; // Limit of value stack
       varsint7 sig; // Block signature
       uint8_t op; // instruction that pushed this label
@@ -48,6 +49,8 @@ namespace innative {
       llvm::Function* imported;
     };
 
+    KHASH_DECLARE(importhash, const char*, llvm::Function*);
+
     struct Context
     {
       const Environment& env;
@@ -56,6 +59,7 @@ namespace innative {
       llvm::Module* llvm;
       llvm::IRBuilder<>& builder;
       llvm::TargetMachine* machine;
+      kh_importhash_t* importhash;
       llvm::IntegerType* intptrty;
       llvm::DIBuilder* dbuilder;
       llvm::DIType* diF32;
