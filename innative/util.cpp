@@ -47,13 +47,15 @@ void* __WASM_ALLOCATOR::allocate(size_t n)
     if(index <= max && end > max) // Exactly one allocation can be in this state at a time, the others will spin while waiting for the reallocation
     {
       n = std::max<size_t>(end, 4096) * 2;
-      void* prev = mem.load(std::memory_order_acquire);
+      void* prev; // = mem.load(std::memory_order_acquire);
 #ifdef IR_PLATFORM_WIN32
-      mem.exchange(!prev ? HeapAlloc(GetProcessHeap(), 0, n) : HeapReAlloc(GetProcessHeap(), HEAP_REALLOC_IN_PLACE_ONLY, prev, n), std::memory_order_release);
+      prev = HeapAlloc(GetProcessHeap(), 0, n);
 #elif defined(IR_PLATFORM_POSIX)
-      mem.exchange(!prev ? mmap(0, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1) : mremap(prev, max, n, PROT_READ | PROT_WRITE), std::memory_order_release);
+      prev = mmap(0, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1);
 #endif
-      sz.exchange(n, std::memory_order_release);
+      list.push_back({ prev, n }); // Add real pointer and size to our destructor list
+      mem.exchange((char*)prev - index, std::memory_order_release); // backtrack to trick the current index into pointing to the right address
+      sz.exchange(n + index, std::memory_order_release); // Actual "end" is our previous allocation endpoint (not the memory endpoint) plus current size
     }
   }
 
@@ -61,20 +63,19 @@ void* __WASM_ALLOCATOR::allocate(size_t n)
 }
 __WASM_ALLOCATOR::~__WASM_ALLOCATOR()
 {
-  void* p = mem.load(std::memory_order_acquire);
-  if(p != nullptr)
-  {
-    size_t max = sz.load(std::memory_order_acquire);
-#ifdef IR_PLATFORM_WIN32
-    HeapFree(GetProcessHeap(), 0, p);
-#elif defined(IR_PLATFORM_POSIX)
-    munmap(p, max);
-#endif
-    mem.exchange(nullptr, std::memory_order_release);
-  }
-
+  mem.exchange(nullptr, std::memory_order_release);
   sz.exchange(0, std::memory_order_release);
   cur.exchange(0, std::memory_order_release);
+
+  while(!list.empty())
+  {
+#ifdef IR_PLATFORM_WIN32
+    HeapFree(GetProcessHeap(), 0, list.back().first);
+#elif defined(IR_PLATFORM_POSIX)
+    munmap(list.back().first, list.back().second);
+#endif
+    list.pop_back();
+  }
 }
 
 namespace innative {

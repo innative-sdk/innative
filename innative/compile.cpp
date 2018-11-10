@@ -1942,35 +1942,6 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   if(baselocation)
     context.builder.SetCurrentDebugLocation(baselocation);
 
-  // Set ENV_HOMOGENIZE_FUNCTIONS flag appropriately.
-  auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &HomogenizeFunction : &WrapFunction;
-
-  // Process exports by modifying global variables or function definitions as needed
-  for(varuint32 i = 0; i < context.m.exportsection.n_exports; ++i)
-  {
-    Export& e = context.m.exportsection.exports[i];
-    auto canonical = CanonicalName(context.m.name.str(), e.name.str());
-    switch(e.kind)
-    {
-    case WASM_KIND_FUNCTION:
-      context.functions[e.index].exported = (*wrapperfn)(context.functions[e.index].imported ? context.functions[e.index].imported : context.functions[e.index].internal, canonical, context, Func::ExternalLinkage, llvm::CallingConv::C);
-      context.functions[e.index].exported->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
-      break;
-    case WASM_KIND_TABLE:
-      llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, context.tables[e.index])->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
-      break;
-    case WASM_KIND_MEMORY:
-      llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, context.memories[e.index])->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
-      break;
-    case WASM_KIND_GLOBAL:
-      llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, context.globals[e.index])->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
-      break;
-    }
-  }
-
-  if(baselocation)
-    context.builder.SetCurrentDebugLocation(baselocation);
-
   // Process data section by appending to the init function
   for(varuint32 i = 0; i < context.m.data.n_data; ++i)
   {
@@ -2164,6 +2135,82 @@ namespace innative {
 
     if(!env->n_modules)
       return ERR_FATAL_INVALID_MODULE;
+
+    // Set ENV_HOMOGENIZE_FUNCTIONS flag appropriately.
+    auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &HomogenizeFunction : &WrapFunction;
+
+    // Resolve all exports in the module they originated from (in case any module is exporting an import)
+    for(varuint32 i = 0; i < env->n_modules; ++i)
+    {
+      for(varuint32 j = 0; j < context[i].m.exportsection.n_exports; ++j)
+      {
+        Export* e = &context[i].m.exportsection.exports[j];
+        Module* m = &context[i].m;
+
+        // Calculate the canonical name we wish to export as using the initial export object
+        auto canonical = CanonicalName(context[i].m.name.str(), e->name.str());
+
+        // Resolve the export/module pair to the concrete source
+        for(;;)
+        {
+          Import* imp = nullptr;
+
+          switch(e->kind)
+          {
+          case WASM_KIND_FUNCTION:
+            if(e->index < m->importsection.functions)
+              imp = &m->importsection.imports[e->index];
+            break;
+          case WASM_KIND_TABLE:
+            if(e->index < (m->importsection.tables - m->importsection.functions))
+              imp = &m->importsection.imports[m->importsection.functions + e->index];
+            break;
+          case WASM_KIND_MEMORY:
+            if(e->index < (m->importsection.memories - m->importsection.tables))
+              imp = &m->importsection.imports[m->importsection.tables + e->index];
+            break;
+          case WASM_KIND_GLOBAL:
+            if(e->index < (m->importsection.globals - m->importsection.memories))
+              imp = &m->importsection.imports[m->importsection.memories + e->index];
+            break;
+          }
+
+          if(!imp)
+            break;
+
+          auto pair = ResolveExport(*env, *imp);
+          m = pair.first;
+          e = pair.second;
+        }
+
+        code::Context* ctx = context + (m - env->modules); // Figure out what the corresponding context is for this module
+
+        switch(e->kind)
+        {
+        case WASM_KIND_FUNCTION:
+          if(!ctx->functions[e->index].exported)
+          {
+            if(ctx->dbuilder)
+              builder.SetCurrentDebugLocation(llvm::DILocation::get(llvm_context, ctx->init->getSubprogram()->getLine(), 0, ctx->init->getSubprogram()));
+
+            ctx->functions[e->index].exported = (*wrapperfn)(ctx->functions[e->index].imported ? ctx->functions[e->index].imported : ctx->functions[e->index].internal, canonical, *ctx, Func::ExternalLinkage, llvm::CallingConv::C);
+            ctx->functions[e->index].exported->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+          }
+          else
+            llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, ctx->functions[e->index].exported)->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+          break;
+        case WASM_KIND_TABLE:
+          llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, ctx->tables[e->index])->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+          break;
+        case WASM_KIND_MEMORY:
+          llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, ctx->memories[e->index])->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+          break;
+        case WASM_KIND_GLOBAL:
+          llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, ctx->globals[e->index])->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+          break;
+        }
+      }
+    }
 
     // Initialize all modules and call start function (if it exists)
     if(!start) // We always create an initialization function, even for DLLs, to do proper initialization of modules

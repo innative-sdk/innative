@@ -673,6 +673,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
         return ERR_PARSE_INVALID_NAME;
 
       kh_val(env.modulemap, iter) = i;
+      env.modules[i].name = name;
       break;
     }
     case TOKEN_INVOKE:

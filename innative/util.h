@@ -14,6 +14,7 @@
 #include <utility>
 #include <memory>
 #include <atomic>
+#include <vector>
 
 #define kh_exist2(h, x) ((x < kh_end(h)) && kh_exist(h, x))
 
@@ -25,6 +26,7 @@ struct __WASM_ALLOCATOR
   std::atomic<void*> mem;
   std::atomic_size_t sz;
   std::atomic_size_t cur;
+  std::vector<std::pair<void*, size_t>> list;
 
   void* allocate(size_t n);
 };
