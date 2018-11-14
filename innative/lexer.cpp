@@ -125,6 +125,13 @@ namespace innative {
           numbuf += token.pos[i];
       }
 
+      if(digitcheck == &isdigit) // If this is a decimal number, strip all leading 0s because otherwise it'll be considered octal 
+      {
+        size_t iter = numbuf.find_first_not_of('0');
+        if(iter != std::string::npos)
+          numbuf.substr(iter);
+      }
+
       errno = 0;
       char* end;
       out = (*fn)(numbuf.c_str(), &end, args...);
@@ -141,10 +148,11 @@ namespace innative {
       numbuf.assign("400000"); // Hex for the first bit in the mantissa
       if(CheckTokenNAN(token.pos, token.pos + token.len, &numbuf))
       {
-        *((uint32_t*)&out) = 0x7F800000UL | strtoul(numbuf.c_str(), &last, 16);
+        union { uint32_t i; float f; } u = { 0x7F800000UL | strtoul(numbuf.c_str(), &last, 16) };
         if(token.pos[0] == '-')
-          *((uint32_t*)&out) |= 0x80000000UL;
+          u.i |= 0x80000000UL;
 
+        out = u.f;
         return ERR_SUCCESS;
       }
 
@@ -163,10 +171,11 @@ namespace innative {
       numbuf.assign("8000000000000"); // Hex for the first bit in the mantissa
       if(CheckTokenNAN(token.pos, token.pos + token.len, &numbuf))
       {
-        *((uint64_t*)&out) = 0x7FF0000000000000ULL | strtoull(numbuf.c_str(), &last, 16);
+        union { uint64_t i; double f; } u = { 0x7FF0000000000000ULL | strtoull(numbuf.c_str(), &last, 16) };
         if(token.pos[0] == '-')
-          *((uint64_t*)&out) |= 0x8000000000000000ULL;
+          u.i |= 0x8000000000000000ULL;
 
+        out = u.f;
         return ERR_SUCCESS;
       }
 

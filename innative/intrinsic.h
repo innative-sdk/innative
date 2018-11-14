@@ -49,7 +49,7 @@ namespace innative {
       llvm::Function* imported;
     };
 
-    KHASH_DECLARE(importhash, const char*, llvm::Function*);
+    KHASH_DECLARE(importhash, const char*, llvm::GlobalObject*);
 
     struct Context
     {

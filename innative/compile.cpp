@@ -166,8 +166,10 @@ Func* HomogenizeFunction(Func* fn, const Twine& name, code::Context& context, ll
     auto ty = fn->getFunctionType()->params()[i++];
     if(ty->isIntegerTy()) // Directly convert all ints from i64
       v = context.builder.CreateIntCast(&arg, ty, true);
-    else if(ty->isFloatingPointTy()) // Bitcast from i64 to a double, then shrink to the appropriate size
-      v = context.builder.CreateFPCast(context.builder.CreateBitCast(&arg, context.builder.getDoubleTy()), ty);
+    else if(ty->isDoubleTy()) // Bitcast directly to double
+      v = context.builder.CreateBitCast(&arg, ty);
+    else if(ty->isFloatTy()) // Shrink from i64 to i32 then bitcast to float
+      v = context.builder.CreateBitCast(context.builder.CreateIntCast(&arg, context.builder.getInt32Ty(), true), ty);
     else if(ty->isPointerTy())
       v = context.builder.CreateIntToPtr(&arg, ty);
     else
@@ -181,8 +183,10 @@ Func* HomogenizeFunction(Func* fn, const Twine& name, code::Context& context, ll
   {
     if(fn->getReturnType()->isIntegerTy()) // Directly convert all ints to i64
       val = context.builder.CreateIntCast(val, context.builder.getInt64Ty(), true);
-    else if(fn->getReturnType()->isFloatingPointTy()) // expand to double, then bitcast to i64
-      val = context.builder.CreateBitCast(context.builder.CreateFPCast(val, context.builder.getDoubleTy()), context.builder.getInt64Ty());
+    else if(fn->getReturnType()->isDoubleTy()) // Bitcast directly to i64
+      val = context.builder.CreateBitCast(val, context.builder.getInt64Ty());
+    else if(fn->getReturnType()->isFloatTy()) // bitcast to i32, then expand to i64
+      val = context.builder.CreateIntCast(context.builder.CreateBitCast(val, context.builder.getInt32Ty()), context.builder.getInt64Ty(), true);
     else if(fn->getReturnType()->isPointerTy())
       val = context.builder.CreatePtrToInt(val, context.builder.getInt64Ty());
     else
@@ -942,7 +946,7 @@ IR_ERROR CompileMemGrow(code::Context& context, const char* name)
 
   llvmVal* old = CompileMemSize(context.memories[0], context);
 
-  auto max = context.builder.getInt64(uint64_t((context.m.memory.memories[0].limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? context.m.memory.memories[0].limits.maximum : 0x10000) << 16);
+  auto max = llvm::cast<llvm::ConstantAsMetadata>(context.memories[0]->getMetadata(IR_MEMORY_MAX_METADATA)->getOperand(0))->getValue();
   CallInst* call = context.builder.CreateCall(context.memgrow, { context.builder.CreateLoad(context.memories[0]), context.builder.CreateShl(context.builder.CreateZExt(delta, context.builder.getInt64Ty()), 16), max }, name);
 
   llvmVal* success = context.builder.CreateICmpNE(context.builder.CreatePtrToInt(call, context.intptrty), CInt::get(context.intptrty, 0));
@@ -977,11 +981,37 @@ IR_ERROR CompileSRem(code::Context& context, const Twine& name)
   if(err = PopType(Ty1, context, val1))
     return assert(false), err;
   
+  InsertConditionalTrap(context.builder.CreateICmpEQ(val2, CInt::get(val2->getType(), 0, true)), context);
+
   // The specific case of INT_MIN % -1 is undefined behavior in LLVM and crashes on x86, but WASM requires that it return 0, so we branch on that specific case.
-  llvm::Value* cond = context.builder.CreateAnd(
+  llvmVal* cond = context.builder.CreateAnd(
     context.builder.CreateICmpEQ(val1, (val1->getType()->getIntegerBitWidth() == 32) ? context.builder.getInt32(0x80000000) : context.builder.getInt64(0x8000000000000000)),
     context.builder.CreateICmpEQ(val2, CInt::get(val2->getType(), ~0ULL, true)));
   return PushReturn(context, context.builder.CreateSRem(context.builder.CreateSelect(cond, CInt::get(val1->getType(), 0, true), val1), val2, name));
+}
+
+// Given a function pointer to the appropriate builder function, pops two binary arguments off the stack and pushes the result
+template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR, typename... Args>
+IR_ERROR CompileDiv(code::Context& context, bool overflow, llvmVal* (llvm::IRBuilder<>::*op)(llvmVal*, llvmVal*, Args...), Args... args)
+{
+  IR_ERROR err;
+
+  // Pop in reverse order
+  llvmVal *val2, *val1;
+  if(err = PopType(Ty2, context, val2))
+    return assert(false), err;
+  if(err = PopType(Ty1, context, val1))
+    return assert(false), err;
+
+  llvmVal* cond = context.builder.CreateICmpEQ(val2, CInt::get(val2->getType(), 0, true));
+  if(overflow)
+    cond = context.builder.CreateOr(cond,
+      context.builder.CreateAnd(
+        context.builder.CreateICmpEQ(val1, (val1->getType()->getIntegerBitWidth() == 32) ? context.builder.getInt32(0x80000000) : context.builder.getInt64(0x8000000000000000)),
+        context.builder.CreateICmpEQ(val2, CInt::get(val2->getType(), ~0ULL, true))));
+
+  InsertConditionalTrap(cond, context);
+  return PushReturn(context, (context.builder.*op)(val1, val2, args...));
 }
 
 IR_ERROR InsertTruncTrap(code::Context& context, double max, double min, llvm::Type* ty)
@@ -1294,13 +1324,13 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   case OP_i32_mul:
     return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const Twine&, bool, bool>(context, &llvm::IRBuilder<>::CreateMul, OPNAMES[ins.opcode], false, false);
   case OP_i32_div_s:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const Twine&, bool>(context, &llvm::IRBuilder<>::CreateSDiv, OPNAMES[ins.opcode], false);
+    return CompileDiv<TE_i32, TE_i32, TE_i32, const Twine&, bool>(context, true, &llvm::IRBuilder<>::CreateSDiv, OPNAMES[ins.opcode], false);
   case OP_i32_div_u:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const Twine&, bool>(context, &llvm::IRBuilder<>::CreateUDiv, OPNAMES[ins.opcode], false);
+    return CompileDiv<TE_i32, TE_i32, TE_i32, const Twine&, bool>(context, false, &llvm::IRBuilder<>::CreateUDiv, OPNAMES[ins.opcode], false);
   case OP_i32_rem_s:
     return CompileSRem<TE_i32, TE_i32, TE_i32>(context, OPNAMES[ins.opcode]);
   case OP_i32_rem_u:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const Twine&>(context, &llvm::IRBuilder<>::CreateURem, OPNAMES[ins.opcode]);
+    return CompileDiv<TE_i32, TE_i32, TE_i32, const Twine&>(context, false, &llvm::IRBuilder<>::CreateURem, OPNAMES[ins.opcode]);
   case OP_i32_and:
     return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const Twine&>(context, &llvm::IRBuilder<>::CreateAnd, OPNAMES[ins.opcode]);
   case OP_i32_or:
@@ -1330,13 +1360,13 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   case OP_i64_mul:
     return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const Twine&, bool, bool>(context, &llvm::IRBuilder<>::CreateMul, OPNAMES[ins.opcode], false, false);
   case OP_i64_div_s:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const Twine&, bool>(context, &llvm::IRBuilder<>::CreateSDiv, OPNAMES[ins.opcode], false);
+    return CompileDiv<TE_i64, TE_i64, TE_i64, const Twine&, bool>(context, true, &llvm::IRBuilder<>::CreateSDiv, OPNAMES[ins.opcode], false);
   case OP_i64_div_u:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const Twine&, bool>(context, &llvm::IRBuilder<>::CreateUDiv, OPNAMES[ins.opcode], false);
+    return CompileDiv<TE_i64, TE_i64, TE_i64, const Twine&, bool>(context, false, &llvm::IRBuilder<>::CreateUDiv, OPNAMES[ins.opcode], false);
   case OP_i64_rem_s:
     return CompileSRem<TE_i64, TE_i64, TE_i64>(context, OPNAMES[ins.opcode]);
   case OP_i64_rem_u:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const Twine&>(context, &llvm::IRBuilder<>::CreateURem, OPNAMES[ins.opcode]);
+    return CompileDiv<TE_i64, TE_i64, TE_i64, const Twine&>(context, false, &llvm::IRBuilder<>::CreateURem, OPNAMES[ins.opcode]);
   case OP_i64_and:
     return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const Twine&>(context, &llvm::IRBuilder<>::CreateAnd, OPNAMES[ins.opcode]);
   case OP_i64_or:
@@ -1782,7 +1812,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       auto fname = CanonImportName(context.m.importsection.imports[i]);
       khiter_t iter = code::kh_get_importhash(context.importhash, fname.c_str());
       if(iter != kh_end(context.importhash))
-        context.functions.back().internal = kh_val(context.importhash, iter);
+        context.functions.back().internal = static_cast<llvm::Function*>(kh_val(context.importhash, iter));
       else
       {
         context.functions.back().internal = CompileFunction(
@@ -1820,34 +1850,77 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
 
   // Import tables
   for(varuint32 i = context.m.importsection.functions; i < context.m.importsection.tables; ++i)
-    context.tables.push_back(CreateGlobal(
-      context,
-      GetTableType(context.m.importsection.imports[i].table_desc.element_type, context)->getPointerTo(0),
-      false,
-      true,
-      CanonImportName(context.m.importsection.imports[i]),
-      context.m.importsection.imports[i].table_desc.debug.line));
+  {
+    auto name = CanonImportName(context.m.importsection.imports[i]);
+
+    khiter_t iter = code::kh_get_importhash(context.importhash, name.c_str());
+    if(iter != kh_end(context.importhash))
+      context.tables.push_back(static_cast<llvm::GlobalVariable*>(kh_val(context.importhash, iter)));
+    else
+    {
+      context.tables.push_back(CreateGlobal(
+        context,
+        GetTableType(context.m.importsection.imports[i].table_desc.element_type, context)->getPointerTo(0),
+        false,
+        true,
+        name,
+        context.m.importsection.imports[i].table_desc.debug.line));
+
+      int r;
+      iter = code::kh_put_importhash(context.importhash, context.tables.back()->getName().data(), &r);
+      kh_val(context.importhash, iter) = context.tables.back();
+    }
+  }
 
   // Import memory
   for(varuint32 i = context.m.importsection.tables; i < context.m.importsection.memories; ++i)
-    context.memories.push_back(CreateGlobal(
-      context,
-      context.builder.getInt8PtrTy(0),
-      false,
-      true,
-      CanonImportName(context.m.importsection.imports[i]),
-      context.m.importsection.imports[i].mem_desc.debug.line));
+  {
+    auto name = CanonImportName(context.m.importsection.imports[i]);
+
+    khiter_t iter = code::kh_get_importhash(context.importhash, name.c_str());
+    if(iter != kh_end(context.importhash))
+      context.memories.push_back(static_cast<llvm::GlobalVariable*>(kh_val(context.importhash, iter)));
+    else
+    {
+      context.memories.push_back(CreateGlobal(
+        context,
+        context.builder.getInt8PtrTy(0),
+        false,
+        true,
+        name,
+        context.m.importsection.imports[i].mem_desc.debug.line));
+
+      auto max = context.builder.getInt64(((context.m.importsection.imports[i].mem_desc.limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? ((uint64_t)context.m.importsection.imports[i].mem_desc.limits.maximum) : 0x10000ULL) << 16);
+      context.memories.back()->setMetadata(IR_MEMORY_MAX_METADATA, llvm::MDNode::get(context.context, { llvm::ConstantAsMetadata::get(max) }));
+
+      int r;
+      iter = code::kh_put_importhash(context.importhash, context.memories.back()->getName().data(), &r);
+      kh_val(context.importhash, iter) = context.memories.back();
+    }
+  }
 
   // Import global variables
   for(varuint32 i = context.m.importsection.memories; i < context.m.importsection.globals; ++i)
   {
-    context.globals.push_back(CreateGlobal(
-      context,
-      GetLLVMType(context.m.importsection.imports[i].global_desc.type, context),
-      !context.m.importsection.imports[i].global_desc.mutability,
-      true,
-      CanonImportName(context.m.importsection.imports[i]),
-      context.m.importsection.imports[i].global_desc.debug.line));
+    auto name = CanonImportName(context.m.importsection.imports[i]);
+
+    khiter_t iter = code::kh_get_importhash(context.importhash, name.c_str());
+    if(iter != kh_end(context.importhash))
+      context.globals.push_back(static_cast<llvm::GlobalVariable*>(kh_val(context.importhash, iter)));
+    else
+    {
+      context.globals.push_back(CreateGlobal(
+        context,
+        GetLLVMType(context.m.importsection.imports[i].global_desc.type, context),
+        !context.m.importsection.imports[i].global_desc.mutability,
+        true,
+        name,
+        context.m.importsection.imports[i].global_desc.debug.line));
+
+      int r;
+      iter = code::kh_put_importhash(context.importhash, context.globals.back()->getName().data(), &r);
+      kh_val(context.importhash, iter) = context.globals.back();
+    }
   }
 
   // Cache internal function start index
@@ -1912,8 +1985,9 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     MemoryDesc& mem = context.m.memory.memories[i];
     auto type = context.builder.getInt8PtrTy(0);
     auto sz = context.builder.getInt64(((uint64_t)mem.limits.minimum) << 16);
-    auto max = context.builder.getInt64((mem.limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? (((uint64_t)mem.limits.maximum) << 16) : 0ULL);
+    auto max = context.builder.getInt64(((mem.limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? ((uint64_t)mem.limits.maximum) : 0x10000ULL) << 16);
     context.memories.push_back(CreateGlobal(context, type, false, false, CanonicalName(context.m.name.str(), "linearmemory#", i), mem.debug.line, llvm::ConstantPointerNull::get(type)));
+    context.memories.back()->setMetadata(IR_MEMORY_MAX_METADATA, llvm::MDNode::get(context.context, { llvm::ConstantAsMetadata::get(max) }));
 
     CallInst* call = context.builder.CreateCall(context.memgrow, { llvm::ConstantPointerNull::get(type), sz, max });
     InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty), CInt::get(context.intptrty, 0)), context);

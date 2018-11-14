@@ -329,6 +329,16 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="test.cpp" />
+    <ClCompile Include="test_allocator.cpp" />
+    <ClCompile Include="test_environment.cpp" />
+    <ClCompile Include="test_path.cpp" />
+    <ClCompile Include="test_queue.cpp" />
+    <ClCompile Include="test_stack.cpp" />
+    <ClCompile Include="test_stream.cpp" />
+    <ClCompile Include="test_util.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="test.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

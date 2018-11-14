@@ -249,6 +249,8 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
       AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid exported global index %u", exp.index);
     else if(imp.global_desc.mutability != global->mutability || imp.global_desc.type != global->type)
       AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_IMPORT_TYPE, "Imported global type (%hhi) or mutability (%hhu) does not match exported type (%hhi) or mutability (%hhu)", imp.global_desc.type, imp.global_desc.mutability, global->type, global->mutability);
+    else if(!(env.flags & ENV_FEATURE_MUTABLE_GLOBALS) && imp.global_desc.mutability)
+      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_IMPORT_TYPE, "Imported global cannot be mutable.");
     break;
   }
   default:
@@ -800,6 +802,8 @@ void innative::ValidateExport(const Export& e, Environment& env, Module* m)
     GlobalDesc* g = ModuleGlobal(*m, e.index);
     if(!g)
       AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index %u", e.index);
+    else if(!(env.flags & ENV_FEATURE_MUTABLE_GLOBALS) && g->mutability)
+      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_IMPORT_TYPE, "Exported global cannot be mutable.");
     break;
   }
   default:

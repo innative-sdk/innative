@@ -7,7 +7,7 @@ using namespace innative;
 
 namespace innative {
   namespace code {
-    __KHASH_IMPL(importhash, , const char*, llvm::Function*, 1, kh_str_hash_func, kh_str_hash_equal);
+    __KHASH_IMPL(importhash, , const char*, llvm::GlobalObject*, 1, kh_str_hash_func, kh_str_hash_equal);
   }
 }
 

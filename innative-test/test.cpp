@@ -1,6 +1,7 @@
 // Copyright ©2018 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
+#include "test.h"
 #include "innative/export.h"
 #include <iostream>
 #include <filesystem>
@@ -10,11 +11,11 @@ using namespace std::filesystem;
 
 // This defines the testing environment that we need to inject
 const char testenv[] = "(module $spectest "
-"\n  (global $global_i32 (export \"global_i32\") i32 i32.const 0)"
-"\n  (global $global_i64 (export \"global_i64\") i64 i64.const 0)"
-"\n  (global $global_f32 (export \"global_f32\") f32 f32.const 0)"
-"\n  (global $global_f64 (export \"global_f64\") f64 f64.const 0)"
-"\n  (memory $memory1 (export \"memory\") 1)"
+"\n  (global $global_i32 (export \"global_i32\") i32 i32.const 666)"
+"\n  (global $global_i64 (export \"global_i64\") i64 i64.const 666)"
+"\n  (global $global_f32 (export \"global_f32\") f32 f32.const 666)"
+"\n  (global $global_f64 (export \"global_f64\") f64 f64.const 666)"
+"\n  (memory $memory1 (export \"memory\") 1 2)"
 "\n  (table $table10 (export \"table\") 10 anyfunc)"
 "\n  (func $print (export \"print\"))"
 "\n  (func $print_i32 (export \"print_i32\") (param i32))"
@@ -24,6 +25,40 @@ const char testenv[] = "(module $spectest "
 "\n  (func $print_i32_f32 (export \"print_i32_f32\") (param i32 f32))"
 "\n  (func $print_f64_f64 (export \"print_f64_f64\") (param f64 f64))"
 "\n) (register \"spectest\" $spectest)";
+
+size_t internal_tests()
+{
+  std::pair<const char*, void(TestHarness::*)()> tests[] = {
+    { "util.h", &TestHarness::test_allocator },
+    { "internal.c", &TestHarness::test_environment },
+    { "path.h", &TestHarness::test_path },
+    { "queue.h", &TestHarness::test_queue },
+    { "stack.h", &TestHarness::test_stack },
+    { "stream.h", &TestHarness::test_stream },
+    { "util.h", &TestHarness::test_util },
+  };
+
+  static const size_t NUMTESTS = sizeof(tests) / sizeof(decltype(tests[0]));
+  static constexpr int COLUMNS[3] = { 24, 11, 8 };
+  TestHarness harness(stderr);
+
+  printf("%-*s %-*s %-*s\n", COLUMNS[0], "Internal Tests", COLUMNS[1], "Subtests", COLUMNS[2], "Pass/Fail");
+  printf("%-*s %-*s %-*s\n", COLUMNS[0], "--------------", COLUMNS[1], "--------", COLUMNS[2], "---------");
+
+  size_t failures = 0;
+  for(size_t i = 0; i < NUMTESTS; ++i)
+  {
+    (harness.*tests[i].second)();
+    auto results = harness.Results();
+    failures += results.second - results.first;
+
+    char buf[COLUMNS[1] + 1] = { 0 };
+    snprintf(buf, COLUMNS[1] + 1, "%u/%u", results.first, results.second);
+    printf("%-*s %-*s %-*s\n", COLUMNS[0], tests[i].first, COLUMNS[1], buf, COLUMNS[2], (results.first == results.second) ? "PASS" : "FAIL");
+  }
+
+  return failures;
+}
 
 int main(int argc, char *argv[])
 {
@@ -35,6 +70,8 @@ int main(int argc, char *argv[])
   //std::ofstream target("out.txt", std::fstream::binary | std::fstream::out);
   target << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
   target << std::endl;
+
+  internal_tests();
 
   path testdir("../spec/test/core");
   std::vector<path> testfiles;

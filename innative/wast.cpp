@@ -359,8 +359,8 @@ int64_t Homogenize(const Instruction& i)
   {
   case OP_i32_const: return i.immediates[0]._varsint32;
   case OP_i64_const: return i.immediates[0]._varsint64;
-  case OP_f32_const: { double d = i.immediates[0]._float32; return *(int64_t*)&d; }
-  case OP_f64_const: return *(int64_t*)&i.immediates[0]._float64;
+  case OP_f32_const: return i.immediates[0]._varsint32;
+  case OP_f64_const: return i.immediates[0]._varsint64;
   }
 
   assert(false);
@@ -380,10 +380,10 @@ void GenWastFunctionCall(void* f, WastResult& result, Args... params)
   int64_t r = static_cast<int64_t(*)(typename internal::HType<Args>::T...)>(f)(Homogenize(params)...);
   switch(result.type)
   {
-  case TE_i32: result.i32 = (int32_t)r; break;
+  case TE_i32:
+  case TE_f32: 
+  case TE_f64:
   case TE_i64: result.i64 = r; break;
-  case TE_f32: { double d = *(double*)&r; result.f32 = (float)d; break; }
-  case TE_f64: result.f64 = *(double*)&r; break;
   default:
     assert(false);
     result.type = TE_NONE;
@@ -771,7 +771,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
             AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f32 type but got %i", WatLineNumber(start, t.pos), result.type);
           else if(isnan(value.immediates[0]._float32)) // If this is an NAN we must match the exact bit pattern
           {
-            if((*(uint32_t*)&value.immediates[0]._float32) != *(uint32_t*)&result.f32)
+            if(value.immediates[0]._varsint32 != result.i32)
               AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g", WatLineNumber(start, t.pos), value.immediates[0]._float32, result.f32);
           }
           else if(result.f32 != value.immediates[0]._float32)
@@ -782,7 +782,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
             AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f64 type but got %i", WatLineNumber(start, t.pos), result.type);
           else if(isnan(value.immediates[0]._float64)) // If this is an NAN we must match the exact bit pattern
           {
-            if((*(uint64_t*)&value.immediates[0]._float64) != *(uint64_t*)&result.f64)
+            if(value.immediates[0]._varsint64 != result.i64)
               AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g", WatLineNumber(start, t.pos), value.immediates[0]._float64, result.f64);
           }
           else if(result.f64 != value.immediates[0]._float64)
@@ -898,7 +898,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
 
   if(always_compile && !cache) // If cache is null we must ensure we've at least tried to compile the test even if there's nothing to run.
   {
-    if(err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache))
+    if(err = CompileWast(env, (targetpath + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache))
       return err;
     assert(cache);
   }
