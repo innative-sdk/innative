@@ -182,6 +182,8 @@ namespace innative {
     // Creates a C-compatible mangled name with an optional index
     inline std::string CanonicalName(const char* prefix, const char* name, int index = -1)
     {
+      static const char HEX[17] = "0123456789ABCDEF";
+
       std::string str;
       if(index >= 0)
       {
@@ -195,12 +197,27 @@ namespace innative {
       std::string canonical;
       canonical.reserve(str.capacity());
 
-      for(char c : str)
+      for(unsigned char c : str)
       {
         switch(c)
         {
         case ' ': canonical += "--"; break;
-        default: canonical += c; break;
+        case ':': canonical += "#3A"; break;
+        case '=': canonical += "#3D"; break;
+        case '/': canonical += "#2F"; break;
+        case '"': canonical += "#22"; break;
+        case ',': canonical += "#2C"; break;
+        default: 
+          if(c < 32 || c > 126)
+          {
+            char buf[4] = { '#' };
+            buf[1] = HEX[c / 16];
+            buf[2] = HEX[c % 16];
+            canonical += buf;
+          }
+          else
+            canonical += (char)c;
+          break;
         }
       }
 

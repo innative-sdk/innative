@@ -1025,12 +1025,12 @@ void innative::ValidateModule(Environment& env, Module& m)
 {
   ValidateImportOrder(m);
 
-  {
-  Queue<wat::WatToken> auxtokens;
-  wat::TokenizeModule(env, auxtokens, m);
-  wat::WriteTokens(auxtokens, std::cout);
-  std::cout << std::endl;
-  }
+  //{
+  //Queue<wat::WatToken> auxtokens;
+  //wat::TokenizeModule(env, auxtokens, m);
+  //wat::WriteTokens(auxtokens, std::cout);
+  //std::cout << std::endl;
+  //}
   
   if(ModuleTable(m, 1) != nullptr)
     AppendError(env, env.errors, &m, ERR_MULTIPLE_TABLES, "Cannot have more than 1 table defined.");

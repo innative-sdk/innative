@@ -317,9 +317,9 @@ namespace innative {
           const char* begin = IncToken(s, end, line, column);
           while(s[0] != '"' && s + 1 < end)
           {
-            IncToken(s, end, line, column);
-            if(s[-1] == '\\' && s[0] == '"')
+            if(s[0] == '\\')
               IncToken(s, end, line, column);
+            IncToken(s, end, line, column);
           }
 
           WatToken t = { TOKEN_STRING, begin, line };

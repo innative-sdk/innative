@@ -641,7 +641,6 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
 
       env.modules = trealloc<Module>(env.modules, ++env.n_modules);
       last = &env.modules[env.n_modules - 1];
-      auto t = tokens[0];
 
       if(err = ParseWastModule(env, tokens, mapping, *last, path))
         return err;
@@ -883,10 +882,14 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
       // If we get an unexpected token, try to parse it as an inline module
       WatToken t = WatToken{ TOKEN_NONE };
       env.modules = trealloc<Module>(env.modules, ++env.n_modules);
+      auto name = "m" + std::to_string(env.n_modules);
+
       last = &env.modules[env.n_modules - 1];
       tokens.SetPosition(tokens.GetPosition() - 1); // Recover the '('
-      if(err = WatModule(env, *last, tokens, StringRef{ nullptr, 0 }, t))
+
+      if(err = WatModule(env, *last, tokens, StringRef{ name.data(), name.size() }, t))
         return err;
+
       last->path = path;
       tokens.SetPosition(tokens.GetPosition() - 1); // Recover the ')'
       break;
