@@ -551,15 +551,14 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
 
     void* f = innative::LoadGlobal(cache, m->name.str(), global.str());
     if(!f)
-      return ERR_SUCCESS;
-    //return ERR_INVALID_GLOBAL_INDEX;
+      return ERR_INVALID_GLOBAL_INDEX;
 
     switch(g->type)
     {
-    case TE_i32: result.i32 = *(int32_t*)f; break;
-    case TE_i64: result.i64 = *(int64_t*)f; break;
-    case TE_f32: result.f32 = *(float*)f; break;
-    case TE_f64: result.f64 = *(double*)f; break;
+    case TE_i32: result.i32 = *(int32_t*)f; result.type = TE_i32; break;
+    case TE_i64: result.i64 = *(int64_t*)f; result.type = TE_i64; break;
+    case TE_f32: result.f32 = *(float*)f; result.type = TE_f32; break;
+    case TE_f64: result.f64 = *(double*)f; result.type = TE_f64; break;
     default: return ERR_INVALID_TYPE;
     }
 
@@ -642,6 +641,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
 
       env.modules = trealloc<Module>(env.modules, ++env.n_modules);
       last = &env.modules[env.n_modules - 1];
+      auto t = tokens[0];
 
       if(err = ParseWastModule(env, tokens, mapping, *last, path))
         return err;

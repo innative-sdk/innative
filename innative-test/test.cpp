@@ -16,7 +16,7 @@ const char testenv[] = "(module $spectest "
 "\n  (global $global_f32 (export \"global_f32\") f32 f32.const 666)"
 "\n  (global $global_f64 (export \"global_f64\") f64 f64.const 666)"
 "\n  (memory $memory1 (export \"memory\") 1 2)"
-"\n  (table $table10 (export \"table\") 10 anyfunc)"
+"\n  (table $table10 (export \"table\") 10 20 anyfunc)"
 "\n  (func $print (export \"print\"))"
 "\n  (func $print_i32 (export \"print_i32\") (param i32))"
 "\n  (func $print_i64 (export \"print_i64\") (param i64))"
@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  testfiles = { "../spec/test/core/imports.wast" };
+  testfiles = { "../spec/test/core/linking.wast" };
   target << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
   //testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
 

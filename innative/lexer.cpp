@@ -33,7 +33,7 @@ namespace innative {
       return h;
     }
 
-    static const char* tokenlist[] = { "(", ")", "module", "import", "type", "start", "func", "global", "table", "memory", "export",
+    static const char* tokenlist[] = { "(", ")", "module", "import", "type", "start", "func", "table", "memory", "global", "export",
       "data", "elem", "offset", "align", "local", "result", "param", "i32", "i64", "f32", "f64", "anyfunc", "mut", "block", "loop",
       "if", "then", "else", "end", /* script extensions */ "binary", "quote", "register", "invoke", "get", "assert_return",
       "assert_return_canonical_nan", "assert_return_arithmetic_nan", "assert_trap", "assert_malformed", "assert_invalid",

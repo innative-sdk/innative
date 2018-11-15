@@ -160,7 +160,7 @@ void innative::wat::TokenizeInstruction(const Environment& env, Queue<WatToken>&
   }
 }
 
-void innative::wat::PushExportToken(Queue<WatToken>& tokens, const Module& m, WASM_KIND kind, varuint32 index)
+void innative::wat::PushExportToken(Queue<WatToken>& tokens, const Module& m, varuint7 kind, varuint32 index, bool outside)
 {
   if(m.knownsections&(1 << WASM_SECTION_EXPORT))
     for(uint64_t i = 0; i < m.exportsection.n_exports; ++i)
@@ -170,6 +170,15 @@ void innative::wat::PushExportToken(Queue<WatToken>& tokens, const Module& m, WA
         tokens.Push(WatToken{ TOKEN_OPEN });
         tokens.Push(WatToken{ TOKEN_EXPORT });
         PushIdentifierToken(tokens, m.exportsection.exports[i].name);
+
+        if(outside)
+        {
+          tokens.Push(WatToken{ TOKEN_OPEN });
+          tokens.Push(WatToken{ WatTokenID(TOKEN_FUNC + kind) });
+          tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, index });
+          tokens.Push(WatToken{ TOKEN_CLOSE }); // do NOT break here, because you can export a function under multiple names
+        }
+
         tokens.Push(WatToken{ TOKEN_CLOSE }); // do NOT break here, because you can export a function under multiple names
       }
     }
@@ -242,6 +251,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
       PushIdentifierToken(tokens, imp.export_name);
 
       tokens.Push(WatToken{ TOKEN_OPEN });
+      int index = i;
 
       switch(imp.kind)
       {
@@ -267,7 +277,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
             tokens.Push(WatToken{ TOKEN_CLOSE });
           }
 
-          for(uint64_t j = 0; j < m.type.functions[i].n_returns; ++j)
+          for(uint64_t j = 0; j < m.type.functions[imp.func_desc.type_index].n_returns; ++j)
           {
             tokens.Push(WatToken{ TOKEN_OPEN });
             tokens.Push(WatToken{ TOKEN_RESULT });
@@ -280,19 +290,23 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
         tokens.Push(WatToken{ TOKEN_TABLE });
         tokenize_limits(tokens, imp.table_desc.resizable);
         tokens.Push(WatToken{ TypeEncodingToken(imp.table_desc.element_type) });
+        index -= m.importsection.functions;
         break;
       case WASM_KIND_MEMORY:
         tokens.Push(WatToken{ TOKEN_MEMORY });
         tokenize_limits(tokens, imp.mem_desc.limits);
+        index -= m.importsection.tables;
         break;
       case WASM_KIND_GLOBAL:
         tokens.Push(WatToken{ TOKEN_GLOBAL });
         tokenize_global(tokens, imp.global_desc);
+        index -= m.importsection.memories;
         break;
       }
 
       tokens.Push(WatToken{ TOKEN_CLOSE });
       tokens.Push(WatToken{ TOKEN_CLOSE });
+      PushExportToken(tokens, m, imp.kind, index, true);
     }
 
   if(m.knownsections&(1 << WASM_SECTION_TABLE))
@@ -300,7 +314,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_TABLE });
-      PushExportToken(tokens, m, WASM_KIND_TABLE, (varuint32)i);
+      PushExportToken(tokens, m, WASM_KIND_TABLE, (varuint32)i + m.importsection.tables - m.importsection.functions, false);
       tokenize_limits(tokens, m.table.tables[i].resizable);
       tokens.Push(WatToken{ TypeEncodingToken(m.table.tables[i].element_type) });
       tokens.Push(WatToken{ TOKEN_CLOSE });
@@ -311,8 +325,8 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_MEMORY });
-      PushExportToken(tokens, m, WASM_KIND_MEMORY, (varuint32)i);
-      tokenize_limits(tokens, m.table.tables[i].resizable);
+      PushExportToken(tokens, m, WASM_KIND_MEMORY, (varuint32)i + m.importsection.memories - m.importsection.tables, false);
+      tokenize_limits(tokens, m.memory.memories[i].limits);
       tokens.Push(WatToken{ TOKEN_CLOSE });
     }
 
@@ -321,7 +335,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_GLOBAL });
-      PushExportToken(tokens, m, WASM_KIND_GLOBAL, (varuint32)i);
+      PushExportToken(tokens, m, WASM_KIND_GLOBAL, (varuint32)i + m.importsection.globals - m.importsection.memories, false);
       tokenize_global(tokens, m.global.globals[i].desc);
       tokens.Push(WatToken{ TOKEN_OPEN });
       TokenizeInstruction(env, tokens, m, m.global.globals[i].init, 0, 0);
@@ -360,7 +374,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
     tokens.Push(WatToken{ TOKEN_OPEN });
     tokens.Push(WatToken{ TOKEN_FUNC });
     PushFunctionName(env, tokens, m, (varuint32)(i + m.importsection.functions));
-    PushExportToken(tokens, m, WASM_KIND_FUNCTION, (varuint32)(i + m.importsection.functions));
+    PushExportToken(tokens, m, WASM_KIND_FUNCTION, (varuint32)(i + m.importsection.functions), false);
 
     tokens.Push(WatToken{ TOKEN_OPEN });
     tokens.Push(WatToken{ TOKEN_TYPE });

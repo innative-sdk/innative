@@ -906,6 +906,7 @@ namespace innative {
         Export e = { };
         e.kind = kind;
         e.index = *index; // This is fine because you can only import OR export on a declaration statement
+
         if(err = WatString(env, e.name, tokens.Pop()))
           return err;
         if(!ValidateIdentifier(e.name))
@@ -963,7 +964,7 @@ namespace innative {
       body.debug.line = tokens.Peek().line;
       body.debug.column = tokens.Peek().column;
 
-      *index = state.m.importsection.functions + state.m.function.n_funcdecl;
+      *index = state.m.function.n_funcdecl + state.m.importsection.functions;
       Import* i = 0;
       if(err = WatInlineImportExport(state.env, state.m, tokens, index, WASM_KIND_FUNCTION, &i))
         return err;
@@ -1068,7 +1069,7 @@ namespace innative {
     int WatTable(WatState& state, Queue<WatToken>& tokens, varuint32* index)
     {
       int err;
-      *index = state.m.table.n_tables;
+      *index = state.m.table.n_tables + state.m.importsection.tables - state.m.importsection.functions;
       Import* i = 0;
       if(err = WatInlineImportExport(state.env, state.m, tokens, index, WASM_KIND_TABLE, &i))
         return err;
@@ -1162,7 +1163,7 @@ namespace innative {
     int WatGlobal(WatState& state, Queue<WatToken>& tokens, varuint32* index)
     {
       int err;
-      *index = state.m.global.n_globals;
+      *index = state.m.global.n_globals + state.m.importsection.globals - state.m.importsection.memories;
       Import* i = 0;
       if(err = WatInlineImportExport(state.env, state.m, tokens, index, WASM_KIND_GLOBAL, &i))
         return err;
@@ -1189,7 +1190,7 @@ namespace innative {
     int WatMemory(WatState& state, Queue<WatToken>& tokens, varuint32* index)
     {
       int err;
-      *index = state.m.memory.n_memories;
+      *index = state.m.memory.n_memories + state.m.importsection.memories - state.m.importsection.tables;
       Import* i = 0;
       if(err = WatInlineImportExport(state.env, state.m, tokens, index, WASM_KIND_MEMORY, &i))
         return err;

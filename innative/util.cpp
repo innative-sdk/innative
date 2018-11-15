@@ -176,6 +176,31 @@ namespace innative {
     //      return m.exportsection.exports + i;
     //  return 0;
     //}
+    Import* ResolveImport(const Module& m, const Export& exp)
+    {
+      switch(exp.kind)
+      {
+      case WASM_KIND_FUNCTION:
+        if(exp.index < m.importsection.functions)
+          return &m.importsection.imports[exp.index];
+        break;
+      case WASM_KIND_TABLE:
+        if(exp.index < (m.importsection.tables - m.importsection.functions))
+          return &m.importsection.imports[exp.index + m.importsection.functions];
+        break;
+      case WASM_KIND_MEMORY:
+        if(exp.index < (m.importsection.memories - m.importsection.tables))
+          return &m.importsection.imports[exp.index + m.importsection.tables];
+        break;
+      case WASM_KIND_GLOBAL:
+        if(exp.index < (m.importsection.globals - m.importsection.memories))
+          return &m.importsection.imports[exp.index + m.importsection.memories];
+        break;
+      }
+
+      return nullptr;
+    }
+
     std::pair<Module*, Export*> ResolveExport(const Environment& env, const Import& imp)
     {
       khint_t iter = kh_get_modules(env.modulemap, imp.module_name);
@@ -195,6 +220,17 @@ namespace innative {
         return { env.modules + i, 0 };
 
       return { env.modules + i, env.modules[i].exportsection.exports + j };
+    }
+
+    std::pair<Module*, Export*> ResolveTrueExport(const Environment& env, const Import& init)
+    {
+      const Import* imp = &init;
+      auto pair = ResolveExport(env, *imp);
+
+      while(imp = ResolveImport(*pair.first, *pair.second))
+        pair = ResolveExport(env, *imp);
+
+      return pair;
     }
 
     Path GetProgramPath(const char* arg0)

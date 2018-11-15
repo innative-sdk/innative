@@ -167,6 +167,8 @@ namespace innative {
     MemoryDesc* ModuleMemory(const Module& m, varuint32 index);
     GlobalDesc* ModuleGlobal(const Module& m, varuint32 index);
     std::pair<Module*, Export*> ResolveExport(const Environment& env, const Import& imp);
+    std::pair<Module*, Export*> ResolveTrueExport(const Environment& env, const Import& imp);
+    Import* ResolveImport(const Module& m, const Export& imp);
     Path GetProgramPath(const char* arg0);
     Path GetWorkingDir();
     bool SetWorkingDir(const char* path);

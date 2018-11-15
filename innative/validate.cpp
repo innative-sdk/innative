@@ -207,11 +207,10 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
     {
       if(imp.table_desc.resizable.minimum > table->resizable.minimum)
         AppendError(env, env.errors, m, ERR_INVALID_IMPORT_TABLE_MINIMUM, "Imported table minimum (%u) greater than exported table minimum (%u).", imp.table_desc.resizable.minimum, table->resizable.minimum);
-      if(table->resizable.flags & 1)
+      if(imp.table_desc.resizable.flags & WASM_LIMIT_HAS_MAXIMUM)
       {
-        if(!(imp.table_desc.resizable.flags & 1))
-          break;
-          //AppendError(env, env.errors, m, ERR_INVALID_IMPORT_TABLE_MAXIMUM, "Imported table doesn't have a maximum, but exported table does.");
+        if(!(table->resizable.flags & WASM_LIMIT_HAS_MAXIMUM))
+          AppendError(env, env.errors, m, ERR_INVALID_IMPORT_TABLE_MAXIMUM, "Exported table doesn't have a maximum, but imported table does.");
         else if(imp.table_desc.resizable.maximum < table->resizable.maximum)
           AppendError(env, env.errors, m, ERR_INVALID_IMPORT_TABLE_MAXIMUM, "Imported table maximum (%u) less than exported table maximum (%u).", imp.table_desc.resizable.maximum, table->resizable.maximum);
       }
@@ -227,17 +226,16 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
     {
       if(imp.mem_desc.limits.minimum > mem->limits.minimum)
         AppendError(env, env.errors, m, ERR_INVALID_IMPORT_MEMORY_MINIMUM, "Imported memory minimum (%u) greater than exported memory minimum (%u).", imp.mem_desc.limits.minimum, mem->limits.minimum);
-      if(mem->limits.flags & 1)
+      if(imp.mem_desc.limits.minimum > 65536)
+        AppendError(env, env.errors, m, ERR_MEMORY_MINIMUM_TOO_LARGE, "Memory minimum cannot exceed 65536");
+      if(imp.mem_desc.limits.flags & WASM_LIMIT_HAS_MAXIMUM)
       {
-        if(!(imp.mem_desc.limits.flags & 1))
-          break;
-          //AppendError(env, env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported memory doesn't have a maximum, but exported memory does.");
+        if(imp.mem_desc.limits.maximum > 65536)
+          AppendError(env, env.errors, m, ERR_MEMORY_MAXIMUM_TOO_LARGE, "Memory maximum cannot exceed 65536");
+        if(!(mem->limits.flags & WASM_LIMIT_HAS_MAXIMUM))
+          AppendError(env, env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Exported memory doesn't have a maximum, but imported memory does.");
         else if(imp.mem_desc.limits.maximum < mem->limits.maximum)
           AppendError(env, env.errors, m, ERR_INVALID_IMPORT_MEMORY_MAXIMUM, "Imported memory maximum (%u) less than exported memory maximum (%u).", imp.mem_desc.limits.maximum, mem->limits.maximum);
-        if(imp.mem_desc.limits.minimum > 65536)
-          AppendError(env, env.errors, m, ERR_MEMORY_MINIMUM_TOO_LARGE, "Memory minimum cannot exceed 65536");
-        if((imp.mem_desc.limits.flags&WASM_LIMIT_HAS_MAXIMUM) && imp.mem_desc.limits.maximum > 65536)
-          AppendError(env, env.errors, m, ERR_MEMORY_MAXIMUM_TOO_LARGE, "Memory maximum cannot exceed 65536");
       }
     }
     break;
@@ -249,7 +247,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
       AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid exported global index %u", exp.index);
     else if(imp.global_desc.mutability != global->mutability || imp.global_desc.type != global->type)
       AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_IMPORT_TYPE, "Imported global type (%hhi) or mutability (%hhu) does not match exported type (%hhi) or mutability (%hhu)", imp.global_desc.type, imp.global_desc.mutability, global->type, global->mutability);
-    else if(!(env.flags & ENV_FEATURE_MUTABLE_GLOBALS) && imp.global_desc.mutability)
+    else if(!(env.features & ENV_FEATURE_MUTABLE_GLOBALS) && imp.global_desc.mutability)
       AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_IMPORT_TYPE, "Imported global cannot be mutable.");
     break;
   }
@@ -802,7 +800,7 @@ void innative::ValidateExport(const Export& e, Environment& env, Module* m)
     GlobalDesc* g = ModuleGlobal(*m, e.index);
     if(!g)
       AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index %u", e.index);
-    else if(!(env.flags & ENV_FEATURE_MUTABLE_GLOBALS) && g->mutability)
+    else if(!(env.features & ENV_FEATURE_MUTABLE_GLOBALS) && g->mutability)
       AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_IMPORT_TYPE, "Exported global cannot be mutable.");
     break;
   }
@@ -1020,19 +1018,19 @@ void innative::ValidateImportOrder(Module& m)
   }
 }
 
-//#include "serialize.h"
-//#include <iostream>
+#include "serialize.h"
+#include <iostream>
 
 void innative::ValidateModule(Environment& env, Module& m)
 {
   ValidateImportOrder(m);
 
-  //{
-  //Queue<wat::Token> auxtokens;
-  //wat::TokenizeModule(auxtokens, m);
-  //wat::WriteTokens(auxtokens, std::cout);
-  //std::cout << std::endl;
-  //}
+  {
+  Queue<wat::WatToken> auxtokens;
+  wat::TokenizeModule(env, auxtokens, m);
+  wat::WriteTokens(auxtokens, std::cout);
+  std::cout << std::endl;
+  }
   
   if(ModuleTable(m, 1) != nullptr)
     AppendError(env, env.errors, &m, ERR_MULTIPLE_TABLES, "Cannot have more than 1 table defined.");

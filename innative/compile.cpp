@@ -980,8 +980,9 @@ IR_ERROR CompileSRem(code::Context& context, const Twine& name)
     return assert(false), err;
   if(err = PopType(Ty1, context, val1))
     return assert(false), err;
-  
-  InsertConditionalTrap(context.builder.CreateICmpEQ(val2, CInt::get(val2->getType(), 0, true)), context);
+
+  if(context.env.flags & ENV_CHECK_INT_DIVISION)
+    InsertConditionalTrap(context.builder.CreateICmpEQ(val2, CInt::get(val2->getType(), 0, true)), context);
 
   // The specific case of INT_MIN % -1 is undefined behavior in LLVM and crashes on x86, but WASM requires that it return 0, so we branch on that specific case.
   llvmVal* cond = context.builder.CreateAnd(
@@ -1010,7 +1011,8 @@ IR_ERROR CompileDiv(code::Context& context, bool overflow, llvmVal* (llvm::IRBui
         context.builder.CreateICmpEQ(val1, (val1->getType()->getIntegerBitWidth() == 32) ? context.builder.getInt32(0x80000000) : context.builder.getInt64(0x8000000000000000)),
         context.builder.CreateICmpEQ(val2, CInt::get(val2->getType(), ~0ULL, true))));
 
-  InsertConditionalTrap(cond, context);
+  if(context.env.flags & ENV_CHECK_INT_DIVISION)
+    InsertConditionalTrap(cond, context);
   return PushReturn(context, (context.builder.*op)(val1, val2, args...));
 }
 
@@ -1858,13 +1860,16 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       context.tables.push_back(static_cast<llvm::GlobalVariable*>(kh_val(context.importhash, iter)));
     else
     {
+      auto pair = ResolveTrueExport(*env, context.m.importsection.imports[i]);
+      auto table_desc = ModuleTable(*pair.first, pair.second->index);
+
       context.tables.push_back(CreateGlobal(
         context,
-        GetTableType(context.m.importsection.imports[i].table_desc.element_type, context)->getPointerTo(0),
+        GetTableType(table_desc->element_type, context)->getPointerTo(0),
         false,
         true,
         name,
-        context.m.importsection.imports[i].table_desc.debug.line));
+        table_desc->debug.line));
 
       int r;
       iter = code::kh_put_importhash(context.importhash, context.tables.back()->getName().data(), &r);
@@ -1882,15 +1887,18 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       context.memories.push_back(static_cast<llvm::GlobalVariable*>(kh_val(context.importhash, iter)));
     else
     {
+      auto pair = ResolveTrueExport(*env, context.m.importsection.imports[i]);
+      auto mem_desc = ModuleMemory(*pair.first, pair.second->index);
+
       context.memories.push_back(CreateGlobal(
         context,
         context.builder.getInt8PtrTy(0),
         false,
         true,
         name,
-        context.m.importsection.imports[i].mem_desc.debug.line));
+        mem_desc->debug.line));
 
-      auto max = context.builder.getInt64(((context.m.importsection.imports[i].mem_desc.limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? ((uint64_t)context.m.importsection.imports[i].mem_desc.limits.maximum) : 0x10000ULL) << 16);
+      auto max = context.builder.getInt64(((mem_desc->limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? ((uint64_t)mem_desc->limits.maximum) : 0x10000ULL) << 16);
       context.memories.back()->setMetadata(IR_MEMORY_MAX_METADATA, llvm::MDNode::get(context.context, { llvm::ConstantAsMetadata::get(max) }));
 
       int r;
@@ -2227,27 +2235,7 @@ namespace innative {
         // Resolve the export/module pair to the concrete source
         for(;;)
         {
-          Import* imp = nullptr;
-
-          switch(e->kind)
-          {
-          case WASM_KIND_FUNCTION:
-            if(e->index < m->importsection.functions)
-              imp = &m->importsection.imports[e->index];
-            break;
-          case WASM_KIND_TABLE:
-            if(e->index < (m->importsection.tables - m->importsection.functions))
-              imp = &m->importsection.imports[m->importsection.functions + e->index];
-            break;
-          case WASM_KIND_MEMORY:
-            if(e->index < (m->importsection.memories - m->importsection.tables))
-              imp = &m->importsection.imports[m->importsection.tables + e->index];
-            break;
-          case WASM_KIND_GLOBAL:
-            if(e->index < (m->importsection.globals - m->importsection.memories))
-              imp = &m->importsection.imports[m->importsection.memories + e->index];
-            break;
-          }
+          Import* imp = ResolveImport(*m, *e);
 
           if(!imp)
             break;
