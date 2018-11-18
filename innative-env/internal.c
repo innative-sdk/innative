@@ -134,7 +134,7 @@ void _innative_internal_write_out(const void* buf, size_t num)
 #endif
 }
 
-static char lookup[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+static const char lookup[16] = "0123456789ABCDEF";
 
 IR_COMPILER_DLLEXPORT extern void _innative_internal_env_print(uint64_t a)
 {
@@ -157,7 +157,7 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_print_compiler(uint64_t
 
 IR_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned char* mem, uint64_t sz)
 {
-  static char prefix[] = "\n --- MEMORY DUMP ---\n\n";
+  static const char prefix[] = "\n --- MEMORY DUMP ---\n\n";
   char buf[256];
 
   _innative_internal_write_out(prefix, sizeof(prefix));

@@ -89,12 +89,12 @@ namespace innative {
     void TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* end);
     int CheckWatTokens(const Environment& env, ValidationError*& errors, Queue<WatToken>& tokens, const char* start);
     const char* GetTokenString(WatTokenID token);
-    int ResolveTokeni32(const WatToken& token, varsint32& out);
-    int ResolveTokenu32(const WatToken& token, varuint32& out);
-    int ResolveTokenf32(const WatToken& token, float32& out);
-    int ResolveTokeni64(const WatToken& token, varsint64& out);
-    int ResolveTokenu64(const WatToken& token, varuint64& out);
-    int ResolveTokenf64(const WatToken& token, float64& out);
+    int ResolveTokeni32(const WatToken& token, std::string& numbuf, varsint32& out);
+    int ResolveTokenu32(const WatToken& token, std::string& numbuf, varuint32& out);
+    int ResolveTokenf32(const WatToken& token, std::string& numbuf, float32& out);
+    int ResolveTokeni64(const WatToken& token, std::string& numbuf, varsint64& out);
+    int ResolveTokenu64(const WatToken& token, std::string& numbuf, varuint64& out);
+    int ResolveTokenf64(const WatToken& token, std::string& numbuf, float64& out);
   }
 }
 

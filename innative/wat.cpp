@@ -17,11 +17,11 @@ namespace innative {
   namespace wat {
     __KHASH_IMPL(indexname, , StringRef, varuint32, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
 
-    template<typename T, int(*FN)(const WatToken&, T&)>
-    T ResolveInlineToken(const WatToken& token)
+    template<typename T, int(*FN)(const WatToken&, std::string&, T&)>
+    T ResolveInlineToken(WatState& state, const WatToken& token)
     {
       T t;
-      int err = (*FN)(token, t);
+      int err = (*FN)(token, state.numbuf, t);
       return !err ? t : (T)~0;
     }
 
@@ -42,10 +42,10 @@ namespace innative {
       kh_destroy_indexname(globalhash);
     }
 
-    varuint32 WatState::GetJump(WatToken var)
+    varuint32 WatState::GetJump(WatState& state, WatToken var)
     {
       if(var.id == TOKEN_NUMBER)
-        return ResolveInlineToken<varuint32, &ResolveTokenu32>(var);
+        return ResolveInlineToken<varuint32, &ResolveTokenu32>(state, var);
       if(var.id == TOKEN_NAME)
       {
         utility::StringRef err = { var.pos, var.len };
@@ -348,10 +348,10 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    varuint32 WatGetFromHash(kh_indexname_t* hash, const WatToken& t)
+    varuint32 WatGetFromHash(WatState& state, kh_indexname_t* hash, const WatToken& t)
     {
       if(t.id == TOKEN_NUMBER)
-        return ResolveInlineToken<varuint32, &ResolveTokenu32>(t);
+        return ResolveInlineToken<varuint32, &ResolveTokenu32>(state, t);
       else if(t.id == TOKEN_NAME)
       {
         khiter_t iter = kh_get_indexname(hash, StringRef{ t.pos, t.len });
@@ -391,7 +391,7 @@ namespace innative {
         if(tokens.Peek().id != TOKEN_NUMBER && tokens.Peek().id != TOKEN_NAME)
           return assert(false), ERR_WAT_EXPECTED_VAR;
 
-        sig = WatGetFromHash(state.typehash, tokens.Pop());
+        sig = WatGetFromHash(state, state.typehash, tokens.Pop());
 
         if(sig >= state.m.type.n_functions)
           AppendError(state.env, state.env.errors, &state.m, ERR_WAT_UNKNOWN_TYPE, "Invalid type signature %u", sig);
@@ -453,10 +453,10 @@ namespace innative {
       return r;
     }
 
-    varuint32 WatGetLocal(FunctionBody& f, FunctionType& sig, const WatToken& t)
+    varuint32 WatGetLocal(WatState& state, FunctionBody& f, FunctionType& sig, const WatToken& t)
     {
       if(t.id == TOKEN_NUMBER)
-        return ResolveInlineToken<varuint32, &ResolveTokenu32>(t);
+        return ResolveInlineToken<varuint32, &ResolveTokenu32>(state, t);
       else if(t.id == TOKEN_NAME)
       {
         ByteArray n((uint8_t*)t.pos, t.len);
@@ -479,19 +479,19 @@ namespace innative {
       switch(op.opcode)
       {
       case OP_i32_const:
-        err = ResolveTokeni32(tokens.Pop(), op.immediates[0]._varsint32);
+        err = ResolveTokeni32(tokens.Pop(), state.numbuf, op.immediates[0]._varsint32);
         break;
       case OP_i64_const:
-        err = ResolveTokeni64(tokens.Pop(), op.immediates[0]._varsint64);
+        err = ResolveTokeni64(tokens.Pop(), state.numbuf, op.immediates[0]._varsint64);
         break;
       case OP_f32_const:
-        err = ResolveTokenf32(tokens.Pop(), op.immediates[0]._float32);
+        err = ResolveTokenf32(tokens.Pop(), state.numbuf, op.immediates[0]._float32);
         break;
       case OP_f64_const:
-        err = ResolveTokenf64(tokens.Pop(), op.immediates[0]._float64);
+        err = ResolveTokenf64(tokens.Pop(), state.numbuf, op.immediates[0]._float64);
         break;
       case OP_get_global: // For constant initializers, this has to be an import, and thus must always already exist by the time we reach it.
-        op.immediates[0]._varuint32 = WatGetFromHash(state.globalhash, tokens.Pop());
+        op.immediates[0]._varuint32 = WatGetFromHash(state, state.globalhash, tokens.Pop());
         if(op.immediates[0]._varuint32 == (varuint32)~0)
           return assert(false), ERR_WAT_INVALID_VAR;
         break;
@@ -519,14 +519,14 @@ namespace innative {
         return assert(false), ERR_FATAL_UNKNOWN_INSTRUCTION;
       case OP_br:
       case OP_br_if:
-        op.immediates[0]._varuint32 = state.GetJump(tokens.Pop());
+        op.immediates[0]._varuint32 = state.GetJump(state, tokens.Pop());
         if(op.immediates[0]._varuint32 == (varuint32)~0)
           return ERR_WAT_EXPECTED_VAR;
         break;
       case OP_get_local:
       case OP_set_local:
       case OP_tee_local:
-        op.immediates[0]._varuint32 = WatGetLocal(f, sig, tokens.Pop());
+        op.immediates[0]._varuint32 = WatGetLocal(state, f, sig, tokens.Pop());
         if(op.immediates[0]._varuint32 == (varuint32)~0)
           return ERR_WAT_INVALID_LOCAL;
         break;
@@ -551,7 +551,7 @@ namespace innative {
       case OP_br_table:
         do
         {
-          varuint32 jump = state.GetJump(tokens.Pop());
+          varuint32 jump = state.GetJump(state, tokens.Pop());
           if(jump == (varuint32)~0)
             return assert(false), ERR_WAT_EXPECTED_VAR;
 
@@ -591,14 +591,14 @@ namespace innative {
         if(tokens.Peek().id == TOKEN_OFFSET)
         {
           tokens.Pop();
-          if(err = ResolveTokenu32(tokens.Pop(), op.immediates[1]._varuint32))
+          if(err = ResolveTokenu32(tokens.Pop(), state.numbuf, op.immediates[1]._varuint32))
           //if(err = ResolveTokenu64(tokens.Pop(), op.immediates[1]._varuptr)) // We can't do this until webassembly actually supports 64-bit
             return err;
         }
         if(tokens.Peek().id == TOKEN_ALIGN)
         {
           tokens.Pop();
-          if(err = ResolveTokenu32(tokens.Pop(), op.immediates[0]._varuint32))
+          if(err = ResolveTokenu32(tokens.Pop(), state.numbuf, op.immediates[0]._varuint32))
             return assert(false), err;
           if(op.immediates[0]._varuint32 == 0 || !IsPowerOfTwo(op.immediates[0]._varuint32)) // Ensure this alignment is exactly a power of two
             return ERR_WAT_INVALID_ALIGNMENT;
@@ -1039,14 +1039,14 @@ namespace innative {
       return AppendArray(body, state.m.code.funcbody, state.m.code.n_funcbody);
     }
 
-    int WatResizableLimits(ResizableLimits& limits, Queue<WatToken>& tokens)
+    int WatResizableLimits(WatState& state, ResizableLimits& limits, Queue<WatToken>& tokens)
     {
-      int err = ResolveTokenu32(tokens.Pop(), limits.minimum);
+      int err = ResolveTokenu32(tokens.Pop(), state.numbuf, limits.minimum);
       if(err)
         return err;
       if(tokens.Peek().id == TOKEN_NUMBER)
       {
-        if(err = ResolveTokenu32(tokens.Pop(), limits.maximum))
+        if(err = ResolveTokenu32(tokens.Pop(), state.numbuf, limits.maximum))
           return err;
         limits.flags = 1;
       }
@@ -1054,10 +1054,10 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatTableDesc(TableDesc& t, Queue<WatToken>& tokens)
+    int WatTableDesc(WatState& state, TableDesc& t, Queue<WatToken>& tokens)
     {
       int err;
-      if(err = WatResizableLimits(t.resizable, tokens))
+      if(err = WatResizableLimits(state, t.resizable, tokens))
         return err;
 
       EXPECTED(tokens, TOKEN_ANYFUNC, ERR_WAT_EXPECTED_ANYFUNC);
@@ -1075,13 +1075,13 @@ namespace innative {
         return err;
 
       if(i) // If this is an import, assemble the aux information and abort.
-        return WatTableDesc(i->table_desc, tokens);
+        return WatTableDesc(state, i->table_desc, tokens);
 
       TableDesc table = { 0 };
       switch(tokens.Peek().id)
       {
       case TOKEN_NUMBER:
-        if(err = WatTableDesc(table, tokens))
+        if(err = WatTableDesc(state, table, tokens))
           return err;
         break;
       default:
@@ -1182,9 +1182,9 @@ namespace innative {
       return AppendArray(g, state.m.global.globals, state.m.global.n_globals);
     }
 
-    int WatMemoryDesc(MemoryDesc& m, Queue<WatToken>& tokens)
+    int WatMemoryDesc(WatState& state, MemoryDesc& m, Queue<WatToken>& tokens)
     {
-      return WatResizableLimits(m.limits, tokens);
+      return WatResizableLimits(state, m.limits, tokens);
     }
 
     int WatMemory(WatState& state, Queue<WatToken>& tokens, varuint32* index)
@@ -1196,7 +1196,7 @@ namespace innative {
         return err;
 
       if(i) // If this is an import, assemble the aux information and abort.
-        return WatMemoryDesc(i->mem_desc, tokens);
+        return WatMemoryDesc(state, i->mem_desc, tokens);
 
       MemoryDesc mem = { 0 };
 
@@ -1224,7 +1224,7 @@ namespace innative {
         mem.limits.minimum = init.data.size();
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       }
-      else if(err = WatMemoryDesc(mem, tokens))
+      else if(err = WatMemoryDesc(state, mem, tokens))
         return err;
 
       state.m.knownsections |= (1 << WASM_SECTION_MEMORY);
@@ -1278,13 +1278,13 @@ namespace innative {
         break;
       case TOKEN_TABLE:
         i.kind = WASM_KIND_TABLE;
-        if(err = WatTableDesc(i.table_desc, tokens))
+        if(err = WatTableDesc(state, i.table_desc, tokens))
           return err;
         hash = state.tablehash;
         break;
       case TOKEN_MEMORY:
         i.kind = WASM_KIND_MEMORY;
-        if(err = WatMemoryDesc(i.mem_desc, tokens))
+        if(err = WatMemoryDesc(state, i.mem_desc, tokens))
           return err;
         hash = state.memoryhash;
         break;
@@ -1326,19 +1326,19 @@ namespace innative {
       {
       case TOKEN_FUNC:
         e.kind = WASM_KIND_FUNCTION;
-        e.index = WatGetFromHash(state.funchash, tokens.Pop());
+        e.index = WatGetFromHash(state, state.funchash, tokens.Pop());
         break;
       case TOKEN_GLOBAL:
         e.kind = WASM_KIND_GLOBAL;
-        e.index = WatGetFromHash(state.globalhash, tokens.Pop());
+        e.index = WatGetFromHash(state, state.globalhash, tokens.Pop());
         break;
       case TOKEN_TABLE:
         e.kind = WASM_KIND_TABLE;
-        e.index = WatGetFromHash(state.tablehash, tokens.Pop());
+        e.index = WatGetFromHash(state, state.tablehash, tokens.Pop());
         break;
       case TOKEN_MEMORY:
         e.kind = WASM_KIND_MEMORY;
-        e.index = WatGetFromHash(state.memoryhash, tokens.Pop());
+        e.index = WatGetFromHash(state, state.memoryhash, tokens.Pop());
         break;
       default:
         return assert(false), ERR_WAT_EXPECTED_KIND;
@@ -1352,7 +1352,7 @@ namespace innative {
     int WatElemData(WatState& state, Queue<WatToken>& tokens, varuint32& index, Instruction& op, kh_indexname_t* hash)
     {
       if(tokens[0].id == TOKEN_NUMBER || tokens[0].id == TOKEN_NAME)
-        index = WatGetFromHash(hash, tokens.Pop());
+        index = WatGetFromHash(state, hash, tokens.Pop());
 
       if(index == ~0)
         return assert(false), ERR_WAT_INVALID_VAR;
@@ -1381,7 +1381,7 @@ namespace innative {
     {
       while(tokens[0].id != TOKEN_CLOSE)
       {
-        int err = AppendArray(WatGetFromHash(state.funchash, tokens.Pop()), e.elements, e.n_elements);
+        int err = AppendArray(WatGetFromHash(state, state.funchash, tokens.Pop()), e.elements, e.n_elements);
         if(err)
           return err;
         if(e.elements[e.n_elements - 1] == (varuint32)~0)
@@ -1555,7 +1555,7 @@ namespace innative {
           m.knownsections |= (1 << WASM_SECTION_START);
           if(tokens[0].id != TOKEN_NUMBER && tokens[0].id != TOKEN_NAME)
             return assert(false), ERR_WAT_EXPECTED_VAR;
-          m.start = WatGetFromHash(state.funchash, tokens.Pop());
+          m.start = WatGetFromHash(state, state.funchash, tokens.Pop());
           if(m.start == (varuint32)~0)
             return assert(false), ERR_WAT_INVALID_VAR;
           break;
@@ -1601,10 +1601,10 @@ namespace innative {
         break;
         case OP_get_global:
         case OP_set_global:
-          err = procRef(state, m, WatGetFromHash(state.globalhash, state.defer[0].t));
+          err = procRef(state, m, WatGetFromHash(state, state.globalhash, state.defer[0].t));
           break;
         case OP_call:
-          err = procRef(state, m, WatGetFromHash(state.funchash, state.defer[0].t));
+          err = procRef(state, m, WatGetFromHash(state, state.funchash, state.defer[0].t));
           break;
         default:
           return assert(false), ERR_WAT_INVALID_TOKEN;

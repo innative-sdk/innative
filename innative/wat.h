@@ -23,7 +23,7 @@ namespace innative {
     {
       WatState(Environment& e, Module& mod);
       ~WatState();
-      varuint32 GetJump(WatToken var);
+      varuint32 GetJump(WatState& state, WatToken var);
 
       Environment& env;
       Module& m;
@@ -34,6 +34,7 @@ namespace innative {
       kh_indexname_t* tablehash;
       kh_indexname_t* memoryhash;
       kh_indexname_t* globalhash;
+      std::string numbuf;
     };
 
 #define EXPECTED(t, e, err) if((t).Size() == 0 || (t).Pop().id != (e)) return assert(false), (err)

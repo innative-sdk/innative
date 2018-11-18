@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  //testfiles = { "../spec/test/core/names.wast" };
+  //testfiles = { "../spec/test/core/loop.wast" };
   target << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
   //testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
 

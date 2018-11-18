@@ -1562,7 +1562,9 @@ IR_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
 
   for(uint64_t i = 0; i < body.n_locals; ++i)
   {
-    context.locals.push_back(context.builder.CreateAlloca(GetLLVMType(body.locals[i], context), nullptr, (body.local_names && body.local_names[i].name.size()) ? body.local_names[i].name.str() : ""));
+    auto ty = GetLLVMType(body.locals[i], context);
+    context.locals.push_back(context.builder.CreateAlloca(ty, nullptr, (body.local_names && body.local_names[i].name.size()) ? body.local_names[i].name.str() : ""));
+    context.builder.CreateStore(llvm::Constant::getNullValue(ty), context.locals.back());
 
     if(context.dbuilder)
     {

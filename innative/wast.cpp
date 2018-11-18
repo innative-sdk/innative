@@ -473,8 +473,7 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
     signal(SIGILL, WastCrashHandler);
     signal(SIGFPE, WastCrashHandler); // This catches division by zero on linux
 
-    int jmp = setjmp(jump_location);
-    if(jmp)
+    if(setjmp(jump_location) != 0)
       return ERR_RUNTIME_TRAP;
 
 #ifdef IR_COMPILER_MSC

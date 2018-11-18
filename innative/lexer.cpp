@@ -38,7 +38,7 @@ namespace innative {
       "if", "then", "else", "end", /* script extensions */ "binary", "quote", "register", "invoke", "get", "assert_return",
       "assert_return_canonical_nan", "assert_return_arithmetic_nan", "assert_trap", "assert_malformed", "assert_invalid",
       "assert_unlinkable", "assert_exhaustion", "script", "input", "output" };
-    static kh_tokens_t* tokenhash = GenTokenHash(tokenlist);
+    static const kh_tokens_t* tokenhash = GenTokenHash(tokenlist);
 
     template<int LEN>
     inline const char* __getTokenString(WatTokenID token, const char* (&list)[LEN])
@@ -105,10 +105,8 @@ namespace innative {
       return s;
     }
 
-    static string numbuf;
-
     template<typename T, typename Arg, typename... Args>
-    int ResolveTokenNumber(const WatToken& token, Arg(*fn)(const char*, char**, Args...), T& out, Args... args)
+    int ResolveTokenNumber(const WatToken& token, string& numbuf, Arg(*fn)(const char*, char**, Args...), T& out, Args... args)
     {
       numbuf.clear();
       int length = token.len;
@@ -128,8 +126,11 @@ namespace innative {
       if(digitcheck == &isdigit) // If this is a decimal number, strip all leading 0s because otherwise it'll be considered octal 
       {
         size_t iter = numbuf.find_first_not_of('0');
-        if(iter != std::string::npos)
-          numbuf.substr(iter);
+        if(iter != std::string::npos && iter > 0)
+        {
+          numbuf.erase(0, iter);
+          length -= iter;
+        }
       }
 
       errno = 0;
@@ -141,7 +142,7 @@ namespace innative {
       return (errno != 0 || (end - numbuf.c_str()) != length) ? ERR_WAT_INVALID_NUMBER : ERR_SUCCESS;
     }
 
-    int ResolveTokenf32(const WatToken& token, float32& out)
+    int ResolveTokenf32(const WatToken& token, string& numbuf, float32& out)
     {
       char* last;
 
@@ -161,10 +162,10 @@ namespace innative {
         out = strtof(numbuf.c_str(), &last);
         return (last - numbuf.c_str()) == numbuf.size() ? ERR_SUCCESS : ERR_WAT_INVALID_NUMBER;
       }
-      return ResolveTokenNumber<float32>(token, &strtof, out);
+      return ResolveTokenNumber<float32>(token, numbuf, &strtof, out);
     }
 
-    int ResolveTokenf64(const WatToken& token, float64& out)
+    int ResolveTokenf64(const WatToken& token, string& numbuf, float64& out)
     {
       char* last;
 
@@ -184,27 +185,27 @@ namespace innative {
         out = strtod(numbuf.c_str(), &last);
         return (last - numbuf.c_str()) == numbuf.size() ? ERR_SUCCESS : ERR_WAT_INVALID_NUMBER;
       }
-      return ResolveTokenNumber<float64>(token, &strtod, out);
+      return ResolveTokenNumber<float64>(token, numbuf, &strtod, out);
     }
 
-    int ResolveTokeni64(const WatToken& token, varsint64& out)
+    int ResolveTokeni64(const WatToken& token, string& numbuf, varsint64& out)
     {
       if(token.len > 0 && token.pos[0] == '-')
-        return ResolveTokenNumber<varsint64, long long, int>(token, strtoll, out, 0);
-      return ResolveTokenNumber<varsint64, unsigned long long, int>(token, strtoull, out, 0);
+        return ResolveTokenNumber<varsint64, long long, int>(token, numbuf, strtoll, out, 0);
+      return ResolveTokenNumber<varsint64, unsigned long long, int>(token, numbuf, strtoull, out, 0);
     }
 
-    int ResolveTokenu64(const WatToken& token, varuint64& out)
+    int ResolveTokenu64(const WatToken& token, string& numbuf, varuint64& out)
     {
       if(token.len > 0 && token.pos[0] == '-')
         return ERR_WAT_OUT_OF_RANGE;
-      return ResolveTokeni64(token, reinterpret_cast<varsint64&>(out));
+      return ResolveTokeni64(token, numbuf, reinterpret_cast<varsint64&>(out));
     }
 
-    int ResolveTokeni32(const WatToken& token, varsint32& out)
+    int ResolveTokeni32(const WatToken& token, string& numbuf, varsint32& out)
     {
       varsint64 buf;
-      int err = ResolveTokeni64(token, buf);
+      int err = ResolveTokeni64(token, numbuf, buf);
       if(err)
         return err;
       if((buf < std::numeric_limits<varsint32>::min()) || (buf > (varsint64)std::numeric_limits<varuint32>::max()))
@@ -214,10 +215,10 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int ResolveTokenu32(const WatToken& token, varuint32& out)
+    int ResolveTokenu32(const WatToken& token, string& numbuf, varuint32& out)
     {
       varsint64 buf;
-      int err = ResolveTokeni64(token, buf);
+      int err = ResolveTokeni64(token, numbuf, buf);
       if(err)
         return err;
       if((buf < 0) || (buf > (varsint64)std::numeric_limits<varuint32>::max()))

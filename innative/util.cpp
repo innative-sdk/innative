@@ -114,7 +114,7 @@ namespace innative {
 
     uint8_t GetInstruction(StringRef ref)
     {
-      static kh_opnames_t* h = GenOpNames();
+      static const kh_opnames_t* h = GenOpNames();
 
       khiter_t iter = kh_get_opnames(h, ref);
       return kh_exist2(h, iter) ? kh_val(h, iter) : (uint8_t)0xFF;
