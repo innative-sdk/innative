@@ -75,6 +75,7 @@ namespace innative {
       ERR_WAT_INVALID_NUMBER,
       ERR_WAT_INVALID_TOKEN,
       ERR_INVALID_INITIALIZER,
+      ERR_INVALID_INITIALIZER_TYPE,
       ERR_INVALID_GLOBAL_TYPE,
       ERR_INVALID_TABLE_TYPE,
       ERR_INVALID_LOCAL_INDEX,
@@ -139,6 +140,7 @@ namespace innative {
   "unknown operator",
   "unknown operator",
   "constant expression required",
+  "type mismatch",
   "type mismatch",
   "type mismatch",
   "unknown local",
@@ -242,8 +244,23 @@ int CompileWast(Environment& env, const char* out, void*& cache)
 
   auto dir = GetWorkingDir();
   dir.Append(out);
+
+  signal(SIGILL, WastCrashHandler);
+  signal(SIGFPE, WastCrashHandler); // This catches division by zero on linux
+
+  if(setjmp(jump_location) != 0)
+    return ERR_RUNTIME_TRAP;
+
   cache = LoadDLL(dir.Get().c_str());
-  return !cache ? ERR_RUNTIME_INIT_ERROR : ERR_SUCCESS;
+  if(!cache)
+    return ERR_RUNTIME_INIT_ERROR;
+
+  auto entry = LoadFunction(cache, 0, 0);
+  if(!entry)
+    return ERR_RUNTIME_INIT_ERROR;
+
+  (*entry)();
+  return ERR_SUCCESS;
 }
 
 void SetTempName(Environment& env, Module& m)
@@ -617,6 +634,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
   ValidationError* errors = nullptr;
   int counter = 0; // Even if we unload wast.dll, visual studio will keep the .pdb open forever, so we have to generate new DLLs for each new test section.
   std::string targetpath = Path(path).File().RemoveExtension().Get(); // We also have to be sure we don't overlap with any other .wast files, so we name the DLL based on the file path.
+  env.flags |= ENV_NO_INIT; // We can't allow the DLL to call _DllInit because we can't catch exceptions from it, so we manually call it instead.
 
   int err = CheckWatTokens(env, env.errors, tokens, start);
   if(err)
@@ -698,7 +716,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
           return err;
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
-        err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache);
+        err = CompileWast(env, (targetpath + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache);
         --env.n_modules; // Remove the module from the environment to avoid poisoning other compilations
         if(err != ERR_RUNTIME_TRAP)
           AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
@@ -819,6 +837,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
 
       if(STRICMP(assertcode.c_str(), MapAssertionString(error.str())))
         AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead", WatLineNumber(start, t.pos), error.str(), assertcode.c_str());
+      env.errors = 0;
       break;
     }
     case TOKEN_ASSERT_INVALID:
@@ -863,6 +882,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
       err = ParseWastAction(env, tokens, mapping, last, cache, counter, targetpath, result);
       if(err != ERR_RUNTIME_TRAP)
         AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected call exhaustion trap, but call succeeded", WatLineNumber(start, t.pos));
+      env.errors = 0;
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       EXPECTED(tokens, TOKEN_STRING, ERR_WAT_EXPECTED_STRING);
       break;

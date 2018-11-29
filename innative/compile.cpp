@@ -2163,7 +2163,7 @@ namespace innative {
       file = workdir + file;
 
     llvm::IRBuilder<> builder(llvm_context);
-    code::Context* start = nullptr;
+    bool has_start = false;
     IR_ERROR err = ERR_SUCCESS;
 
     code::Context* context = tmalloc<code::Context>(*env, env->n_modules);
@@ -2207,14 +2207,7 @@ namespace innative {
       new(context + i) code::Context{ *env, env->modules[i], llvm_context, 0, builder, machine, code::kh_init_importhash() };
       if((err = CompileModule(env, context[i])) < 0)
         return err;
-
-      // If module has a start function, create a main entry point function
-      if(context[i].start != nullptr)
-      {
-        if(start != nullptr)
-          return ERR_MULTIPLE_ENTRY_POINTS;
-        start = context + i;
-      }
+      has_start |= context[i].start != nullptr;
     }
 
     if(!env->n_modules)
@@ -2276,61 +2269,78 @@ namespace innative {
       }
     }
 
-    // Initialize all modules and call start function (if it exists)
-    if(!start) // We always create an initialization function, even for DLLs, to do proper initialization of modules
-      start = &context[0];
-    if(start->start == nullptr && !(eflags&ENV_LIBRARY))
-      return ERR_FATAL_INVALID_MODULE; // We can't compile an EXE without an entry point
+    // Initialize all modules and call start functions
+    if((!has_start || eflags&ENV_NO_INIT) && !(eflags&ENV_LIBRARY))
+      return ERR_FATAL_INVALID_MODULE; // We can't compile an EXE without at least one start function
 
     FuncTy* mainTy = FuncTy::get(builder.getVoidTy(), false);
 #ifdef IR_PLATFORM_WIN32
-    if(eflags&ENV_LIBRARY)
-      mainTy = FuncTy::get(builder.getInt32Ty(), { builder.getInt8PtrTy(), start->intptrty, builder.getInt8PtrTy() }, false);
+    FuncTy* mainDLLTy = FuncTy::get(builder.getInt32Ty(), { builder.getInt8PtrTy(), context[0].intptrty, builder.getInt8PtrTy() }, false);
+    if((eflags&ENV_LIBRARY) && !(eflags&ENV_NO_INIT))
+      mainTy = mainDLLTy;
+#else
+    FuncTy* mainDLLTy = mainTy;
 #endif
 
     Func* exit = Func::Create(
       FuncTy::get(builder.getVoidTy(), { builder.getInt32Ty() }, false),
       Func::ExternalLinkage,
       "_innative_internal_env_exit",
-      start->llvm);
+      context[0].llvm);
 
     Func* main = Func::Create(mainTy, Func::ExternalLinkage, IR_INIT_FUNCTION);
 
 #ifdef IR_PLATFORM_WIN32
-    if(eflags&ENV_LIBRARY)
+    if((eflags&ENV_LIBRARY) && !(eflags&ENV_NO_INIT))
       main->setCallingConv(llvm::CallingConv::X86_StdCall);
 #endif
-    if(start->dbuilder)
+    if(context[0].dbuilder)
     {
-      FunctionDebugInfo(main, *start, true, 0);
-      builder.SetCurrentDebugLocation(llvm::DILocation::get(start->context, main->getSubprogram()->getLine(), 0, main->getSubprogram()));
+      FunctionDebugInfo(main, context[0], true, 0);
+      builder.SetCurrentDebugLocation(llvm::DILocation::get(context[0].context, main->getSubprogram()->getLine(), 0, main->getSubprogram()));
     }
 
     BB* initblock = BB::Create(llvm_context, "start_entry", main);
     builder.SetInsertPoint(initblock);
-    for(size_t i = 0; i < env->n_modules; ++i)
+    builder.CreateCall(context[0].init, {});
+
+    for(size_t i = 1; i < env->n_modules; ++i)
     {
-      if(context + i == start)
-        builder.CreateCall(context[i].init, {});
-      else
+      Func* stub = Func::Create(context[i].init->getFunctionType(),
+        context[i].init->getLinkage(),
+        context[i].init->getName(),
+        context[0].llvm); // Create function prototype in main module
+      builder.CreateCall(stub, {});
+    }
+
+    // Call every single start function in all modules AFTER we initialize them.
+    if(context[0].start != nullptr)
+      builder.CreateCall(context[0].start, {});
+
+    for(size_t i = 1; i < env->n_modules; ++i)
+    {
+      if(context[i].start != nullptr)
       {
-        Func* stub = Func::Create(context[i].init->getFunctionType(),
-          context[i].init->getLinkage(),
-          context[i].init->getName(),
-          start->llvm); // Create function prototype in main module
+        Func* stub = context[0].llvm->getFunction(context[i].start->getName()); // Catch the case where an import from this module is being called from another module
+        if(!stub)
+          stub = Func::Create(context[i].start->getFunctionType(),
+            context[i].start->getLinkage(),
+            context[i].start->getName(),
+            context[0].llvm); // Create function prototype in main module
         builder.CreateCall(stub, {});
       }
     }
 
-    if(start->start != nullptr)
-      builder.CreateCall(start->start, {});
-
     if(eflags&ENV_LIBRARY)
     {
+      if(eflags&ENV_NO_INIT)
+      {
+        main->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+        builder.CreateRetVoid();
+      }
 #ifdef IR_PLATFORM_WIN32
-      builder.CreateRet(builder.getInt32(1)); // On windows, the DLL init function must always return 1
-#else
-      builder.CreateRetVoid();
+      else
+        builder.CreateRet(builder.getInt32(1)); // On windows, the DLL init function must always return 1
 #endif
     }
     else // If this isn't a DLL, then the init function is actual the process entry point, which must call _exit()
@@ -2340,7 +2350,20 @@ namespace innative {
       builder.CreateUnreachable(); // This function never returns
     }
 
-    start->llvm->getFunctionList().push_back(main);
+    context[0].llvm->getFunctionList().push_back(main);
+
+    if(eflags&ENV_NO_INIT) // If we don't actually want to initialize anything we must still provide a stub entry point for DLLs
+    {
+      Func* mainstub = Func::Create(mainDLLTy, Func::ExternalLinkage, IR_INIT_FUNCTION "-stub");
+      builder.SetInsertPoint(BB::Create(llvm_context, "stub_entry", mainstub));
+#ifdef IR_PLATFORM_WIN32
+      mainstub->setCallingConv(llvm::CallingConv::X86_StdCall);
+      builder.CreateRet(builder.getInt32(1)); // On windows, the DLL init function must always return 1
+#else
+      builder.CreateRetVoid();
+#endif
+      context[0].llvm->getFunctionList().push_back(mainstub);
+    }
 
     // Annotate functions
     AnnotateFunctions(env, context);
@@ -2376,13 +2399,17 @@ namespace innative {
       vector<const char*> linkargs = { "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO",
         "/nodefaultlib", /*"/MANIFEST", "/MANIFEST:embed",*/ "/SUBSYSTEM:CONSOLE", "/VERBOSE",
         "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT",
-        "/MACHINE:X64", "/machine:x64", "/ENTRY:" IR_INIT_FUNCTION };
+        "/MACHINE:X64", "/machine:x64",  };
 
+      if(eflags&ENV_NO_INIT)
+        linkargs.push_back("/ENTRY:" IR_INIT_FUNCTION "-stub");
+      else
+        linkargs.push_back("/ENTRY:" IR_INIT_FUNCTION);
       if(eflags&ENV_LIBRARY)
         linkargs.push_back("/DLL");
       if(eflags&ENV_DEBUG)
         linkargs.push_back("/DEBUG");
-
+        
       vector<string> targets = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.BaseDir().Get(), "/LIBPATH:" + workdir.Get() };
 #elif defined(IR_PLATFORM_POSIX)
       vector<const char*> linkargs = {  };
@@ -2495,4 +2522,17 @@ namespace innative {
 
     return ERR_SUCCESS;
   }
+  
+  std::vector<std::string> GetSymbols(const char* file)
+  {
+    return lld::coff::GetSymbols(file);
+  }
+
+  void AppendIntrinsics(Environment& env)
+  {
+    int r;
+    for(auto intrinsic : code::intrinsics)
+      kh_put_cimport(env.cimports, Identifier((uint8_t*)intrinsic.name, strlen(intrinsic.name)), &r);
+  }
 }
+

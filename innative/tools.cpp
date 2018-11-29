@@ -185,7 +185,7 @@ enum IR_ERROR innative::Compile(Environment* env, const char* file)
 
 IR_Entrypoint innative::LoadFunction(void* cache, const char* module_name, const char* function)
 {
-  return (IR_Entrypoint)LoadDLLFunction(cache, !function ? IR_ENTRYPOINT : utility::CanonicalName(module_name, function).c_str());
+  return (IR_Entrypoint)LoadDLLFunction(cache, !function ? IR_INIT_FUNCTION : utility::CanonicalName(module_name, function).c_str());
 }
 
 struct IR_TABLE

@@ -66,8 +66,8 @@ int main(int argc, char *argv[])
   IRExports exports;
   innative_runtime(&exports);
 
-  //std::ostream& target = std::cout;
-  std::ofstream target("out.txt", std::fstream::binary | std::fstream::out);
+  std::ostream& target = std::cout;
+  //std::ofstream target("out.txt", std::fstream::binary | std::fstream::out);
   target << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
   target << std::endl;
 
@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  //testfiles = { "../spec/test/core/loop.wast" };
+  testfiles = { "../spec/test/core/start.wast" };
   target << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
   //testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
 

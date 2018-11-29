@@ -5,7 +5,6 @@
 
 namespace innative {
   namespace utility {
-    const char* IR_ENTRYPOINT = "__innative_main_func";
     const char* IR_GETCPUINFO = "__innative_getcpuinfo";
     const char* IR_EXTENSION = ".ir-cache";
     const char* IR_ENV_EXTENSION = ".ir-env-cache";

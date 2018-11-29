@@ -4,6 +4,7 @@
 #include "validate.h"
 #include "util.h"
 #include "stack.h"
+#include "compile.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <atomic>
@@ -840,7 +841,7 @@ varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env,
     break;
   }
   default:
-    AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER, "Expected i32 type but got %hhu", ins.opcode);
+    AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER_TYPE, "Expected i32 type but got %hhu", ins.opcode);
   }
 
   return 0;
@@ -1018,8 +1019,8 @@ void innative::ValidateImportOrder(Module& m)
   }
 }
 
-#include "serialize.h"
-#include <iostream>
+//#include "serialize.h"
+//#include <iostream>
 
 void innative::ValidateModule(Environment& env, Module& m)
 {
@@ -1032,6 +1033,26 @@ void innative::ValidateModule(Environment& env, Module& m)
   //std::cout << std::endl;
   //}
   
+
+  for(Embedding* embed = env.embeddings; embed != nullptr; embed = embed->next)
+  {
+    Path path(env.sdkpath);
+    path = path.BaseDir();
+    path.Append((const char*)embed->data);
+    auto symbols = GetSymbols(path.Get().c_str());
+
+    int r;
+    for(auto symbol : symbols)
+    {
+      Identifier id;
+      id.resize(symbol.size(), true, env);
+      memcpy(id.get(), symbol.data(), symbol.size());
+      kh_put_cimport(env.cimports, id, &r);
+      if(!r)
+        AppendError(env, env.errors, &m, ERR_INVALID_EMBEDDING, "Conflicting symbol found in embedding: %s", symbol.c_str());
+    }
+  }
+
   if(ModuleTable(m, 1) != nullptr)
     AppendError(env, env.errors, &m, ERR_MULTIPLE_TABLES, "Cannot have more than 1 table defined.");
   if(ModuleMemory(m, 1) != nullptr)
@@ -1096,15 +1117,8 @@ void innative::ValidateModule(Environment& env, Module& m)
 void innative::ValidateEnvironment(Environment& env)
 {
   int tmp;
-  if(!(env.flags&ENV_STRICT))
-  {
-    //kh_put_cimport(env.cimports, "_innative_to_c", &tmp);
-    //kh_put_cimport(env.cimports, "_innative_from_c", &tmp);
-  }
-  // TODO: replace with proper lib lookup
-  //kh_put_cimport(env.cimports, "_innative_internal_env_print", &tmp);
-  //kh_put_cimport(env.cimports, "GetStdHandle", &tmp);
-  //kh_put_cimport(env.cimports, "WriteConsoleA", &tmp);
+  if(!(env.flags&ENV_CHECK_MEMORY_ACCESS))
+    AppendIntrinsics(env);
 
   for(size_t i = 0; i < env.n_modules; ++i)
     ValidateModule(env, env.modules[i]);

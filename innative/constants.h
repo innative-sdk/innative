@@ -15,7 +15,6 @@
 
 namespace innative {
   namespace utility {
-    extern const char* IR_ENTRYPOINT;
     extern const char* IR_GETCPUINFO;
     extern const char* IR_EXTENSION;
     extern const char* IR_ENV_EXTENSION;
