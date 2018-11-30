@@ -2156,7 +2156,7 @@ namespace innative {
     Path programpath(env->sdkpath);
     uint64_t eflags = env->flags;
 
-    SetWorkingDir(programpath.BaseDir().Get().c_str());
+    SetWorkingDir(programpath.Get().c_str());
     utility::DeferLambda<std::function<void()>> defer([&]() { SetWorkingDir(workdir.Get().c_str()); });
 
     if(!file.IsAbsolute())
@@ -2410,7 +2410,7 @@ namespace innative {
       if(eflags&ENV_DEBUG)
         linkargs.push_back("/DEBUG");
         
-      vector<string> targets = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.BaseDir().Get(), "/LIBPATH:" + workdir.Get() };
+      vector<string> targets = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.Get(), "/LIBPATH:" + workdir.Get() };
 #elif defined(IR_PLATFORM_POSIX)
       vector<const char*> linkargs = {  };
 
@@ -2419,7 +2419,7 @@ namespace innative {
       if(!(eflags&ENV_DEBUG))
         linkargs.push_back("--strip-debug");
 
-      vector<string> targets = { string("--output=") + file.Get(), "-L" + programpath.BaseDir().Get(), "-L" + workdir.Get() };
+      vector<string> targets = { string("--output=") + file.Get(), "-L" + programpath.Get(), "-L" + workdir.Get() };
 #else 
 #error unknown platform
 #endif
@@ -2525,7 +2525,11 @@ namespace innative {
   
   std::vector<std::string> GetSymbols(const char* file)
   {
+#ifdef IR_PLATFORM_WIN32
     return lld::coff::GetSymbols(file);
+#else
+    return std::vector<std::string>();
+#endif
   }
 
   void AppendIntrinsics(Environment& env)

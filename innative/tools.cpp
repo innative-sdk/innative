@@ -36,7 +36,7 @@ Environment* innative::CreateEnvironment(uint64_t flags, uint64_t optimize, uint
     env->features = features;
     env->maxthreads = maxthreads;
     env->linker = 0;
-    auto sdkpath = GetProgramPath(arg0).Get();
+    auto sdkpath = GetProgramPath(arg0).BaseDir().Get();
     char* tmp = tmalloc<char>(*env, sdkpath.size() + 1);
     tmemcpy<char>(tmp, sdkpath.size() + 1, sdkpath.c_str(), sdkpath.size() + 1);
     env->sdkpath = tmp;
@@ -154,6 +154,21 @@ enum IR_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data
   embed->size = size;
   embed->next = env->embeddings;
   env->embeddings = embed;
+
+  Path path(env->sdkpath);
+  path.Append((const char*)embed->data);
+  auto symbols = GetSymbols(path.Get().c_str());
+
+  int r;
+  for(auto symbol : symbols)
+  {
+    Identifier id;
+    id.resize(symbol.size(), true, *env);
+    memcpy(id.get(), symbol.data(), symbol.size());
+    kh_put_cimport(env->cimports, id, &r);
+    if(!r)
+      return ERR_INVALID_EMBEDDING;
+  }
 
   return ERR_SUCCESS;
 }

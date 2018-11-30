@@ -155,11 +155,10 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
 
     if(env.cimports)
     {
-      // TODO: actually enforce this
       std::string name = CanonImportName(imp);
-      //khiter_t iterimport = kh_get_cimport(env.cimports, name.c_str());
-      //if(kh_exist2(env.cimports, iterimport))
-        return; // This function exists and we already have verified the signature if there was a whitelist, so just return
+      khiter_t iterimport = kh_get_cimport(env.cimports, Identifier((uint8_t*)name.c_str(), name.size()));
+      if(kh_exist2(env.cimports, iterimport))
+        return; // For C imports, we just verify that they exist and bail out
       if(!imp.module_name.size() || imp.module_name.str()[0] == '!') // Blank imports must have been C imports, otherwise it could have been a failed WASM module import attempt.
         return AppendError(env, env.errors, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found in C library imports", name.c_str());
     }
@@ -1032,26 +1031,6 @@ void innative::ValidateModule(Environment& env, Module& m)
   //wat::WriteTokens(auxtokens, std::cout);
   //std::cout << std::endl;
   //}
-  
-
-  for(Embedding* embed = env.embeddings; embed != nullptr; embed = embed->next)
-  {
-    Path path(env.sdkpath);
-    path = path.BaseDir();
-    path.Append((const char*)embed->data);
-    auto symbols = GetSymbols(path.Get().c_str());
-
-    int r;
-    for(auto symbol : symbols)
-    {
-      Identifier id;
-      id.resize(symbol.size(), true, env);
-      memcpy(id.get(), symbol.data(), symbol.size());
-      kh_put_cimport(env.cimports, id, &r);
-      if(!r)
-        AppendError(env, env.errors, &m, ERR_INVALID_EMBEDDING, "Conflicting symbol found in embedding: %s", symbol.c_str());
-    }
-  }
 
   if(ModuleTable(m, 1) != nullptr)
     AppendError(env, env.errors, &m, ERR_MULTIPLE_TABLES, "Cannot have more than 1 table defined.");
@@ -1116,7 +1095,6 @@ void innative::ValidateModule(Environment& env, Module& m)
 // Performs all post-load validation that couldn't be done during parsing
 void innative::ValidateEnvironment(Environment& env)
 {
-  int tmp;
   if(!(env.flags&ENV_CHECK_MEMORY_ACCESS))
     AppendIntrinsics(env);
 
