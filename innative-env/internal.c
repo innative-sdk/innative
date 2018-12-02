@@ -61,7 +61,8 @@ IR_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1,
     "movq %r8, %r10\n\t"
     "movq %r9, %r8\n\t"
     "movq $0, %r9\n\t"
-    "syscall");
+    "syscall\n\t"
+    "ret");
 }
 
 const int SYSCALL_WRITE = 1;

@@ -414,7 +414,7 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
   int err;
   int cache_err;
   if(!cache) // If cache is null we need to recompile the current environment, but we can't bail on error messages yet or we'll corrupt the parse
-    cache_err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache))
+    cache_err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache);
 
   switch(tokens.Pop().id)
   {
