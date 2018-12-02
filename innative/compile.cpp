@@ -921,7 +921,7 @@ IR_ERROR CompileStore(code::Context& context, varuint7 memory, varuint32 offset,
   llvmTy* PtrType = !ext ? GetLLVMType(TY, context) : ext;
 
   llvmVal* ptr = GetMemPointer(context, base, PtrType->getPointerTo(0), memory, offset);
-  llvmVal* result = context.builder.CreateAlignedStore(!ext ? value : context.builder.CreateIntCast(value, ext, false), ptr, (1 << memflags), name);
+  context.builder.CreateAlignedStore(!ext ? value : context.builder.CreateIntCast(value, ext, false), ptr, (1 << memflags), name);
 
   //context.builder.CreateCall(fn_memdump, { context.builder.CreateLoad(context.memories[0]), GetMemSize(context.memories[0], context) });
 
@@ -1839,7 +1839,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
         //  FunctionDebugInfo(context.functions.back().imported, context, false, context.m.importsection.imports[i].func_desc.debug.line);
 
         llvm::Twine name = (context.m.importsection.imports[i].func_desc.debug.name.get()) ?
-          "@" + context.functions.back().imported->getName() + "#internal" :
+          "|" + context.functions.back().imported->getName() + "#internal" :
           context.m.importsection.imports[i].func_desc.debug.name.str() + ("#" + std::to_string(i));
 
         context.functions.back().internal = WrapFunction(
@@ -1950,7 +1950,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       context.m.type.functions[index],
       std::string(!context.m.code.funcbody[i].debug.name.size() ? "func" : context.m.code.funcbody[i].debug.name.str())
       + "#" + std::to_string(context.functions.size())
-      + "@" + context.m.name.str(),
+      + "|" + context.m.name.str(),
       context);
 
     if(context.dbuilder)
@@ -2338,9 +2338,11 @@ namespace innative {
         main->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
         builder.CreateRetVoid();
       }
-#ifdef IR_PLATFORM_WIN32
       else
+#ifdef IR_PLATFORM_WIN32
         builder.CreateRet(builder.getInt32(1)); // On windows, the DLL init function must always return 1
+#else
+        builder.CreateRetVoid();
 #endif
     }
     else // If this isn't a DLL, then the init function is actual the process entry point, which must call _exit()
@@ -2395,8 +2397,9 @@ namespace innative {
 
     {
       vector<string> cache;
+      vector<const char*> garbage;
 #ifdef IR_PLATFORM_WIN32
-      vector<const char*> linkargs = { "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO",
+      vector<const char*> linkargs = { "lld", "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO",
         "/nodefaultlib", /*"/MANIFEST", "/MANIFEST:embed",*/ "/SUBSYSTEM:CONSOLE", "/VERBOSE",
         "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT",
         "/MACHINE:X64", "/machine:x64",  };
@@ -2412,17 +2415,39 @@ namespace innative {
         
       vector<string> targets = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.Get(), "/LIBPATH:" + workdir.Get() };
 #elif defined(IR_PLATFORM_POSIX)
-      vector<const char*> linkargs = {  };
+      vector<const char*> linkargs = { "lld" };
 
       if(eflags&ENV_LIBRARY)
         linkargs.push_back("-shared");
-      if(!(eflags&ENV_DEBUG))
-        linkargs.push_back("--strip-debug");
+      //if(!(eflags&ENV_DEBUG))
+      //  linkargs.push_back("--strip-debug");
 
       vector<string> targets = { string("--output=") + file.Get(), "-L" + programpath.Get(), "-L" + workdir.Get() };
 #else 
 #error unknown platform
 #endif
+
+      // Generate object code
+      for(size_t i = 0; i < env->n_modules; ++i)
+      {
+        assert(context[i].m.name.get() != nullptr);
+        targets.emplace_back(std::string(context[i].m.name.str(), context[i].m.name.size()) + ".o");
+        OutputObjectFile(context[i], targets.back().c_str());
+        garbage.push_back(targets.back().c_str());
+
+#ifdef IR_PLATFORM_POSIX
+        if(i == 0)
+        { // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
+          if((eflags&ENV_LIBRARY) && !(eflags&ENV_NO_INIT)) 
+            targets.emplace_back("-init=" IR_INIT_FUNCTION);
+          else // If this isn't a shared library, we must specify an entry point instead of an init function
+            targets.emplace_back("--entry=" IR_INIT_FUNCTION);
+        }
+#endif
+      }
+
+      for(auto& v : targets)
+        linkargs.push_back(v.c_str());
 
       // Write all in-memory environments to cache files
       for(Embedding* cur = env->embeddings; cur != nullptr; cur = cur->next)
@@ -2444,26 +2469,6 @@ namespace innative {
       }
       for(auto& v : cache)
         linkargs.push_back(v.c_str());
-
-      size_t target_init = targets.size();
-
-      // Generate object code
-      for(size_t i = 0; i < env->n_modules; ++i)
-      {
-        assert(context[i].m.name.get() != nullptr);
-        targets.emplace_back(std::string(context[i].m.name.str(), context[i].m.name.size()) + ".o");
-        OutputObjectFile(context[i], targets.back().c_str());
-      }
-
-      for(auto& v : targets)
-        linkargs.push_back(v.c_str());
-
-#ifdef IR_PLATFORM_POSIX
-      if(eflags&ENV_LIBRARY) // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
-        linkargs.push_back("-init=" IR_INIT_FUNCTION);
-      else // If this isn't a shared library, we must specify an entry point instead of an init function
-        linkargs.push_back("--entry=" IR_INIT_FUNCTION);
-#endif
 
       // Link object code
       if(env->linker != 0)
@@ -2500,6 +2505,11 @@ namespace innative {
       }
       else
       {
+        std::cout << "Executing internal linker command:";
+        for(auto arg : linkargs)
+          std::cout << ' ' << '"' << arg << '"';
+        std::cout << std::endl;
+
         llvm::raw_fd_ostream dest(1, false, true);
 #ifdef IR_PLATFORM_WIN32
         if(!lld::coff::link(linkargs, false, dest))
@@ -2511,13 +2521,15 @@ namespace innative {
             std::remove(v.c_str());
           return assert(false), ERR_FATAL_LINK_ERROR;
         }
+        else
+          return ERR_SUCCESS;
       }
 
       // Delete cache files
       for(auto& v : cache)
         std::remove(v.c_str());
-      for(; target_init < targets.size(); ++target_init)
-        std::remove(targets[target_init].c_str());
+      for(auto& v : garbage)
+        std::remove(v);
     }
 
     return ERR_SUCCESS;

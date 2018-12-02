@@ -386,7 +386,7 @@ int64_t Homogenize(const Instruction& i)
 
 namespace innative {
   namespace internal {
-    template<typename T>
+    template<typename X>
     struct HType { typedef int64_t T; };
   }
 }
@@ -394,7 +394,7 @@ namespace innative {
 template<typename... Args>
 void GenWastFunctionCall(void* f, WastResult& result, Args... params)
 {
-  int64_t r = static_cast<int64_t(*)(typename internal::HType<Args>::T...)>(f)(Homogenize(params)...);
+  int64_t r = reinterpret_cast<int64_t(*)(typename internal::HType<Args>::T...)>(f)(Homogenize(params)...);
   switch(result.type)
   {
   case TE_i32:
@@ -412,12 +412,9 @@ void GenWastFunctionCall(void* f, WastResult& result, Args... params)
 int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache, int& counter, const std::string& path, WastResult& result)
 {
   int err;
-  if(!cache) // If cache is null we need to recompile the current environment
-  {
-    if(err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache))
-      return err;
-    assert(cache);
-  }
+  int cache_err;
+  if(!cache) // If cache is null we need to recompile the current environment, but we can't bail on error messages yet or we'll corrupt the parse
+    cache_err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache))
 
   switch(tokens.Pop().id)
   {
@@ -477,7 +474,10 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
         return ERR_INVALID_TYPE;
     }
 
-    void* f = LoadFunction(cache, m->name.str(), func.str());
+    if(cache_err != 0)
+      return cache_err;
+    assert(cache);
+    void* f = reinterpret_cast<void*>(LoadFunction(cache, m->name.str(), func.str()));
     if(!f)
       return ERR_INVALID_FUNCTION_INDEX;
 
@@ -565,6 +565,9 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
     if(e.kind != WASM_KIND_GLOBAL || !(g = ModuleGlobal(*m, e.index)))
       return ERR_INVALID_GLOBAL_INDEX;
 
+    if(cache_err != 0)
+      return cache_err;
+    assert(cache);
     void* f = innative::LoadGlobal(cache, m->name.str(), global.str());
     if(!f)
       return ERR_INVALID_GLOBAL_INDEX;

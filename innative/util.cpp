@@ -51,7 +51,7 @@ void* __WASM_ALLOCATOR::allocate(size_t n)
 #ifdef IR_PLATFORM_WIN32
       prev = HeapAlloc(GetProcessHeap(), 0, n);
 #elif defined(IR_PLATFORM_POSIX)
-      prev = mmap(0, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1);
+      prev = mmap(0, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 #endif
       list.push_back({ prev, n }); // Add real pointer and size to our destructor list
       mem.exchange((char*)prev - index, std::memory_order_release); // backtrack to trick the current index into pointing to the right address

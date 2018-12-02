@@ -12,10 +12,13 @@
 
 static const std::unordered_map<std::string, unsigned int> flag_map = {
   { "strict", ENV_STRICT },
+  { "sandbox", ENV_SANDBOX },
   { "multithreaded", ENV_MULTITHREADED },
   { "debug", ENV_DEBUG },
   { "library", ENV_LIBRARY },
   { "wat", ENV_ENABLE_WAT },
+  { "llvm", ENV_EMIT_LLVM },
+  { "noinit", ENV_NO_INIT },
   { "homogenize", ENV_HOMOGENIZE_FUNCTIONS },
 };
 

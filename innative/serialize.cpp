@@ -3,6 +3,7 @@
 
 #include "serialize.h"
 #include <stdarg.h>
+#include <ostream>
 
 using namespace innative;
 using namespace utility;

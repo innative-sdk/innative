@@ -85,7 +85,7 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
 #ifdef IR_PLATFORM_WIN32
     info = HeapReAlloc(heap, HEAP_ZERO_MEMORY, info - 1, i + sizeof(uint64_t));
 #elif defined(IR_PLATFORM_POSIX)
-    info = _innative_syscall(SYSCALL_MREMAP, p, info[-1] + sizeof(uint64_t), i + sizeof(uint64_t), PROT_READ | PROT_WRITE);
+    info = _innative_syscall(SYSCALL_MREMAP, p, info[-1] + sizeof(uint64_t), i + sizeof(uint64_t), PROT_READ | PROT_WRITE, 0);
 #else
 #error unknown platform!
 #endif
@@ -118,7 +118,8 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_exit(int status)
 #ifdef IR_PLATFORM_WIN32
   ExitProcess(status);
 #elif defined(IR_PLATFORM_POSIX)
-  _innative_syscall(SYSCALL_EXIT, status, 0, 0, 0, 0);
+  size_t cast = status;
+  _innative_syscall(SYSCALL_EXIT, (void*)cast, 0, 0, 0, 0);
 #endif
 }
 
@@ -128,7 +129,8 @@ void _innative_internal_write_out(const void* buf, size_t num)
   DWORD out;
   WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buf, num, &out, NULL);
 #elif defined(IR_PLATFORM_POSIX)
-  _innative_syscall(SYSCALL_WRITE, (void*)1, (size_t)buf, num, 0, 0);
+  size_t cast = 1;
+  _innative_syscall(SYSCALL_WRITE, (void*)cast, (size_t)buf, num, 0, 0);
 #else
 #error unknown platform!
 #endif
