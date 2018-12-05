@@ -251,7 +251,7 @@ int CompileWast(Environment& env, const char* out, void*& cache)
   if(setjmp(jump_location) != 0)
     return ERR_RUNTIME_TRAP;
 
-  cache = LoadDLL(dir.Get().c_str());
+  cache = LoadDLL(dir.c_str());
   if(!cache)
     return ERR_RUNTIME_INIT_ERROR;
 
@@ -412,7 +412,7 @@ void GenWastFunctionCall(void* f, WastResult& result, Args... params)
 int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache, int& counter, const std::string& path, WastResult& result)
 {
   int err;
-  int cache_err;
+  int cache_err = 0;
   if(!cache) // If cache is null we need to recompile the current environment, but we can't bail on error messages yet or we'll corrupt the parse
     cache_err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache);
 

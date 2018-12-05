@@ -52,7 +52,7 @@ int innative_compile_file(const char* file, const char* out, uint64_t flags, uin
   Path name(file);
 
   if(sz > 0)
-    AddModule(env, data_module.get(), sz, name.RemoveExtension().Get().c_str(), &err);
+    AddModule(env, data_module.get(), sz, name.RemoveExtension().c_str(), &err);
   else
     err = -1;
 
@@ -149,5 +149,5 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bo
 
 void innative_set_work_dir_to_bin(const char* arg0)
 {
-  utility::SetWorkingDir(utility::GetProgramPath(arg0).BaseDir().Get().c_str());
+  utility::SetWorkingDir(utility::GetProgramPath(arg0).BaseDir().c_str());
 }

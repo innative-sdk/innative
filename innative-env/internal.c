@@ -86,7 +86,7 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
 #ifdef IR_PLATFORM_WIN32
     info = HeapReAlloc(heap, HEAP_ZERO_MEMORY, info - 1, i + sizeof(uint64_t));
 #elif defined(IR_PLATFORM_POSIX)
-    info = _innative_syscall(SYSCALL_MREMAP, p, info[-1] + sizeof(uint64_t), i + sizeof(uint64_t), PROT_READ | PROT_WRITE, 0);
+    info = _innative_syscall(SYSCALL_MREMAP, info - 1, info[-1] + sizeof(uint64_t), i + sizeof(uint64_t), PROT_READ | PROT_WRITE, 0);
 #else
 #error unknown platform!
 #endif

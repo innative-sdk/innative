@@ -32,6 +32,8 @@
 #include <limits.h>
 #include <dlfcn.h>
 #include <sys/mman.h>
+#else
+#error unknown platform
 #endif
 
 using std::string;
@@ -46,20 +48,19 @@ void* __WASM_ALLOCATOR::allocate(size_t n)
   {
     if(index <= max && end > max) // Exactly one allocation can be in this state at a time, the others will spin while waiting for the reallocation
     {
-      n = std::max<size_t>(end, 4096) * 2;
-      void* prev; // = mem.load(std::memory_order_acquire);
-#ifdef IR_PLATFORM_WIN32
-      prev = HeapAlloc(GetProcessHeap(), 0, n);
-#elif defined(IR_PLATFORM_POSIX)
-      prev = mmap(0, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-#endif
-      list.push_back({ prev, n }); // Add real pointer and size to our destructor list
+      while(commit.load(std::memory_order_acquire) != index); // Spin until all reads are done
+
+      size_t len = std::max<size_t>(end, 4096) * 2;
+      void* prev = malloc(len); // = mem.load(std::memory_order_acquire);
+      list.push_back({ prev, len }); // Add real pointer and size to our destructor list
       mem.exchange((char*)prev - index, std::memory_order_release); // backtrack to trick the current index into pointing to the right address
-      sz.exchange(n + index, std::memory_order_release); // Actual "end" is our previous allocation endpoint (not the memory endpoint) plus current size
+      sz.exchange(len + index, std::memory_order_release); // Actual "end" is our previous allocation endpoint (not the memory endpoint) plus current size
     }
   }
 
-  return (char*)mem.load(std::memory_order_acquire) + index;
+  void* m = mem.load(std::memory_order_acquire);
+  commit.fetch_add(n, std::memory_order_release);
+  return (char*)m + index;
 }
 __WASM_ALLOCATOR::~__WASM_ALLOCATOR()
 {
@@ -69,11 +70,7 @@ __WASM_ALLOCATOR::~__WASM_ALLOCATOR()
 
   while(!list.empty())
   {
-#ifdef IR_PLATFORM_WIN32
-    HeapFree(GetProcessHeap(), 0, list.back().first);
-#elif defined(IR_PLATFORM_POSIX)
-    munmap(list.back().first, list.back().second);
-#endif
+    free(list.back().first);
     list.pop_back();
   }
 }

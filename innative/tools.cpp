@@ -20,7 +20,7 @@ Environment* innative::CreateEnvironment(uint64_t flags, uint64_t optimize, uint
   {
     env->modulemap = kh_init_modules();
     env->whitelist = kh_init_modulepair();
-    env->cimports = kh_init_cimport();
+    //env->cimports = kh_init_cimport();
     env->modules = trealloc<Module>(0, modules);
     env->alloc = new __WASM_ALLOCATOR();
 
@@ -55,7 +55,7 @@ void innative::DestroyEnvironment(Environment* env)
   delete env->alloc;
   kh_destroy_modulepair(env->whitelist);
   kh_destroy_modules(env->modulemap);
-  kh_destroy_cimport(env->cimports);
+  //kh_destroy_cimport(env->cimports);
   free(env->modules);
   free(env);
 }
@@ -155,19 +155,22 @@ enum IR_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data
   embed->next = env->embeddings;
   env->embeddings = embed;
 
-  Path path(env->sdkpath);
-  path.Append((const char*)embed->data);
-  auto symbols = GetSymbols(path.Get().c_str());
-
-  int r;
-  for(auto symbol : symbols)
+  if(env->cimports)
   {
-    Identifier id;
-    id.resize(symbol.size(), true, *env);
-    memcpy(id.get(), symbol.data(), symbol.size());
-    kh_put_cimport(env->cimports, id, &r);
-    if(!r)
-      return ERR_INVALID_EMBEDDING;
+    Path path(env->sdkpath);
+    path.Append((const char*)embed->data);
+    auto symbols = GetSymbols(path.c_str());
+
+    int r;
+    for(auto symbol : symbols)
+    {
+      Identifier id;
+      id.resize(symbol.size(), true, *env);
+      memcpy(id.get(), symbol.data(), symbol.size());
+      kh_put_cimport(env->cimports, id, &r);
+      if(!r)
+        return ERR_INVALID_EMBEDDING;
+    }
   }
 
   return ERR_SUCCESS;
@@ -223,5 +226,5 @@ IRGlobal* innative::LoadGlobal(void* cache, const char* module_name, const char*
 void* innative::LoadAssembly(int flags, const char* file)
 {
   Path path(file != nullptr ? Path(file) : GetProgramPath(0) + IR_EXTENSION);
-  return LoadDLL(path.Get().c_str());
+  return LoadDLL(path.c_str());
 }

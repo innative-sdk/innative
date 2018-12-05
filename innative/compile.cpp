@@ -2156,8 +2156,8 @@ namespace innative {
     Path programpath(env->sdkpath);
     uint64_t eflags = env->flags;
 
-    SetWorkingDir(programpath.Get().c_str());
-    utility::DeferLambda<std::function<void()>> defer([&]() { SetWorkingDir(workdir.Get().c_str()); });
+    SetWorkingDir(programpath.c_str());
+    utility::DeferLambda<std::function<void()>> defer([&]() { SetWorkingDir(workdir.c_str()); });
 
     if(!file.IsAbsolute())
       file = workdir + file;

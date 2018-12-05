@@ -9,9 +9,19 @@
 
 namespace innative {
   // Represents an operating system path for pre-C++17 compilers
-  class Path
+  class Path : std::string
   {
   public:
+#ifdef IR_PLATFORM_WIN32
+    static const char SEPERATOR = '\\';
+    static const char OTHER = '/';
+#elif defined(IR_PLATFORM_POSIX)
+    static const char SEPERATOR = '/';
+    static const char OTHER = '\\';
+#else
+#error "unknown platform"
+#endif
+
     Path() {}
     Path(const Path& copy) : _path(copy._path) {}
     Path(Path&& mov) : _path(std::move(mov._path)) {}
@@ -21,12 +31,16 @@ namespace innative {
     inline bool IsAbsolute() const
     {
       const char* start = _path.c_str();
-      const char* pos = strchr(start, '/');
-      return pos != nullptr && ((pos == start) || (pos[-1] == ':'));
+      const char* pos = strchr(start, SEPERATOR);
+#ifdef IR_PLATFORM_WIN32
+      return pos != nullptr && pos == start + 2 && pos[-1] == ':';
+#elif defined(IR_PLATFORM_POSIX)
+      return pos != nullptr && pos == start;
+#endif
     }
 
     // Sets the path and canonizes it
-    IR_FORCEINLINE void Set(const Path& path) { Set(path._path); }
+    inline void Set(const Path& path) { _path = path._path; }
     inline void Set(const std::string& path) { _path = path; _canonize(); }
     inline void Set(const char* path) { _path = path; _canonize(); }
 
@@ -36,8 +50,13 @@ namespace innative {
     {
       if(!path || !path[0])
         return;
-      if(path[0] != '/' && path[0] != '\\')
-        _path += '/';
+      if(_path.size() > 0)
+      {
+        if(_path.back() == SEPERATOR)
+          _path.pop_back();
+        if(path[0] != SEPERATOR && path[0] != OTHER)
+          _path += SEPERATOR;
+      }
       _path += path;
       _canonize();
     }
@@ -61,48 +80,32 @@ namespace innative {
     inline Path BaseDir() const
     {
       Path r;
-      size_t pos = _path.find_last_of('/');
-      r._path = (pos != std::string::npos) ? _path.substr(0, pos) : _path;
+      if(!_path.size())
+        return r;
+      size_t pos = _path.find_last_of(SEPERATOR, _path.size() - 1 - (_path.back() == SEPERATOR));
+      r._path = (pos != std::string::npos) ? _path.substr(0, pos + 1) : std::string();
       return r;
     }
 
     inline Path File() const
     {
       Path r;
-      size_t pos = _path.find_last_of('/');
-      r._path = (pos != std::string::npos) ? _path.substr(pos + 1) : std::string();
+      size_t pos = _path.find_last_of(SEPERATOR);
+      r._path = (pos != std::string::npos) ? _path.substr(pos + 1) : _path;
       return r;
     }
 
-    inline std::string Get() const
-    {
-      std::string r(_path);
-      // Returns the path canonized to the specific operating system
-#ifdef IR_PLATFORM_WIN32
-      for(size_t i = 0; i < r.size(); ++i)
-      {
-        if(r[i] == '/')
-          r[i] = '\\';
-      }
-#elif defined(IR_PLATFORM_POSIX)
-      for(size_t i = 0; i < r.size(); ++i)
-      {
-        if(r[i] == '\\')
-          r[i] = '/';
-      }
-#else
-#error "unknown platform"
-#endif
-      return r;
-    }
-
+    inline const std::string& Get() const { return _path; }
+    inline const char* c_str() const { return _path.c_str(); }
     inline Path operator+(const Path& right) const { Path r(*this); r += right; return r; }
     inline Path operator+(const std::string& right) const { Path r(*this); r += right; return r; }
     inline Path operator+(const char* right) const { Path r(*this); r += right; return r; }
     inline Path& operator+=(const Path& right) { Append(right); return *this; }
     inline Path& operator+=(const std::string& right) { Append(right); return *this; }
     inline Path& operator+=(const char* right) { Append(right); return *this; }
-    inline Path& operator=(const Path& copy) { _path = copy._path; return *this; }
+    inline Path& operator=(const char* copy) { Set(copy); return *this; }
+    inline Path& operator=(const std::string& copy) { Set(copy); return *this; }
+    inline Path& operator=(const Path& copy) { Set(copy); return *this; }
     inline Path& operator=(Path&& mov) { _path = std::move(mov._path); return *this; }
 
   protected:
@@ -110,11 +113,9 @@ namespace innative {
     {
       for(size_t i = 0; i < _path.size(); ++i)
       {
-        if(_path[i] == '\\')
-          _path[i] = '/';
+        if(_path[i] == OTHER)
+          _path[i] = SEPERATOR;
       }
-      if(_path.back() == '/')
-        _path.pop_back();
     }
 
     std::string _path;

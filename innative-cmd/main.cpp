@@ -164,7 +164,7 @@ int main(int argc, char *argv[])
 
   // Load all modules
   for(size_t i = 0; i < inputs.size(); ++i)
-    (*exports.AddModule)(env, inputs[i], 0, innative::Path(inputs[i]).File().RemoveExtension().Get().c_str(), &err);
+    (*exports.AddModule)(env, inputs[i], 0, innative::Path(inputs[i]).File().RemoveExtension().c_str(), &err);
 
   if(err < 0)
   {

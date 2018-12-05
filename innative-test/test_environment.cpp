@@ -3,6 +3,89 @@
 
 #include "test.h"
 
+extern "C" {
+  extern void _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz);
+  extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max);
+  extern void _innative_internal_env_print(uint64_t a);
+}
+
 void TestHarness::test_environment()
 {
+  // We've linked ourselves with the innative_env library file, so we can directly test these functions
+
+  _innative_internal_env_memcpy(0, 0, 0);
+
+  {
+    char src[1] = { 14 };
+    char dest[1] = { 0 };
+    _innative_internal_env_memcpy(dest, src, 0);
+    TEST(dest[0] == 0);
+  }
+
+  {
+    char src[1] = { 14 };
+    char dest[1] = { 0 };
+    _innative_internal_env_memcpy(dest, src, 1);
+    TEST(dest[0] == 14);
+  }
+
+  {
+    char src[8] = { 14, 5, 5, 5, 5, 5, 5, 5 };
+    char dest[8] = { 0 };
+    _innative_internal_env_memcpy(dest, src, 1);
+    TEST(dest[0] == 14);
+    for(int i = 1; i < 8; ++i)
+      TEST(!dest[i]);
+  }
+
+  char src[64];
+  char dest[64];
+
+  for(int n = 0; n < 64; ++n)
+  {
+    for(int i = 0; i < 64; ++i)
+    {
+      src[i] = i;
+      dest[i] = 0;
+    }
+
+    _innative_internal_env_memcpy(dest, src, n);
+
+    for(int i = 0; i < n; ++i)
+      TEST(dest[i] == src[i]);
+    for(int i = n; i < 64; ++i)
+      TEST(!dest[i]);
+  }
+
+  _innative_internal_env_print(0);
+  _innative_internal_env_print(~0ULL);
+  _innative_internal_env_print(1ULL << 62ULL);
+
+  uint64_t* p = (uint64_t*)_innative_internal_env_grow_memory(0, 0, 0);
+
+  TEST(!_innative_internal_env_grow_memory(0, 9, 1));
+  TEST(!_innative_internal_env_grow_memory(p, 9, 1));
+  p = (uint64_t*)_innative_internal_env_grow_memory(p, 0, 1);
+  TEST(p != 0);
+  TEST(p[-1] == 0);
+  p = (uint64_t*)_innative_internal_env_grow_memory(p, 1, 1);
+  TEST(p != 0);
+  TEST(p[-1] == 1);
+  TEST(reinterpret_cast<char*>(p)[0] == 0);
+  TEST(!_innative_internal_env_grow_memory(p, 1, 1));
+  p = (uint64_t*)_innative_internal_env_grow_memory(p, 1, 2);
+  TEST(p != 0);
+  TEST(p[-1] == 2);
+  TEST(reinterpret_cast<char*>(p)[0] == 0);
+  TEST(reinterpret_cast<char*>(p)[1] == 0);
+  p = (uint64_t*)_innative_internal_env_grow_memory(p, 1000, 0);
+  TEST(p != 0);
+  TEST(p[-1] == 1002);
+  for(int i = 0; i < 1000; ++i)
+    TEST(!reinterpret_cast<char*>(p)[i]);
+
+  p = (uint64_t*)_innative_internal_env_grow_memory(p, 100000, 0);
+  TEST(p != 0);
+  TEST(p[-1] == 101002);
+  TEST(!_innative_internal_env_grow_memory(p, 100000, 200000));
 }

@@ -38,6 +38,7 @@ Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "out", "innative-cmd\out.exe
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "innative-test", "innative-test\innative-test.vcxproj", "{EAC0DE14-E009-4D17-B58B-F8554F6C27FA}"
 	ProjectSection(ProjectDependencies) = postProject
+		{54E92032-38A6-4069-8189-2B27995700E0} = {54E92032-38A6-4069-8189-2B27995700E0}
 		{8B15928A-757D-4280-B90F-4D4E90D37F60} = {8B15928A-757D-4280-B90F-4D4E90D37F60}
 	EndProjectSection
 EndProject

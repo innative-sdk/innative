@@ -20,12 +20,13 @@
 
 struct __WASM_ALLOCATOR
 {
-  __WASM_ALLOCATOR() : mem(0), sz(0), cur(0) {}
+  __WASM_ALLOCATOR() : mem(0), sz(0), cur(0), commit(0) {}
   ~__WASM_ALLOCATOR();
 
   std::atomic<void*> mem;
   std::atomic_size_t sz;
   std::atomic_size_t cur;
+  std::atomic_size_t commit;
   std::vector<std::pair<void*, size_t>> list;
 
   void* allocate(size_t n);
