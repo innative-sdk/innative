@@ -57,17 +57,10 @@ void TestHarness::test_environment()
       TEST(!dest[i]);
   }
 
-  _innative_internal_env_print(0);
-  _innative_internal_env_print(~0ULL);
-  _innative_internal_env_print(1ULL << 62ULL);
 
   uint64_t* p = (uint64_t*)_innative_internal_env_grow_memory(0, 0, 0);
-
   TEST(!_innative_internal_env_grow_memory(0, 9, 1));
   TEST(!_innative_internal_env_grow_memory(p, 9, 1));
-  p = (uint64_t*)_innative_internal_env_grow_memory(p, 0, 1);
-  TEST(p != 0);
-  TEST(p[-1] == 0);
   p = (uint64_t*)_innative_internal_env_grow_memory(p, 1, 1);
   TEST(p != 0);
   TEST(p[-1] == 1);
@@ -88,4 +81,8 @@ void TestHarness::test_environment()
   TEST(p != 0);
   TEST(p[-1] == 101002);
   TEST(!_innative_internal_env_grow_memory(p, 100000, 200000));
+
+  _innative_internal_env_print(0);
+  _innative_internal_env_print(~0ULL);
+  _innative_internal_env_print(1ULL << 62ULL);
 }

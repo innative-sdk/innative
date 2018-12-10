@@ -88,8 +88,10 @@ void innative::AppendError(const Environment& env, ValidationError*& errors, Mod
   va_list args;
   va_start(args, fmt);
   int len = vsnprintf(0, 0, fmt, args);
+  va_end(args);
   ValidationError* err = reinterpret_cast<ValidationError*>(env.alloc->allocate(sizeof(ValidationError) + len + 1));
   err->error = reinterpret_cast<char*>(err + 1);
+  va_start(args, fmt);
   vsnprintf(err->error, len + 1, fmt, args);
   va_end(args);
 

@@ -2498,17 +2498,17 @@ namespace innative {
 
         cmd += quote;
 
-        std::cout << "Executing external linker command: " << cmd.c_str() << std::endl;
+        //std::cout << "Executing external linker command: " << cmd.c_str() << std::endl;
         int err = system(cmd.c_str());
         if(err != 0)
           return assert(false), ERR_FATAL_LINK_ERROR;
       }
       else
       {
-        std::cout << "Executing internal linker command:";
+        /*std::cout << "Executing internal linker command:";
         for(auto arg : linkargs)
           std::cout << ' ' << '"' << arg << '"';
-        std::cout << std::endl;
+        std::cout << std::endl;*/
 
         llvm::raw_fd_ostream dest(1, false, true);
 #ifdef IR_PLATFORM_WIN32

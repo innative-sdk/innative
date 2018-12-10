@@ -299,9 +299,11 @@ namespace innative {
     string StrFormat(const char* fmt, ...)
     {
       va_list args;
-      va_start(args, fmt);
       string s;
+      va_start(args, fmt);
       s.resize(vsnprintf(0, 0, fmt, args) + 1);
+      va_end(args);
+      va_start(args, fmt);
       s.resize(vsnprintf((char*)s.data(), s.capacity(), fmt, args));
       va_end(args);
 

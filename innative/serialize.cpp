@@ -29,13 +29,15 @@ void innative::wat::PushNewNameToken(const Environment& env, Queue<WatToken>& to
 {
   va_list args;
   va_start(args, format);
-
   size_t len = vsnprintf(0, 0, format, args);
+  va_end(args);
+
   char* s = tmalloc<char>(env, len + 1);
+  va_start(args, format);
   vsnprintf(s, len + 1, format, args);
+  va_end(args);
   tokens.Push(WatToken{ TOKEN_NAME, s, 0, 0, (int64_t)len });
 
-  va_end(args);
 }
 
 void innative::wat::PushFunctionName(const Environment& env, Queue<WatToken>& tokens, const Module& m, varuint32 index)

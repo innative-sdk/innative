@@ -13,6 +13,15 @@
 #include <iostream>
 #include <atomic>
 
+#ifdef IR_PLATFORM_POSIX
+#define LONGJMP(x,i) siglongjmp(x,i)
+#define SETJMP(x) sigsetjmp(x,1)
+#else
+#define LONGJMP(x,i) longjmp(x,i)
+#define SETJMP(x) setjmp(x)
+#endif
+
+
 using namespace innative;
 using namespace wat;
 using namespace utility;
@@ -219,7 +228,7 @@ namespace innative {
 
     void WastCrashHandler(int sig)
     {
-      longjmp(jump_location, 1);
+      LONGJMP(jump_location, 1);
     }
   }
 }
@@ -246,20 +255,35 @@ int CompileWast(Environment& env, const char* out, void*& cache)
   dir.Append(out);
 
   signal(SIGILL, WastCrashHandler);
-  signal(SIGFPE, WastCrashHandler); // This catches division by zero on linux
+  signal(SIGFPE, WastCrashHandler);
 
-  if(setjmp(jump_location) != 0)
+  if(SETJMP(jump_location) != 0)
+  {
+    signal(SIGILL, SIG_DFL);
+    signal(SIGFPE, SIG_DFL);
     return ERR_RUNTIME_TRAP;
+  }
 
   cache = LoadDLL(dir.c_str());
   if(!cache)
+  {
+    signal(SIGILL, SIG_DFL);
+    signal(SIGFPE, SIG_DFL);
     return ERR_RUNTIME_INIT_ERROR;
+  }
 
   auto entry = LoadFunction(cache, 0, 0);
+
   if(!entry)
+  {
+    signal(SIGILL, SIG_DFL);
+    signal(SIGFPE, SIG_DFL);
     return ERR_RUNTIME_INIT_ERROR;
+  }
 
   (*entry)();
+  signal(SIGILL, SIG_DFL);
+  signal(SIGFPE, SIG_DFL);
   return ERR_SUCCESS;
 }
 
@@ -278,11 +302,11 @@ int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
   int err;
   WatToken name = { TOKEN_NONE };
   m = { 0 }; // We have to ensure this is zeroed, because an error could occur before ParseModule is called
+  std::string tempname("m");
+  tempname += std::to_string(env.n_modules);
 
   if(tokens[0].id == TOKEN_BINARY || (tokens.Size() > 1 && tokens[1].id == TOKEN_BINARY))
   {
-    std::string tempname("m");
-    tempname += std::to_string(env.n_modules);
     name = GetWatNameToken(tokens);
     if(!name.pos)
     {
@@ -316,7 +340,7 @@ int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
       if(err = WatName(env, m.name, name))
         return err;
   }
-  else if(err = WatModule(env, m, tokens, StringRef{ nullptr, 0 }, name))
+  else if(err = WatModule(env, m, tokens, StringRef{ tempname.data(), tempname.size() }, name))
     return err;
   m.path = path;
 
@@ -490,8 +514,12 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
     signal(SIGILL, WastCrashHandler);
     signal(SIGFPE, WastCrashHandler); // This catches division by zero on linux
 
-    if(setjmp(jump_location) != 0)
+    if(SETJMP(jump_location) != 0)
+    {
+      signal(SIGILL, SIG_DFL);
+      signal(SIGFPE, SIG_DFL);
       return ERR_RUNTIME_TRAP;
+    }
 
 #ifdef IR_COMPILER_MSC
     __try // this catches division by zero on windows
@@ -533,10 +561,14 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
     }
     __except(1)
     {
+      signal(SIGILL, SIG_DFL);
+      signal(SIGFPE, SIG_DFL);
       return ERR_RUNTIME_TRAP;
     }
 #endif
+
     signal(SIGILL, SIG_DFL);
+    signal(SIGFPE, SIG_DFL);
     break;
   }
   case TOKEN_GET:

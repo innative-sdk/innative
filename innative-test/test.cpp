@@ -57,6 +57,7 @@ size_t internal_tests()
     printf("%-*s %-*s %-*s\n", COLUMNS[0], tests[i].first, COLUMNS[1], buf, COLUMNS[2], (results.first == results.second) ? "PASS" : "FAIL");
   }
 
+  printf("\n");
   return failures;
 }
 
@@ -66,8 +67,8 @@ int main(int argc, char *argv[])
   IRExports exports;
   innative_runtime(&exports);
 
-  std::ostream& target = std::cout;
-  //std::ofstream target("out.txt", std::fstream::binary | std::fstream::out);
+  //std::ostream& target = std::cout;
+  std::ofstream target("out.txt", std::fstream::binary | std::fstream::out);
   target << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
   target << std::endl;
 
@@ -82,9 +83,9 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  testfiles = { "../spec/test/core/address.wast" };
+  //testfiles = { "../spec/test/core/start.wast" };
   target << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
-  //testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
+  testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
 
   for(auto file : testfiles)
   {
@@ -106,7 +107,10 @@ int main(int argc, char *argv[])
       target << file << ": FAILED" << std::endl;
       while(env->errors != nullptr)
       {
-        target << "  " << env->errors->error << std::endl;
+        target << "  ";
+        if(env->errors->m != nullptr)
+          target << env->errors->m->name.str() << ": ";
+        target << env->errors->error << std::endl;
         env->errors = env->errors->next;
       }
       target << std::endl;

@@ -106,9 +106,9 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bo
   int err = ERR_SUCCESS;
   char buf[40];
 #ifdef IR_PLATFORM_WIN32
-  sprintf(buf, "memory--%p", data);
+  snprintf(buf, 40, "memory--%p", data);
 #else
-  sprintf(buf, "/memory--%p", data);
+  snprintf(buf, 40, "/memory--%p", data);
 #endif
   const char* path = buf;
 

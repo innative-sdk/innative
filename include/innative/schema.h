@@ -570,9 +570,6 @@ typedef struct __WASM_GLOBAL_DECL
 
 typedef struct __WASM_FUNCTION_DESC
 {
-#ifdef  __cplusplus
-  inline __WASM_FUNCTION_DESC() : type_index(0), param_names(nullptr) {}
-#endif
   varuint32 type_index;
   DebugInfo debug;
   DebugInfo* param_names; // Always the size of n_params from the signature
@@ -580,9 +577,6 @@ typedef struct __WASM_FUNCTION_DESC
 
 typedef struct __WASM_IMPORT
 {
-#ifdef  __cplusplus
-  inline __WASM_IMPORT() : kind(WASM_KIND_FUNCTION), func_desc() {}
-#endif
   Identifier module_name;
   Identifier export_name;
   varuint7 kind; // WASM_KIND

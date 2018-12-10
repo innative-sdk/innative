@@ -921,7 +921,7 @@ namespace innative {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
         EXPECTED(tokens, TOKEN_IMPORT, ERR_WAT_EXPECTED_IMPORT);
 
-        Import i;
+        Import i = { };
         if(err = WatString(env, i.module_name, tokens.Pop()))
           return err;
         if(!ValidateIdentifier(i.module_name))
@@ -1248,7 +1248,7 @@ namespace innative {
 
     int WatImport(WatState& state, Queue<WatToken>& tokens)
     {
-      Import i;
+      Import i = { };
       int err;
       if(err = WatString(state.env, i.module_name, tokens.Pop()))
         return err;
@@ -1354,7 +1354,7 @@ namespace innative {
       if(tokens[0].id == TOKEN_NUMBER || tokens[0].id == TOKEN_NAME)
         index = WatGetFromHash(state, hash, tokens.Pop());
 
-      if(index == ~0)
+      if(index == (varuint32)~0)
         return assert(false), ERR_WAT_INVALID_VAR;
 
       if(tokens[0].id == TOKEN_OPEN)
@@ -1615,7 +1615,7 @@ namespace innative {
       }
 
       m.exports = kh_init_exports();
-
+      assert(m.name.str());
       return ParseExportFixup(m, env.errors, env);
     }
 

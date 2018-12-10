@@ -69,60 +69,12 @@ const int SYSCALL_WRITE = 1;
 const int SYSCALL_MMAP = 9;
 const int SYSCALL_MREMAP = 25;
 const int SYSCALL_EXIT = 60;
+const int MREMAP_MAYMOVE = 1;
+
 #else
 #error unsupported architecture!
 #endif
 #endif
-
-// Platform-specific implementation of the mem.grow instruction, except it works in bytes
-IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max)
-{
-  uint64_t* info = (uint64_t*)p;
-  if(info != 0)
-  {
-    i += info[-1];
-    if(max > 0 && i > max)
-      return 0;
-#ifdef IR_PLATFORM_WIN32
-    info = HeapReAlloc(heap, HEAP_ZERO_MEMORY, info - 1, i + sizeof(uint64_t));
-#elif defined(IR_PLATFORM_POSIX)
-    info = _innative_syscall(SYSCALL_MREMAP, info - 1, info[-1] + sizeof(uint64_t), i + sizeof(uint64_t), PROT_READ | PROT_WRITE, 0);
-#else
-#error unknown platform!
-#endif
-  }
-  else if(!max || i <= max)
-  {
-#ifdef IR_PLATFORM_WIN32
-    if(!heap)
-      heap = HeapCreate(0, i, 0);
-    info = HeapAlloc(heap, HEAP_ZERO_MEMORY, i + sizeof(uint64_t));
-#elif defined(IR_PLATFORM_POSIX)
-    info = _innative_syscall(SYSCALL_MMAP, NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1);
-#else
-#error unknown platform!
-#endif
-  }
-
-  if((size_t)info % sizeof(uint64_t))
-    i = i / 0; // Force error (we have no standard library so we can't abort)
-
-  if(!info)
-    return 0;
-  info[0] = i;
-  return info + 1;
-}
-
-// You cannot return from the entry point of a program, you must instead call a platform-specific syscall to terminate it.
-IR_COMPILER_DLLEXPORT extern void _innative_internal_env_exit(int status)
-{
-#ifdef IR_PLATFORM_WIN32
-  ExitProcess(status);
-#elif defined(IR_PLATFORM_POSIX)
-  size_t cast = status;
-  _innative_syscall(SYSCALL_EXIT, (void*)cast, 0, 0, 0, 0);
-#endif
-}
 
 void _innative_internal_write_out(const void* buf, size_t num)
 {
@@ -156,6 +108,60 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_print(uint64_t a)
 IR_COMPILER_DLLEXPORT extern void _innative_internal_env_print_compiler(uint64_t a)
 {
   _innative_internal_env_print(a);
+}
+
+// Platform-specific implementation of the mem.grow instruction, except it works in bytes
+IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max)
+{
+  uint64_t* info = (uint64_t*)p;
+  if(info != 0)
+  {
+    i += info[-1];
+    if(max > 0 && i > max)
+      return 0;
+#ifdef IR_PLATFORM_WIN32
+    info = HeapReAlloc(heap, HEAP_ZERO_MEMORY, info - 1, i + sizeof(uint64_t));
+#elif defined(IR_PLATFORM_POSIX)
+    info = _innative_syscall(SYSCALL_MREMAP, info - 1, info[-1] + sizeof(uint64_t), i + sizeof(uint64_t), MREMAP_MAYMOVE, 0);
+    if((void*)info >= (void*)0xfffffffffffff001) // This is a syscall error from -4095 to -1
+      return 0;
+#else
+#error unknown platform!
+#endif
+  }
+  else if(!max || i <= max)
+  {
+#ifdef IR_PLATFORM_WIN32
+    if(!heap)
+      heap = HeapCreate(0, i, 0);
+    info = HeapAlloc(heap, HEAP_ZERO_MEMORY, i + sizeof(uint64_t));
+#elif defined(IR_PLATFORM_POSIX)
+    info = _innative_syscall(SYSCALL_MMAP, NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1);
+    if((void*)info >= (void*)0xfffffffffffff001) // This is a syscall error from -4095 to -1
+      return 0;
+#else
+#error unknown platform!
+#endif
+  }
+
+  if((size_t)info % sizeof(uint64_t))
+    i = i / 0; // Force error (we have no standard library so we can't abort)
+
+  if(!info)
+    return 0;
+  info[0] = i;
+  return info + 1;
+}
+
+// You cannot return from the entry point of a program, you must instead call a platform-specific syscall to terminate it.
+IR_COMPILER_DLLEXPORT extern void _innative_internal_env_exit(int status)
+{
+#ifdef IR_PLATFORM_WIN32
+  ExitProcess(status);
+#elif defined(IR_PLATFORM_POSIX)
+  size_t cast = status;
+  _innative_syscall(SYSCALL_EXIT, (void*)cast, 0, 0, 0, 0);
+#endif
 }
 
 IR_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned char* mem, uint64_t sz)

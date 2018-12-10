@@ -208,6 +208,7 @@ namespace innative {
         case '/': canonical += "#2F"; break;
         case '"': canonical += "#22"; break;
         case ',': canonical += "#2C"; break;
+        case '@': canonical += "#40"; break;
         default: 
           if(c < 32 || c > 126)
           {
