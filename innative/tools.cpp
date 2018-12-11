@@ -36,6 +36,8 @@ Environment* innative::CreateEnvironment(uint64_t flags, uint64_t optimize, uint
     env->features = features;
     env->maxthreads = maxthreads;
     env->linker = 0;
+    env->log = stdout;
+    env->loglevel = LOG_WARNING;
     auto sdkpath = GetProgramPath(arg0).BaseDir().Get();
     char* tmp = tmalloc<char>(*env, sdkpath.size() + 1);
     tmemcpy<char>(tmp, sdkpath.size() + 1, sdkpath.c_str(), sdkpath.size() + 1);

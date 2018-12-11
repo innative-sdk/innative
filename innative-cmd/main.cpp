@@ -36,7 +36,11 @@ void usage()
     "  -s <FILE> : Links the input files against <FILE>, which must be an ELF shared library.\n"
     "  -o <FILE> : Sets the output path for the resulting executable or library.\n"
     "  -a <FILE> : Specifies an alternative linker to use instead of LLD.\n"
-    "  -d <PATH> : Sets the directory that contains the SDK library and data files."
+    "  -d <PATH> : Sets the directory that contains the SDK library and data files.\n"
+    "  -w <[MODULE:]FUNCTION> : whitelists a given C import, does name-mangling if the module is specified.\n"
+    "  -i : Installs this innative SDK to the host operating system.\n"
+    "  -u : Uninstalls and deregisters this SDK from the host operating system.\n"
+    "  -v : Turns on verbose logging."
     << std::endl;
 }
 
@@ -52,6 +56,7 @@ int main(int argc, char *argv[])
   const char* linker = 0;
   bool run = false;
   bool generate = false;
+  bool verbose = true;
   int err = ERR_SUCCESS;
   IRExports exports;
   innative_runtime(&exports);
@@ -90,6 +95,7 @@ int main(int argc, char *argv[])
         generate = true;
         break;
       case 'w': // whitelist
+        whitelist.push_back(argv[i] + 2);
         break;
       case 'a': // animal sacrifice (specify an alternative linker)
         linker = argv[i] + 2;
@@ -97,6 +103,22 @@ int main(int argc, char *argv[])
       case 'd': // Specify EXE directory, or any directory containing SDK libraries.
         sdkpath = argv[i] + 2;
         break;
+      case 'i': // install
+        std::cout << "Installing inNative Runtime..." << std::endl;
+        err = innative_install();
+        if(err < 0)
+          std::cout << "Installation failed!" << std::endl;
+        else
+          std::cout << "Installation succeeded!" << std::endl;
+        return err;
+      case 'u': // uninstall
+        std::cout << "Uninstalling inNative Runtime..." << std::endl;
+        err = innative_uninstall();
+        if(err < 0)
+          std::cout << "Failed to uninstalled runtime!" << std::endl;
+        else
+          std::cout << "Successfully uninstalled runtime!" << std::endl;
+        return err;
       default:
         std::cout << "Unknown command line option: " << argv[i] << std::endl;
         err = -5;
@@ -141,26 +163,26 @@ int main(int argc, char *argv[])
     return -2;
   }
 
+  if(verbose)
+    env->loglevel = LOG_NOTICE;
   if(sdkpath)
     env->sdkpath = sdkpath;
   if(linker)
     env->linker = linker;
 
-  /*if(whitelist != nullptr)
+  std::string whitebuf;
+  for(auto item : whitelist)
   {
-    if(!whitelist[0]) // This indicates we should enforce a whitelist that is empty, forbidding all C imports
-      (*exports.AddWhitelist)(env, nullptr, nullptr, nullptr);
+    whitebuf = item; // We have ot make a copy of the string because the actual argv string isn't necessarily mutable
+    char* ctx;
+    char* first = STRTOK((char*)whitebuf.data(), ":", &ctx);
+    char* second = STRTOK(NULL, ":", &ctx);
+
+    if(!second)
+      (*exports.AddWhitelist)(env, nullptr, first);
     else
-    {
-      char* ctx;
-      char* token = STRTOK(whitelist, ",", &ctx);
-      while(token)
-      {
-        (*exports.AddWhitelist)(env, "", token, &whitelist[i].sig);
-        token = STRTOK(NULL, ",", &ctx);
-      }
-    }
-  }*/
+      (*exports.AddWhitelist)(env, first, second);
+  }
 
   // Load all modules
   for(size_t i = 0; i < inputs.size(); ++i)
@@ -168,7 +190,8 @@ int main(int argc, char *argv[])
 
   if(err < 0)
   {
-    fprintf(stderr, "Error loading modules: 0x%x\n", -err);
+    if(env->loglevel >= LOG_FATAL)
+      fprintf(env->log, "Error loading modules: 0x%x\n", -err);
     return err;
   }
 
@@ -180,7 +203,8 @@ int main(int argc, char *argv[])
 
   if(err < 0)
   {
-    fprintf(stderr, "Error loading environment: %i\n", err);
+    if(env->loglevel >= LOG_FATAL)
+      fprintf(env->log, "Error loading environment: %i\n", err);
     return err;
   }
 
@@ -195,10 +219,13 @@ int main(int argc, char *argv[])
 
   if(err < 0)
   {
-    fprintf(stderr, "Compile error: %i\n", err);
+    if(env->loglevel >= LOG_ERROR)
+    {
+      fprintf(env->log, "Compile error: %i\n", err);
 
-    for(ValidationError* error = env->errors; error != nullptr; error = error->next)
-      fprintf(stderr, "Error %i: %s\n", error->code, error->error);
+      for(ValidationError* error = env->errors; error != nullptr; error = error->next)
+        fprintf(env->log, "Error %i: %s\n", error->code, error->error);
+    }
 
     getchar();
     return err;

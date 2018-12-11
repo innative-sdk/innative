@@ -67,10 +67,8 @@ int main(int argc, char *argv[])
   IRExports exports;
   innative_runtime(&exports);
 
-  //std::ostream& target = std::cout;
-  std::ofstream target("out.txt", std::fstream::binary | std::fstream::out);
-  target << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
-  target << std::endl;
+  std::cout << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
+  std::cout << std::endl;
 
   internal_tests();
 
@@ -83,13 +81,14 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  //testfiles = { "../spec/test/core/start.wast" };
-  target << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
-  testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
+  //testfiles = { "../spec/test/core/memory.wast" };
+  std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
+  //testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
 
   for(auto file : testfiles)
   {
     Environment* env = (*exports.CreateEnvironment)(ENV_LIBRARY | ENV_DEBUG | ENV_EMIT_LLVM | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS, 0, ENV_FEATURE_ALL, 1, 0, (!argc ? 0 : argv[0]));
+    env->log = stdout;
     int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
 
     if(err >= 0)
@@ -99,21 +98,26 @@ int main(int argc, char *argv[])
 
     err = innative_compile_script((const uint8_t*)file.generic_u8string().data(), 0, env, true);
     if(!err && !env->errors)
-      target << file << ": SUCCESS" << std::endl;
+      FPRINTF(env->log, "%s: SUCCESS\n", file.generic_u8string().c_str());
     else
     {
       if(err < 0)
-        target << "Error running script " << file << ": " << err << std::endl;
-      target << file << ": FAILED" << std::endl;
+        FPRINTF(env->log, "Error running script %s: %i\n", file.generic_u8string().c_str(), err);
+      FPRINTF(env->log, "%s: FAILED\n", file.generic_u8string().c_str());
       while(env->errors != nullptr)
       {
-        target << "  ";
+        fputs("  ", env->log);
         if(env->errors->m != nullptr)
-          target << env->errors->m->name.str() << ": ";
-        target << env->errors->error << std::endl;
+        {
+          fputs(env->errors->m->name.str(), env->log);
+          fputs(": ", env->log);
+        }
+        fputs(env->errors->error, env->log);
+        fputc('\n', env->log);
         env->errors = env->errors->next;
       }
-      target << std::endl;
+      fputc('\n', env->log);
+      fflush(env->log);
     }
     (*exports.DestroyEnvironment)(env);
   }

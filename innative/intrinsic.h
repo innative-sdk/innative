@@ -78,6 +78,7 @@ namespace innative {
       std::vector<llvm::GlobalVariable*> globals;
       std::vector<Function> functions;
       llvm::Function* init;
+      llvm::Function* exit;
       llvm::Function* start;
       llvm::Function* memgrow;
     };

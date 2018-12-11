@@ -24,6 +24,9 @@
 #define INNATIVE_DEFAULT_ENVIRONMENT "innative-env" IR_STATIC_EXTENSION
 #endif
 
+#define IR_INIT_FUNCTION "_innative_internal_start"
+#define IR_EXIT_FUNCTION "_innative_internal_exit"
+
 #ifdef  __cplusplus
 extern "C" {
 #endif
@@ -84,6 +87,8 @@ extern "C" {
   IR_COMPILER_DLLEXPORT extern int innative_compile_file(const char* file, const char* out, uint64_t flags, uint64_t optimize, uint64_t features, bool dynamic, const struct _IR_WHITELIST* whitelist, unsigned int n_whitelist, const char* arg0);
   IR_COMPILER_DLLEXPORT extern int innative_build_loader(struct _IR_CHUNK* chunks, const char* out, bool dynamic);
   IR_COMPILER_DLLEXPORT extern void innative_set_work_dir_to_bin(const char* arg0);
+  IR_COMPILER_DLLEXPORT extern int innative_install();
+  IR_COMPILER_DLLEXPORT extern int innative_uninstall();
 
 #ifdef  __cplusplus
 }

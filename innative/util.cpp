@@ -62,6 +62,7 @@ void* __WASM_ALLOCATOR::allocate(size_t n)
   commit.fetch_add(n, std::memory_order_release);
   return (char*)m + index;
 }
+
 __WASM_ALLOCATOR::~__WASM_ALLOCATOR()
 {
   mem.exchange(nullptr, std::memory_order_release);
@@ -319,5 +320,37 @@ namespace innative {
     void* LoadDLLFunction(void* dll, const char* name) { return dlsym(dll, name); }
     void FreeDLL(void* dll) { dlclose(dll); }
 #endif
+
+    int install()
+    {
+#ifdef IR_PLATFORM_WIN32
+      // Install detailed information to registry
+
+      // Set %INNATIVE_PATH% to our path only if we are the newest version
+
+      // Register ourselves as handling *.wast *.wat and *.wasm files
+#elif defined(IR_PLATFORM_POSIX)
+      // Install symlinks to /usr/bin
+
+      // Calculate new master symlink
+#endif
+      return -1;
+    }
+
+    int uninstall()
+    {
+#ifdef IR_PLATFORM_WIN32
+      // Remove this version from the registry
+
+      // Recalculate %INNATIVE_PATH%
+
+      // Remove our file handling registration
+#elif defined(IR_PLATFORM_POSIX)
+      // Remove symlink from /usr/bin
+
+      // Calculate new master symlink
+#endif
+      return -1;
+    }
   }
 }

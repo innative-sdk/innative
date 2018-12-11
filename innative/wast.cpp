@@ -236,7 +236,14 @@ namespace innative {
 void InvalidateCache(void*& cache)
 {
   if(cache)
+  {
+    auto exit = LoadFunction(cache, 0, IR_EXIT_FUNCTION);
+
+    if(exit)
+      (*exit)();
+
     FreeDLL(cache);
+  }
   cache = nullptr;
 }
 
@@ -960,6 +967,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
     assert(cache);
   }
 
+  InvalidateCache(cache);
   env.errors = errors;
   if(env.errors)
     internal::ReverseErrorList(env.errors);

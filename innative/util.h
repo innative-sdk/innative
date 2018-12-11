@@ -179,6 +179,8 @@ namespace innative {
     void* LoadDLL(const char* path);
     void* LoadDLLFunction(void* dll, const char* name);
     void FreeDLL(void* dll);
+    int install();
+    int uninstall();
 
     // Creates a C-compatible mangled name with an optional index
     inline std::string CanonicalName(const char* prefix, const char* name, int index = -1)

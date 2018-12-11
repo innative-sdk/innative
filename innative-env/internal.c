@@ -60,13 +60,14 @@ IR_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1,
     "movq %rcx, %rdx\n\t"
     "movq %r8, %r10\n\t"
     "movq %r9, %r8\n\t"
-    "movq $0, %r9\n\t"
+    "movq $0, %r9\n\t" // movq 8(%rsp), %r9
     "syscall\n\t"
     "ret");
 }
 
 const int SYSCALL_WRITE = 1;
 const int SYSCALL_MMAP = 9;
+const int SYSCALL_MUNMAP = 11;
 const int SYSCALL_MREMAP = 25;
 const int SYSCALL_EXIT = 60;
 const int MREMAP_MAYMOVE = 1;
@@ -151,6 +152,23 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
     return 0;
   info[0] = i;
   return info + 1;
+}
+
+// Platform-specific memory free, called by the exit function to clean up memory allocations
+IR_COMPILER_DLLEXPORT extern void _innative_internal_env_free_memory(void* p)
+{
+  if(p)
+  {
+    uint64_t* info = (uint64_t*)p;
+
+#ifdef IR_PLATFORM_WIN32
+    HeapFree(heap, 0, info - 1);
+#elif defined(IR_PLATFORM_POSIX)
+    _innative_syscall(SYSCALL_MUNMAP, info - 1, info[-1]);
+#else
+#error unknown platform!
+#endif
+  }
 }
 
 // You cannot return from the entry point of a program, you must instead call a platform-specific syscall to terminate it.

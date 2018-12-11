@@ -8,6 +8,7 @@
 #include "innative/khash.h"
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <assert.h>
 
 #ifdef  __cplusplus
@@ -730,6 +731,16 @@ typedef struct __WASM_EMBEDDING
   struct __WASM_EMBEDDING* next;
 } Embedding;
 
+enum WASM_LOG_LEVEL
+{
+  LOG_NONE = -1, // Suppress all log output no matter what
+  LOG_FATAL = 0,
+  LOG_ERROR,
+  LOG_WARNING, // Default setting
+  LOG_NOTICE, // Verbose setting
+  LOG_DEBUG, // Only useful for library developers
+};
+
 KHASH_DECLARE(modulepair, kh_cstr_t, FunctionType);
 
 struct __WASM_ALLOCATOR;
@@ -749,6 +760,8 @@ typedef struct __WASM_ENVIRONMENT
   const char* sdkpath; // Path to look for SDK components, which usually aren't in the working directory
   const char* linker; // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
   struct __WASM_ALLOCATOR* alloc; // Stores a pointer to the allocator
+  int loglevel;
+  FILE* log;
 
   struct kh_modules_s* modulemap;
   struct kh_modulepair_s* whitelist;

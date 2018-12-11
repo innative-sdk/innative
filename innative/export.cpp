@@ -58,7 +58,8 @@ int innative_compile_file(const char* file, const char* out, uint64_t flags, uin
 
   if(err < 0)
   {
-    fprintf(stderr, "Error loading modules: 0x%x\n", -err);
+    if(env->loglevel >= LOG_FATAL)
+      fprintf(env->log, "Error loading modules: 0x%x\n", -err);
     return err;
   }
 
@@ -67,18 +68,22 @@ int innative_compile_file(const char* file, const char* out, uint64_t flags, uin
 
   if(err < 0)
   {
-    fprintf(stderr, "Error loading environment: %i\n", err);
+    if(env->loglevel >= LOG_FATAL)
+      fprintf(env->log, "Error loading environment: %i\n", err);
     return err;
   }
 
-  // Attempt to compile. If an error happens, output it and any validation errors to stderr
+  // Attempt to compile. If an error happens, output it and any validation errors to the log
   err = Compile(env, out);
   if(err < 0)
   {
-    fprintf(stderr, "Compile error: %i\n", err);
+    if(env->loglevel >= LOG_ERROR)
+    {
+      fprintf(env->log, "Compile error: %i\n", err);
 
-    for(ValidationError* err = env->errors; err != nullptr; err = err->next)
-      fprintf(stderr, "Error %i: %s\n", err->code, err->error);
+      for(ValidationError* err = env->errors; err != nullptr; err = err->next)
+        fprintf(env->log, "Error %i: %s\n", err->code, err->error);
+    }
 
     getchar();
     return err;
@@ -127,27 +132,38 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bo
 
   if(!env)
   {
-    fprintf(stderr, "Environment cannot be null.\n");
+    fputs("Environment cannot be null.\n", stderr);
     return -1;
   }
 
   if(err < 0)
   {
-    fprintf(stderr, "Error loading environment: %i\n", err);
+    if(env->loglevel >= LOG_FATAL)
+      FPRINTF(env->log, "Error loading environment: %i\n", err);
     return err;
   }
 
   err = wat::ParseWast(*env, data, sz, path, always_compile);
 
-  if(err < 0)
-    fprintf(stderr, "Error loading modules: %i\n", err);
+  if(env->loglevel >= LOG_ERROR && err < 0)
+    FPRINTF(env->log, "Error loading modules: %i\n", err);
 
-  if(path)
-    std::cout << "Finished Script: " << path << std::endl;
+  if(env->loglevel >= LOG_NOTICE && path)
+    FPRINTF(env->log, "Finished Script: %s\n", path);
   return err;
 }
 
 void innative_set_work_dir_to_bin(const char* arg0)
 {
   utility::SetWorkingDir(utility::GetProgramPath(arg0).BaseDir().c_str());
+}
+
+int innative_install()
+{
+  return utility::install();
+}
+
+int innative_uninstall()
+{
+  return utility::uninstall();
 }
