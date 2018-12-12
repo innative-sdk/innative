@@ -42,6 +42,7 @@ Environment* innative::CreateEnvironment(uint64_t flags, uint64_t optimize, uint
     char* tmp = tmalloc<char>(*env, sdkpath.size() + 1);
     tmemcpy<char>(tmp, sdkpath.size() + 1, sdkpath.c_str(), sdkpath.size() + 1);
     env->sdkpath = tmp;
+    env->wasthook = 0;
   }
   return env;
 }

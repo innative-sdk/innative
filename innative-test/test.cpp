@@ -29,7 +29,6 @@ const char testenv[] = "(module $spectest "
 size_t internal_tests()
 {
   std::pair<const char*, void(TestHarness::*)()> tests[] = {
-    { "util.h", &TestHarness::test_allocator },
     { "internal.c", &TestHarness::test_environment },
     { "path.h", &TestHarness::test_path },
     { "queue.h", &TestHarness::test_queue },
@@ -81,7 +80,7 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  //testfiles = { "../spec/test/core/memory.wast" };
+  testfiles = { "../spec/test/core/call_indirect.wast" };
   std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
   //testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
 
@@ -89,6 +88,7 @@ int main(int argc, char *argv[])
   {
     Environment* env = (*exports.CreateEnvironment)(ENV_LIBRARY | ENV_DEBUG | ENV_EMIT_LLVM | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS, 0, ENV_FEATURE_ALL, 1, 0, (!argc ? 0 : argv[0]));
     env->log = stdout;
+    env->wasthook = [](void*) { fputc('.', stdout); };
     int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
 
     if(err >= 0)
@@ -96,14 +96,16 @@ int main(int argc, char *argv[])
     if(err < 0)
       return assert(false), -1; // If the environment injection fails, abort everything
 
+    FPRINTF(env->log, "%s: .", file.generic_u8string().c_str());
     err = innative_compile_script((const uint8_t*)file.generic_u8string().data(), 0, env, true);
+
     if(!err && !env->errors)
-      FPRINTF(env->log, "%s: SUCCESS\n", file.generic_u8string().c_str());
+      fputs("SUCCESS\n", env->log);
     else
     {
+      fputs("FAILED\n", env->log);
       if(err < 0)
         FPRINTF(env->log, "Error running script %s: %i\n", file.generic_u8string().c_str(), err);
-      FPRINTF(env->log, "%s: FAILED\n", file.generic_u8string().c_str());
       while(env->errors != nullptr)
       {
         fputs("  ", env->log);

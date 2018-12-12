@@ -2105,11 +2105,11 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     context.builder.SetCurrentDebugLocation(baselocation);
   }
 
-  for(auto memory : context.memories)
-    context.builder.CreateCall(fn_memfree, { context.builder.CreateLoad(memory) });
+  for(size_t i = context.m.importsection.memories - context.m.importsection.tables; i < context.memories.size(); ++i) // Don't accidentally delete imported linear memories
+    context.builder.CreateCall(fn_memfree, { context.builder.CreateLoad(context.memories[i]) });
 
-  for(auto table : context.tables)
-    context.builder.CreateCall(fn_memfree, { context.builder.CreatePointerCast(context.builder.CreateLoad(table), context.builder.getInt8PtrTy(0)) });
+  for(size_t i = context.m.importsection.tables - context.m.importsection.functions; i < context.tables.size(); ++i) // Don't accidentally delete imported tables
+    context.builder.CreateCall(fn_memfree, { context.builder.CreatePointerCast(context.builder.CreateLoad(context.tables[i]), context.builder.getInt8PtrTy(0)) });
 
   // Terminate cleanup function
   context.builder.CreateRetVoid();
@@ -2240,7 +2240,7 @@ void ResolveModuleExports(const Environment* env, llvm::LLVMContext& llvm_contex
   }
 }
 
-int CallLinker(const Environment* env, const vector<string>& cache, const vector<const char*>& garbage, const vector<const char*>& linkargs)
+int CallLinker(const Environment* env, const vector<const char*>& linkargs)
 {
   int err = ERR_SUCCESS;
 
@@ -2305,33 +2305,27 @@ int CallLinker(const Environment* env, const vector<string>& cache, const vector
     }
   }
 
-  // Delete cache files
-  for(auto& v : cache)
-    std::remove(v.c_str());
-  for(auto& v : garbage)
-    std::remove(v);
-
   return err;
 }
 
-void GenerateLinkerObjects(const Environment* env, code::Context* context, vector<string>& targets, vector<const char*>& garbage)
+void GenerateLinkerObjects(const Environment* env, code::Context* context, vector<string>& cache, vector<string>& garbage)
 {
   for(size_t i = 0; i < env->n_modules; ++i)
   {
     assert(context[i].m.name.get() != nullptr);
-    targets.emplace_back(std::string(context[i].m.name.str(), context[i].m.name.size()) + ".o");
-    OutputObjectFile(context[i], targets.back().c_str());
-    garbage.push_back(targets.back().c_str());
+    cache.emplace_back(std::string(context[i].m.name.str(), context[i].m.name.size()) + ".o");
+    OutputObjectFile(context[i], cache.back().c_str());
+    garbage.emplace_back(cache.back());
 
 #ifdef IR_PLATFORM_POSIX
     if(i == 0)
     { // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
       if(!(eflags&ENV_LIBRARY)) // If this isn't a shared library, we must specify an entry point instead of an init function
-        targets.emplace_back("--entry=" IR_INIT_FUNCTION);
+        cache.emplace_back("--entry=" IR_INIT_FUNCTION);
       else if(!(eflags&ENV_NO_INIT)) // Otherwise only specify entry functions if we actually want them
       {
-        targets.emplace_back("-init=" IR_INIT_FUNCTION);
-        targets.emplace_back("-fini=" IR_EXIT_FUNCTION);
+        cache.emplace_back("-init=" IR_INIT_FUNCTION);
+        cache.emplace_back("-fini=" IR_EXIT_FUNCTION);
       }
     }
 #endif
@@ -2565,8 +2559,6 @@ namespace innative {
     }
 
     {
-      vector<string> cache;
-      vector<const char*> garbage;
 #ifdef IR_PLATFORM_WIN32
       vector<const char*> linkargs = { "lld", "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO",
         "/nodefaultlib", /*"/MANIFEST", "/MANIFEST:embed",*/ "/SUBSYSTEM:CONSOLE", "/VERBOSE",
@@ -2584,7 +2576,7 @@ namespace innative {
       if(eflags&ENV_DEBUG)
         linkargs.push_back("/DEBUG");
 
-      vector<string> targets = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.Get(), "/LIBPATH:" + workdir.Get() };
+      vector<string> cache = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.Get(), "/LIBPATH:" + workdir.Get() };
 #elif defined(IR_PLATFORM_POSIX)
       vector<const char*> linkargs = { "lld" };
 
@@ -2593,16 +2585,21 @@ namespace innative {
       //if(!(eflags&ENV_DEBUG))
       //  linkargs.push_back("--strip-debug");
 
-      vector<string> targets = { string("--output=") + file.Get(), "-L" + programpath.Get(), "-L" + workdir.Get() };
+      vector<string> cache = { string("--output=") + file.Get(), "-L" + programpath.Get(), "-L" + workdir.Get() };
 #else 
 #error unknown platform
 #endif
+      vector<string> garbage;
+
+      // Defer lambda deleting temporary files
+      utility::DeferLambda<std::function<void()>> deferclean([&garbage]() {
+        for(auto& v : garbage)
+          std::remove(v.c_str());
+        }
+      );
 
       // Generate object code
-      GenerateLinkerObjects(env, context, targets, garbage);
-
-      for(auto& v : targets)
-        linkargs.push_back(v.c_str());
+      GenerateLinkerObjects(env, context, cache, garbage);
 
       // Write all in-memory environments to cache files
       for(Embedding* cur = env->embeddings; cur != nullptr; cur = cur->next)
@@ -2610,7 +2607,7 @@ namespace innative {
         if(cur->size > 0) // If the size is greater than 0, this is an in-memory embedding
         {
           union { Embedding* p; size_t z; } u = { cur };
-          cache.push_back(IR_STATIC_FLAG + std::to_string(u.z) + IR_ENV_EXTENSION + IR_STATIC_EXTENSION);
+          cache.emplace_back(IR_STATIC_FLAG + std::to_string(u.z) + IR_ENV_EXTENSION + IR_STATIC_EXTENSION);
           FILE* f;
           FOPEN(f, cache.back().c_str(), "wb");
           if(!f)
@@ -2618,14 +2615,16 @@ namespace innative {
 
           fwrite(cur->data, 1, cur->size, f);
           fclose(f);
+          garbage.emplace_back(cache.back().c_str());
         }
         else
-          linkargs.push_back((const char*)cur->data);
+          cache.emplace_back((const char*)cur->data);
       }
-      for(auto& v : cache)
+
+      for(auto& v : cache) // We can only do this after we're finished adding everything to cache
         linkargs.push_back(v.c_str());
 
-      if(CallLinker(env, cache, garbage, linkargs) != 0)
+      if(CallLinker(env, linkargs) != 0)
         return assert(false), ERR_FATAL_LINK_ERROR;
     }
 

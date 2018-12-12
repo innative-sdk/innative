@@ -34,7 +34,17 @@ namespace innative {
 
       // Reads a type from the stream, returns false if EOF reached before entire type could be read.
       template<typename T>
-      IR_FORCEINLINE bool Read(T& t) noexcept { return ReadBytes(reinterpret_cast<uint8_t*>(&t), sizeof(T)) == sizeof(T); }
+      IR_FORCEINLINE bool Read(T& t) noexcept {
+        if(sizeof(T) > (size - pos))
+        {
+          pos = size; // We advance the read pointer to the end, but don't read anything
+          return false;
+        }
+
+        memcpy(reinterpret_cast<void*>(&t), data + pos, sizeof(T));
+        pos += sizeof(T);
+        return true;
+      }
 
       // Reads one character from the stream, returns -1 if EOF has been reached
       IR_FORCEINLINE int Get() noexcept

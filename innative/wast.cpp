@@ -13,6 +13,26 @@
 #include <iostream>
 #include <atomic>
 
+#ifdef IR_PLATFORM_WIN32
+#pragma pack(push)
+#pragma pack(8)
+#define WINVER 0x0501 //_WIN32_WINNT_WINXP   
+#define _WIN32_WINNT 0x0501
+#define NTDDI_VERSION 0x05010300 //NTDDI_WINXPSP3 
+#define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX // Some compilers enable this by default
+#define NOMINMAX
+#endif
+#define NODRAWTEXT
+#define NOBITMAP
+#define NOMCX
+#define NOSERVICE
+#define NOHELP
+#define NOGDI
+#include <windows.h>
+#pragma pack(pop)
+#endif 
+
 #ifdef IR_PLATFORM_POSIX
 #define LONGJMP(x,i) siglongjmp(x,i)
 #define SETJMP(x) sigsetjmp(x,1)
@@ -233,7 +253,7 @@ namespace innative {
   }
 }
 
-void InvalidateCache(void*& cache)
+void InvalidateCache(void*& cache, const Path& cachepath)
 {
   if(cache)
   {
@@ -241,15 +261,20 @@ void InvalidateCache(void*& cache)
 
     if(exit)
       (*exit)();
+    else
+      assert(false);
 
     FreeDLL(cache);
+    std::remove(cachepath.c_str());
+    std::remove((cachepath.RemoveExtension().Get() + ".lib").c_str());
+    std::remove((cachepath.RemoveExtension().Get() + ".pdb").c_str());
   }
   cache = nullptr;
 }
 
-int CompileWast(Environment& env, const char* out, void*& cache)
+int CompileWast(Environment& env, const char* out, void*& cache, Path& cachepath)
 {
-  InvalidateCache(cache);
+  InvalidateCache(cache, cachepath);
 
   int err;
   ValidateEnvironment(env);
@@ -258,8 +283,8 @@ int CompileWast(Environment& env, const char* out, void*& cache)
   if(err = CompileEnvironment(&env, out))
     return err;
 
-  auto dir = GetWorkingDir();
-  dir.Append(out);
+  cachepath = GetWorkingDir();
+  cachepath.Append(out);
 
   signal(SIGILL, WastCrashHandler);
   signal(SIGFPE, WastCrashHandler);
@@ -271,13 +296,16 @@ int CompileWast(Environment& env, const char* out, void*& cache)
     return ERR_RUNTIME_TRAP;
   }
 
-  cache = LoadDLL(dir.c_str());
+  cache = LoadDLL(cachepath.c_str());
   if(!cache)
   {
     signal(SIGILL, SIG_DFL);
     signal(SIGFPE, SIG_DFL);
     return ERR_RUNTIME_INIT_ERROR;
   }
+
+  if(env.wasthook != nullptr)
+    (*env.wasthook)(cache);
 
   auto entry = LoadFunction(cache, 0, 0);
 
@@ -440,12 +468,12 @@ void GenWastFunctionCall(void* f, WastResult& result, Args... params)
   }
 }
 
-int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache, int& counter, const std::string& path, WastResult& result)
+int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache, Path& cachepath, int& counter, const std::string& path, WastResult& result)
 {
   int err;
   int cache_err = 0;
   if(!cache) // If cache is null we need to recompile the current environment, but we can't bail on error messages yet or we'll corrupt the parse
-    cache_err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache);
+    cache_err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache, cachepath);
 
   switch(tokens.Pop().id)
   {
@@ -568,6 +596,38 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
     }
     __except(1)
     {
+      // This uses unholy black magic to restore the stack guard page in the event of a stack overflow
+      if(GetExceptionCode() == EXCEPTION_STACK_OVERFLOW)
+      {
+        void* lpPage;
+#ifdef IR_CPU_x86
+        __asm mov lpPage, esp;
+#elif defined(IR_CPU_x86_64)
+        lpPage = (void*)GetRSPValue();
+#else
+#error unsupported CPU architecture
+#endif
+        // Get page size of system
+        SYSTEM_INFO si;
+        GetSystemInfo(&si);
+
+        // Get allocation base of stack
+        MEMORY_BASIC_INFORMATION mi;
+        VirtualQuery(lpPage, &mi, sizeof(mi));
+
+        // Go to page beyond current page
+        lpPage = (LPBYTE)(mi.BaseAddress) - si.dwPageSize;
+
+        // Free portion of stack just abandoned
+        if(!VirtualFree(mi.AllocationBase, (LPBYTE)lpPage - (LPBYTE)mi.AllocationBase, MEM_DECOMMIT))
+          return ERR_FATAL_UNKNOWN_KIND;
+
+        // Reintroduce the guard page
+        DWORD dwOldProtect;
+        if(!VirtualProtect(lpPage, si.dwPageSize, PAGE_GUARD | PAGE_READWRITE, &dwOldProtect))
+          return ERR_FATAL_UNKNOWN_KIND;
+      }
+
       signal(SIGILL, SIG_DFL);
       signal(SIGFPE, SIG_DFL);
       return ERR_RUNTIME_TRAP;
@@ -688,6 +748,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
   kh_indexname_t* mapping = kh_init_indexname(); // This is a special mapping for all modules using the module name itself, not just registered ones.
   Module* last = nullptr; // For anything not providing a module name, this was the most recently defined module.
   void* cache = nullptr;
+  Path cachepath;
 
   while(tokens.Size() > 0 && tokens[0].id != TOKEN_CLOSE)
   {
@@ -696,7 +757,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
     {
     case TOKEN_MODULE:
     {
-      InvalidateCache(cache);
+      InvalidateCache(cache, cachepath);
 
       env.modules = trealloc<Module>(env.modules, ++env.n_modules);
       last = &env.modules[env.n_modules - 1];
@@ -711,7 +772,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
     }
     case TOKEN_REGISTER:
     {
-      InvalidateCache(cache);
+      InvalidateCache(cache, cachepath);
       tokens.Pop();
 
       ByteArray name;
@@ -739,7 +800,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
     {
       WatToken t = tokens.Peek();
       WastResult result;
-      if(err = ParseWastAction(env, tokens, mapping, last, cache, counter, targetpath, result))
+      if(err = ParseWastAction(env, tokens, mapping, last, cache, cachepath, counter, targetpath, result))
       {
         if(err != ERR_RUNTIME_TRAP && err != ERR_RUNTIME_INIT_ERROR)
           return err;
@@ -747,6 +808,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
       }
       break;
     }
+    case TOKEN_ASSERT_EXHAUSTION:
     case TOKEN_ASSERT_TRAP:
     {
       WatToken t = tokens.Pop();
@@ -758,7 +820,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
           return err;
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
-        err = CompileWast(env, (targetpath + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache);
+        err = CompileWast(env, (targetpath + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache, cachepath);
         --env.n_modules; // Remove the module from the environment to avoid poisoning other compilations
         if(err != ERR_RUNTIME_TRAP)
           AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
@@ -768,7 +830,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
       {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
         WastResult result;
-        err = ParseWastAction(env, tokens, mapping, last, cache, counter, targetpath, result);
+        err = ParseWastAction(env, tokens, mapping, last, cache, cachepath, counter, targetpath, result);
         if(err != ERR_RUNTIME_TRAP)
           AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
@@ -783,7 +845,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
       WatToken t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       WastResult result = { TE_NONE };
-      if(err = ParseWastAction(env, tokens, mapping, last, cache, counter, targetpath, result))
+      if(err = ParseWastAction(env, tokens, mapping, last, cache, cachepath, counter, targetpath, result))
       {
         if(err != ERR_RUNTIME_TRAP && err != ERR_RUNTIME_INIT_ERROR)
           return err;
@@ -914,21 +976,6 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
         AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead", WatLineNumber(start, t.pos), error.str(), assertcode.c_str());
       break;
     }
-    case TOKEN_ASSERT_EXHAUSTION:
-    {
-      SkipSection(tokens); // TODO: figure out how to do this.
-      break;
-      WatToken t = tokens.Pop();
-      EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-      WastResult result;
-      err = ParseWastAction(env, tokens, mapping, last, cache, counter, targetpath, result);
-      if(err != ERR_RUNTIME_TRAP)
-        AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected call exhaustion trap, but call succeeded", WatLineNumber(start, t.pos));
-      env.errors = 0;
-      EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
-      EXPECTED(tokens, TOKEN_STRING, ERR_WAT_EXPECTED_STRING);
-      break;
-    }
     case TOKEN_SCRIPT:
     case TOKEN_INPUT:
     case TOKEN_OUTPUT:
@@ -962,12 +1009,12 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
 
   if(always_compile && !cache) // If cache is null we must ensure we've at least tried to compile the test even if there's nothing to run.
   {
-    if(err = CompileWast(env, (targetpath + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache))
+    if(err = CompileWast(env, (targetpath + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache, cachepath))
       return err;
     assert(cache);
   }
 
-  InvalidateCache(cache);
+  InvalidateCache(cache, cachepath);
   env.errors = errors;
   if(env.errors)
     internal::ReverseErrorList(env.errors);

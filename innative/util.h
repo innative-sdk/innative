@@ -32,6 +32,8 @@ struct __WASM_ALLOCATOR
   void* allocate(size_t n);
 };
 
+extern "C" __int64 GetRSPValue();
+
 namespace innative {
   namespace utility {
 #ifdef IR_PLATFORM_WIN32
@@ -181,6 +183,7 @@ namespace innative {
     void FreeDLL(void* dll);
     int install();
     int uninstall();
+    bool RestoreStackGuard(void* lpPage);
 
     // Creates a C-compatible mangled name with an optional index
     inline std::string CanonicalName(const char* prefix, const char* name, int index = -1)

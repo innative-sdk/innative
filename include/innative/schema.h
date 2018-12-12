@@ -762,6 +762,7 @@ typedef struct __WASM_ENVIRONMENT
   struct __WASM_ALLOCATOR* alloc; // Stores a pointer to the allocator
   int loglevel;
   FILE* log;
+  void(*wasthook)(void*);
 
   struct kh_modules_s* modulemap;
   struct kh_modulepair_s* whitelist;

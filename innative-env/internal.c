@@ -49,6 +49,7 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, cons
 
 #ifdef IR_PLATFORM_WIN32
 HANDLE heap = 0;
+DWORD heapcount = 0;
 #elif defined(IR_PLATFORM_POSIX)
 #ifdef IR_CPU_x86_64
 IR_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2, size_t p3, size_t p4, size_t p5)
@@ -135,6 +136,7 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
 #ifdef IR_PLATFORM_WIN32
     if(!heap)
       heap = HeapCreate(0, i, 0);
+    ++heapcount;
     info = HeapAlloc(heap, HEAP_ZERO_MEMORY, i + sizeof(uint64_t));
 #elif defined(IR_PLATFORM_POSIX)
     info = _innative_syscall(SYSCALL_MMAP, NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1);
@@ -163,6 +165,8 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_free_memory(void* p)
 
 #ifdef IR_PLATFORM_WIN32
     HeapFree(heap, 0, info - 1);
+    if(--heapcount == 0)
+      HeapDestroy(heap);
 #elif defined(IR_PLATFORM_POSIX)
     _innative_syscall(SYSCALL_MUNMAP, info - 1, info[-1]);
 #else
