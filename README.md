@@ -60,8 +60,8 @@ inNative is compiled as either a dynamic or static library, and can be integrate
     // Create the environment, setting the dynamic library flag
     IRExports exports;
     innative_runtime(&exports);
-    int flags = ENV_DLL | ENV_STRICT | ENV_WHITELIST;
-    Environment* env = (*exports.CreateEnvironment)(flags, 1, 0, argv[0]);
+    Environment* env = (*exports.CreateEnvironment)(1, 0, argv[0]);
+    env->flags |= ENV_DLL; // Add ENV_NO_INIT if you want to manually initialize and cleanup the DLL.
 
     // Add the script you want to compile
     int err;

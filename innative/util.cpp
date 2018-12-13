@@ -290,7 +290,7 @@ namespace innative {
 #ifdef IR_PLATFORM_WIN32
       SYSTEM_INFO sysinfo;
       GetSystemInfo(&sysinfo);
-      info[5] = sysinfo.wProcessorArchitecture | (flags << 16);
+      info[4] = sysinfo.wProcessorArchitecture | (flags << 16);
       __cpuid(info, 1);
 #elif defined(IR_PLATFORM_POSIX)
       __get_cpuid(1, info + 0, info + 1, info + 2, info + 3);

@@ -13,7 +13,7 @@
 using namespace innative;
 using namespace utility;
 
-Environment* innative::CreateEnvironment(uint64_t flags, uint64_t optimize, uint64_t features, unsigned int modules, unsigned int maxthreads, const char* arg0)
+Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxthreads, const char* arg0)
 {
   Environment* env = (Environment*)calloc(1, sizeof(Environment));
   if(env)
@@ -31,9 +31,9 @@ Environment* innative::CreateEnvironment(uint64_t flags, uint64_t optimize, uint
     }
 
     env->capacity = modules;
-    env->flags = flags;
-    env->optimize = optimize;
-    env->features = features;
+    env->flags = ENV_SANDBOX;
+    env->optimize = ENV_OPTIMIZE_ALL;
+    env->features = ENV_FEATURE_ALL;
     env->maxthreads = maxthreads;
     env->linker = 0;
     env->log = stdout;
@@ -226,7 +226,7 @@ IRGlobal* innative::LoadGlobal(void* cache, const char* module_name, const char*
   return (IRGlobal*)LoadDLLFunction(cache, utility::CanonicalName(module_name, export_name).c_str());
 }
 
-void* innative::LoadAssembly(int flags, const char* file)
+void* innative::LoadAssembly(const char* file)
 {
   Path path(file != nullptr ? Path(file) : GetProgramPath(0) + IR_EXTENSION);
   return LoadDLL(path.c_str());

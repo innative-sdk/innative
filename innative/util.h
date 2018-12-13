@@ -161,7 +161,6 @@ namespace innative {
     }
 
     IR_FORCEINLINE bool ModuleHasSection(const Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
-    inline std::string MergeStrings(const char* a, const char* b) { return std::string(!a ? "" : a) + b; }
 
     uint8_t GetInstruction(StringRef s);
     varuint32 ModuleFunctionType(const Module& m, varuint32 index);

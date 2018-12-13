@@ -156,7 +156,9 @@ int main(int argc, char *argv[])
     out = innative::Path(inputs[0]).RemoveExtension().Get() + ((flags&ENV_LIBRARY) ? IR_LIBRARY_EXTENSION : IR_EXE_EXTENSION);
 
   // Then create the runtime environment with the module count.
-  Environment* env = (*exports.CreateEnvironment)(flags, 0, ENV_FEATURE_ALL, inputs.size(), 0, (!argc ? 0 : argv[0]));
+  Environment* env = (*exports.CreateEnvironment)(inputs.size(), 0, (!argc ? 0 : argv[0]));
+  env->flags = flags;
+
   if(!env)
   {
     fprintf(stderr, "Unknown error creating environment.\n");
@@ -237,7 +239,7 @@ int main(int argc, char *argv[])
   // Automatically run the assembly, but only if there were no wast scripts (which are always executed)
   if(run && !wast.size())
   {
-    void* assembly = (*exports.LoadAssembly)(flags, out.c_str()); // This automatically calls the start function on load
+    void* assembly = (*exports.LoadAssembly)(out.c_str()); // This automatically calls the start function on load
     if(!assembly)
       return ERR_FATAL_FILE_ERROR;
     //IR_Entrypoint start = (*exports.LoadFunction)(assembly, 0, 0, 0);

@@ -86,7 +86,10 @@ int main(int argc, char *argv[])
 
   for(auto file : testfiles)
   {
-    Environment* env = (*exports.CreateEnvironment)(ENV_LIBRARY | ENV_DEBUG | ENV_EMIT_LLVM | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS, 0, ENV_FEATURE_ALL, 1, 0, (!argc ? 0 : argv[0]));
+    Environment* env = (*exports.CreateEnvironment)(1, 0, (!argc ? 0 : argv[0]));
+    env->flags = ENV_LIBRARY | ENV_DEBUG | ENV_EMIT_LLVM | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS;
+    env->optimize = 0;
+    env->features = ENV_FEATURE_ALL;
     env->log = stdout;
     env->wasthook = [](void*) { fputc('.', stdout); };
     int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);

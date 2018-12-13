@@ -92,9 +92,8 @@ int main(int argc, char** argv)
   // This will either be an embedded runtime, or a stub function that dynamically loads a DLL.
   IRExports exports;
   innative_runtime(&exports);
-  unsigned int flags = 0; //ENV_MULTITHREADED;
   unsigned int maxthreads = 0;
-  void* assembly = (*exports.LoadAssembly)(flags, "out.cache");
+  void* assembly = (*exports.LoadAssembly)("out.cache");
 
   // Before doing anything, check if we have a cached version available
   if(!assembly)
@@ -116,7 +115,8 @@ int main(int argc, char** argv)
 #endif
 
     // Then create the runtime environment with the module count.
-    Environment* env = (*exports.CreateEnvironment)(flags, 0, ENV_FEATURE_ALL, modules, maxthreads, argv[0]);
+    Environment* env = (*exports.CreateEnvironment)(modules, maxthreads, argv[0]);
+    env->flags = 0; //ENV_MULTITHREADED;
     if(!env)
     {
       fprintf(stderr, "Unknown error creating environment.\n");
@@ -181,7 +181,7 @@ int main(int argc, char** argv)
 
     // Destroy environment now that compilation is complete
     (*exports.DestroyEnvironment)(env);
-    assembly = (*exports.LoadAssembly)(flags, "out.cache");
+    assembly = (*exports.LoadAssembly)("out.cache");
   }
 
   if(!assembly)

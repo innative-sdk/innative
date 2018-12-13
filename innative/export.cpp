@@ -30,7 +30,11 @@ void innative_runtime(IRExports* exports)
 int innative_compile_file(const char* file, const char* out, uint64_t flags, uint64_t optimize, uint64_t features, bool dynamic, const struct _IR_WHITELIST* whitelist, unsigned int n_whitelist, const char* arg0)
 {
   // Then create the runtime environment with the module count.
-  Environment* env = CreateEnvironment(flags, optimize, features, 1, 0, arg0);
+  Environment* env = CreateEnvironment(1, 0, arg0);
+  env->flags = flags;
+  env->optimize = optimize;
+  env->features = features;
+
   if(!env)
   {
     fprintf(stderr, "Unknown error creating environment.\n");
@@ -91,7 +95,7 @@ int innative_compile_file(const char* file, const char* out, uint64_t flags, uin
 
   // Destroy environment now that compilation is complete
   DestroyEnvironment(env);
-  void* assembly = LoadAssembly(flags, out);
+  void* assembly = LoadAssembly(out);
   if(!assembly)
     return ERR_FATAL_FILE_ERROR;
   IR_Entrypoint start = LoadFunction(assembly, 0, 0);

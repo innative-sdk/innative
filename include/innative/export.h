@@ -51,7 +51,7 @@ extern "C" {
   // Contains the actual runtime functions
   typedef struct __IR_EXPORTS
   {
-    Environment* (*CreateEnvironment)(uint64_t flags, uint64_t optimize, uint64_t features, unsigned int modules, unsigned int maxthreads, const char* arg0);
+    Environment* (*CreateEnvironment)(unsigned int modules, unsigned int maxthreads, const char* arg0);
     void(*AddModule)(Environment* env, const void* data, uint64_t size, const char* name, int* err); // If size is 0, data points to a null terminated UTF8 file path
     void(*AddWhitelist)(Environment* env, const char* module_name, const char* export_name);
     void(*WaitForLoad)(Environment* env);
@@ -60,7 +60,7 @@ extern "C" {
     IR_Entrypoint(*LoadFunction)(void* cache, const char* module_name, const char* function); // if function is null, loads the entrypoint function
     IR_Entrypoint(*LoadTable)(void* cache, const char* module_name, const char* table);
     IRGlobal*(*LoadGlobal)(void* cache, const char* module_name, const char* export_name);
-    void*(*LoadAssembly)(int flags, const char* file);
+    void*(*LoadAssembly)(const char* file);
     void(*DestroyEnvironment)(Environment* env);
   } IRExports;
 

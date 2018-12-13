@@ -420,7 +420,7 @@ enum WASM_ENVIRONMENT_FLAGS
   ENV_ENABLE_WAT = (1 << 4), // Enables compiling .wat and .wast files
   ENV_EMIT_LLVM = (1 << 5), // Emits intermediate LLVM IR files for debugging
   ENV_HOMOGENIZE_FUNCTIONS = (1 << 6), // Converts all exported functions to i64 types for testing
-  ENV_NO_INIT = (1 << 7), // Disables automatic initialization in DLLs, requiring you to manually call IR_INIT_FUNCTION
+  ENV_NO_INIT = (1 << 7), // Disables automatic initialization in DLLs, requiring you to manually call IR_INIT_FUNCTION and IR_EXIT_FUNCTION
   ENV_CHECK_STACK_OVERFLOW = (1 << 10),
   ENV_CHECK_FLOAT_TRUNC = (1 << 11),
   ENV_CHECK_MEMORY_ACCESS = (1 << 12),
@@ -429,9 +429,9 @@ enum WASM_ENVIRONMENT_FLAGS
   ENV_DISABLE_TAIL_CALL = (1 << 15),
 
   // Strictly adheres to the standard, provided the optimization level does not exceed ENV_OPTIMIZE_STRICT
-  ENV_STRICT = ENV_CHECK_STACK_OVERFLOW | ENV_CHECK_FLOAT_TRUNC | ENV_CHECK_MEMORY_ACCESS | ENV_CHECK_INDIRECT_CALL | ENV_DISABLE_TAIL_CALL | ENV_CHECK_INT_DIVISION,
+  ENV_STRICT = ENV_CHECK_STACK_OVERFLOW | ENV_CHECK_FLOAT_TRUNC | ENV_CHECK_MEMORY_ACCESS | ENV_CHECK_INDIRECT_CALL | ENV_DISABLE_TAIL_CALL | ENV_CHECK_INT_DIVISION | ENV_WHITELIST,
   // Only inserts checks required to maintain a sandbox
-  ENV_SANDBOX = ENV_CHECK_STACK_OVERFLOW | ENV_CHECK_MEMORY_ACCESS | ENV_CHECK_INDIRECT_CALL,
+  ENV_SANDBOX = ENV_CHECK_STACK_OVERFLOW | ENV_CHECK_MEMORY_ACCESS | ENV_CHECK_INDIRECT_CALL | ENV_WHITELIST,
 };
 
 enum WASM_OPTIMIZE_FLAGS
