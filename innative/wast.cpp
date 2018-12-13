@@ -12,6 +12,7 @@
 #include <setjmp.h>
 #include <iostream>
 #include <atomic>
+#include <functional>
 
 #ifdef IR_PLATFORM_WIN32
 #pragma pack(push)
@@ -289,20 +290,17 @@ int CompileWast(Environment& env, const char* out, void*& cache, Path& cachepath
   signal(SIGILL, WastCrashHandler);
   signal(SIGFPE, WastCrashHandler);
 
-  if(SETJMP(jump_location) != 0)
-  {
+  DeferLambda<std::function<void()>> restorehandlers([]() {
     signal(SIGILL, SIG_DFL);
     signal(SIGFPE, SIG_DFL);
+    });
+
+  if(SETJMP(jump_location) != 0)
     return ERR_RUNTIME_TRAP;
-  }
 
   cache = LoadDLL(cachepath.c_str());
   if(!cache)
-  {
-    signal(SIGILL, SIG_DFL);
-    signal(SIGFPE, SIG_DFL);
     return ERR_RUNTIME_INIT_ERROR;
-  }
 
   if(env.wasthook != nullptr)
     (*env.wasthook)(cache);
@@ -310,15 +308,9 @@ int CompileWast(Environment& env, const char* out, void*& cache, Path& cachepath
   auto entry = LoadFunction(cache, 0, 0);
 
   if(!entry)
-  {
-    signal(SIGILL, SIG_DFL);
-    signal(SIGFPE, SIG_DFL);
     return ERR_RUNTIME_INIT_ERROR;
-  }
 
   (*entry)();
-  signal(SIGILL, SIG_DFL);
-  signal(SIGFPE, SIG_DFL);
   return ERR_SUCCESS;
 }
 
@@ -548,11 +540,15 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
     // Call the function and set the correct result.
     signal(SIGILL, WastCrashHandler);
     signal(SIGFPE, WastCrashHandler); // This catches division by zero on linux
+    signal(SIGSEGV, WastCrashHandler); // Catches stack overflow on linux
 
-    if(SETJMP(jump_location) != 0)
-    {
+    DeferLambda<std::function<void()>> restorehandlers([]() {
       signal(SIGILL, SIG_DFL);
       signal(SIGFPE, SIG_DFL);
+      signal(SIGSEGV, SIG_DFL);
+    });
+    if(SETJMP(jump_location) != 0)
+    {
       return ERR_RUNTIME_TRAP;
     }
 
@@ -628,14 +624,10 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
           return ERR_FATAL_UNKNOWN_KIND;
       }
 
-      signal(SIGILL, SIG_DFL);
-      signal(SIGFPE, SIG_DFL);
       return ERR_RUNTIME_TRAP;
     }
 #endif
 
-    signal(SIGILL, SIG_DFL);
-    signal(SIGFPE, SIG_DFL);
     break;
   }
   case TOKEN_GET:

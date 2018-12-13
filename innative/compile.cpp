@@ -2293,10 +2293,13 @@ int CallLinker(const Environment* env, const vector<const char*>& linkargs)
     }
 
     std::string outbuf;
+    llvm::raw_fd_ostream fdo(1, false, true);
+    llvm::raw_string_ostream sso(outbuf);
+    llvm::raw_ostream& llvm_stream = (env->loglevel >= LOG_NOTICE) ? static_cast<llvm::raw_ostream&>(fdo) : static_cast<llvm::raw_ostream&>(sso);
 #ifdef IR_PLATFORM_WIN32
-    if(!lld::coff::link(linkargs, false, (env->loglevel >= LOG_NOTICE) ? (llvm::raw_ostream&)llvm::raw_fd_ostream(1, false, true) : (llvm::raw_ostream&)llvm::raw_string_ostream(outbuf)))
+    if(!lld::coff::link(linkargs, false, llvm_stream))
 #else
-    if(!lld::elf::link(linkargs, false, (env->loglevel >= LOG_NOTICE) ? (llvm::raw_ostream&)llvm::raw_fd_ostream(1, false, true) : (llvm::raw_ostream&)llvm::raw_string_ostream(outbuf)))
+    if(!lld::elf::link(linkargs, false, llvm_stream))
 #endif
     {
       if(env->loglevel < LOG_NOTICE)
@@ -2320,9 +2323,9 @@ void GenerateLinkerObjects(const Environment* env, code::Context* context, vecto
 #ifdef IR_PLATFORM_POSIX
     if(i == 0)
     { // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
-      if(!(eflags&ENV_LIBRARY)) // If this isn't a shared library, we must specify an entry point instead of an init function
+      if(!(env->flags&ENV_LIBRARY)) // If this isn't a shared library, we must specify an entry point instead of an init function
         cache.emplace_back("--entry=" IR_INIT_FUNCTION);
-      else if(!(eflags&ENV_NO_INIT)) // Otherwise only specify entry functions if we actually want them
+      else if(!(env->flags&ENV_NO_INIT)) // Otherwise only specify entry functions if we actually want them
       {
         cache.emplace_back("-init=" IR_INIT_FUNCTION);
         cache.emplace_back("-fini=" IR_EXIT_FUNCTION);
@@ -2340,7 +2343,6 @@ namespace innative {
     Path file(filepath);
     Path workdir = GetWorkingDir();
     Path programpath(env->sdkpath);
-    uint64_t eflags = env->flags;
 
     SetWorkingDir(programpath.c_str());
     utility::DeferLambda<std::function<void()>> defer([&]() { SetWorkingDir(workdir.c_str()); });
@@ -2375,7 +2377,7 @@ namespace innative {
     llvm::TargetOptions opt;
     auto RM = llvm::Optional<llvm::Reloc::Model>();
 #ifdef IR_PLATFORM_POSIX
-    if(eflags&ENV_LIBRARY)
+    if(env->flags&ENV_LIBRARY)
       RM = llvm::Optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
 #endif
     llvm::SubtargetFeatures subtarget_features;
@@ -2403,7 +2405,7 @@ namespace innative {
 
     ResolveModuleExports(env, llvm_context, context);
 
-    if((!has_start || eflags & ENV_NO_INIT) && !(eflags&ENV_LIBRARY))
+    if((!has_start || env->flags & ENV_NO_INIT) && !(env->flags&ENV_LIBRARY))
       return ERR_FATAL_INVALID_MODULE; // We can't compile an EXE without at least one start function
 
     // Create cleanup function
@@ -2466,9 +2468,9 @@ namespace innative {
       }
     }
 
-    if(eflags&ENV_LIBRARY)
+    if(env->flags&ENV_LIBRARY)
     {
-      if(eflags&ENV_NO_INIT)
+      if(env->flags&ENV_NO_INIT)
       {
         main->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
         cleanup->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
@@ -2494,7 +2496,7 @@ namespace innative {
     context[0].llvm->getFunctionList().push_back(main);
 
 #ifdef IR_PLATFORM_WIN32
-    if(eflags&ENV_LIBRARY)
+    if(env->flags&ENV_LIBRARY)
     {
       Func* mainstub = Func::Create(
         FuncTy::get(builder.getInt32Ty(), { builder.getInt8PtrTy(), context[0].builder.getInt32Ty(), builder.getInt8PtrTy() }, false),
@@ -2504,7 +2506,7 @@ namespace innative {
       BB* entryblock = BB::Create(llvm_context, "entry", mainstub);
       builder.SetInsertPoint(entryblock);
 
-      if(!(eflags&ENV_NO_INIT)) // Only actually initialize things on DLL load if we actually want to, otherwise create a stub function
+      if(!(env->flags&ENV_NO_INIT)) // Only actually initialize things on DLL load if we actually want to, otherwise create a stub function
       {
         BB* endblock = BB::Create(llvm_context, "end", mainstub);
         BB* initblock = BB::Create(llvm_context, "init", mainstub);
@@ -2565,7 +2567,7 @@ namespace innative {
         "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT",
         "/MACHINE:X64", "/machine:x64", };
 
-      if(eflags&ENV_LIBRARY)
+      if(env->flags&ENV_LIBRARY)
       {
         linkargs.push_back("/DLL");
         linkargs.push_back("/ENTRY:" IR_INIT_FUNCTION "-stub");
@@ -2573,16 +2575,16 @@ namespace innative {
       else
         linkargs.push_back("/ENTRY:" IR_INIT_FUNCTION);
 
-      if(eflags&ENV_DEBUG)
+      if(env->flags&ENV_DEBUG)
         linkargs.push_back("/DEBUG");
 
       vector<string> cache = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.Get(), "/LIBPATH:" + workdir.Get() };
 #elif defined(IR_PLATFORM_POSIX)
       vector<const char*> linkargs = { "lld" };
 
-      if(eflags&ENV_LIBRARY)
+      if(env->flags&ENV_LIBRARY)
         linkargs.push_back("-shared");
-      //if(!(eflags&ENV_DEBUG))
+      //if(!(env->flags&ENV_DEBUG))
       //  linkargs.push_back("--strip-debug");
 
       vector<string> cache = { string("--output=") + file.Get(), "-L" + programpath.Get(), "-L" + workdir.Get() };

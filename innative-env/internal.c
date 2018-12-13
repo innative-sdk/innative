@@ -168,7 +168,7 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_free_memory(void* p)
     if(--heapcount == 0)
       HeapDestroy(heap);
 #elif defined(IR_PLATFORM_POSIX)
-    _innative_syscall(SYSCALL_MUNMAP, info - 1, info[-1]);
+    _innative_syscall(SYSCALL_MUNMAP, info - 1, info[-1], 0, 0, 0);
 #else
 #error unknown platform!
 #endif

@@ -32,7 +32,7 @@ struct __WASM_ALLOCATOR
   void* allocate(size_t n);
 };
 
-extern "C" __int64 GetRSPValue();
+extern "C" int64_t GetRSPValue();
 
 namespace innative {
   namespace utility {

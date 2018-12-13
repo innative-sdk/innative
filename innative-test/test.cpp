@@ -80,7 +80,7 @@ int main(int argc, char *argv[])
       testfiles.push_back(p.path());
   }
 
-  testfiles = { "../spec/test/core/call_indirect.wast" };
+  //testfiles = { "../spec/test/core/address.wast" };
   std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
   //testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
 
@@ -91,7 +91,7 @@ int main(int argc, char *argv[])
     env->optimize = 0;
     env->features = ENV_FEATURE_ALL;
     env->log = stdout;
-    env->wasthook = [](void*) { fputc('.', stdout); };
+    env->wasthook = [](void*) { fputc('.', stdout); fflush(stdout); };
     int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
 
     if(err >= 0)
@@ -100,6 +100,7 @@ int main(int argc, char *argv[])
       return assert(false), -1; // If the environment injection fails, abort everything
 
     FPRINTF(env->log, "%s: .", file.generic_u8string().c_str());
+    fflush(env->log);
     err = innative_compile_script((const uint8_t*)file.generic_u8string().data(), 0, env, true);
 
     if(!err && !env->errors)

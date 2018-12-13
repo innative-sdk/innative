@@ -11,7 +11,7 @@ void TestHarness::test_path()
   static const char* FOO = "foo";
   static const char* BAR = "bar";
   static const char* FOOBAR = "foobar";
-  static const char* FILE = "file.ext";
+  static const char* FILEEXT = "file.ext";
   static const char* EXT = ".ext";
 
   Path empty;
@@ -43,13 +43,13 @@ void TestHarness::test_path()
 
   TEST(!strcmp((empty + p).c_str(), FOO));
 
-  Path f(FILE);
-  TEST(!strcmp(f.c_str(), FILE));
+  Path f(FILEEXT);
+  TEST(!strcmp(f.c_str(), FILEEXT));
   TEST(!f.IsAbsolute());
   TEST(!strcmp(f.RemoveExtension().c_str(), "file"));
   TEST(!strcmp(f.Extension().c_str(), "ext"));
   TEST(*f.BaseDir().c_str() == 0);
-  TEST(!strcmp(f.File().c_str(), FILE));
+  TEST(!strcmp(f.File().c_str(), FILEEXT));
 
   auto ftest1 = [this](const Path& x) {
     TEST(!x.IsAbsolute());
@@ -57,17 +57,17 @@ void TestHarness::test_path()
     test[3] = Path::SEPERATOR;
     TEST(!strcmp(x.BaseDir().c_str(), test));
     TEST(*x.BaseDir().BaseDir().c_str() == 0);
-    TEST(!strcmp(x.File().c_str(), FILE));
-    TEST(!strcmp(x.File().File().c_str(), FILE));
+    TEST(!strcmp(x.File().c_str(), FILEEXT));
+    TEST(!strcmp(x.File().File().c_str(), FILEEXT));
     TEST(!strcmp(x.File().RemoveExtension().c_str(), "file"));
     TEST(!strcmp(x.Extension().c_str(), "ext"));
   };
 
   ftest1(p2 + f);
-  ftest1(p2 + FILE);
-  ftest1(Path("foo") + FILE);
-  ftest1(Path("foo/") + FILE);
-  ftest1(Path("foo\\") + FILE);
+  ftest1(p2 + FILEEXT);
+  ftest1(Path("foo") + FILEEXT);
+  ftest1(Path("foo/") + FILEEXT);
+  ftest1(Path("foo\\") + FILEEXT);
   ftest1(Path("foo") + Path("/file.ext"));
   ftest1(Path("foo/") + Path("/file.ext"));
   ftest1(Path("foo\\") + Path("/file.ext"));
@@ -77,7 +77,7 @@ void TestHarness::test_path()
   ftest1(Path("foo/file.ext"));
   ftest1(Path("foo\\file.ext"));
 
-  p2 += FILE;
+  p2 += FILEEXT;
   ftest1(p2);
 
 #ifdef IR_PLATFORM_WIN32
@@ -95,13 +95,13 @@ void TestHarness::test_path()
   rootno += "foo\\file.ext";
 
   TEST(rootyes.IsAbsolute());
-  TEST(!strcmp(rootyes.File().c_str(), FILE));
-  TEST(!strcmp(rootyes.File().File().c_str(), FILE));
+  TEST(!strcmp(rootyes.File().c_str(), FILEEXT));
+  TEST(!strcmp(rootyes.File().File().c_str(), FILEEXT));
   TEST(!strcmp(rootyes.File().RemoveExtension().c_str(), "file"));
   TEST(!strcmp(rootyes.Extension().c_str(), "ext"));
   TEST(!rootno.IsAbsolute());
-  TEST(!strcmp(rootno.File().c_str(), FILE));
-  TEST(!strcmp(rootno.File().File().c_str(), FILE));
+  TEST(!strcmp(rootno.File().c_str(), FILEEXT));
+  TEST(!strcmp(rootno.File().File().c_str(), FILEEXT));
   TEST(!strcmp(rootno.File().RemoveExtension().c_str(), "file"));
   TEST(!strcmp(rootno.Extension().c_str(), "ext"));
 
