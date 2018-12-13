@@ -540,7 +540,25 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
     // Call the function and set the correct result.
     signal(SIGILL, WastCrashHandler);
     signal(SIGFPE, WastCrashHandler); // This catches division by zero on linux
-    signal(SIGSEGV, WastCrashHandler); // Catches stack overflow on linux
+    signal(SIGSEGV, WastCrashHandler);
+
+#ifdef IR_PLATFORM_POSIX
+    // Catch stack overflow on linux
+    struct sigaction sa;
+    stack_t ss;
+
+    // Don't need much stack space, we immediately longjmp()
+    // back out of the signal handler
+    ss.ss_sp = alloca(MINSIGSTKSZ);
+    ss.ss_size = MINSIGSTKSZ;
+    ss.ss_flags = 0;
+
+    sigaltstack(&ss, NULL);
+    sa.sa_flags = SA_ONSTACK;
+    sa.sa_handler = WastCrashHandler;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGSEGV, &sa, NULL);
+#endif
 
     DeferLambda<std::function<void()>> restorehandlers([]() {
       signal(SIGILL, SIG_DFL);
