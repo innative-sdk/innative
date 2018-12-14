@@ -1,8 +1,9 @@
-// Copyright ©2018 Black Sphere Studios
+// Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "test.h"
 #include "innative/export.h"
+#include "innative/khash.h"
 #include <iostream>
 #include <filesystem>
 #include <fstream>
@@ -25,6 +26,9 @@ const char testenv[] = "(module $spectest "
 "\n  (func $print_i32_f32 (export \"print_i32_f32\") (param i32 f32))"
 "\n  (func $print_f64_f64 (export \"print_f64_f64\") (param f64 f64))"
 "\n) (register \"spectest\" $spectest)";
+
+// We use khash instead of unordered_set so we can make it case-insensitive
+KHASH_INIT(match, kh_cstr_t, char, 0, kh_str_hash_funcins, kh_str_hash_insequal);
 
 size_t internal_tests()
 {
@@ -71,18 +75,36 @@ int main(int argc, char *argv[])
 
   internal_tests();
 
+  std::unique_ptr<kh_match_t, void(*)(kh_match_t*)> matchfiles(kh_init_match(), kh_destroy_match);
+  
+  {
+    int r;
+    for(int i = 1; i < argc; ++i)
+    {
+      if(!STRICMP(argv[i], "-internal"))
+        return 0; // If we only want the internal tests, just bail out at this point
+      kh_put_match(matchfiles.get(), argv[i], &r);
+    }
+  }
+
   path testdir("../spec/test/core");
   std::vector<path> testfiles;
-  
+
   for(auto& p : recursive_directory_iterator(testdir, directory_options::skip_permission_denied))
   {
     if(!STRICMP(p.path().extension().u8string().data(), ".wast"))
+    {
+      if(kh_end(matchfiles) > 0)
+      {
+        khiter_t iter = kh_get_match(matchfiles.get(), p.path().filename().u8string().data());
+        if(!kh_exist2(matchfiles, iter))
+          continue;
+      }
       testfiles.push_back(p.path());
+    }
   }
 
-  //testfiles = { "../spec/test/core/address.wast" };
   std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
-  //testfiles.erase(testfiles.begin(), testfiles.begin() + 50);
 
   for(auto file : testfiles)
   {

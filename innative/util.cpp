@@ -1,4 +1,4 @@
-// Copyright ©2018 Black Sphere Studios
+// Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "util.h"
@@ -293,6 +293,7 @@ namespace innative {
       info[4] = sysinfo.wProcessorArchitecture | (flags << 16);
       __cpuid(info, 1);
 #elif defined(IR_PLATFORM_POSIX)
+      info[4] = (flags << 16);
       __get_cpuid(1, info + 0, info + 1, info + 2, info + 3);
 #endif
     }
