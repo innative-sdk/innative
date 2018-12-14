@@ -1,5 +1,5 @@
 /* inNative Runtime Compiler
-Copyright ©2018 Black Sphere Studios
+Copyright (c)2019 Black Sphere Studios
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

@@ -1,4 +1,4 @@
-// Copyright ©2018 Black Sphere Studios
+// Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef __UTIL_H__IR__
@@ -15,8 +15,6 @@
 #include <memory>
 #include <atomic>
 #include <vector>
-
-#define kh_exist2(h, x) ((x < kh_end(h)) && kh_exist(h, x))
 
 struct __WASM_ALLOCATOR
 {

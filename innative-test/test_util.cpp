@@ -1,4 +1,4 @@
-// Copyright ©2018 Black Sphere Studios
+// Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "test.h"
@@ -119,7 +119,7 @@ void TestHarness::test_util()
   }
 
   TEST(StrFormat("%i", 3) == "3");
-  uintcpuinfo info;
+  uintcpuinfo info = { 0 };
   GetCPUInfo(info, 0);
   TEST(info[4] != 0);
 }

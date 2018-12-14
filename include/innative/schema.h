@@ -1,4 +1,4 @@
-// Copyright ©2018 Black Sphere Studios
+// Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef __SCHEMA_H__IR__
@@ -10,6 +10,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <assert.h>
+
+#define kh_exist2(h, x) ((x < kh_end(h)) && kh_exist(h, x))
 
 #ifdef  __cplusplus
 #include <string>
