@@ -105,7 +105,7 @@ int main(int argc, char *argv[])
         break;
       case 'i': // install
         std::cout << "Installing inNative Runtime..." << std::endl;
-        err = innative_install();
+        err = innative_install(argv[0], true);
         if(err < 0)
           std::cout << "Installation failed!" << std::endl;
         else
@@ -158,6 +158,8 @@ int main(int argc, char *argv[])
   // Then create the runtime environment with the module count.
   Environment* env = (*exports.CreateEnvironment)(inputs.size(), 0, (!argc ? 0 : argv[0]));
   env->flags = flags;
+  env->features = ENV_FEATURE_ALL;
+  env->optimize = (env->flags & ENV_DEBUG) ? 0 : ENV_OPTIMIZE_ALL;
 
   if(!env)
   {

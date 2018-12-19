@@ -20,6 +20,7 @@ limitations under the License.
 #define INNATIVE_VERSION_MAJOR 0
 #define INNATIVE_VERSION_MINOR 1
 #define INNATIVE_VERSION_REVISION 0
+#define INNATIVE_VERSION(v, m, r, b) (((v|0ULL)<<48) | ((m|0ULL)<<32) | ((r|0ULL)<<16) | (b|0ULL))
 
 // CPU Architecture (possible pre-defined macros found on http://predef.sourceforge.net/prearch.html)
 #if defined(_M_X64) || defined(__amd64__) || defined(__amd64) || defined(_AMD64_) || defined(__x86_64__) || defined(__x86_64) || defined(_LP64)

@@ -11,6 +11,7 @@
 #define IR_STATIC_FLAG ""
 #define IR_LIBRARY_EXTENSION ".dll"
 #define IR_EXE_EXTENSION ".exe"
+#define IR_WIN32_REGPATH L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\innative-cmd.exe"
 #else
 #define IR_STATIC_EXTENSION ".a"
 #define IR_STATIC_FLAG "-l"
@@ -87,7 +88,7 @@ extern "C" {
   IR_COMPILER_DLLEXPORT extern int innative_compile_file(const char* file, const char* out, uint64_t flags, uint64_t optimize, uint64_t features, bool dynamic, const struct _IR_WHITELIST* whitelist, unsigned int n_whitelist, const char* arg0);
   IR_COMPILER_DLLEXPORT extern int innative_build_loader(struct _IR_CHUNK* chunks, const char* out, bool dynamic);
   IR_COMPILER_DLLEXPORT extern void innative_set_work_dir_to_bin(const char* arg0);
-  IR_COMPILER_DLLEXPORT extern int innative_install();
+  IR_COMPILER_DLLEXPORT extern int innative_install(const char* arg0, bool full); // full install requires elevation on windows
   IR_COMPILER_DLLEXPORT extern int innative_uninstall();
 
 #ifdef  __cplusplus

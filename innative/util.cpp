@@ -2,6 +2,7 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "util.h"
+#include "innative/export.h"
 #include <assert.h>
 #include <stdexcept>
 #include <stdarg.h>
@@ -316,42 +317,224 @@ namespace innative {
     void* LoadDLL(const char* path) { return LoadLibraryA(path); }
     void* LoadDLLFunction(void* dll, const char* name) { return GetProcAddress((HMODULE)dll, name); }
     void FreeDLL(void* dll) { FreeLibrary((HMODULE)dll); }
+
+#define MAKEWSTRING2(x) L#x
+#define MAKEWSTRING(x) MAKEWSTRING2(x)
+#define IR_VERSION_PATH MAKEWSTRING(INNATIVE_VERSION_MAJOR) L"\\" MAKEWSTRING(INNATIVE_VERSION_MINOR) L"\\" MAKEWSTRING(INNATIVE_VERSION_REVISION)
+#define IR_WIN32_CLASSPATH L"SOFTWARE\\Classes\\Applications\\innative-cmd.exe"
+
+    bool Win32SetKey(HKEY hive, const wchar_t* key, const wchar_t* value, const wchar_t* data)
+    {
+      DWORD	dwDisposition = 0;
+      HKEY hTempKey = (HKEY)0;
+      bool ret = false;
+      if(ERROR_SUCCESS == ::RegCreateKeyExW(hive, key, 0, 0, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, 0, &hTempKey, &dwDisposition))
+      {
+        if(!data || ::RegSetValueExW(hTempKey, value, 0, REG_SZ, (LPBYTE)data, ((DWORD)wcslen(data) + 1) * sizeof(wchar_t)) == ERROR_SUCCESS)
+          ret = true;
+      }
+
+      if(hTempKey)
+        ::RegCloseKey(hTempKey);
+
+      return ret;
+    };
+
+    bool Win32DeleteKeyValue(HKEY hive, const wchar_t* key, const wchar_t* value)
+    {
+      HKEY hTempKey = (HKEY)0;
+      bool ret = false;
+
+      if(ERROR_SUCCESS == ::RegOpenKeyExW(hive, key, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, &hTempKey))
+      {
+        if(::RegDeleteValueW(hTempKey, value))
+          ret = true;
+      }
+
+      if(hTempKey)
+        ::RegCloseKey(hTempKey);
+
+      return ret;
+    }
+
+    template<typename F>
+    bool Win32EnumKey(HKEY hive, const wchar_t* key, F && f)
+    {
+      HKEY hKey;
+      if(RegOpenKeyExW(hive, key, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+        return false;
+
+      FILETIME ftWrite;
+      DWORD dwSize = MAX_PATH;
+      wchar_t szName[MAX_PATH];
+      DWORD index = 0;
+      LSTATUS lResult = RegEnumKeyExW(hKey, index, szName, &dwSize, nullptr, nullptr, nullptr, &ftWrite);
+
+      while(lResult == ERROR_SUCCESS)
+      {
+        f(szName);
+        dwSize = MAX_PATH;
+        lResult = RegEnumKeyExW(hKey, ++index, szName, &dwSize, nullptr, nullptr, nullptr, &ftWrite);
+      }
+
+      RegCloseKey(hKey);
+      return true;
+    }
+
+    bool Win32Install(uint64_t version, bool full)
+    {
+      std::wstring path(IR_WIN32_REGPATH);
+      path += L"\\" + std::to_wstring((version >> 48) & 0xFFFF);
+      path += L"\\" + std::to_wstring((version >> 32) & 0xFFFF);
+      path += L"\\" + std::to_wstring((version >> 16) & 0xFFFF);
+
+      HKEY hKey;
+      if(RegOpenKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, KEY_READ | KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS)
+        return false;
+
+      DWORD len = 0;
+      RegQueryValueExW(hKey, 0, 0, 0, 0, &len);
+      std::unique_ptr<wchar_t[]> exe(new wchar_t[(len + 1) / 2]);
+      if(RegQueryValueExW(hKey, 0, 0, 0, (LPBYTE)exe.get(), &len) != ERROR_SUCCESS)
+        return false;
+
+      RegQueryValueExW(hKey, L"runtime", 0, 0, 0, &len);
+      std::unique_ptr<wchar_t[]> runtime(new wchar_t[(len + 1) / 2]);
+      if(RegQueryValueExW(hKey, L"runtime", 0, 0, (LPBYTE)runtime.get(), &len) != ERROR_SUCCESS)
+        return false;
+
+      if(!Win32SetKey(HKEY_CURRENT_USER, L"Environment", L"INNATIVE_PATH", runtime.get()))
+        return false;
+      if(!Win32SetKey(HKEY_CURRENT_USER, IR_WIN32_REGPATH, nullptr, exe.get()))
+        return false;
+      if(!full)
+        return true;
+
+      if(!Win32SetKey(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH, L"FriendlyAppName", L"inNative Runtime"))
+        return false;
+      if(!Win32SetKey(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH, L"IsHostApp", L""))
+        return false;
+      if(!Win32SetKey(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH, L"UseExecutableForTaskbarGroupIcon", L""))
+        return false;
+      if(!Win32SetKey(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH L"\\shell\\open\\command", nullptr, (L'"' + std::wstring(exe.get()) + L"\" \"%1\"").c_str()))
+        return false;
+
+      // Set file type handlers
+      if(!Win32SetKey(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH L"\\SupportedTypes", L".wast", L""))
+        return false;
+      if(!Win32SetKey(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH L"\\SupportedTypes", L".wat", L""))
+        return false;
+      if(!Win32SetKey(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH L"\\SupportedTypes", L".wasm", L""))
+        return false;
+      return true;
+    }
+
 #elif defined(IR_PLATFORM_POSIX)
     void* LoadDLL(const char* path) { return dlopen(path, RTLD_NOW); } // We MUST load and initialize WASM dlls immediately for init function testing
     void* LoadDLLFunction(void* dll, const char* name) { return dlsym(dll, name); }
     void FreeDLL(void* dll) { dlclose(dll); }
 #endif
 
-    int install()
+    uint64_t GetLatestVersion()
+    {
+      uint16_t major = 0;
+      uint16_t minor = 0;
+      uint16_t revision = 0;
+      uint16_t build = 0;
+
+#ifdef IR_PLATFORM_WIN32
+      if(!Win32EnumKey(HKEY_CURRENT_USER,
+        IR_WIN32_REGPATH,
+        [&major](const wchar_t* s) { wchar_t *end; major = std::max((uint16_t)wcstol(s, &end, 10), major); }))
+        return 0;
+
+      if(!Win32EnumKey(HKEY_CURRENT_USER,
+        (IR_WIN32_REGPATH L"\\" + std::to_wstring(major)).c_str(),
+        [&minor](const wchar_t* s) { wchar_t *end; minor = std::max((uint16_t)wcstol(s, &end, 10), minor); }))
+        return 0;
+
+      if(!Win32EnumKey(HKEY_CURRENT_USER,
+        (IR_WIN32_REGPATH L"\\" + std::to_wstring(major) + L"\\" + std::to_wstring(minor)).c_str(),
+        [&revision](const wchar_t* s) { wchar_t *end; revision = std::max((uint16_t)wcstol(s, &end, 10), revision); }))
+        return 0;
+
+      HKEY hKey;
+      if(RegOpenKeyExW(HKEY_CURRENT_USER, (IR_WIN32_REGPATH L"\\" + std::to_wstring(major) + L"\\" + std::to_wstring(minor) + L"\\" + std::to_wstring(revision)).c_str(), 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+        return 0;
+      RegCloseKey(hKey);
+#elif defined(IR_PLATFORM_POSIX)
+
+#endif
+      return INNATIVE_VERSION(major, minor, revision, build);
+    }
+
+    int Install(const char* arg0, bool full)
     {
 #ifdef IR_PLATFORM_WIN32
-      // Install detailed information to registry
+      // Open our base registry entry and install this specific version info (overwrite any existing info)
+      std::wstring path;
+      path.resize(MAX_PATH);
+      path.resize(GetModuleFileNameW(NULL, const_cast<wchar_t*>(path.data()), (DWORD)path.capacity()));
+      std::wstring buf;
+      buf.resize(GetFullPathNameW(path.c_str(), 0, 0, 0));
+      buf.resize(GetFullPathNameW(path.c_str(), (DWORD)buf.capacity(), const_cast<wchar_t*>(buf.data()), 0));
+      if(!Win32SetKey(HKEY_CURRENT_USER, IR_WIN32_REGPATH L"\\" IR_VERSION_PATH, nullptr, buf.c_str()))
+        return -1;
+      std::wstring runtime = buf.substr(0, buf.find_last_of(L'\\')) + L"\\innative.dll";
+      if(!Win32SetKey(HKEY_CURRENT_USER, IR_WIN32_REGPATH L"\\" IR_VERSION_PATH, L"runtime", runtime.c_str()))
+        return -2;
 
-      // Set %INNATIVE_PATH% to our path only if we are the newest version
+      constexpr uint64_t cur = INNATIVE_VERSION(INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR, INNATIVE_VERSION_REVISION, 0);
+      if(GetLatestVersion() <= cur) // Only if we are the latest version do we perform a full install
+        if(!Win32Install(cur, full))
+          return -3;
 
-      // Register ourselves as handling *.wast *.wat and *.wasm files
 #elif defined(IR_PLATFORM_POSIX)
       // Install symlinks to /usr/bin
 
       // Calculate new master symlink
 #endif
-      return -1;
+      return 0;
     }
 
-    int uninstall()
+    int Uninstall()
     {
 #ifdef IR_PLATFORM_WIN32
-      // Remove this version from the registry
+      // Remove this version from the registry by deleting all version levels. Only the levels that have no more subkeys will actually be deleted.
+      uint64_t oldversion = GetLatestVersion();
+      bool r = RegDeleteKeyW(HKEY_CURRENT_USER, IR_WIN32_REGPATH L"\\" IR_VERSION_PATH) == ERROR_SUCCESS;
+      RegDeleteKeyW(HKEY_CURRENT_USER, IR_WIN32_REGPATH L"\\" MAKEWSTRING(INNATIVE_VERSION_MAJOR) L"\\" MAKEWSTRING(INNATIVE_VERSION_MINOR));
+      RegDeleteKeyW(HKEY_CURRENT_USER, IR_WIN32_REGPATH L"\\" MAKEWSTRING(INNATIVE_VERSION_MAJOR));
 
-      // Recalculate %INNATIVE_PATH%
+      HKEY hKey = 0;
+      bool full = RegOpenKeyExW(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH, 0, KEY_READ, &hKey) == ERROR_SUCCESS;
+      if(hKey)
+        RegCloseKey(hKey);
 
-      // Remove our file handling registration
+      uint64_t newversion = GetLatestVersion();
+      if(!newversion) // That was the last version, so wipe all registry keys
+      {
+        r &= Win32DeleteKeyValue(HKEY_CURRENT_USER, L"Environment", L"INNATIVE_PATH") == ERROR_SUCCESS;
+        r &= RegDeleteKeyW(HKEY_CURRENT_USER, IR_WIN32_REGPATH) == ERROR_SUCCESS; // This should work because we should have no more version subkeys
+        if(full)
+        {
+          r &= RegDeleteKeyW(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH L"\\shell\\open\\command") == ERROR_SUCCESS;
+          r &= RegDeleteKeyW(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH L"\\shell\\open") == ERROR_SUCCESS;
+          r &= RegDeleteKeyW(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH L"\\shell") == ERROR_SUCCESS;
+          r &= RegDeleteKeyW(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH L"\\SupportedTypes") == ERROR_SUCCESS;
+          r &= RegDeleteKeyW(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH) == ERROR_SUCCESS;
+        }
+    }
+      else if(newversion != oldversion) // Otherwise, overwrite current registry entries with new version
+        if(!Win32Install(newversion, full))
+          return -9;
+
 #elif defined(IR_PLATFORM_POSIX)
       // Remove symlink from /usr/bin
 
       // Calculate new master symlink
 #endif
-      return -1;
-    }
+      return r ? 0 : -1;
   }
 }
+    }
