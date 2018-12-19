@@ -162,12 +162,12 @@ void innative_set_work_dir_to_bin(const char* arg0)
   utility::SetWorkingDir(utility::GetProgramPath(arg0).BaseDir().c_str());
 }
 
-int innative_install()
+int innative_install(const char* arg0, bool full)
 {
-  return utility::install();
+  return utility::Install(arg0, full);
 }
 
 int innative_uninstall()
 {
-  return utility::uninstall();
+  return utility::Uninstall();
 }

@@ -2645,8 +2645,9 @@ namespace innative {
   void AppendIntrinsics(Environment& env)
   {
     int r;
-    for(auto intrinsic : code::intrinsics)
-      kh_put_cimport(env.cimports, Identifier((uint8_t*)intrinsic.name, strlen(intrinsic.name)), &r);
+    if(env.cimports)
+      for(auto intrinsic : code::intrinsics)
+        kh_put_cimport(env.cimports, Identifier((uint8_t*)intrinsic.name, strlen(intrinsic.name)), &r);
   }
 }
 

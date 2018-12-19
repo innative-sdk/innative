@@ -178,8 +178,8 @@ namespace innative {
     void* LoadDLL(const char* path);
     void* LoadDLLFunction(void* dll, const char* name);
     void FreeDLL(void* dll);
-    int install();
-    int uninstall();
+    int Install(const char* arg0, bool full);
+    int Uninstall();
     bool RestoreStackGuard(void* lpPage);
 
     // Creates a C-compatible mangled name with an optional index

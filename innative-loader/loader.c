@@ -116,7 +116,7 @@ int main(int argc, char** argv)
 
     // Then create the runtime environment with the module count.
     Environment* env = (*exports.CreateEnvironment)(modules, maxthreads, argv[0]);
-    env->flags = 0; //ENV_MULTITHREADED;
+    env->flags = ENV_NO_INIT; //ENV_MULTITHREADED;
     if(!env)
     {
       fprintf(stderr, "Unknown error creating environment.\n");
@@ -188,11 +188,15 @@ int main(int argc, char** argv)
     return ERR_FATAL_NULL_POINTER;
 
   // Load the entry point and execute it
-  IR_Entrypoint start = (*exports.LoadFunction)(assembly, 0, 0, 0);
+  IR_Entrypoint start = (*exports.LoadFunction)(assembly, 0, IR_INIT_FUNCTION);
+  IR_Entrypoint exit = (*exports.LoadFunction)(assembly, 0, IR_EXIT_FUNCTION);
   if(!start)
     return ERR_INVALID_START_FUNCTION;
-  
+
   (*start)();
+  if(exit)
+    (*exit)();
+
   return ERR_SUCCESS;
 }
 
