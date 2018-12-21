@@ -125,6 +125,9 @@
     <ClInclude Include="lexer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="win32.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="innative.rc">
@@ -132,8 +135,8 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="x86_64.asm">
+    <MASM Include="x86_64.asm">
       <Filter>Source Files</Filter>
-    </None>
+    </MASM>
   </ItemGroup>
 </Project>

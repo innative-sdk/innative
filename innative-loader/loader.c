@@ -5,23 +5,7 @@
 #include <stdio.h>
 
 #ifdef IR_PLATFORM_WIN32
-#pragma pack(push)
-#pragma pack(8)
-#define WINVER 0x0501 //_WIN32_WINNT_WINXP   
-#define _WIN32_WINNT 0x0501
-#define NTDDI_VERSION 0x05010300 //NTDDI_WINXPSP3 
-#define WIN32_LEAN_AND_MEAN
-#ifndef NOMINMAX // Some compilers enable this by default
-#define NOMINMAX
-#endif
-#define NODRAWTEXT
-#define NOBITMAP
-#define NOMCX
-#define NOSERVICE
-#define NOHELP
-#define NOGDI
-#include <windows.h>
-#pragma pack(pop)
+#include "../innative/win32.h"
 
 struct WinPass
 {
@@ -36,28 +20,7 @@ BOOL CALLBACK CountResource(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in 
   return TRUE;
 }
 
-BOOL CALLBACK EnumModule(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LPWSTR lpName, __in LONG_PTR lParam)
-{
-  struct WinPass* pass = (struct WinPass*)lParam;
-  HRSRC res = FindResourceW(hModule, lpName, lpType);
-  if(res != NULL)
-  {
-    HGLOBAL buf = LoadResource(hModule, res);
-    if(buf)
-    {
-      void* data = LockResource(buf);
-      if(data)
-      {
-        (*pass->exports->AddModule)(pass->env, data, SizeofResource(hModule, res), (const char*)lpName, pass->err);
-        return TRUE;
-      }
-    }
-  }
-  *pass->err = ERR_FATAL_NULL_POINTER;
-  return FALSE;
-}
-
-BOOL CALLBACK EnumEnvironment(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LPWSTR lpName, __in LONG_PTR lParam)
+BOOL CALLBACK EnumHandler(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LPWSTR lpName, __in LONG_PTR lParam, void(*handler)(struct WinPass*, uint8_t*, DWORD, const char*))
 {
   struct WinPass* pass = (struct WinPass*)lParam;
   HRSRC res = FindResourceW(hModule, lpName, lpType);
@@ -68,14 +31,40 @@ BOOL CALLBACK EnumEnvironment(__in_opt HMODULE hModule, __in LPCWSTR lpType, __i
     {
       uint8_t* data = LockResource(buf);
       if(data)
-      {
-        (*pass->exports->AddEmbedding)(pass->env, data[0], data + 1, SizeofResource(hModule, res) - 1);
-        return TRUE;
-      }
+        (*handler)(pass, data, SizeofResource(hModule, res), (const char*)lpName);
+      return TRUE;
     }
   }
   *pass->err = ERR_FATAL_NULL_POINTER;
   return FALSE;
+}
+
+void EnumEnvironmentHandler(struct WinPass* pass, uint8_t* data, DWORD sz, const char* name)
+{
+  (*pass->exports->AddEmbedding)(pass->env, data[0], data + 1, sz - 1);
+}
+
+void EnumModuleHandler(struct WinPass* pass, uint8_t* data, DWORD sz, const char* name)
+{
+  (*pass->exports->AddModule)(pass->env, data, sz, name, pass->err);
+}
+void EnumWhitelistHandler(struct WinPass* pass, uint8_t* data, DWORD sz, const char* name)
+{
+  *pass->err = 0;
+  (*pass->exports->AddWhitelist)(pass->env, name, data);
+}
+
+BOOL CALLBACK EnumEnvironment(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LPWSTR lpName, __in LONG_PTR lParam)
+{
+  return EnumHandler(hModule, lpType, lpName, lParam, &EnumEnvironmentHandler);
+}
+BOOL CALLBACK EnumModule(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LPWSTR lpName, __in LONG_PTR lParam)
+{
+  return EnumHandler(hModule, lpType, lpName, lParam, &EnumModuleHandler);
+}
+BOOL CALLBACK EnumWhitelist(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LPWSTR lpName, __in LONG_PTR lParam)
+{
+  return EnumHandler(hModule, lpType, lpName, lParam, &EnumWhitelistHandler);
 }
 
 #elif defined(IR_PLATFORM_POSIX)
@@ -101,7 +90,7 @@ int main(int argc, char** argv)
     // Count WASM module payloads.
 #ifdef IR_PLATFORM_WIN32
     unsigned int modules = 0;
-    if(EnumResourceNamesW(NULL, L"WASM_MODULE", &CountResource, (LONG_PTR)&modules) == FALSE)
+    if(EnumResourceNamesW(NULL, WIN32_RESOURCE_MODULE, &CountResource, (LONG_PTR)&modules) == FALSE)
     {
       fprintf(stderr, "Error counting resources: %u\n", GetLastError());
       return GetLastError();
@@ -128,7 +117,7 @@ int main(int argc, char** argv)
     int err = ERR_SUCCESS;
     struct WinPass pass = { &exports, env, &err };
 
-    if(EnumResourceNamesW(NULL, L"WASM_MODULE", &EnumModule, (LONG_PTR)&pass) == FALSE)
+    if(EnumResourceNamesW(NULL, WIN32_RESOURCE_MODULE, &EnumModule, (LONG_PTR)&pass) == FALSE)
     {
       if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
       {
@@ -152,11 +141,26 @@ int main(int argc, char** argv)
     // Then add each embedding environment payload to the environment.
     // These payloads have a tag, but have no set format. What the tag means depends on the runtime we've loaded.
 #ifdef IR_PLATFORM_WIN32
-    if(EnumResourceNamesW(NULL, L"WASM_ENVIRONMENT", &EnumEnvironment, (LONG_PTR)&pass) == FALSE || err < 0)
+    if(EnumResourceNamesW(NULL, WIN32_RESOURCE_EMBEDDING, &EnumEnvironment, (LONG_PTR)&pass) == FALSE || err < 0)
     {
       if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
       {
         fprintf(stderr, "Error enumerating embedding environments: %u - %i\n", GetLastError(), err);
+        return err;
+      }
+    }
+
+#elif defined(IR_PLATFORM_POSIX)
+#error TODO
+#endif
+
+    // Add the whitelist values, the resource name being the module and the data being the function
+#ifdef IR_PLATFORM_WIN32
+    if(EnumResourceNamesW(NULL, WIN32_RESOURCE_WHITELIST, &EnumWhitelist, (LONG_PTR)&pass) == FALSE || err < 0)
+    {
+      if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
+      {
+        fprintf(stderr, "Error enumerating whitelist: %u - %i\n", GetLastError(), err);
         return err;
       }
     }

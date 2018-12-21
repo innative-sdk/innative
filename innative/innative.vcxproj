@@ -409,6 +409,7 @@
     <ClInclude Include="validate.h" />
     <ClInclude Include="wast.h" />
     <ClInclude Include="wat.h" />
+    <ClInclude Include="win32.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="innative.rc" />

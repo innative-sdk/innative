@@ -10,6 +10,10 @@
 #include <functional>
 #include <algorithm>
 
+#ifdef IR_PLATFORM_WIN32
+#include "../innative/win32.h"
+#endif
+
 static const std::unordered_map<std::string, unsigned int> flag_map = {
   { "strict", ENV_STRICT },
   { "sandbox", ENV_SANDBOX },

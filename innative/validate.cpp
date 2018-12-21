@@ -97,7 +97,9 @@ void innative::AppendError(const Environment& env, ValidationError*& errors, Mod
 
   err->error[len] = 0;
   err->code = code;
-  err->m = m;
+  err->m = -1;
+  if(m >= env.modules && (m - env.modules) < env.n_modules)
+    err->m = m - env.modules;
 
   do
   {
