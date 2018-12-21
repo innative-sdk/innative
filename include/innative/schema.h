@@ -721,7 +721,7 @@ typedef struct __WASM_VALIDATION_ERROR
 {
   int code;
   char* error;
-  Module* m;
+  ptrdiff_t m;
   struct __WASM_VALIDATION_ERROR* next;
 } ValidationError;
 

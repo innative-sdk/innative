@@ -113,6 +113,7 @@ int main(int argc, char *argv[])
     env->optimize = 0;
     env->features = ENV_FEATURE_ALL;
     env->log = stdout;
+    //env->loglevel = LOG_DEBUG;
     env->wasthook = [](void*) { fputc('.', stdout); fflush(stdout); };
     int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
 
@@ -135,9 +136,9 @@ int main(int argc, char *argv[])
       while(env->errors != nullptr)
       {
         fputs("  ", env->log);
-        if(env->errors->m != nullptr)
+        if(env->errors->m >= 0)
         {
-          fputs(env->errors->m->name.str(), env->log);
+          fputs(env->modules[env->errors->m].name.str(), env->log);
           fputs(": ", env->log);
         }
         fputs(env->errors->error, env->log);

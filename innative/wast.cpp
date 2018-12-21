@@ -15,23 +15,7 @@
 #include <functional>
 
 #ifdef IR_PLATFORM_WIN32
-#pragma pack(push)
-#pragma pack(8)
-#define WINVER 0x0501 //_WIN32_WINNT_WINXP   
-#define _WIN32_WINNT 0x0501
-#define NTDDI_VERSION 0x05010300 //NTDDI_WINXPSP3 
-#define WIN32_LEAN_AND_MEAN
-#ifndef NOMINMAX // Some compilers enable this by default
-#define NOMINMAX
-#endif
-#define NODRAWTEXT
-#define NOBITMAP
-#define NOMCX
-#define NOSERVICE
-#define NOHELP
-#define NOGDI
-#include <windows.h>
-#pragma pack(pop)
+#include "../innative/win32.h"
 #endif 
 
 #ifdef IR_PLATFORM_POSIX
@@ -466,7 +450,7 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
   int cache_err = 0;
   if(!cache) // If cache is null we need to recompile the current environment, but we can't bail on error messages yet or we'll corrupt the parse
     cache_err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache, cachepath);
-
+  
   switch(tokens.Pop().id)
   {
   case TOKEN_INVOKE:
