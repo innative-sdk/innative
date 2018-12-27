@@ -101,7 +101,7 @@ namespace innative {
       if(str.get())
       {
         index = str.size();
-        varuint32 n = str.size() + t.len;
+        size_t n = str.size() + t.len;
         uint8_t* b = tmalloc<uint8_t>(env, n + 1);
         if(!b)
           return assert(false), ERR_FATAL_OUT_OF_MEMORY;

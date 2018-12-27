@@ -340,6 +340,9 @@
   <ItemGroup>
     <ClInclude Include="test.h" />
   </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="innative-test.rc" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

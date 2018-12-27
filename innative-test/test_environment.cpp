@@ -82,7 +82,7 @@ void TestHarness::test_environment()
   TEST(p[-1] == 101002);
   TEST(!_innative_internal_env_grow_memory(p, 100000, 200000));
 
-  _innative_internal_env_print(0);
-  _innative_internal_env_print(~0ULL);
-  _innative_internal_env_print(1ULL << 62ULL);
+  //_innative_internal_env_print(0);
+  //_innative_internal_env_print(~0ULL);
+  //_innative_internal_env_print(1ULL << 62ULL);
 }

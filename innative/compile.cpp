@@ -107,7 +107,7 @@ llvm::DIType* CreateDebugType(llvmTy* t, code::Context& context)
   return nullptr;
 }
 
-void FunctionDebugInfo(Func* fn, code::Context& context, bool definition, size_t line)
+void FunctionDebugInfo(Func* fn, code::Context& context, bool definition, unsigned int line)
 {
   llvm::SmallVector<llvm::Metadata*, 8> dwarfTys = { CreateDebugType(fn->getReturnType(), context) };
   for(auto& arg : fn->args())

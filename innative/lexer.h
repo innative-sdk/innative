@@ -76,8 +76,8 @@ namespace innative {
     {
       WatTokenID id;
       const char* pos;
-      size_t line;
-      size_t column;
+      unsigned int line;
+      unsigned int column;
       union
       {
         int64_t i;

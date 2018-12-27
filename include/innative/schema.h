@@ -500,8 +500,8 @@ KHASH_DECLARE(modules, Identifier, size_t);
 
 typedef struct __WASM_DEBUGINFO
 {
-  size_t line;
-  size_t column;
+  unsigned int line;
+  unsigned int column;
   Identifier name; // Stored debug name, if applicable
 } DebugInfo;
 
@@ -525,8 +525,8 @@ typedef struct __WASM_INSTRUCTION
 {
   uint8_t opcode;
   Immediate immediates[MAX_IMMEDIATES];
-  size_t line; // To keep the size small, we ONLY store line/column on instructions
-  size_t column;
+  unsigned int line; // To keep the size small, we ONLY store line/column on instructions
+  unsigned int column;
 } Instruction;
 
 typedef struct __WASM_FUNCTION_TYPE

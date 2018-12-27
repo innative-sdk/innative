@@ -12,6 +12,21 @@
 
 #ifdef IR_PLATFORM_WIN32
 #include "../innative/win32.h"
+
+inline std::unique_ptr<uint8_t[]> LoadFile(const char* file, long& sz)
+{
+  FILE* f = nullptr;
+  FOPEN(f, file, "rb");
+  if(!f)
+    return nullptr;
+  fseek(f, 0, SEEK_END);
+  sz = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  std::unique_ptr<uint8_t[]> data(new uint8_t[sz]);
+  sz = (long)fread(data.get(), 1, sz, f);
+  fclose(f);
+  return data;
+}
 #endif
 
 static const std::unordered_map<std::string, unsigned int> flag_map = {
@@ -62,8 +77,6 @@ int main(int argc, char *argv[])
   bool generate = false;
   bool verbose = true;
   int err = ERR_SUCCESS;
-  IRExports exports;
-  innative_runtime(&exports);
 
   for(int i = 1; i < argc; ++i) // skip first argument, which is the program path
   {
@@ -73,7 +86,7 @@ int main(int argc, char *argv[])
       {
       case 'r': // run immediately
         run = true;
-        flags |= ENV_LIBRARY;
+        flags |= ENV_LIBRARY| ENV_NO_INIT;
         break;
       case 'f': // flag
       {
@@ -150,20 +163,74 @@ int main(int argc, char *argv[])
     return -3;
   }
 
-  // If we are generating a loader EXE instead of compiling, we go down a completely different code path.
-  if(generate)
-  {
-    // TODO
-  }
-
   if(out.empty()) // If no out is specified, default to name of first input file
     out = innative::Path(inputs[0]).RemoveExtension().Get() + ((flags&ENV_LIBRARY) ? IR_LIBRARY_EXTENSION : IR_EXE_EXTENSION);
+
+  IRExports exports = { 0 };
+  if(generate) // If we are generating a loader, we replace all of the normal functions to reroute the resources into the EXE file
+  {
+    if(run)
+    {
+      std::cout << "You can't run a file dynamically and also generate a loader, make up your mind!" << std::endl;
+      return -8;
+    }
+
+    exports.CreateEnvironment = [](unsigned int modules, unsigned int maxthreads, const char* arg0) ->Environment* {
+      Environment* env = (Environment*)calloc(1, sizeof(Environment));
+      env->log = stdout;
+      return env;
+    };
+    exports.AddModule = [](Environment* env, const void* data, uint64_t size, const char* name, int* err) {
+      if(!size)
+      {
+        long sz = 0;
+        auto file = LoadFile((const char*)data, sz);
+        if(!sz)
+          *err = ERR_FATAL_FILE_ERROR;
+        else
+          UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_MODULE, name, 0, file.get(), sz);
+      }
+      else
+        UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_MODULE, name, 0, (void*)data, size);
+    };
+    exports.AddWhitelist = [](Environment* env, const char* module_name, const char* export_name) {
+      UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_WHITELIST, module_name, 0, (void*)export_name, strlen(export_name) + 1);
+    };
+    exports.AddEmbedding = [](Environment* env, int tag, const void* data, uint64_t size)->enum IR_ERROR {
+      char buf[20];
+      _itoa_s(tag, buf, 10);
+      if(!size)
+      {
+        long sz = 0;
+        auto file = LoadFile((const char*)data, sz);
+        if(!sz)
+          return ERR_FATAL_FILE_ERROR;
+        else
+          UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, file.get(), sz);
+      }
+      else
+        UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, (void*)data, size);
+      return ERR_SUCCESS;
+    };
+    exports.WaitForLoad = [](Environment* env) {};
+    exports.Compile = [](Environment* env, const char* file)->enum IR_ERROR { return ERR_SUCCESS; };
+    exports.DestroyEnvironment = [](Environment* env) { EndUpdateResourceA((HANDLE)env->alloc, FALSE); };
+
+    std::ifstream src("loader.exe", std::ios::binary);
+    std::ofstream dst(out.c_str(), std::ios::binary);
+    dst << src.rdbuf();
+  }
+  else
+    innative_runtime(&exports);
 
   // Then create the runtime environment with the module count.
   Environment* env = (*exports.CreateEnvironment)(inputs.size(), 0, (!argc ? 0 : argv[0]));
   env->flags = flags;
   env->features = ENV_FEATURE_ALL;
   env->optimize = (env->flags & ENV_DEBUG) ? 0 : ENV_OPTIMIZE_ALL;
+
+  if(generate)
+    env->alloc = (__WASM_ALLOCATOR*)BeginUpdateResourceA(out.c_str(), TRUE);
 
   if(!env)
   {
@@ -181,7 +248,7 @@ int main(int argc, char *argv[])
   std::string whitebuf;
   for(auto item : whitelist)
   {
-    whitebuf = item; // We have ot make a copy of the string because the actual argv string isn't necessarily mutable
+    whitebuf = item; // We have to make a copy of the string because the actual argv string isn't necessarily mutable
     char* ctx;
     char* first = STRTOK((char*)whitebuf.data(), ":", &ctx);
     char* second = STRTOK(NULL, ":", &ctx);
@@ -216,6 +283,9 @@ int main(int argc, char *argv[])
     return err;
   }
 
+  // Ensure all modules are loaded, in case we have multithreading enabled
+  (*exports.WaitForLoad)(env);
+
   // Check if this is a .wast file, which must be handled differently because it's an entire environment
   if(wast.size() > 0)
   {
@@ -248,10 +318,13 @@ int main(int argc, char *argv[])
     void* assembly = (*exports.LoadAssembly)(out.c_str()); // This automatically calls the start function on load
     if(!assembly)
       return ERR_FATAL_FILE_ERROR;
-    //IR_Entrypoint start = (*exports.LoadFunction)(assembly, 0, 0, 0);
-    //if(!start)
-    //  return ERR_INVALID_START_FUNCTION;
-    //(*start)();
+    IR_Entrypoint start = (*exports.LoadFunction)(assembly, 0, IR_INIT_FUNCTION);
+    IR_Entrypoint exit = (*exports.LoadFunction)(assembly, 0, IR_EXIT_FUNCTION);
+    if(!start)
+      return ERR_INVALID_START_FUNCTION;
+    (*start)();
+    if(exit)
+      (*exit)();
     return ERR_SUCCESS;
   }
 
