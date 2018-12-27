@@ -228,7 +228,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    IR_FORCEINLINE const char* IncToken(const char*& s, const char* end, size_t& line, size_t& column)
+    IR_FORCEINLINE const char* IncToken(const char*& s, const char* end, unsigned int& line, unsigned int& column)
     {
       ++s;
       if(s + 1 < end && ((s[0] == '\r' && s[1] != '\n') || s[0] == '\n'))
@@ -243,8 +243,8 @@ namespace innative {
 
     void TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* end)
     {
-      size_t line = 0;
-      size_t column = 0;
+      unsigned int line = 0;
+      unsigned int column = 0;
       while(s < end)
       {
         while(s < end && (s[0] == ' ' || s[0] == '\n' || s[0] == '\r' || s[0] == '\t' || s[0] == '\f'))

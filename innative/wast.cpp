@@ -12,7 +12,6 @@
 #include <setjmp.h>
 #include <iostream>
 #include <atomic>
-#include <functional>
 
 #ifdef IR_PLATFORM_WIN32
 #include "../innative/win32.h"
@@ -257,28 +256,9 @@ void InvalidateCache(void*& cache, const Path& cachepath)
   cache = nullptr;
 }
 
-int CompileWast(Environment& env, const char* out, void*& cache, Path& cachepath)
+// longjmp and exceptions don't always play well with destructors, so we isolate this call
+int IsolateInitCall(Environment& env, void*& cache, Path& cachepath)
 {
-  InvalidateCache(cache, cachepath);
-
-  int err;
-  ValidateEnvironment(env);
-  if(env.errors)
-    return ERR_VALIDATION_ERROR;
-  if(err = CompileEnvironment(&env, out))
-    return err;
-
-  cachepath = GetWorkingDir();
-  cachepath.Append(out);
-
-  signal(SIGILL, WastCrashHandler);
-  signal(SIGFPE, WastCrashHandler);
-
-  DeferLambda<std::function<void()>> restorehandlers([]() {
-    signal(SIGILL, SIG_DFL);
-    signal(SIGFPE, SIG_DFL);
-    });
-
   if(SETJMP(jump_location) != 0)
     return ERR_RUNTIME_TRAP;
 
@@ -296,6 +276,30 @@ int CompileWast(Environment& env, const char* out, void*& cache, Path& cachepath
 
   (*entry)();
   return ERR_SUCCESS;
+}
+
+int CompileWast(Environment& env, const char* out, void*& cache, Path& cachepath)
+{
+  InvalidateCache(cache, cachepath);
+
+  int err;
+  ValidateEnvironment(env);
+  if(env.errors)
+    return ERR_VALIDATION_ERROR;
+  if(err = CompileEnvironment(&env, out))
+    return err;
+
+  cachepath = GetWorkingDir();
+  cachepath.Append(out);
+
+  signal(SIGILL, WastCrashHandler);
+  signal(SIGFPE, WastCrashHandler);
+
+  err = IsolateInitCall(env, cache, cachepath);
+
+  signal(SIGILL, SIG_DFL);
+  signal(SIGFPE, SIG_DFL);
+  return err;
 }
 
 void SetTempName(Environment& env, Module& m)
@@ -444,6 +448,93 @@ void GenWastFunctionCall(void* f, WastResult& result, Args... params)
   }
 }
 
+// SEH exceptions and destructors don't mix, so we isolate all this signal and exception handling in this function.
+int IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, WastResult& result, std::vector<Instruction>& params)
+{
+  if(SETJMP(jump_location) != 0)
+  {
+    return ERR_RUNTIME_TRAP;
+  }
+
+#ifdef IR_COMPILER_MSC
+  __try // this catches division by zero on windows
+  {
+#endif
+    if(env.flags&ENV_HOMOGENIZE_FUNCTIONS)
+    {
+      switch(n_params)
+      {
+      case 0: GenWastFunctionCall(f, result); break;
+      case 1: GenWastFunctionCall(f, result, params[0]); break;
+      case 2: GenWastFunctionCall(f, result, params[0], params[1]); break;
+      case 3: GenWastFunctionCall(f, result, params[0], params[1], params[2]); break;
+      case 4: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3]); break;
+      case 5: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4]); break;
+      case 6: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5]); break;
+      case 7: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6]); break;
+      case 8: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7]); break;
+      case 9: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7], params[8]); break;
+      default:
+        assert(false);
+        return ERR_FATAL_UNKNOWN_KIND;
+      }
+    }
+    else
+    {
+      switch(n_params)
+      {
+      case 0: GenWastFunction<0>::Call(f, result, params.data()); break;
+      case 1: GenWastFunction<1>::Call(f, result, params.data()); break;
+      case 2: GenWastFunction<2>::Call(f, result, params.data()); break;
+      case 3: GenWastFunction<3>::Call(f, result, params.data()); break;
+      default:
+        assert(false);
+        return ERR_FATAL_UNKNOWN_KIND;
+      }
+    }
+#ifdef IR_COMPILER_MSC
+  }
+  __except(1)
+  {
+    // This uses unholy black magic to restore the stack guard page in the event of a stack overflow
+    if(GetExceptionCode() == EXCEPTION_STACK_OVERFLOW)
+    {
+      void* lpPage;
+#ifdef IR_CPU_x86
+      __asm mov lpPage, esp;
+#elif defined(IR_CPU_x86_64)
+      lpPage = (void*)GetRSPValue();
+#else
+#error unsupported CPU architecture
+#endif
+      // Get page size of system
+      SYSTEM_INFO si;
+      GetSystemInfo(&si);
+
+      // Get allocation base of stack
+      MEMORY_BASIC_INFORMATION mi;
+      VirtualQuery(lpPage, &mi, sizeof(mi));
+
+      // Go to page beyond current page
+      lpPage = (LPBYTE)(mi.BaseAddress) - si.dwPageSize;
+
+      // Free portion of stack just abandoned
+      if(!VirtualFree(mi.AllocationBase, (LPBYTE)lpPage - (LPBYTE)mi.AllocationBase, MEM_DECOMMIT))
+        return ERR_FATAL_UNKNOWN_KIND;
+
+      // Reintroduce the guard page
+      DWORD dwOldProtect;
+      if(!VirtualProtect(lpPage, si.dwPageSize, PAGE_GUARD | PAGE_READWRITE, &dwOldProtect))
+        return ERR_FATAL_UNKNOWN_KIND;
+    }
+
+    return ERR_RUNTIME_TRAP;
+  }
+#endif
+
+  return ERR_SUCCESS;
+}
+
 int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache, Path& cachepath, int& counter, const std::string& path, WastResult& result)
 {
   int err;
@@ -544,92 +635,14 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
     sigaction(SIGSEGV, &sa, NULL);
 #endif
 
-    DeferLambda<std::function<void()>> restorehandlers([]() {
-      signal(SIGILL, SIG_DFL);
-      signal(SIGFPE, SIG_DFL);
-      signal(SIGSEGV, SIG_DFL);
-    });
-    if(SETJMP(jump_location) != 0)
-    {
-      return ERR_RUNTIME_TRAP;
-    }
+    err = IsolateFunctionCall(env, ftype->n_params, f, result, params);
 
-#ifdef IR_COMPILER_MSC
-    __try // this catches division by zero on windows
-    {
-#endif
-      if(env.flags&ENV_HOMOGENIZE_FUNCTIONS)
-      {
-        switch(ftype->n_params)
-        {
-        case 0: GenWastFunctionCall(f, result); break;
-        case 1: GenWastFunctionCall(f, result, params[0]); break;
-        case 2: GenWastFunctionCall(f, result, params[0], params[1]); break;
-        case 3: GenWastFunctionCall(f, result, params[0], params[1], params[2]); break;
-        case 4: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3]); break;
-        case 5: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4]); break;
-        case 6: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5]); break;
-        case 7: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6]); break;
-        case 8: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7]); break;
-        case 9: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7], params[8]); break;
-        default:
-          assert(false);
-          return ERR_FATAL_UNKNOWN_KIND;
-        }
-      }
-      else
-      {
-        switch(ftype->n_params)
-        {
-        case 0: GenWastFunction<0>::Call(f, result, params.data()); break;
-        case 1: GenWastFunction<1>::Call(f, result, params.data()); break;
-        case 2: GenWastFunction<2>::Call(f, result, params.data()); break;
-        case 3: GenWastFunction<3>::Call(f, result, params.data()); break;
-        default:
-          assert(false);
-          return ERR_FATAL_UNKNOWN_KIND;
-        }
-      }
-#ifdef IR_COMPILER_MSC
-    }
-    __except(1)
-    {
-      // This uses unholy black magic to restore the stack guard page in the event of a stack overflow
-      if(GetExceptionCode() == EXCEPTION_STACK_OVERFLOW)
-      {
-        void* lpPage;
-#ifdef IR_CPU_x86
-        __asm mov lpPage, esp;
-#elif defined(IR_CPU_x86_64)
-        lpPage = (void*)GetRSPValue();
-#else
-#error unsupported CPU architecture
-#endif
-        // Get page size of system
-        SYSTEM_INFO si;
-        GetSystemInfo(&si);
+    signal(SIGILL, SIG_DFL);
+    signal(SIGFPE, SIG_DFL);
+    signal(SIGSEGV, SIG_DFL);
 
-        // Get allocation base of stack
-        MEMORY_BASIC_INFORMATION mi;
-        VirtualQuery(lpPage, &mi, sizeof(mi));
-
-        // Go to page beyond current page
-        lpPage = (LPBYTE)(mi.BaseAddress) - si.dwPageSize;
-
-        // Free portion of stack just abandoned
-        if(!VirtualFree(mi.AllocationBase, (LPBYTE)lpPage - (LPBYTE)mi.AllocationBase, MEM_DECOMMIT))
-          return ERR_FATAL_UNKNOWN_KIND;
-
-        // Reintroduce the guard page
-        DWORD dwOldProtect;
-        if(!VirtualProtect(lpPage, si.dwPageSize, PAGE_GUARD | PAGE_READWRITE, &dwOldProtect))
-          return ERR_FATAL_UNKNOWN_KIND;
-      }
-
-      return ERR_RUNTIME_TRAP;
-    }
-#endif
-
+    if(err != ERR_SUCCESS)
+      return err;
     break;
   }
   case TOKEN_GET:

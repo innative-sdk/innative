@@ -14,16 +14,16 @@ struct WinPass
   int* err;
 };
 
-BOOL CALLBACK CountResource(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LPWSTR lpName, __in LONG_PTR lParam)
+BOOL CALLBACK CountResource(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPSTR lpName, __in LONG_PTR lParam)
 {
   *((unsigned int*)lParam) += 1;
   return TRUE;
 }
 
-BOOL CALLBACK EnumHandler(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LPWSTR lpName, __in LONG_PTR lParam, void(*handler)(struct WinPass*, uint8_t*, DWORD, const char*))
+BOOL CALLBACK EnumHandler(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPSTR lpName, __in LONG_PTR lParam, void(*handler)(struct WinPass*, uint8_t*, DWORD, const char*))
 {
   struct WinPass* pass = (struct WinPass*)lParam;
-  HRSRC res = FindResourceW(hModule, lpName, lpType);
+  HRSRC res = FindResourceA(hModule, lpName, lpType);
   if(res != NULL)
   {
     HGLOBAL buf = LoadResource(hModule, res);
@@ -31,7 +31,7 @@ BOOL CALLBACK EnumHandler(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LP
     {
       uint8_t* data = LockResource(buf);
       if(data)
-        (*handler)(pass, data, SizeofResource(hModule, res), (const char*)lpName);
+        (*handler)(pass, data, SizeofResource(hModule, res), lpName);
       return TRUE;
     }
   }
@@ -54,15 +54,15 @@ void EnumWhitelistHandler(struct WinPass* pass, uint8_t* data, DWORD sz, const c
   (*pass->exports->AddWhitelist)(pass->env, name, data);
 }
 
-BOOL CALLBACK EnumEnvironment(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LPWSTR lpName, __in LONG_PTR lParam)
+BOOL CALLBACK EnumEnvironment(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPSTR lpName, __in LONG_PTR lParam)
 {
   return EnumHandler(hModule, lpType, lpName, lParam, &EnumEnvironmentHandler);
 }
-BOOL CALLBACK EnumModule(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LPWSTR lpName, __in LONG_PTR lParam)
+BOOL CALLBACK EnumModule(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPSTR lpName, __in LONG_PTR lParam)
 {
   return EnumHandler(hModule, lpType, lpName, lParam, &EnumModuleHandler);
 }
-BOOL CALLBACK EnumWhitelist(__in_opt HMODULE hModule, __in LPCWSTR lpType, __in LPWSTR lpName, __in LONG_PTR lParam)
+BOOL CALLBACK EnumWhitelist(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPSTR lpName, __in LONG_PTR lParam)
 {
   return EnumHandler(hModule, lpType, lpName, lParam, &EnumWhitelistHandler);
 }
@@ -90,7 +90,7 @@ int main(int argc, char** argv)
     // Count WASM module payloads.
 #ifdef IR_PLATFORM_WIN32
     unsigned int modules = 0;
-    if(EnumResourceNamesW(NULL, WIN32_RESOURCE_MODULE, &CountResource, (LONG_PTR)&modules) == FALSE)
+    if(EnumResourceNamesA(NULL, WIN32_RESOURCE_MODULE, &CountResource, (LONG_PTR)&modules) == FALSE)
     {
       fprintf(stderr, "Error counting resources: %u\n", GetLastError());
       return GetLastError();
@@ -117,7 +117,7 @@ int main(int argc, char** argv)
     int err = ERR_SUCCESS;
     struct WinPass pass = { &exports, env, &err };
 
-    if(EnumResourceNamesW(NULL, WIN32_RESOURCE_MODULE, &EnumModule, (LONG_PTR)&pass) == FALSE)
+    if(EnumResourceNamesA(NULL, WIN32_RESOURCE_MODULE, &EnumModule, (LONG_PTR)&pass) == FALSE)
     {
       if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
       {
@@ -141,7 +141,7 @@ int main(int argc, char** argv)
     // Then add each embedding environment payload to the environment.
     // These payloads have a tag, but have no set format. What the tag means depends on the runtime we've loaded.
 #ifdef IR_PLATFORM_WIN32
-    if(EnumResourceNamesW(NULL, WIN32_RESOURCE_EMBEDDING, &EnumEnvironment, (LONG_PTR)&pass) == FALSE || err < 0)
+    if(EnumResourceNamesA(NULL, WIN32_RESOURCE_EMBEDDING, &EnumEnvironment, (LONG_PTR)&pass) == FALSE || err < 0)
     {
       if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
       {
@@ -156,7 +156,7 @@ int main(int argc, char** argv)
 
     // Add the whitelist values, the resource name being the module and the data being the function
 #ifdef IR_PLATFORM_WIN32
-    if(EnumResourceNamesW(NULL, WIN32_RESOURCE_WHITELIST, &EnumWhitelist, (LONG_PTR)&pass) == FALSE || err < 0)
+    if(EnumResourceNamesA(NULL, WIN32_RESOURCE_WHITELIST, &EnumWhitelist, (LONG_PTR)&pass) == FALSE || err < 0)
     {
       if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
       {
