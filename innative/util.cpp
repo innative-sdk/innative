@@ -480,7 +480,7 @@ namespace innative {
 
       for(auto f : files)
       {
-        if(f.size() > prefix.size() && !strnicmp(f.c_str(), prefix.c_str(), prefix.size()))
+        if(f.size() > prefix.size() && !strncasecmp(f.c_str(), prefix.c_str(), prefix.size()))
         {
           auto s = f.substr(prefix.size() + 1);
 
@@ -526,8 +526,8 @@ namespace innative {
         return unlink(link.c_str()) != 0; // No version exists here, so just delete it
 
       unlink(link.c_str());
-      auto src = POSIX_LIB_BASE "." + std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(revision);
-      return symlink(src.c_str(), link.c_str()) != 0;
+      auto origin = POSIX_LIB_BASE "." + std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(revision);
+      return symlink(origin.c_str(), link.c_str()) != 0;
     }
 
     // Finds the latest version for each level: revision, minor, major. Then sets the /usr/bin symlink to the executable corresponding to the latest version
@@ -542,7 +542,7 @@ namespace innative {
       struct dirent *d;
       while((d = readdir(pdir)) != NULL)
       {
-        if(strlen(d->d_name) >= sizeof("libinnative.so") && !strnicmp(d->d_name, "libinnative.so", sizeof("libinnative.so")))
+        if(strlen(d->d_name) >= sizeof("libinnative.so") && !strncasecmp(d->d_name, "libinnative.so", sizeof("libinnative.so")))
           files.emplace_back(d->d_name);
       }
 
@@ -613,7 +613,7 @@ namespace innative {
           return -3;
       
 #elif defined(IR_PLATFORM_POSIX)
-      Path path = GetProgramPath(arg0).BaseDir().Append("/libinnative.so");
+      Path path = GetProgramPath(arg0).BaseDir() += "/libinnative.so";
 
       // Install symlinks to /usr/lib
       if(symlink(path.c_str(), POSIX_LIB_PATH) != 0)

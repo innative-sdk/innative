@@ -7,6 +7,7 @@
 #include "innative/innative.h"
 #include "innative/khash.h"
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <assert.h>
