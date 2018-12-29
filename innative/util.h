@@ -45,6 +45,9 @@ namespace innative {
       const char* s;
       size_t len;
 
+      static StringRef From(const ByteArray& b) { return StringRef{ b.str(), b.size() }; }
+      static StringRef From(const char* s) { return StringRef{ s, !s ? 0 : strlen(s) }; }
+
       bool operator ==(const StringRef& r) const
       {
         if(len != r.len)
@@ -183,19 +186,21 @@ namespace innative {
     bool RestoreStackGuard(void* lpPage);
 
     // Creates a C-compatible mangled name with an optional index
-    inline std::string CanonicalName(const char* prefix, const char* name, int index = -1)
+    inline std::string CanonicalName(StringRef prefix, StringRef name, int index = -1)
     {
       static const char HEX[17] = "0123456789ABCDEF";
 
       std::string str;
+      std::string strname(name.s, name.len);
+      std::string strprefix(prefix.s, prefix.len);
       if(index >= 0)
       {
         char buf[20] = { 0 };
         snprintf(buf, 20, "%d", index);
-        str = (!prefix ? std::string(name) + buf : (std::string(prefix) + IR_GLUE_STRING + name + buf));
+        str = (!prefix.s ? strname + buf : (strprefix + IR_GLUE_STRING + strname + buf));
       }
       else
-        str = (!prefix ? name : (std::string(prefix) + IR_GLUE_STRING + name));
+        str = (!prefix.s ? strname : (strprefix + IR_GLUE_STRING + strname));
 
       std::string canonical;
       canonical.reserve(str.capacity());
@@ -232,8 +237,8 @@ namespace innative {
     inline std::string CanonImportName(const Import& imp)
     {
       if(!imp.module_name.size() || memchr(imp.module_name.get(), '!', imp.module_name.size()) != nullptr) // blank imports or imports with a calling convention are always raw function names
-        return CanonicalName(0, imp.export_name.str());
-      return CanonicalName(imp.module_name.str(), imp.export_name.str());
+        return CanonicalName(StringRef{ 0,0 }, StringRef::From(imp.export_name));
+      return CanonicalName(StringRef::From(imp.module_name), StringRef::From(imp.export_name));
     }
 
     // Generates a whitelist string for a module and export name, which includes calling convention information

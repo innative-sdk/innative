@@ -17,7 +17,7 @@ const char testenv[] = "(module $spectest "
 "\n  (global $global_f32 (export \"global_f32\") f32 f32.const 666)"
 "\n  (global $global_f64 (export \"global_f64\") f64 f64.const 666)"
 "\n  (memory $memory1 (export \"memory\") 1 2)"
-"\n  (table $table10 (export \"table\") 10 20 anyfunc)"
+"\n  (table $table10 (export \"table\") 10 20 funcref)"
 "\n  (func $print (export \"print\"))"
 "\n  (func $print_i32 (export \"print_i32\") (param i32))"
 "\n  (func $print_i64 (export \"print_i64\") (param i64))"
@@ -69,6 +69,13 @@ int main(int argc, char *argv[])
   innative_set_work_dir_to_bin(!argc ? 0 : argv[0]);
   IRExports exports;
   innative_runtime(&exports);
+  
+  /*std::unique_ptr<FILE, void(*)(FILE*)> f(nullptr, [](FILE* f) { fclose(f); });
+  {
+    FILE* tmp = 0;
+    freopen_s(&tmp, "out.txt", "w", stdout);
+    f.reset(tmp);
+  }*/
 
   std::cout << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
   std::cout << std::endl;

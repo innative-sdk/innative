@@ -17,7 +17,7 @@ WatTokens innative::wat::TypeEncodingToken(varsint7 type_encoding)
   case TE_i64:return TOKEN_i64;
   case TE_f32:return TOKEN_f32;
   case TE_f64:return TOKEN_f64;
-  case TE_anyfunc:return TOKEN_ANYFUNC;
+  case TE_funcref:return TOKEN_FUNCREF;
   case TE_func:return TOKEN_FUNC;
   case TE_void:return TOKEN_NONE;
   }
@@ -80,9 +80,9 @@ void innative::wat::TokenizeInstruction(const Environment& env, Queue<WatToken>&
 
   switch(ins.opcode)
   {
-  case OP_get_local:
-  case OP_set_local:
-  case OP_tee_local:
+  case OP_local_get:
+  case OP_local_set:
+  case OP_local_tee:
     if(body && ftype)
     {
       if(ins.immediates[0]._varuint32 < ftype->n_params)
@@ -91,8 +91,8 @@ void innative::wat::TokenizeInstruction(const Environment& env, Queue<WatToken>&
         PushLocalName(env, tokens, ins.immediates[0]._varuint32 - ftype->n_params, body->local_names, body->n_locals, 'l');
       break;
     } // If this isn't actually a function, just write out the integer by falling through
-  case OP_get_global:
-  case OP_set_global:
+  case OP_global_get:
+  case OP_global_set:
   case OP_br:
   case OP_br_if:
     tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varuint32 });

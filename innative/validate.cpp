@@ -112,7 +112,7 @@ void innative::ValidateFunctionSig(const FunctionType& sig, Environment& env, Mo
   if(sig.form == TE_func)
   {
     if(sig.n_returns > 1)
-      AppendError(env, env.errors, m, ERR_MULTIPLE_RETURN_VALUES, "Return count of %u encountered: only 0 or 1 allowed.", sig.form);
+      AppendError(env, env.errors, m, ERR_MULTIPLE_RETURN_VALUES, "Return count of %u encountered: only 0 or 1 allowed.", sig.n_returns);
   }
   else
     AppendError(env, env.errors, m, ERR_UNKNOWN_SIGNATURE_TYPE, "Illegal function type %hhi encountered: only -0x20 allowed", sig.form);
@@ -144,25 +144,27 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   khint_t iter = kh_get_modules(env.modulemap, imp.module_name); // WASM modules do not understand !CALL convention appendings, so we use the full name no matter what
   if(iter == kh_end(env.modulemap))
   {
-    if(env.flags&ENV_WHITELIST)
-    {
-      khiter_t itermodule = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.str(), "").c_str()); // Check for a wildcard match first
-      if(!kh_exist2(env.whitelist, itermodule))
-      {
-        khiter_t iterexport = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.str(), imp.export_name.str()).c_str()); // We already canonized the whitelist imports to eliminate unnecessary !C specifiers
-        if(!kh_exist2(env.whitelist, iterexport))
-          return AppendError(env, env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a whitelisted C import, nor a valid webassembly import.", imp.module_name.str(), imp.export_name.str());
-        if(imp.kind != WASM_KIND_FUNCTION)
-          return AppendError(env, env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a function. You can only import C functions at this time.", imp.module_name.str(), imp.export_name.str());
-      }
-    }
-
     if(env.cimports)
     {
       std::string name = CanonImportName(imp);
       khiter_t iterimport = kh_get_cimport(env.cimports, Identifier((uint8_t*)name.c_str(), name.size()));
       if(kh_exist2(env.cimports, iterimport))
-        return; // For C imports, we just verify that they exist and bail out
+      {
+        if(env.flags&ENV_WHITELIST)
+        {
+          khiter_t itermodule = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.str(), "").c_str()); // Check for a wildcard match first
+          if(!kh_exist2(env.whitelist, itermodule))
+          {
+            khiter_t iterexport = kh_get_modulepair(env.whitelist, CanonWhitelist(imp.module_name.str(), imp.export_name.str()).c_str()); // We already canonized the whitelist imports to eliminate unnecessary !C specifiers
+            if(!kh_exist2(env.whitelist, iterexport))
+              return AppendError(env, env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a whitelisted C import, nor a valid webassembly import.", imp.module_name.str(), imp.export_name.str());
+            if(imp.kind != WASM_KIND_FUNCTION)
+              return AppendError(env, env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a function. You can only import C functions at this time.", imp.module_name.str(), imp.export_name.str());
+          }
+        }
+      }
+      if(!imp.module_name.size() && !imp.export_name.size())
+        return AppendError(env, env.errors, m, ERR_EMPTY_IMPORT, "Empty imports are invalid.");
       if(!imp.module_name.size() || imp.module_name.str()[0] == '!') // Blank imports must have been C imports, otherwise it could have been a failed WASM module import attempt.
         return AppendError(env, env.errors, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found in C library imports", name.c_str());
     }
@@ -274,8 +276,8 @@ void innative::ValidateLimits(const ResizableLimits& limits, Environment& env, M
 
 void innative::ValidateTable(const TableDesc& table, Environment& env, Module* m)
 {
-  if(table.element_type != TE_anyfunc)
-    AppendError(env, env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Table element type is %hhi: only anyfunc allowed.", table.element_type);
+  if(table.element_type != TE_funcref)
+    AppendError(env, env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Table element type is %hhi: only funcref allowed.", table.element_type);
   ValidateLimits(table.resizable, env, m);
 }
 
@@ -516,13 +518,13 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
   break;
 
   // Variable access
-  case OP_get_local:
+  case OP_local_get:
     if(ins.immediates[0]._varuint32 >= n_locals)
       AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for get_local.");
     else
       values.Push(locals[ins.immediates[0]._varuint32]);
     break;
-  case OP_set_local:
+  case OP_local_set:
     if(ins.immediates[0]._varuint32 >= n_locals)
     {
       AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
@@ -531,7 +533,7 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
     else
       ValidatePopType(values, locals[ins.immediates[0]._varuint32], env, m);
     break;
-  case OP_tee_local:
+  case OP_local_tee:
     if(ins.immediates[0]._varuint32 >= n_locals)
     {
       AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
@@ -543,7 +545,7 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
       values.Push(locals[ins.immediates[0]._varuint32]);
     }
     break;
-  case OP_get_global:
+  case OP_global_get:
   {
     GlobalDesc* desc = ModuleGlobal(*m, ins.immediates[0]._varuint32);
     if(!desc)
@@ -552,7 +554,7 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
       values.Push(desc->type);
   }
   break;
-  case OP_set_global:
+  case OP_global_set:
   {
     GlobalDesc* desc = ModuleGlobal(*m, ins.immediates[0]._varuint32);
     if(!desc)
@@ -720,25 +722,25 @@ void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<
 
     // Conversions
   case OP_i32_wrap_i64: ValidateUnaryOp<TE_i64, TE_i32>(values, env, m); break;
-  case OP_i32_trunc_s_f32:
-  case OP_i32_trunc_u_f32: ValidateUnaryOp<TE_f32, TE_i32>(values, env, m); break;
-  case OP_i32_trunc_s_f64:
-  case OP_i32_trunc_u_f64: ValidateUnaryOp<TE_f64, TE_i32>(values, env, m); break;
-  case OP_i64_extend_s_i32:
-  case OP_i64_extend_u_i32: ValidateUnaryOp<TE_i32, TE_i64>(values, env, m); break;
-  case OP_i64_trunc_s_f32:
-  case OP_i64_trunc_u_f32: ValidateUnaryOp<TE_f32, TE_i64>(values, env, m); break;
-  case OP_i64_trunc_s_f64:
-  case OP_i64_trunc_u_f64: ValidateUnaryOp<TE_f64, TE_i64>(values, env, m); break;
-  case OP_f32_convert_s_i32:
-  case OP_f32_convert_u_i32: ValidateUnaryOp<TE_i32, TE_f32>(values, env, m); break;
-  case OP_f32_convert_s_i64:
-  case OP_f32_convert_u_i64: ValidateUnaryOp<TE_i64, TE_f32>(values, env, m); break;
+  case OP_i32_trunc_f32_s:
+  case OP_i32_trunc_f32_u: ValidateUnaryOp<TE_f32, TE_i32>(values, env, m); break;
+  case OP_i32_trunc_f64_s:
+  case OP_i32_trunc_f64_u: ValidateUnaryOp<TE_f64, TE_i32>(values, env, m); break;
+  case OP_i64_extend_i32_s:
+  case OP_i64_extend_i32_u: ValidateUnaryOp<TE_i32, TE_i64>(values, env, m); break;
+  case OP_i64_trunc_f32_s:
+  case OP_i64_trunc_f32_u: ValidateUnaryOp<TE_f32, TE_i64>(values, env, m); break;
+  case OP_i64_trunc_f64_s:
+  case OP_i64_trunc_f64_u: ValidateUnaryOp<TE_f64, TE_i64>(values, env, m); break;
+  case OP_f32_convert_i32_s:
+  case OP_f32_convert_i32_u: ValidateUnaryOp<TE_i32, TE_f32>(values, env, m); break;
+  case OP_f32_convert_i64_s:
+  case OP_f32_convert_i64_u: ValidateUnaryOp<TE_i64, TE_f32>(values, env, m); break;
   case OP_f32_demote_f64: ValidateUnaryOp<TE_f64, TE_f32>(values, env, m); break;
-  case OP_f64_convert_s_i32:
-  case OP_f64_convert_u_i32: ValidateUnaryOp<TE_i32, TE_f64>(values, env, m); break;
-  case OP_f64_convert_s_i64:
-  case OP_f64_convert_u_i64: ValidateUnaryOp<TE_i64, TE_f64>(values, env, m); break;
+  case OP_f64_convert_i32_s:
+  case OP_f64_convert_i32_u: ValidateUnaryOp<TE_i32, TE_f64>(values, env, m); break;
+  case OP_f64_convert_i64_s:
+  case OP_f64_convert_i64_u: ValidateUnaryOp<TE_i64, TE_f64>(values, env, m); break;
   case OP_f64_promote_f32: ValidateUnaryOp<TE_f32, TE_f64>(values, env, m); break;
 
     // Reinterpretations
@@ -759,24 +761,24 @@ varsint7 innative::ValidateInitializer(const Instruction& ins, Environment& env,
   case OP_i64_const: return TE_i64;
   case OP_f32_const: return TE_f32;
   case OP_f64_const: return TE_f64;
-  case OP_get_global:
+  case OP_global_get:
     if(!ModuleGlobal(*m, ins.immediates[0]._varuint32))
       AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid global index for get_global.");
     else if(ins.immediates[0]._varuint32 + m->importsection.memories < m->importsection.globals)
       return m->importsection.imports[ins.immediates[0]._varuint32 + m->importsection.memories].global_desc.type;
     else
-      AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER, "A get_global initializer must be an import.", ins.opcode);
+      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INITIALIZER, "A get_global initializer must be an import.", ins.opcode);
     return TE_i32;
   }
 
   AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER, "An initializer must be a get_global or const instruction, not %hhu", ins.opcode);
-  return TE_i32;
+  return TE_NONE;
 }
 
 void innative::ValidateGlobal(const GlobalDecl& decl, Environment& env, Module* m)
 {
   varsint7 type = ValidateInitializer(decl.init, env, m);
-  if(type != decl.desc.type)
+  if(type != TE_NONE && type != decl.desc.type)
     AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_TYPE, "The global initializer has type %hhi, must be the same as the description type %hhi.", type, decl.desc.type);
 }
 
@@ -820,7 +822,7 @@ varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env,
   {
   case OP_i32_const:
     return ins.immediates[0]._varsint32;
-  case OP_get_global:
+  case OP_global_get:
   {
     GlobalDecl* global = 0;
     size_t i = ins.immediates[0]._varsint32 + m->importsection.memories; // Shift index to globals section
@@ -843,8 +845,13 @@ varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env,
       return EvalInitializerI32(global->init, env, nullptr);
     break;
   }
-  default:
+  case OP_i64_const:
+  case OP_f32_const:
+  case OP_f64_const:
     AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER_TYPE, "Expected i32 type but got %hhu", ins.opcode);
+    break;
+  default:
+    break; // If this isn't even a valid instruction, don't bother emitting an error because it will be redundant.
   }
 
   return 0;
@@ -853,13 +860,13 @@ varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env,
 void innative::ValidateTableOffset(const TableInit& init, Environment& env, Module* m)
 {
   varsint7 type = ValidateInitializer(init.offset, env, m);
-  if(type != TE_i32)
+  if(type != TE_NONE && type != TE_i32)
     AppendError(env, env.errors, m, ERR_INVALID_TABLE_TYPE, "Expected table offset instruction type of i32, got %hhi instead.", type);
    
   TableDesc* table = ModuleTable(*m, init.index);
   if(!table)
     AppendError(env, env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", init.index);
-  else if(table->element_type == TE_anyfunc)
+  else if(table->element_type == TE_funcref)
   {
     if(type != TE_i32) // We cannot verify the offset if it's the wrong type
       return; 
@@ -903,6 +910,9 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
   Stack<internal::ControlBlock> control; // control-flow stack that must be closed by end instructions
   Stack<varsint7> values; // Current stack of value types
   varsint7 ret = TE_void;
+  if(sig.n_returns > 1) // This is already an invalid function so don't pollute the output with more errors.
+    return;
+
   if(sig.n_returns > 0)
     ret = sig.returns[0];
 
@@ -979,7 +989,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
 void innative::ValidateDataOffset(const DataInit& init, Environment& env, Module* m)
 {
   varsint7 type = ValidateInitializer(init.offset, env, m);
-  if(type != TE_i32)
+  if(type != TE_NONE && type != TE_i32)
     AppendError(env, env.errors, m, ERR_INVALID_MEMORY_TYPE, "Expected memory offset instruction type of i32, got %hhi instead.", type);
 
   MemoryDesc* memory = ModuleMemory(*m, init.index);
@@ -1094,7 +1104,6 @@ void innative::ValidateModule(Environment& env, Module& m)
   if(m.knownsections&(1 << WASM_SECTION_DATA))
     ValidateSection<DataInit, &ValidateDataOffset>(m.data.data, m.data.n_data, env, &m);
 }
-
 
 // Performs all post-load validation that couldn't be done during parsing
 void innative::ValidateEnvironment(Environment& env)

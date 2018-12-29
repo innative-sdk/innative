@@ -490,7 +490,7 @@ namespace innative {
       case OP_f64_const:
         err = ResolveTokenf64(tokens.Pop(), state.numbuf, op.immediates[0]._float64);
         break;
-      case OP_get_global: // For constant initializers, this has to be an import, and thus must always already exist by the time we reach it.
+      case OP_global_get: // For constant initializers, this has to be an import, and thus must always already exist by the time we reach it.
         op.immediates[0]._varuint32 = WatGetFromHash(state, state.globalhash, tokens.Pop());
         if(op.immediates[0]._varuint32 == (varuint32)~0)
           return assert(false), ERR_WAT_INVALID_VAR;
@@ -523,21 +523,21 @@ namespace innative {
         if(op.immediates[0]._varuint32 == (varuint32)~0)
           return ERR_WAT_EXPECTED_VAR;
         break;
-      case OP_get_local:
-      case OP_set_local:
-      case OP_tee_local:
+      case OP_local_get:
+      case OP_local_set:
+      case OP_local_tee:
         op.immediates[0]._varuint32 = WatGetLocal(state, f, sig, tokens.Pop());
         if(op.immediates[0]._varuint32 == (varuint32)~0)
           return ERR_WAT_INVALID_LOCAL;
         break;
-      case OP_get_global:
+      case OP_global_get:
         if(!sig.form) // If this is zero, this is an initializer
         {
           if(err = WatConstantOperator(state, tokens, op))
             return err;
           break;
         }
-      case OP_set_global:
+      case OP_global_set:
       case OP_call:
         defer = DeferWatAction{ op.opcode, tokens.Pop(), 0, 0 };
         break;
@@ -1060,9 +1060,9 @@ namespace innative {
       if(err = WatResizableLimits(state, t.resizable, tokens))
         return err;
 
-      EXPECTED(tokens, TOKEN_ANYFUNC, ERR_WAT_EXPECTED_ANYFUNC);
+      EXPECTED(tokens, TOKEN_FUNCREF, ERR_WAT_EXPECTED_FUNCREF);
 
-      t.element_type = TE_anyfunc;
+      t.element_type = TE_funcref;
       return ERR_SUCCESS;
     }
 
@@ -1085,9 +1085,9 @@ namespace innative {
           return err;
         break;
       default:
-        EXPECTED(tokens, TOKEN_ANYFUNC, ERR_WAT_EXPECTED_ANYFUNC);
+        EXPECTED(tokens, TOKEN_FUNCREF, ERR_WAT_EXPECTED_FUNCREF);
 
-        table.element_type = TE_anyfunc;
+        table.element_type = TE_funcref;
         table.resizable.flags = 0;
         state.defer.Push(DeferWatAction{ -TOKEN_ELEM, {TOKEN_NONE}, tokens.GetPosition(), *index });
         SkipSection(tokens); // Defer element section to after we know we've loaded everything.
@@ -1599,8 +1599,8 @@ namespace innative {
           tokens.SetPosition(cache);
         }
         break;
-        case OP_get_global:
-        case OP_set_global:
+        case OP_global_get:
+        case OP_global_set:
           err = procRef(state, m, WatGetFromHash(state, state.globalhash, state.defer[0].t));
           break;
         case OP_call:

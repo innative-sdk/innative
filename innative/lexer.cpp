@@ -18,7 +18,7 @@ namespace innative {
     KHASH_INIT(tokens, StringRef, WatTokenID, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
 
     template<int LEN>
-    inline kh_tokens_t* GenTokenHash(const char* (&list)[LEN])
+    inline kh_tokens_t* GenTokenHash(const char* (&list)[LEN], std::initializer_list<std::pair<const char*, int>> legacy)
     {
       kh_tokens_t* h = kh_init_tokens();
 
@@ -30,15 +30,21 @@ namespace innative {
         kh_val(h, iter) = ++count;
       }
 
+      for(auto& e : legacy)
+      {
+        auto iter = kh_put_tokens(h, StringRef{ e.first, strlen(e.first) }, &r);
+        kh_val(h, iter) = e.second;
+      }
+
       return h;
     }
 
     static const char* tokenlist[] = { "(", ")", "module", "import", "type", "start", "func", "table", "memory", "global", "export",
-      "data", "elem", "offset", "align", "local", "result", "param", "i32", "i64", "f32", "f64", "anyfunc", "mut", "block", "loop",
+      "data", "elem", "offset", "align", "local", "result", "param", "i32", "i64", "f32", "f64", "funcref", "mut", "block", "loop",
       "if", "then", "else", "end", /* script extensions */ "binary", "quote", "register", "invoke", "get", "assert_return",
       "assert_return_canonical_nan", "assert_return_arithmetic_nan", "assert_trap", "assert_malformed", "assert_invalid",
       "assert_unlinkable", "assert_exhaustion", "script", "input", "output" };
-    static const kh_tokens_t* tokenhash = GenTokenHash(tokenlist);
+    static const kh_tokens_t* tokenhash = GenTokenHash(tokenlist, { { "anyfunc", TOKEN_FUNCREF } });
 
     template<int LEN>
     inline const char* __getTokenString(WatTokenID token, const char* (&list)[LEN])
