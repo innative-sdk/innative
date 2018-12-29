@@ -175,6 +175,7 @@ int main(int argc, char *argv[])
       return -8;
     }
 
+#ifdef IR_PLATFORM_WIN32
     exports.CreateEnvironment = [](unsigned int modules, unsigned int maxthreads, const char* arg0) ->Environment* {
       Environment* env = (Environment*)calloc(1, sizeof(Environment));
       env->log = stdout;
@@ -219,6 +220,7 @@ int main(int argc, char *argv[])
     std::ifstream src("loader.exe", std::ios::binary);
     std::ofstream dst(out.c_str(), std::ios::binary);
     dst << src.rdbuf();
+#endif
   }
   else
     innative_runtime(&exports);
@@ -229,8 +231,10 @@ int main(int argc, char *argv[])
   env->features = ENV_FEATURE_ALL;
   env->optimize = (env->flags & ENV_DEBUG) ? 0 : ENV_OPTIMIZE_ALL;
 
+#ifdef IR_PLATFORM_WIN32
   if(generate)
     env->alloc = (__WASM_ALLOCATOR*)BeginUpdateResourceA(out.c_str(), TRUE);
+#endif
 
   if(!env)
   {
