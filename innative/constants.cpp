@@ -53,11 +53,11 @@ namespace innative {
       "RESERVED",              // 0x1f
 
       // Variable access
-      "get_local",             // 0x20
-      "set_local",             // 0x21
-      "tee_local",             // 0x22
-      "get_global",            // 0x23
-      "set_global",            // 0x24
+      "local.get",             // 0x20
+      "local.set",             // 0x21
+      "local.tee",             // 0x22
+      "global.get",            // 0x23
+      "global.set",            // 0x24
 
       "RESERVED",              // 0x25
       "RESERVED",              // 0x26
@@ -205,36 +205,36 @@ namespace innative {
       "f64.copysign",          // 0xa6
 
       // Conversions
-      "i32.wrap/i64",          // 0xa7
-      "i32.trunc_s/f32",       // 0xa8
-      "i32.trunc_u/f32",       // 0xa9
-      "i32.trunc_s/f64",       // 0xaa
-      "i32.trunc_u/f64",       // 0xab
+      "i32.wrap_i64",          // 0xa7
+      "i32.trunc_f32_s",       // 0xa8
+      "i32.trunc_f32_u",       // 0xa9
+      "i32.trunc_f64_s",       // 0xaa
+      "i32.trunc_f64_u",       // 0xab
 
-      "i64.extend_s/i32",      // 0xac
-      "i64.extend_u/i32",      // 0xad
-      "i64.trunc_s/f32",       // 0xae
-      "i64.trunc_u/f32",       // 0xaf
-      "i64.trunc_s/f64",       // 0xb0
-      "i64.trunc_u/f64",       // 0xb1
+      "i64.extend_i32_s",      // 0xac
+      "i64.extend_i32_u",      // 0xad
+      "i64.trunc_f32_s",       // 0xae
+      "i64.trunc_f32_u",       // 0xaf
+      "i64.trunc_f64_s",       // 0xb0
+      "i64.trunc_f64_u",       // 0xb1
 
-      "f32.convert_s/i32",     // 0xb2
-      "f32.convert_u/i32",     // 0xb3
-      "f32.convert_s/i64",     // 0xb4
-      "f32.convert_u/i64",     // 0xb5
-      "f32.demote/f64",        // 0xb6
+      "f32.convert_i32_s",     // 0xb2
+      "f32.convert_i32_u",     // 0xb3
+      "f32.convert_i64_s",     // 0xb4
+      "f32.convert_i64_u",     // 0xb5
+      "f32.demote_f64",        // 0xb6
 
-      "f64.convert_s/i32",     // 0xb7
-      "f64.convert_u/i32",     // 0xb8
-      "f64.convert_s/i64",     // 0xb9
-      "f64.convert_u/i64",     // 0xba
-      "f64.promote/f32",       // 0xbb
+      "f64.convert_i32_s",     // 0xb7
+      "f64.convert_i32_u",     // 0xb8
+      "f64.convert_i64_s",     // 0xb9
+      "f64.convert_i64_u",     // 0xba
+      "f64.promote_f32",       // 0xbb
 
       // Reinterpretations
-      "i32.reinterpret/f32",   // 0xbc
-      "i64.reinterpret/f64",   // 0xbd
-      "f32.reinterpret/i32",   // 0xbe
-      "f64.reinterpret/i64"    // 0xbf
+      "i32.reinterpret_f32",   // 0xbc
+      "i64.reinterpret_f64",   // 0xbd
+      "f32.reinterpret_i32",   // 0xbe
+      "f64.reinterpret_i64"    // 0xbf
     };
     int OPNAMECOUNT = sizeof(OPNAMES) / sizeof(const char*);
   }

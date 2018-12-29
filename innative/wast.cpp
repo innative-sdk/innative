@@ -87,7 +87,7 @@ namespace innative {
       ERR_INVALID_TABLE_INDEX,
       ERR_WAT_INVALID_NUMBER,
       ERR_WAT_INVALID_TOKEN,
-      ERR_INVALID_INITIALIZER,
+      ERR_INVALID_GLOBAL_INITIALIZER,
       ERR_INVALID_INITIALIZER_TYPE,
       ERR_INVALID_GLOBAL_TYPE,
       ERR_INVALID_TABLE_TYPE,
@@ -116,6 +116,8 @@ namespace innative {
       ERR_INVALID_LIMITS,
       ERR_MEMORY_MAXIMUM_TOO_LARGE,
       ERR_MEMORY_MINIMUM_TOO_LARGE,
+      ERR_INVALID_INITIALIZER,
+      ERR_EMPTY_IMPORT,
       },
 {
   "alignment",
@@ -152,7 +154,7 @@ namespace innative {
   "unknown table",
   "unknown operator",
   "unknown operator",
-  "constant expression required",
+  "unknown global",
   "type mismatch",
   "type mismatch",
   "type mismatch",
@@ -181,6 +183,8 @@ namespace innative {
   "size minimum must not be greater than maximum",
   "memory size must be at most 65536 pages (4GiB)",
   "memory size must be at most 65536 pages (4GiB)",
+  "constant expression required",
+  "unknown import",
 });
 
     kh_stringmap_t* GenWastStringMap(std::initializer_list<const char*> map)
@@ -269,7 +273,7 @@ int IsolateInitCall(Environment& env, void*& cache, Path& cachepath)
   if(env.wasthook != nullptr)
     (*env.wasthook)(cache);
 
-  auto entry = LoadFunction(cache, 0, 0);
+  auto entry = LoadFunction(cache, 0, IR_INIT_FUNCTION);
 
   if(!entry)
     return ERR_RUNTIME_INIT_ERROR;
@@ -603,7 +607,7 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
     if(cache_err != 0)
       return cache_err;
     assert(cache);
-    void* f = reinterpret_cast<void*>(LoadFunction(cache, m->name.str(), func.str()));
+    void* f = reinterpret_cast<void*>(LoadDLLFunction(cache, utility::CanonicalName(StringRef::From(m->name), StringRef::From(func)).c_str()));
     if(!f)
       return ERR_INVALID_FUNCTION_INDEX;
 

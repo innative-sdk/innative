@@ -37,7 +37,7 @@ namespace innative {
       TOKEN_i64,
       TOKEN_f32,
       TOKEN_f64,
-      TOKEN_ANYFUNC,
+      TOKEN_FUNCREF,
       TOKEN_MUT,
       TOKEN_BLOCK,
       TOKEN_LOOP,

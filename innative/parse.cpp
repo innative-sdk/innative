@@ -241,11 +241,11 @@ IR_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
     break;
   case OP_br:
   case OP_br_if:
-  case OP_get_local:
-  case OP_set_local:
-  case OP_tee_local:
-  case OP_get_global:
-  case OP_set_global:
+  case OP_local_get:
+  case OP_local_set:
+  case OP_local_tee:
+  case OP_global_get:
+  case OP_global_set:
   case OP_call:
     ins.immediates[0]._varuint32 = s.ReadVarUInt32(err);
     break;
@@ -420,25 +420,25 @@ IR_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_f64_max:
   case OP_f64_copysign:
   case OP_i32_wrap_i64:
-  case OP_i32_trunc_s_f32:
-  case OP_i32_trunc_u_f32:
-  case OP_i32_trunc_s_f64:
-  case OP_i32_trunc_u_f64:
-  case OP_i64_extend_s_i32:
-  case OP_i64_extend_u_i32:
-  case OP_i64_trunc_s_f32:
-  case OP_i64_trunc_u_f32:
-  case OP_i64_trunc_s_f64:
-  case OP_i64_trunc_u_f64:
-  case OP_f32_convert_s_i32:
-  case OP_f32_convert_u_i32:
-  case OP_f32_convert_s_i64:
-  case OP_f32_convert_u_i64:
+  case OP_i32_trunc_f32_s:
+  case OP_i32_trunc_f32_u:
+  case OP_i32_trunc_f64_s:
+  case OP_i32_trunc_f64_u:
+  case OP_i64_extend_i32_s:
+  case OP_i64_extend_i32_u:
+  case OP_i64_trunc_f32_s:
+  case OP_i64_trunc_f32_u:
+  case OP_i64_trunc_f64_s:
+  case OP_i64_trunc_f64_u:
+  case OP_f32_convert_i32_s:
+  case OP_f32_convert_i32_u:
+  case OP_f32_convert_i64_s:
+  case OP_f32_convert_i64_u:
   case OP_f32_demote_f64:
-  case OP_f64_convert_s_i32:
-  case OP_f64_convert_u_i32:
-  case OP_f64_convert_s_i64:
-  case OP_f64_convert_u_i64:
+  case OP_f64_convert_i32_s:
+  case OP_f64_convert_i32_u:
+  case OP_f64_convert_i64_s:
+  case OP_f64_convert_i64_u:
   case OP_f64_promote_f32:
   case OP_i32_reinterpret_f32:
   case OP_i64_reinterpret_f64:
@@ -464,7 +464,7 @@ IR_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const E
     TableDesc* desc = ModuleTable(m, init.index);
     if(!desc)
       err = ERR_INVALID_TABLE_INDEX;
-    else if(desc->element_type == TE_anyfunc)
+    else if(desc->element_type == TE_funcref)
       err = Parse<varuint32>::template Array<&ParseVarUInt32>(s, init.elements, init.n_elements, env);
     else
       err = ERR_FATAL_BAD_ELEMENT_TYPE;

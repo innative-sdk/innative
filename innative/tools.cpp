@@ -203,10 +203,9 @@ enum IR_ERROR innative::Compile(Environment* env, const char* file)
 
   return CompileEnvironment(env, file);
 }
-
 IR_Entrypoint innative::LoadFunction(void* cache, const char* module_name, const char* function)
 {
-  return (IR_Entrypoint)LoadDLLFunction(cache, !function ? IR_INIT_FUNCTION : utility::CanonicalName(module_name, function).c_str());
+  return (IR_Entrypoint)LoadDLLFunction(cache, !function ? IR_INIT_FUNCTION : utility::CanonicalName(StringRef::From(module_name), StringRef::From(function)).c_str());
 }
 
 struct IR_TABLE
@@ -217,13 +216,13 @@ struct IR_TABLE
 
 IR_Entrypoint innative::LoadTable(void* cache, const char* module_name, const char* table, varuint32 index)
 {
-  IR_TABLE* ref = (IR_TABLE*)LoadDLLFunction(cache, utility::CanonicalName(module_name, table).c_str());
+  IR_TABLE* ref = (IR_TABLE*)LoadDLLFunction(cache, utility::CanonicalName(StringRef::From(module_name), StringRef::From(table)).c_str());
   return !ref ? nullptr : ref[index].func;
 }
 
 IRGlobal* innative::LoadGlobal(void* cache, const char* module_name, const char* export_name)
 {
-  return (IRGlobal*)LoadDLLFunction(cache, utility::CanonicalName(module_name, export_name).c_str());
+  return (IRGlobal*)LoadDLLFunction(cache, utility::CanonicalName(StringRef::From(module_name), StringRef::From(export_name)).c_str());
 }
 
 void* innative::LoadAssembly(const char* file)

@@ -48,7 +48,7 @@ llvmTy* GetLLVMType(varsint7 type, code::Context& context)
   case TE_f32: return llvmTy::getFloatTy(context.context);
   case TE_f64: return llvmTy::getDoubleTy(context.context);
   case TE_void: return llvmTy::getVoidTy(context.context);
-  case TE_anyfunc: return FuncTy::get(llvmTy::getVoidTy(context.context), false)->getPointerTo(0); // placeholder (*void)() function pointer
+  case TE_funcref: return FuncTy::get(llvmTy::getVoidTy(context.context), false)->getPointerTo(0); // placeholder (*void)() function pointer
   }
 
   assert(false);
@@ -1150,31 +1150,31 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
     return CompileSelectOp(context, OPNAMES[ins.opcode], nullptr);
 
     // Variable access
-  case OP_get_local:
+  case OP_local_get:
     if(ins.immediates[0]._varuint32 >= context.locals.size())
       return assert(false), ERR_INVALID_LOCAL_INDEX;
     PushReturn(context, context.builder.CreateLoad(context.locals[ins.immediates[0]._varuint32]));
     return ERR_SUCCESS;
-  case OP_set_local:
-  case OP_tee_local:
+  case OP_local_set:
+  case OP_local_tee:
   {
     if(ins.immediates[0]._varuint32 >= context.locals.size())
       return assert(false), ERR_INVALID_LOCAL_INDEX;
     if(context.values.Size() < 1)
       return assert(false), ERR_INVALID_VALUE_STACK;
     context.builder.CreateStore(!context.values.Peek() ? llvm::Constant::getAllOnesValue(context.locals[ins.immediates[0]._varuint32]->getType()->getElementType()) : context.values.Peek(), context.locals[ins.immediates[0]._varuint32]);
-    if(context.values.Peek() != nullptr && ins.opcode == OP_set_local) // tee_local is the same as set_local except the operand isn't popped
+    if(context.values.Peek() != nullptr && ins.opcode == OP_local_set) // tee_local is the same as set_local except the operand isn't popped
       context.values.Pop();
     return ERR_SUCCESS;
   }
-  case OP_set_global:
+  case OP_global_set:
     if(ins.immediates[0]._varuint32 >= context.globals.size())
       return assert(false), ERR_INVALID_GLOBAL_INDEX;
     if(context.values.Size() < 1)
       return assert(false), ERR_INVALID_VALUE_STACK;
     context.builder.CreateStore(!context.values.Peek() ? llvm::Constant::getAllOnesValue(context.globals[ins.immediates[0]._varuint32]->getType()->getElementType()) : context.values.Pop(), context.globals[ins.immediates[0]._varuint32]);
     return ERR_SUCCESS;
-  case OP_get_global:
+  case OP_global_get:
     if(ins.immediates[0]._varuint32 >= context.globals.size())
       return ERR_INVALID_GLOBAL_INDEX;
     PushReturn(context, context.builder.CreateLoad(context.globals[ins.immediates[0]._varuint32]));
@@ -1449,51 +1449,51 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
     // Conversions
   case OP_i32_wrap_i64:
     return CompileUnaryOp<TE_i64, TE_i32, llvmTy*, bool, const Twine&>(context, &llvm::IRBuilder<>::CreateIntCast, context.builder.getInt32Ty(), true, OPNAMES[ins.opcode]);
-  case OP_i32_trunc_s_f32: // These truncation values are specifically picked to be the largest representable 32-bit floating point value that can be safely converted.
+  case OP_i32_trunc_f32_s: // These truncation values are specifically picked to be the largest representable 32-bit floating point value that can be safely converted.
     InsertTruncTrap(context, 2147483520.0, -2147483650.0, context.builder.getFloatTy());
     return CompileUnaryOp<TE_f32, TE_i32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToSI, context.builder.getInt32Ty(), OPNAMES[ins.opcode]);
-  case OP_i32_trunc_u_f32: // This is truncation, so values of up to -0.999999... are actually valid unsigned integers because they are truncated to 0
+  case OP_i32_trunc_f32_u: // This is truncation, so values of up to -0.999999... are actually valid unsigned integers because they are truncated to 0
     InsertTruncTrap(context, 4294967040.0, -0.999999940, context.builder.getFloatTy());
     return CompileUnaryOp<TE_f32, TE_i32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToUI, context.builder.getInt32Ty(), OPNAMES[ins.opcode]);
-  case OP_i32_trunc_s_f64: // Doubles can exactly represent 32-bit integers, so the real values are used
+  case OP_i32_trunc_f64_s: // Doubles can exactly represent 32-bit integers, so the real values are used
     InsertTruncTrap(context, 2147483647.0, -2147483648.0, context.builder.getDoubleTy());
     return CompileUnaryOp<TE_f64, TE_i32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToSI, context.builder.getInt32Ty(), OPNAMES[ins.opcode]);
-  case OP_i32_trunc_u_f64:
+  case OP_i32_trunc_f64_u:
     InsertTruncTrap(context, 4294967295.0, -0.99999999999999989, context.builder.getDoubleTy());
     return CompileUnaryOp<TE_f64, TE_i32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToUI, context.builder.getInt32Ty(), OPNAMES[ins.opcode]);
-  case OP_i64_extend_s_i32:
+  case OP_i64_extend_i32_s:
     return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const Twine&>(context, &llvm::IRBuilder<>::CreateIntCast, context.builder.getInt64Ty(), true, OPNAMES[ins.opcode]);
-  case OP_i64_extend_u_i32:
+  case OP_i64_extend_i32_u:
     return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const Twine&>(context, &llvm::IRBuilder<>::CreateIntCast, context.builder.getInt64Ty(), false, OPNAMES[ins.opcode]);
-  case OP_i64_trunc_s_f32:
+  case OP_i64_trunc_f32_s:
     InsertTruncTrap(context, 9223371490000000000.0, -9223372040000000000.0, context.builder.getFloatTy());
     return CompileUnaryOp<TE_f32, TE_i64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToSI, context.builder.getInt64Ty(), OPNAMES[ins.opcode]);
-  case OP_i64_trunc_u_f32:
+  case OP_i64_trunc_f32_u:
     InsertTruncTrap(context, 18446743000000000000.0, -0.999999940, context.builder.getFloatTy());
     return CompileUnaryOp<TE_f32, TE_i64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToUI, context.builder.getInt64Ty(), OPNAMES[ins.opcode]);
-  case OP_i64_trunc_s_f64: // Largest representable 64-bit floating point values that can be safely converted
+  case OP_i64_trunc_f64_s: // Largest representable 64-bit floating point values that can be safely converted
     InsertTruncTrap(context, 9223372036854774800.0, -9223372036854775800.0, context.builder.getDoubleTy());
     return CompileUnaryOp<TE_f64, TE_i64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToSI, context.builder.getInt64Ty(), OPNAMES[ins.opcode]);
-  case OP_i64_trunc_u_f64:
+  case OP_i64_trunc_f64_u:
     InsertTruncTrap(context, 18446744073709550000.0, -0.99999999999999989, context.builder.getDoubleTy());
     return CompileUnaryOp<TE_f64, TE_i64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPToUI, context.builder.getInt64Ty(), OPNAMES[ins.opcode]);
-  case OP_f32_convert_s_i32:
+  case OP_f32_convert_i32_s:
     return CompileUnaryOp<TE_i32, TE_f32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateSIToFP, context.builder.getFloatTy(), OPNAMES[ins.opcode]);
-  case OP_f32_convert_u_i32:
+  case OP_f32_convert_i32_u:
     return CompileUnaryOp<TE_i32, TE_f32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateUIToFP, context.builder.getFloatTy(), OPNAMES[ins.opcode]);
-  case OP_f32_convert_s_i64:
+  case OP_f32_convert_i64_s:
     return CompileUnaryOp<TE_i64, TE_f32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateSIToFP, context.builder.getFloatTy(), OPNAMES[ins.opcode]);
-  case OP_f32_convert_u_i64:
+  case OP_f32_convert_i64_u:
     return CompileUnaryOp<TE_i64, TE_f32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateUIToFP, context.builder.getFloatTy(), OPNAMES[ins.opcode]);
   case OP_f32_demote_f64:
     return CompileUnaryOp<TE_f64, TE_f32, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPTrunc, context.builder.getFloatTy(), OPNAMES[ins.opcode]);
-  case OP_f64_convert_s_i32:
+  case OP_f64_convert_i32_s:
     return CompileUnaryOp<TE_i32, TE_f64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateSIToFP, context.builder.getDoubleTy(), OPNAMES[ins.opcode]);
-  case OP_f64_convert_u_i32:
+  case OP_f64_convert_i32_u:
     return CompileUnaryOp<TE_i32, TE_f64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateUIToFP, context.builder.getDoubleTy(), OPNAMES[ins.opcode]);
-  case OP_f64_convert_s_i64:
+  case OP_f64_convert_i64_s:
     return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateSIToFP, context.builder.getDoubleTy(), OPNAMES[ins.opcode]);
-  case OP_f64_convert_u_i64:
+  case OP_f64_convert_i64_u:
     return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateUIToFP, context.builder.getDoubleTy(), OPNAMES[ins.opcode]);
   case OP_f64_promote_f32:
     return CompileUnaryOp<TE_f32, TE_f64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateFPExt, context.builder.getDoubleTy(), OPNAMES[ins.opcode]);
@@ -1676,7 +1676,7 @@ IR_ERROR CompileInitGlobal(Module& m, varuint32 index, code::Context& context, l
 
 IR_ERROR CompileInitConstant(Instruction& instruction, Module& m, code::Context& context, llvm::Constant*& out)
 {
-  if(instruction.opcode == OP_get_global)
+  if(instruction.opcode == OP_global_get)
     return CompileInitGlobal(m, instruction.immediates[0]._varuint32, context, out);
   return CompileConstant(instruction, context, out);
 }
@@ -1772,7 +1772,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   }
 
   // Define a unique init function for performing module initialization
-  context.init = TopLevelFunction(context.context, context.builder, CanonicalName(context.m.name.str(), "innative_internal_init").c_str(), context.llvm);
+  context.init = TopLevelFunction(context.context, context.builder, CanonicalName(StringRef::From(context.m.name), StringRef::From("innative_internal_init")).c_str(), context.llvm);
 
   llvm::DILocation* baselocation = 0;
 
@@ -1979,7 +1979,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       type,
       false,
       false,
-      CanonicalName(context.m.name.str(), "table#", i),
+      CanonicalName(StringRef::From(context.m.name), StringRef::From("table#"), i),
       context.m.table.tables[i].debug.line,
       llvm::ConstantPointerNull::get(type)));
 
@@ -2006,7 +2006,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     auto type = context.builder.getInt8PtrTy(0);
     auto sz = context.builder.getInt64(((uint64_t)mem.limits.minimum) << 16);
     auto max = context.builder.getInt64(((mem.limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? ((uint64_t)mem.limits.maximum) : 0x10000ULL) << 16);
-    context.memories.push_back(CreateGlobal(context, type, false, false, CanonicalName(context.m.name.str(), "linearmemory#", i), mem.debug.line, llvm::ConstantPointerNull::get(type)));
+    context.memories.push_back(CreateGlobal(context, type, false, false, CanonicalName(StringRef::From(context.m.name), StringRef::From("linearmemory#"), i), mem.debug.line, llvm::ConstantPointerNull::get(type)));
     context.memories.back()->setMetadata(IR_MEMORY_MAX_METADATA, llvm::MDNode::get(context.context, { llvm::ConstantAsMetadata::get(max) }));
 
     CallInst* call = context.builder.CreateCall(context.memgrow, { llvm::ConstantPointerNull::get(type), sz, max });
@@ -2028,7 +2028,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       GetLLVMType(context.m.global.globals[i].desc.type, context),
       !context.m.global.globals[i].desc.mutability,
       false,
-      CanonicalName(context.m.name.str(), "globalvariable#", i),
+      CanonicalName(StringRef::From(context.m.name), StringRef::From("globalvariable#"), i),
       context.m.global.globals[i].desc.debug.line,
       init));
   }
@@ -2041,7 +2041,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   {
     DataInit& d = context.m.data.data[i]; // First we declare a constant array that stores the data in the EXE
     auto data = llvm::ConstantDataArray::get(context.context, llvm::makeArrayRef<uint8_t>(d.data.get(), d.data.get() + d.data.size()));
-    auto val = new llvm::GlobalVariable(*context.llvm, data->getType(), true, llvm::GlobalValue::LinkageTypes::PrivateLinkage, data, CanonicalName(0, "data", i));
+    auto val = new llvm::GlobalVariable(*context.llvm, data->getType(), true, llvm::GlobalValue::LinkageTypes::PrivateLinkage, data, CanonicalName(StringRef{ 0,0 }, StringRef::From("data"), i));
     GenGlobalDebugInfo(val, context, 0);
 
     llvm::Constant* offset;
@@ -2065,9 +2065,9 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     if(!t)
       return assert(false), ERR_INVALID_TABLE_INDEX;
 
-    if(t->element_type == TE_anyfunc)
+    if(t->element_type == TE_funcref)
     {
-      llvmTy* target = GetLLVMType(TE_anyfunc, context);
+      llvmTy* target = GetLLVMType(TE_funcref, context);
       llvm::Constant* offset;
       if(err = CompileInitConstant(e.offset, context.m, context, offset))
         return err;
@@ -2096,7 +2096,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   context.builder.CreateRetVoid();
 
   // Create cleanup function
-  context.exit = TopLevelFunction(context.context, context.builder, CanonicalName(context.m.name.str(), "innative_internal_exit").c_str(), context.llvm);
+  context.exit = TopLevelFunction(context.context, context.builder, CanonicalName(StringRef::From(context.m.name), StringRef::From("innative_internal_exit")).c_str(), context.llvm);
 
   if(context.dbuilder)
   {
@@ -2195,7 +2195,7 @@ void ResolveModuleExports(const Environment* env, llvm::LLVMContext& llvm_contex
       Module* m = &context[i].m;
 
       // Calculate the canonical name we wish to export as using the initial export object
-      auto canonical = CanonicalName(context[i].m.name.str(), e->name.str());
+      auto canonical = CanonicalName(StringRef::From(context[i].m.name), StringRef::From(e->name));
 
       // Resolve the export/module pair to the concrete source
       for(;;)
