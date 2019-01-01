@@ -352,7 +352,7 @@ IR_ERROR CompileBinaryIntrinsic(code::Context& context, llvm::Intrinsic::ID id, 
   if(err = PopType(Ty1, context, val1))
     return assert(false), err;
 
-  return PushReturn(context, context.builder.CreateBinaryIntrinsic(id, val1, val2, nullptr, name));
+  return PushReturn(context, context.builder.CreateBinaryIntrinsic(id, val1, val2, name));
 }
 
 // Given a function pointer to the appropriate builder function, pops one unary argument off the stack and pushes the result
@@ -1108,7 +1108,7 @@ IR_ERROR CompileFloatCmp(code::Context& context, llvm::Intrinsic::ID id, const T
 
   // WASM requires we return an NaN if either operand is NaN
   auto nancheck = context.builder.CreateFCmpUNO(val1, val2);
-  auto compare = context.builder.CreateBinaryIntrinsic(id, val1, val2, nullptr, name);
+  auto compare = context.builder.CreateBinaryIntrinsic(id, val1, val2, name);
   return PushReturn(context, context.builder.CreateSelect(nancheck, llvm::ConstantFP::getNaN(val1->getType()), compare));
 }
 
