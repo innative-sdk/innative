@@ -409,6 +409,7 @@ enum IR_ERROR
   ERR_WAT_OUT_OF_RANGE,
   ERR_WAT_BAD_ESCAPE,
   ERR_WAT_DUPLICATE_NAME,
+  ERR_WAT_PARAM_AFTER_RESULT,
 
   // Runtime errors
   ERR_RUNTIME_INIT_ERROR = -0xFFFFFF,
@@ -449,19 +450,14 @@ enum WASM_OPTIMIZE_FLAGS
   ENV_OPTIMIZE_FAST_MATH_AFN = (1 << 5),
   ENV_OPTIMIZE_FAST_MATH_REASSOC = (1 << 6),
   ENV_OPTIMIZE_FAST_MATH = ENV_OPTIMIZE_FAST_MATH_NNAN | ENV_OPTIMIZE_FAST_MATH_NINF | ENV_OPTIMIZE_FAST_MATH_NSZ | ENV_OPTIMIZE_FAST_MATH_ARCP | ENV_OPTIMIZE_FAST_MATH_CONTRACT | ENV_OPTIMIZE_FAST_MATH_AFN | ENV_OPTIMIZE_FAST_MATH_REASSOC,
-  ENV_OPTIMIZE_ALWAYS_INLINE = (1 << 7),
-  ENV_OPTIMIZE_ARG_PROMOTION = (1 << 8),
-  ENV_OPTIMIZE_VECTORIZE = (1 << 9),
-  ENV_OPTIMIZE_CONST_MERGE = (1 << 10),
-  ENV_OPTIMIZE_CONST_PROP = (1 << 11),
-  ENV_OPTIMIZE_DCE = (1 << 12), // Dead code elimination
-  ENV_OPTIMIZE_DAE = (1 << 13), // Dead argument elimination
-  ENV_OPTIMIZE_DTE = (1 << 14), // Dead type elimination
-  ENV_OPTIMIZE_DIE = (1 << 15), // Dead instruction elimination
-  ENV_OPTIMIZE_DSE = (1 << 16), // Dead store elimination
-  ENV_OPTIMIZE_DGE = (1 << 17), // Dead global elimination
-  ENV_OPTIMIZE_STRICT = 0, // Only performs optimizations that cannot invalidate the standard
-  ENV_OPTIMIZE_ALL = ~0, // Performs all optimizations, but will never compromise the sandbox.
+  ENV_OPTIMIZE_O0 = 0, // no optimization
+  ENV_OPTIMIZE_O1 = (1 << 8), // some optimization
+  ENV_OPTIMIZE_O2 = (2 << 8), // more optimization
+  ENV_OPTIMIZE_O3 = (3 << 8), // all the optimization
+  ENV_OPTIMIZE_Os = (4 << 8), // minimize code size
+  ENV_OPTIMIZE_OMASK = (7 << 8), 
+  ENV_OPTIMIZE_STRICT = ENV_OPTIMIZE_O3, // Only performs optimizations that cannot invalidate the standard
+  ENV_OPTIMIZE_ALL = ENV_OPTIMIZE_O3 | ENV_OPTIMIZE_FAST_MATH, // Performs all optimizations, but will never compromise the sandbox.
 };
 
 enum WASM_FEATURE_FLAGS

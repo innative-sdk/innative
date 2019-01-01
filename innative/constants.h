@@ -18,6 +18,7 @@ namespace innative {
     extern const char* IR_ENV_EXTENSION;
     extern const char* IR_GLUE_STRING;
     extern const char* IR_MEMORY_MAX_METADATA;
+    extern const char* IR_TEMP_PREFIX;
 
     extern int OPNAMECOUNT;
     extern const char OPNAMES[][20];

@@ -32,7 +32,7 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
 
     env->capacity = modules;
     env->flags = ENV_SANDBOX;
-    env->optimize = ENV_OPTIMIZE_ALL;
+    env->optimize = ENV_OPTIMIZE_O3;
     env->features = ENV_FEATURE_ALL;
     env->maxthreads = maxthreads;
     env->linker = 0;

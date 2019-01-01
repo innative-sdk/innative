@@ -254,7 +254,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
       PushIdentifierToken(tokens, imp.export_name);
 
       tokens.Push(WatToken{ TOKEN_OPEN });
-      int index = i;
+      varuint32 index = i;
 
       switch(imp.kind)
       {

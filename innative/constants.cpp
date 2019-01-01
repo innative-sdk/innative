@@ -10,6 +10,7 @@ namespace innative {
     const char* IR_ENV_EXTENSION = ".ir-env-cache";
     const char* IR_GLUE_STRING = "_WASM_";
     const char* IR_MEMORY_MAX_METADATA = "__IR_MEMORY_MAX_METADATA";
+    const char* IR_TEMP_PREFIX = "wast_m";
     
     const char OPNAMES[][20] = {
       // Control flow operators
