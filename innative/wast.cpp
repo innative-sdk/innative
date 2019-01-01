@@ -118,6 +118,7 @@ namespace innative {
       ERR_MEMORY_MINIMUM_TOO_LARGE,
       ERR_INVALID_INITIALIZER,
       ERR_EMPTY_IMPORT,
+      ERR_WAT_PARAM_AFTER_RESULT,
       },
 {
   "alignment",
@@ -185,6 +186,7 @@ namespace innative {
   "memory size must be at most 65536 pages (4GiB)",
   "constant expression required",
   "unknown import",
+  "unexpected token",
 });
 
     kh_stringmap_t* GenWastStringMap(std::initializer_list<const char*> map)
@@ -212,6 +214,8 @@ namespace innative {
         "import after global", "invalid import order",
         "import after table", "invalid import order",
         "import after memory", "invalid import order",
+        "result before parameter", "unexpected token",
+
       });
 
     size_t GetWastMapping(kh_indexname_t* mapping, const WatToken& t)
@@ -310,7 +314,7 @@ void SetTempName(Environment& env, Module& m)
 {
   static std::atomic_size_t modcount(1); // We can't use n_modules in case a module is malformed
 
-  auto buf = std::string("m") + std::to_string(modcount.fetch_add(1, std::memory_order::memory_order_relaxed));
+  auto buf = std::string(IR_TEMP_PREFIX) + std::to_string(modcount.fetch_add(1, std::memory_order::memory_order_relaxed));
   m.name.resize(buf.size(), true, env);
   tmemcpy((char*)m.name.get(), m.name.size(), buf.data(), buf.size());
 }
@@ -321,7 +325,7 @@ int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
   int err;
   WatToken name = { TOKEN_NONE };
   m = { 0 }; // We have to ensure this is zeroed, because an error could occur before ParseModule is called
-  std::string tempname("m");
+  std::string tempname(IR_TEMP_PREFIX);
   tempname += std::to_string(env.n_modules);
 
   if(tokens[0].id == TOKEN_BINARY || (tokens.Size() > 1 && tokens[1].id == TOKEN_BINARY))
@@ -979,12 +983,20 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
       if(!env.errors) // Only do additional validation if we didn't find validation errors during the parsing process that must trump our normal validation
         ValidateModule(env, m);
       code = ERR_SUCCESS;
-      if(env.errors)
+
+      while(env.errors)
+      {
         code = env.errors->code;
-      assertcode = GetAssertionString(code);
-      env.errors = 0;
-      if(STRICMP(assertcode.c_str(), MapAssertionString(error.str())))
+        assertcode = GetAssertionString(code);
+        if(!STRICMP(assertcode.c_str(), MapAssertionString(error.str())))
+          break;
+        env.errors = env.errors->next;
+      }
+
+      if(!env.errors)
         AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead", WatLineNumber(start, t.pos), error.str(), assertcode.c_str());
+      else
+        env.errors = 0;
       break;
     }
     case TOKEN_SCRIPT:
@@ -1001,7 +1013,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
       // If we get an unexpected token, try to parse it as an inline module
       WatToken t = WatToken{ TOKEN_NONE };
       env.modules = trealloc<Module>(env.modules, ++env.n_modules);
-      auto name = "m" + std::to_string(env.n_modules);
+      auto name = IR_TEMP_PREFIX + std::to_string(env.n_modules);
 
       last = &env.modules[env.n_modules - 1];
       tokens.SetPosition(tokens.GetPosition() - 1); // Recover the '('

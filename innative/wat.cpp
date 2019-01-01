@@ -278,7 +278,7 @@ namespace innative {
 
       // We detect this special case because otherwise it can turn into a "type mismatch" error, which is very confusing
       if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_PARAM)
-        return ERR_WAT_EXPECTED_OPERATOR;
+        return ERR_WAT_PARAM_AFTER_RESULT;
       return ERR_SUCCESS;
     }
 

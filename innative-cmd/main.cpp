@@ -37,8 +37,17 @@ static const std::unordered_map<std::string, unsigned int> flag_map = {
   { "library", ENV_LIBRARY },
   { "wat", ENV_ENABLE_WAT },
   { "llvm", ENV_EMIT_LLVM },
-  { "noinit", ENV_NO_INIT },
   { "homogenize", ENV_HOMOGENIZE_FUNCTIONS },
+  { "noinit", ENV_NO_INIT },
+};
+
+static const std::unordered_map<std::string, unsigned int> optimize_map = {
+  { "o0", ENV_OPTIMIZE_O0 },
+  { "o1", ENV_OPTIMIZE_O1 },
+  { "o2", ENV_OPTIMIZE_O2 },
+  { "o3", ENV_OPTIMIZE_O3 },
+  { "os", ENV_OPTIMIZE_Os },
+  { "fastmath", ENV_OPTIMIZE_FAST_MATH },
 };
 
 void usage()
@@ -48,6 +57,8 @@ void usage()
     "  -f : Set a supported flag to true. Flags:\n";
  
   for(auto& f : flag_map)
+    std::cout << "         " << f.first << "\n";
+  for(auto& f : optimize_map)
     std::cout << "         " << f.first << "\n";
 
   std::cout << "\n"
@@ -68,7 +79,8 @@ int main(int argc, char *argv[])
   std::vector<const char*> inputs;
   std::vector<const char*> embeddings;
   std::vector<const char*> whitelist;
-  unsigned int flags = ENV_ENABLE_WAT; // Always enable WAT 
+  unsigned int flags = ENV_ENABLE_WAT; // Always enable WAT
+  unsigned int optimize = 0;
   std::string out;
   std::vector<const char*> wast; // WAST files will be executed in the order they are specified, after all other modules are injected into the environment
   const char* sdkpath = 0;
@@ -95,8 +107,15 @@ int main(int argc, char *argv[])
         auto flag = flag_map.find(raw);
         if(flag == flag_map.end())
         {
-          std::cout << "Unknown flag: " << argv[i] + 2 << std::endl;
-          err = -4;
+          flag = optimize_map.find(raw);
+
+          if(flag == optimize_map.end())
+          {
+            std::cout << "Unknown flag: " << argv[i] + 2 << std::endl;
+            err = -4;
+          }
+          else
+            optimize |= flag->second;
         }
         else
           flags |= flag->second;
@@ -229,7 +248,7 @@ int main(int argc, char *argv[])
   Environment* env = (*exports.CreateEnvironment)(inputs.size(), 0, (!argc ? 0 : argv[0]));
   env->flags = flags;
   env->features = ENV_FEATURE_ALL;
-  env->optimize = (env->flags & ENV_DEBUG) ? 0 : ENV_OPTIMIZE_ALL;
+  env->optimize = optimize;
 
 #ifdef IR_PLATFORM_WIN32
   if(generate)

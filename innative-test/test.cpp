@@ -115,16 +115,17 @@ int main(int argc, char *argv[])
     }
   }
 
+  testfiles.erase(testfiles.begin(), testfiles.begin() + 25);
   std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
 
   for(auto file : testfiles)
   {
     Environment* env = (*exports.CreateEnvironment)(1, 0, (!argc ? 0 : argv[0]));
     env->flags = ENV_LIBRARY | ENV_DEBUG | ENV_EMIT_LLVM | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS;
-    env->optimize = 0;
+    env->optimize = ENV_OPTIMIZE_O3;
     env->features = ENV_FEATURE_ALL;
     env->log = stdout;
-    //env->loglevel = LOG_DEBUG;
+    env->loglevel = LOG_WARNING;
     env->wasthook = [](void*) { fputc('.', stdout); fflush(stdout); };
     int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
 

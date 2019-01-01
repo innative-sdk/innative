@@ -433,7 +433,7 @@ namespace innative {
       if(!Win32SetKey(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH, L"UseExecutableForTaskbarGroupIcon", L""))
         return false;
 
-      auto cmdline = L'"' + std::wstring(exe.get()) + L"\" \"%1\"";
+      auto cmdline = L'"' + std::wstring(exe.get()) + L"\" \"%1\" -r -fo3";
       if(!Win32SetKey(HKEY_CURRENT_USER, IR_WIN32_CLASSPATH L"\\shell\\open\\command", nullptr, cmdline.c_str()))
         return false;
 
