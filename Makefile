@@ -27,7 +27,7 @@ clean: innative-env-clean innative-clean innative-cmd-clean innative-test-clean
 	$(RM) -r $(BINDIR)
 	$(RM) -r $(OBJDIR)
 
-install:
+install: all
 	mkdir -p $(DESTDIR)$(PREFIX)/include/innative/
 	mkdir -p $(DESTDIR)$(PREFIX)/lib
 	cp include/innative/*.h $(DESTDIR)$(PREFIX)/include/innative/
