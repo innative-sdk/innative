@@ -10,12 +10,12 @@ CXX   ?= g++
 CXXLD ?= $(CXX)
 
 # Compiler flags
-CPPFLAGS := $(CPPFLAGS) -Iinclude -I/usr/lib/llvm-7/include
+CPPFLAGS := $(CPPFLAGS) -Iinclude -Ibin/llvm/include -Illvm/include -Illvm/tools/lld/include
 CPPFLAGS += -Wall -Wshadow -Wno-attributes -Wno-unknown-pragmas -Wno-missing-braces \
 	    -Wno-unused-function -Wno-comment -Wno-char-subscripts -Wno-sign-compare \
 	    -Wno-unused-variable -Wno-switch
 LIBS     :=
-LDFLAGS  := -L$(LIBDIR) -L/usr/lib/llvm-7/lib
+LDFLAGS  := -L$(LIBDIR) -Lbin/llvm/lib
 
 # Destination settings
 PREFIX  ?= /usr/local
@@ -23,8 +23,8 @@ DESTDIR ?=
 
 all: innative-env innative innative-cmd innative-test
 clean: innative-env-clean innative-clean innative-cmd-clean innative-test-clean
-	$(RM) -r $(LIBDIR)
-	$(RM) -r $(BINDIR)
+	#$(RM) -r $(LIBDIR)
+	#$(RM) -r $(BINDIR)
 	$(RM) -r $(OBJDIR)
 
 install: all
