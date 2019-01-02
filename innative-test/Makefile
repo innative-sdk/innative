@@ -4,7 +4,7 @@ INNATIVE_TEST_FILES    := $(notdir $(wildcard $(INNATIVE_TEST_SRC)/*.cpp))
 INNATIVE_TEST_OBJDIR   := $(OBJDIR)/innative-test
 INNATIVE_TEST_OBJS     := $(foreach rule,$(INNATIVE_TEST_FILES:.cpp=.o),$(INNATIVE_TEST_OBJDIR)/$(rule))
 INNATIVE_TEST_CPPFLAGS := $(CPPFLAGS) -std=c++17 -pthread -msse2 -mcx16 -DLIBICONV_PLUG -Wno-reorder -Wno-class-memaccess
-INNATIVE_TEST_LIBS     := -linnative -lrt -lpthread -lstdc++fs
+INNATIVE_TEST_LIBS     := -linnative -lrt -lpthread -lstdc++fs -lLLVM-8svn -llld-8svn
 INNATIVE_TEST_LDFLAGS  := $(LDFLAGS) $(INNATIVE_TEST_LIBS) -Wl,-rpath -Wl,. # try to use rpath to pick up library in binary directory
 
 # Automatically declare dependencies

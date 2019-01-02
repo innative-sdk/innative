@@ -5,8 +5,8 @@ INNATIVE_ENV_OBJDIR         := $(OBJDIR)/innative-env
 INNATIVE_ENV_OBJS           := $(foreach rule,$(INNATIVE_ENV_FILES:.c=.o),$(INNATIVE_ENV_OBJDIR)/$(rule))
 INNATIVE_ENV_DEBUG_OBJDIR   := $(OBJDIR)/innative-env/debug
 INNATIVE_ENV_DEBUG_OBJS     := $(foreach rule,$(INNATIVE_ENV_FILES:.c=.o),$(INNATIVE_ENV_DEBUG_OBJDIR)/$(rule))
-INNATIVE_ENV_CPPFLAGS       := $(CPPFLAGS)
-INNATIVE_ENV_DEBUG_CPPFLAGS := $(CPPFLAGS) -g3
+INNATIVE_ENV_CPPFLAGS       := $(CPPFLAGS) -fPIC
+INNATIVE_ENV_DEBUG_CPPFLAGS := $(CPPFLAGS) -g3 -fPIC
 
 # Automatically declare dependencies
 -include $(INNATIVE_ENV_OBJS:.o=.d)

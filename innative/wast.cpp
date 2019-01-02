@@ -352,6 +352,12 @@ int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
   else if(tokens[0].id == TOKEN_QUOTE || (tokens.Size() > 1 && tokens[1].id == TOKEN_QUOTE))
   {
     name = GetWatNameToken(tokens);
+    if(!name.pos)
+    {
+      name.pos = tempname.data();
+      name.len = tempname.size();
+    }
+
     EXPECTED(tokens, TOKEN_QUOTE, ERR_WAT_EXPECTED_QUOTE);
     ByteArray quote;
     while(tokens.Peek().id == TOKEN_STRING)
