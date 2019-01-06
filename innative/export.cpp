@@ -171,3 +171,11 @@ int innative_uninstall()
 {
   return utility::Uninstall();
 }
+const char* innative_type_encoding_string(int type_encoding)
+{
+  return utility::EnumToString(utility::ERR_TYPE_ENCODING_MAP, type_encoding, 0, 0);
+}
+const char* innative_error_string(int error_code)
+{
+  return utility::EnumToString(utility::ERR_ENUM_MAP, error_code, 0, 0);
+}

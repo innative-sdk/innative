@@ -90,6 +90,8 @@ extern "C" {
   IR_COMPILER_DLLEXPORT extern void innative_set_work_dir_to_bin(const char* arg0);
   IR_COMPILER_DLLEXPORT extern int innative_install(const char* arg0, bool full); // full install requires elevation on windows
   IR_COMPILER_DLLEXPORT extern int innative_uninstall();
+  IR_COMPILER_DLLEXPORT extern const char* innative_type_encoding_string(int type_encoding);
+  IR_COMPILER_DLLEXPORT extern const char* innative_error_string(int error_code);
 
 #ifdef  __cplusplus
 }

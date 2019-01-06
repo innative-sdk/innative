@@ -308,7 +308,20 @@ namespace innative {
       info[4] = sysinfo.wProcessorArchitecture | (flags << 16);
       __cpuid(info, 1);
 #elif defined(IR_PLATFORM_POSIX)
-      info[4] = (flags << 16);
+#ifdef IR_CPU_x86_64
+      info[4] = 1;
+#elif defined(IR_CPU_IA_64)
+      info[4] = 2;
+#elif defined(IR_CPU_x86)
+      info[4] = 3;
+#elif defined(IR_CPU_ARM)
+      info[4] = 4;
+#elif defined(IR_CPU_MIPS)
+      info[4] = 5;
+#elif defined(IR_CPU_POWERPC)
+      info[4] = 6;
+#endif
+      info[4] |= (flags << 16);
       __get_cpuid(1, info + 0, info + 1, info + 2, info + 3);
 #endif
     }

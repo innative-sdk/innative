@@ -5,11 +5,15 @@
 #define __CONSTANTS_H__IR__
 
 #include "innative/innative.h"
+#include "innative/khash.h"
+#include <ostream>
 
 #define MAKESTRING2(x) #x
 #define MAKESTRING(x) MAKESTRING2(x)
 
 #define IR_VERSION_STRING MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
+
+KHASH_DECLARE(mapenum, int, const char*);
 
 namespace innative {
   namespace utility {
@@ -25,6 +29,11 @@ namespace innative {
 
     static const unsigned int WASM_MAGIC_COOKIE = 0x6d736100;
     static const unsigned int WASM_MAGIC_VERSION = 0x01;
+
+    extern const struct kh_mapenum_s* ERR_ENUM_MAP;
+    extern const struct kh_mapenum_s* ERR_TYPE_ENCODING_MAP;
+
+    const char* EnumToString(const struct kh_mapenum_s* h, int i, char* buf, size_t n);
   }
 }
 
