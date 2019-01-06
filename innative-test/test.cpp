@@ -69,7 +69,8 @@ int main(int argc, char *argv[])
   innative_set_work_dir_to_bin(!argc ? 0 : argv[0]);
   IRExports exports;
   innative_runtime(&exports);
-  
+  int log = LOG_WARNING;
+
   /*std::unique_ptr<FILE, void(*)(FILE*)> f(nullptr, [](FILE* f) { fclose(f); });
   {
     FILE* tmp = 0;
@@ -90,7 +91,10 @@ int main(int argc, char *argv[])
     {
       if(!STRICMP(argv[i], "-internal"))
         return 0; // If we only want the internal tests, just bail out at this point
-      kh_put_match(matchfiles.get(), argv[i], &r);
+      if(!STRICMP(argv[i], "-v"))
+        log = LOG_DEBUG;
+      else
+        kh_put_match(matchfiles.get(), argv[i], &r);
     }
   }
 
@@ -115,17 +119,17 @@ int main(int argc, char *argv[])
     }
   }
 
-  testfiles.erase(testfiles.begin(), testfiles.begin() + 25);
+  //testfiles.erase(testfiles.begin(), testfiles.begin() + 25);
   std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
 
   for(auto file : testfiles)
   {
     Environment* env = (*exports.CreateEnvironment)(1, 0, (!argc ? 0 : argv[0]));
     env->flags = ENV_LIBRARY | ENV_DEBUG | ENV_EMIT_LLVM | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS;
-    env->optimize = ENV_OPTIMIZE_O3;
+    env->optimize = ENV_OPTIMIZE_O0;
     env->features = ENV_FEATURE_ALL;
     env->log = stdout;
-    env->loglevel = LOG_WARNING;
+    env->loglevel = log;
     env->wasthook = [](void*) { fputc('.', stdout); fflush(stdout); };
     int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
 
@@ -144,7 +148,14 @@ int main(int argc, char *argv[])
     {
       fputs("FAILED\n", env->log);
       if(err < 0)
-        FPRINTF(env->log, "Error running script %s: %i\n", file.generic_u8string().c_str(), err);
+      {
+        const char* strerr = innative_error_string(err);
+        if(strerr)
+          FPRINTF(env->log, "Error running script %s: %s\n", file.generic_u8string().c_str(), strerr);
+        else
+          FPRINTF(env->log, "Error running script %s: %i\n", file.generic_u8string().c_str(), err);
+      }
+
       while(env->errors != nullptr)
       {
         fputs("  ", env->log);

@@ -7,7 +7,7 @@
 #include "intrinsic.h"
 
 namespace innative {
-  IR_ERROR AnnotateFunctions(const Environment* env, code::Context* contexts);
+  IR_ERROR OptimizeModules(const Environment* env, code::Context* context);
 }
 
 #endif
