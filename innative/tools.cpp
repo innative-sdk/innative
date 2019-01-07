@@ -20,7 +20,7 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
   {
     env->modulemap = kh_init_modules();
     env->whitelist = kh_init_modulepair();
-    //env->cimports = kh_init_cimport();
+    env->cimports = kh_init_cimport();
     env->modules = trealloc<Module>(0, modules);
     env->alloc = new __WASM_ALLOCATOR();
 
@@ -58,7 +58,7 @@ void innative::DestroyEnvironment(Environment* env)
   delete env->alloc;
   kh_destroy_modulepair(env->whitelist);
   kh_destroy_modules(env->modulemap);
-  //kh_destroy_cimport(env->cimports);
+  kh_destroy_cimport(env->cimports);
   free(env->modules);
   free(env);
 }

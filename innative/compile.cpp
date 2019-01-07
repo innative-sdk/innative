@@ -15,6 +15,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/MC/SubtargetFeature.h"
 #include "lld/Common/Driver.h"
+#include "lld/Common/ErrorHandler.h"
 #include <iostream>
 #include <sstream>
 #pragma warning(pop)
@@ -2555,7 +2556,7 @@ namespace innative {
       std::error_code EC;
       llvm::raw_fd_ostream dest(1, false, true);
       if(llvm::verifyModule(*context[i].llvm, &dest))
-        return ERR_FATAL_INVALID_MODULE;
+        return assert(false), ERR_FATAL_INVALID_MODULE;
     }
 
     {
@@ -2627,16 +2628,17 @@ namespace innative {
       if(CallLinker(env, linkargs) != 0)
         return assert(false), ERR_FATAL_LINK_ERROR;
     }
-
     return ERR_SUCCESS;
   }
 
   std::vector<std::string> GetSymbols(const char* file)
   {
+    std::string outbuf;
+    llvm::raw_string_ostream sso(outbuf);
 #ifdef IR_PLATFORM_WIN32
-    return lld::coff::GetSymbols(file);
+    return lld::coff::GetSymbols(file, sso);
 #else
-    return std::vector<std::string>();
+    return lld::elf::GetSymbols(file, sso);
 #endif
   }
 
@@ -2648,4 +2650,3 @@ namespace innative {
         kh_put_cimport(env.cimports, Identifier((uint8_t*)intrinsic.name, strlen(intrinsic.name)), &r);
   }
 }
-

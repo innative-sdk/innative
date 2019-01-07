@@ -31,191 +31,35 @@ using namespace wat;
 using namespace utility;
 using std::string;
 
-KHASH_INIT(assertion, int, const char*, 1, kh_int_hash_func, kh_int_hash_equal)
 KHASH_INIT(stringmap, const char*, const char*, 1, kh_str_hash_funcins, kh_str_hash_insequal)
 
 namespace innative {
   namespace wat {
-    kh_assertion_t* GenWastAssertions(std::initializer_list<int> code, std::initializer_list<const char*> msg)
-    {
-      kh_assertion_t* h = kh_init_assertion();
-
-      int r;
-      assert(code.size() == msg.size());
-      auto m = msg.begin();
-      for(auto c = code.begin(); c != code.end() && m != msg.end(); ++c, ++m)
-      {
-        auto iter = kh_put_assertion(h, *c, &r);
-        kh_val(h, iter) = *m;
-      }
-
-      return h;
-    }
-
-    static kh_assertion_t* assertionhash = GenWastAssertions({
-      ERR_WAT_INVALID_ALIGNMENT,
-      ERR_INVALID_MEMORY_ALIGNMENT,
-      ERR_INVALID_MEMORY_OFFSET,
-      ERR_END_MISMATCH,
-      ERR_PARSE_INVALID_MAGIC_COOKIE,
-      ERR_PARSE_INVALID_VERSION,
-      ERR_FATAL_OVERLONG_ENCODING,
-      ERR_FATAL_INVALID_ENCODING,
-      ERR_INVALID_RESERVED_VALUE,
-      ERR_FATAL_TOO_MANY_LOCALS,
-      ERR_IMPORT_EXPORT_MISMATCH,
-      ERR_INVALID_BLOCK_SIGNATURE,
-      ERR_EMPTY_VALUE_STACK,
-      ERR_INVALID_VALUE_STACK,
-      ERR_INVALID_TYPE,
-      ERR_WAT_TYPE_MISMATCH,
-      ERR_WAT_UNKNOWN_TYPE,
-      ERR_WAT_LABEL_MISMATCH,
-      ERR_INVALID_BRANCH_DEPTH,
-      ERR_INVALID_FUNCTION_INDEX,
-      ERR_INVALID_TABLE_INDEX,
-      ERR_WAT_OUT_OF_RANGE,
-      ERR_PARSE_UNEXPECTED_EOF,
-      ERR_WAT_EXPECTED_OPERATOR,
-      ERR_WAT_UNEXPECTED_NAME,
-      ERR_PARSE_INVALID_FILE_LENGTH,
-      ERR_FATAL_UNKNOWN_SECTION,
-      ERR_FUNCTION_BODY_MISMATCH,
-      ERR_FATAL_DUPLICATE_EXPORT,
-      ERR_INVALID_MEMORY_INDEX,
-      ERR_INVALID_GLOBAL_INDEX,
-      ERR_INVALID_TABLE_INDEX,
-      ERR_WAT_INVALID_NUMBER,
-      ERR_WAT_INVALID_TOKEN,
-      ERR_INVALID_GLOBAL_INITIALIZER,
-      ERR_INVALID_INITIALIZER_TYPE,
-      ERR_INVALID_GLOBAL_TYPE,
-      ERR_INVALID_TABLE_TYPE,
-      ERR_INVALID_LOCAL_INDEX,
-      ERR_MULTIPLE_RETURN_VALUES,
-      ERR_INVALID_START_FUNCTION,
-      ERR_WAT_EXPECTED_VAR,
-      ERR_WAT_EXPECTED_VALTYPE,
-      ERR_INVALID_UTF8_ENCODING,
-      ERR_INVALID_DATA_SEGMENT,
-      ERR_INVALID_TABLE_OFFSET,
-      ERR_IMMUTABLE_GLOBAL,
-      ERR_INVALID_MUTABILITY,
-      ERR_UNKNOWN_EXPORT,
-      ERR_INVALID_GLOBAL_IMPORT_TYPE,
-      ERR_INVALID_FUNCTION_IMPORT_TYPE,
-      ERR_WAT_INVALID_IMPORT_ORDER,
-      ERR_INVALID_IMPORT_MEMORY_MINIMUM,
-      ERR_INVALID_IMPORT_MEMORY_MAXIMUM,
-      ERR_INVALID_IMPORT_TABLE_MINIMUM,
-      ERR_INVALID_IMPORT_TABLE_MAXIMUM,
-      ERR_MULTIPLE_TABLES,
-      ERR_MULTIPLE_MEMORIES,
-      ERR_IMPORT_EXPORT_TYPE_MISMATCH,
-      ERR_UNKNOWN_MODULE,
-      ERR_INVALID_LIMITS,
-      ERR_MEMORY_MAXIMUM_TOO_LARGE,
-      ERR_MEMORY_MINIMUM_TOO_LARGE,
-      ERR_INVALID_INITIALIZER,
-      ERR_EMPTY_IMPORT,
-      ERR_WAT_PARAM_AFTER_RESULT,
-      },
-{
-  "alignment",
-  "alignment must not be larger than natural",
-  "out of bounds memory access",
-  "unexpected end",
-  "magic header not detected",
-  "unknown binary version",
-  "integer representation too long",
-  "integer too large",
-  "zero flag expected",
-  "too many locals",
-  "type mismatch",
-  "type mismatch",
-  "type mismatch",
-  "type mismatch",
-  "type mismatch",
-  "inline function type",
-  "unknown type",
-  "mismatching label",
-  "unknown label",
-  "unknown function",
-  "unknown table",
-  "constant out of range",
-  "unexpected end",
-  "unexpected token",
-  "unexpected token",
-  "unexpected end",
-  "invalid section id",
-  "function and code section have inconsistent lengths",
-  "duplicate export name",
-  "unknown memory",
-  "unknown global",
-  "unknown table",
-  "unknown operator",
-  "unknown operator",
-  "unknown global",
-  "type mismatch",
-  "type mismatch",
-  "type mismatch",
-  "unknown local",
-  "invalid result arity",
-  "start function",
-  "unknown operator",
-  "unexpected token",
-  "invalid UTF-8 encoding",
-  "data segment does not fit",
-  "elements segment does not fit",
-  "global is immutable",
-  "invalid mutability",
-  "unknown import",
-  "incompatible import type",
-  "incompatible import type",
-  "invalid import order",
-  "incompatible import type",
-  "incompatible import type",
-  "incompatible import type",
-  "incompatible import type",
-  "multiple tables",
-  "multiple memories",
-  "incompatible import type",
-  "unknown import",
-  "size minimum must not be greater than maximum",
-  "memory size must be at most 65536 pages (4GiB)",
-  "memory size must be at most 65536 pages (4GiB)",
-  "constant expression required",
-  "unknown import",
-  "unexpected token",
-});
-
-    kh_stringmap_t* GenWastStringMap(std::initializer_list<const char*> map)
+    kh_stringmap_t* GenWastStringMap(std::initializer_list<std::pair<const char*, const char*>> map)
     {
       kh_stringmap_t* h = kh_init_stringmap();
 
       int r;
-      assert(!(map.size() % 2));
-      for(auto m = map.begin(); m != map.end(); ++m)
+      for(auto& m : map)
       {
-        auto iter = kh_put_stringmap(h, *m, &r);
-        kh_val(h, iter) = *++m;
+        auto iter = kh_put_stringmap(h, m.first, &r);
+        kh_val(h, iter) = m.second;
       }
 
       return h;
     }
 
     static kh_stringmap_t* assertmap = GenWastStringMap({
-        "unknown function 0", "unknown function",
-        "unknown memory 0", "unknown memory",
-        "unknown table 0", "unknown table",
-        "i32 constant", "constant out of range",
-        "length out of bounds", "unexpected end",
-        "import after function", "invalid import order",
-        "import after global", "invalid import order",
-        "import after table", "invalid import order",
-        "import after memory", "invalid import order",
-        "result before parameter", "unexpected token",
-
+      {"unknown function 0", "unknown function"},
+      {"unknown memory 0", "unknown memory"},
+      {"unknown table 0", "unknown table"},
+      {"i32 constant", "constant out of range"},
+      {"length out of bounds", "unexpected end"},
+      {"import after function", "invalid import order"},
+      {"import after global", "invalid import order"},
+      {"import after table", "invalid import order"},
+      {"import after memory", "invalid import order"},
+      {"result before parameter", "unexpected token"},
       });
 
     size_t GetWastMapping(kh_indexname_t* mapping, const WatToken& t)
@@ -451,7 +295,7 @@ void GenWastFunctionCall(void* f, WastResult& result, Args... params)
   switch(result.type)
   {
   case TE_i32:
-  case TE_f32: 
+  case TE_f32:
   case TE_f64:
   case TE_i64: result.i64 = r; break;
   default:
@@ -555,7 +399,7 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
   int cache_err = 0;
   if(!cache) // If cache is null we need to recompile the current environment, but we can't bail on error messages yet or we'll corrupt the parse
     cache_err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache, cachepath);
-  
+
   switch(tokens.Pop().id)
   {
   case TOKEN_INVOKE:
@@ -731,11 +575,11 @@ inline string GetAssertionString(int code)
   string assertcode = "[SUCCESS]";
   if(code < 0)
   {
-    khiter_t iter = kh_get_assertion(assertionhash, code);
-    if(!kh_exist2(assertionhash, iter))
+    khiter_t iter = kh_get_mapenum(WAST_ASSERTION_MAP, code);
+    if(!kh_exist2(WAST_ASSERTION_MAP, iter))
       assertcode = "[unknown error code " + std::to_string(code) + "]";
     else
-      assertcode = kh_val(assertionhash, iter);
+      assertcode = kh_val(WAST_ASSERTION_MAP, iter);
   }
   return assertcode;
 }
