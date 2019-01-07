@@ -302,7 +302,7 @@ void innative::ValidateBlockSignature(varsint7 sig, Environment& env, Module* m)
   case TE_void:
     break;
   default:
-    AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "%s is not a valid block signature type.", EnumToString(ERR_TYPE_ENCODING_MAP, sig, buf, 10));
+    AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "%s is not a valid block signature type.", EnumToString(TYPE_ENCODING_MAP, sig, buf, 10));
   }
 }
 
@@ -317,7 +317,7 @@ varsint7 ValidatePopType(innative::Stack<varsint7>& values, varsint7 type, Envir
     {
       char buf[10];
       char buf2[10];
-      AppendError(env, env.errors, m, ERR_INVALID_TYPE, "Expected %s on the stack, but found %s.", EnumToString(ERR_TYPE_ENCODING_MAP, type, buf, 10), EnumToString(ERR_TYPE_ENCODING_MAP, t, buf2, 10));
+      AppendError(env, env.errors, m, ERR_INVALID_TYPE, "Expected %s on the stack, but found %s.", EnumToString(TYPE_ENCODING_MAP, type, buf, 10), EnumToString(TYPE_ENCODING_MAP, t, buf2, 10));
     }
     return t;
   }
@@ -337,10 +337,10 @@ void ValidateBranchSignature(varsint7 sig, Stack<varsint7>& values, Environment&
       //if(values.Size() > 2 || (values.Size() == 2 && values.Peek() != TE_POLY)) // TE_POLY can count as 0
       //  AppendError(env, env.errors, m, ERR_INVALID_TYPE, "block signature expected one value, but value stack had %zu!", values.Size());
       if(values.Peek() != TE_POLY && values.Peek() != sig)
-        AppendError(env, env.errors, m, ERR_INVALID_TYPE, "block signature expected %s, but value stack had %s instead!", EnumToString(ERR_TYPE_ENCODING_MAP, sig, buf, 10), EnumToString(ERR_TYPE_ENCODING_MAP, values.Peek(), buf2, 10));
+        AppendError(env, env.errors, m, ERR_INVALID_TYPE, "block signature expected %s, but value stack had %s instead!", EnumToString(TYPE_ENCODING_MAP, sig, buf, 10), EnumToString(TYPE_ENCODING_MAP, values.Peek(), buf2, 10));
     }
     else
-      AppendError(env, env.errors, m, ERR_EMPTY_VALUE_STACK, "block signature expected %s, but value stack was empty!", EnumToString(ERR_TYPE_ENCODING_MAP, sig, buf, 10));
+      AppendError(env, env.errors, m, ERR_EMPTY_VALUE_STACK, "block signature expected %s, but value stack was empty!", EnumToString(TYPE_ENCODING_MAP, sig, buf, 10));
   }
 }
 
@@ -385,7 +385,7 @@ void ValidateBranchTable(varuint32 n_table, varuint32* table, varuint32 def, Sta
       char buf[10];
       char buf2[10];
       if(table[i] < control.Size() && GetBlockSig(control[table[i]]) != type)
-        AppendError(env, env.errors, m, ERR_INVALID_TYPE, "Branch table target has type signature %s, but default branch has %s", EnumToString(ERR_TYPE_ENCODING_MAP, control[table[i]].sig, buf, 10), EnumToString(ERR_TYPE_ENCODING_MAP, control[def].sig, buf2, 10));
+        AppendError(env, env.errors, m, ERR_INVALID_TYPE, "Branch table target has type signature %s, but default branch has %s", EnumToString(TYPE_ENCODING_MAP, control[table[i]].sig, buf, 10), EnumToString(TYPE_ENCODING_MAP, control[def].sig, buf2, 10));
     }
   }
 }
@@ -791,7 +791,7 @@ void innative::ValidateGlobal(const GlobalDecl& decl, Environment& env, Module* 
   {
     char buf[10];
     char buf2[10];
-    AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_TYPE, "The global initializer has type %s, must be the same as the description type %s.", EnumToString(ERR_TYPE_ENCODING_MAP, type, buf, 10), EnumToString(ERR_TYPE_ENCODING_MAP, decl.desc.type, buf2, 10));
+    AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_TYPE, "The global initializer has type %s, must be the same as the description type %s.", EnumToString(TYPE_ENCODING_MAP, type, buf, 10), EnumToString(TYPE_ENCODING_MAP, decl.desc.type, buf2, 10));
   }
 }
 
@@ -877,7 +877,7 @@ void innative::ValidateTableOffset(const TableInit& init, Environment& env, Modu
   if(type != TE_NONE && type != TE_i32)
   {
     char buf[10];
-    AppendError(env, env.errors, m, ERR_INVALID_TABLE_TYPE, "Expected table offset instruction type of i32, got %s instead.", EnumToString(ERR_TYPE_ENCODING_MAP, type, buf, 10));
+    AppendError(env, env.errors, m, ERR_INVALID_TABLE_TYPE, "Expected table offset instruction type of i32, got %s instead.", EnumToString(TYPE_ENCODING_MAP, type, buf, 10));
   }
 
   TableDesc* table = ModuleTable(*m, init.index);
@@ -907,7 +907,7 @@ void innative::ValidateTableOffset(const TableInit& init, Environment& env, Modu
   else
   {
     char buf[10];
-    AppendError(env, env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Invalid table element type %s", EnumToString(ERR_TYPE_ENCODING_MAP, table->element_type, buf, 10));
+    AppendError(env, env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Invalid table element type %s", EnumToString(TYPE_ENCODING_MAP, table->element_type, buf, 10));
   }
 }
 
@@ -975,7 +975,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
       {
         char buf[10];
         if(control.Peek().type == OP_if && control.Peek().sig != TE_void)
-          AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "If statement without else cannot have a non-void block signature, had %s.", EnumToString(ERR_TYPE_ENCODING_MAP, control.Peek().sig, buf, 10));
+          AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "If statement without else cannot have a non-void block signature, had %s.", EnumToString(TYPE_ENCODING_MAP, control.Peek().sig, buf, 10));
         ValidateEndBlock(control.Pop(), values, env, m, true);
       }
       break;
@@ -987,7 +987,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
         char buf[10];
         internal::ControlBlock block = control.Pop();
         if(block.type != OP_if)
-          AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Expected else instruction to terminate if block, but found %s instead.", EnumToString(ERR_TYPE_ENCODING_MAP, block.type, buf, 10));
+          AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Expected else instruction to terminate if block, but found %s instead.", EnumToString(TYPE_ENCODING_MAP, block.type, buf, 10));
         ValidateEndBlock(block, values, env, m, false);
         control.Push({ values.Limit(), block.sig, OP_else }); // Push a new else block that must be terminated by an end instruction
         values.SetLimit(values.Size() + values.Limit());
@@ -1014,7 +1014,7 @@ void innative::ValidateDataOffset(const DataInit& init, Environment& env, Module
   if(type != TE_NONE && type != TE_i32)
   {
     char buf[10];
-    AppendError(env, env.errors, m, ERR_INVALID_MEMORY_TYPE, "Expected memory offset instruction type of i32, got %s instead.", EnumToString(ERR_TYPE_ENCODING_MAP, type, buf, 10));
+    AppendError(env, env.errors, m, ERR_INVALID_MEMORY_TYPE, "Expected memory offset instruction type of i32, got %s instead.", EnumToString(TYPE_ENCODING_MAP, type, buf, 10));
   }
 
   MemoryDesc* memory = ModuleMemory(*m, init.index);

@@ -381,6 +381,7 @@
     <ClCompile Include="parse.cpp" />
     <ClCompile Include="schema.cpp" />
     <ClCompile Include="serialize.cpp" />
+    <ClCompile Include="setup.cpp" />
     <ClCompile Include="stream.cpp" />
     <ClCompile Include="tools.cpp" />
     <ClCompile Include="util.cpp" />

@@ -92,7 +92,7 @@ extern "C" {
   IR_COMPILER_DLLEXPORT extern int innative_uninstall();
   IR_COMPILER_DLLEXPORT extern const char* innative_type_encoding_string(int type_encoding);
   IR_COMPILER_DLLEXPORT extern const char* innative_error_string(int error_code);
-
+  IR_COMPILER_DLLEXPORT extern void INNATIVE_DEBUG_TEST();
 #ifdef  __cplusplus
 }
 #endif

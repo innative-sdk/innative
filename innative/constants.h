@@ -31,9 +31,11 @@ namespace innative {
     static const unsigned int WASM_MAGIC_VERSION = 0x01;
 
     extern const struct kh_mapenum_s* ERR_ENUM_MAP;
-    extern const struct kh_mapenum_s* ERR_TYPE_ENCODING_MAP;
+    extern const struct kh_mapenum_s* TYPE_ENCODING_MAP;
+    extern const struct kh_mapenum_s* WAST_ASSERTION_MAP;
 
     const char* EnumToString(const struct kh_mapenum_s* h, int i, char* buf, size_t n);
+    struct kh_mapenum_s* GenMapEnum(std::initializer_list<std::pair<int, const char*>> list);
   }
 }
 
