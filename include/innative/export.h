@@ -58,10 +58,11 @@ extern "C" {
     void(*WaitForLoad)(Environment* env);
     enum IR_ERROR(*AddEmbedding)(Environment* env, int tag, const void* data, uint64_t size); // If size is 0, data points to a null terminated UTF8 file path
     enum IR_ERROR(*Compile)(Environment* env, const char* file);
-    IR_Entrypoint(*LoadFunction)(void* cache, const char* module_name, const char* function); // if function is null, loads the entrypoint function
-    IR_Entrypoint(*LoadTable)(void* cache, const char* module_name, const char* table);
-    IRGlobal*(*LoadGlobal)(void* cache, const char* module_name, const char* export_name);
+    IR_Entrypoint(*LoadFunction)(void* assembly, const char* module_name, const char* function); // if function is null, loads the entrypoint function
+    IR_Entrypoint(*LoadTable)(void* assembly, const char* module_name, const char* table);
+    IRGlobal*(*LoadGlobal)(void* assembly, const char* module_name, const char* export_name);
     void*(*LoadAssembly)(const char* file);
+    void(*FreeAssembly)(void* assembly);
     void(*DestroyEnvironment)(Environment* env);
   } IRExports;
 

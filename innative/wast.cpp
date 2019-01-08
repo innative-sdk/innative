@@ -669,7 +669,8 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
       {
         if(err != ERR_RUNTIME_TRAP && err != ERR_RUNTIME_INIT_ERROR)
           return err;
-        AppendError(env, errors, last, err, "[%zu] Runtime error %i while attempting to verify result.", WatLineNumber(start, t.pos), err);
+        char buf[10];
+        AppendError(env, errors, last, err, "[%zu] Runtime error %s while attempting to verify result.", WatLineNumber(start, t.pos), EnumToString(ERR_ENUM_MAP, err, buf, 10));
       }
       break;
     }
@@ -714,7 +715,8 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
       {
         if(err != ERR_RUNTIME_TRAP && err != ERR_RUNTIME_INIT_ERROR)
           return err;
-        AppendError(env, errors, last, err, "[%zu] Runtime error %i while attempting to verify result.", WatLineNumber(start, t.pos), err);
+        char buf[10];
+        AppendError(env, errors, last, err, "[%zu] Runtime error %s while attempting to verify result.", WatLineNumber(start, t.pos), EnumToString(ERR_ENUM_MAP, err, buf, 10));
       }
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       Instruction value;
@@ -733,27 +735,28 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
           EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
         }
 
+        char typebuf[10];
         switch(value.opcode)
         {
         case OP_nop:
           if(result.type != TE_void)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected no return value but got %i", WatLineNumber(start, t.pos), result.type);
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected no return value but got %s", WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
           break;
         case OP_i32_const:
           if(result.type != TE_i32)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i32 type but got %i", WatLineNumber(start, t.pos), result.type);
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i32 type but got %s", WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
           else if(result.i32 != value.immediates[0]._varsint32)
             AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %i but got %i", WatLineNumber(start, t.pos), value.immediates[0]._varsint32, result.i32);
           break;
         case OP_i64_const:
           if(result.type != TE_i64)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i64 type but got %i", WatLineNumber(start, t.pos), result.type);
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i64 type but got %s", WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
           else if(result.i64 != value.immediates[0]._varsint64)
             AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %lli but got %lli", WatLineNumber(start, t.pos), value.immediates[0]._varsint64, result.i64);
           break;
         case OP_f32_const:
           if(result.type != TE_f32)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f32 type but got %i", WatLineNumber(start, t.pos), result.type);
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f32 type but got %s", WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
           else if(isnan(value.immediates[0]._float32)) // If this is an NAN we must match the exact bit pattern
           {
             if(value.immediates[0]._varsint32 != result.i32)
@@ -764,7 +767,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
           break;
         case OP_f64_const:
           if(result.type != TE_f64)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f64 type but got %i", WatLineNumber(start, t.pos), result.type);
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f64 type but got %s", WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
           else if(isnan(value.immediates[0]._float64)) // If this is an NAN we must match the exact bit pattern
           {
             if(value.immediates[0]._varsint64 != result.i64)

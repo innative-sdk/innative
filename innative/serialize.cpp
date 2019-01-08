@@ -21,7 +21,6 @@ WatTokens innative::wat::TypeEncodingToken(varsint7 type_encoding)
   case TE_func:return TOKEN_FUNC;
   case TE_void:return TOKEN_NONE;
   }
-  assert(false);
   return TOKEN_NONE;
 }
 
@@ -72,7 +71,6 @@ void innative::wat::TokenizeInstruction(const Environment& env, Queue<WatToken>&
   if(ins.opcode >= OPNAMECOUNT)
   {
     tokens.Push(WatToken{ TOKEN_NONE });
-    assert(false);
     return;
   }
 

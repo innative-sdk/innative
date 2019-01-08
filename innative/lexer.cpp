@@ -324,7 +324,6 @@ namespace innative {
           else
           {
             tokens.Push(WatToken{ TOKEN_NONE });
-            assert(false);
           }
 
           if(s < end)
@@ -464,7 +463,6 @@ namespace innative {
                 tokens.Push(WatToken{ TOKEN_OPERATOR, begin, line, column, (int64_t)op });
               else
               {
-                // assert(false);
                 tokens.Push(WatToken{ TOKEN_NONE, begin, line, column, (int64_t)ref.len });
               }
             }
