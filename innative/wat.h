@@ -37,7 +37,7 @@ namespace innative {
       std::string numbuf;
     };
 
-#define EXPECTED(t, e, err) if((t).Size() == 0 || (t).Pop().id != (e)) return assert(false), (err)
+#define EXPECTED(t, e, err) if((t).Size() == 0 || (t).Pop().id != (e)) return (err)
 
     int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, utility::StringRef name);
     int WatString(const Environment& env, ByteArray& str, utility::StringRef ref);

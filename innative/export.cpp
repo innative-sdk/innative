@@ -24,6 +24,7 @@ void innative_runtime(IRExports* exports)
   exports->LoadFunction = &LoadFunction;
   exports->LoadGlobal = &LoadGlobal;
   exports->LoadAssembly = &LoadAssembly;
+  exports->FreeAssembly = &FreeAssembly;
   exports->DestroyEnvironment = &DestroyEnvironment;
 }
 
@@ -62,8 +63,9 @@ int innative_compile_file(const char* file, const char* out, uint64_t flags, uin
 
   if(err < 0)
   {
+    char buf[10];
     if(env->loglevel >= LOG_FATAL)
-      fprintf(env->log, "Error loading modules: 0x%x\n", -err);
+      fprintf(env->log, "Error loading modules: %s\n", utility::EnumToString(utility::ERR_ENUM_MAP, err, buf, 10));
     return err;
   }
 
@@ -72,8 +74,9 @@ int innative_compile_file(const char* file, const char* out, uint64_t flags, uin
 
   if(err < 0)
   {
+    char buf[10];
     if(env->loglevel >= LOG_FATAL)
-      fprintf(env->log, "Error loading environment: %i\n", err);
+      fprintf(env->log, "Error loading environment: %s\n", utility::EnumToString(utility::ERR_ENUM_MAP, err, buf, 10));
     return err;
   }
 
@@ -83,10 +86,11 @@ int innative_compile_file(const char* file, const char* out, uint64_t flags, uin
   {
     if(env->loglevel >= LOG_ERROR)
     {
-      fprintf(env->log, "Compile error: %i\n", err);
+      char buf[10];
+      fprintf(env->log, "Compile error: %s\n", utility::EnumToString(utility::ERR_ENUM_MAP, err, buf, 10));
 
-      for(ValidationError* err = env->errors; err != nullptr; err = err->next)
-        fprintf(env->log, "Error %i: %s\n", err->code, err->error);
+      for(ValidationError* e = env->errors; e != nullptr; e = e->next)
+        fprintf(env->log, "Error %s: %s\n", utility::EnumToString(utility::ERR_ENUM_MAP, e->code, buf, 10), e->error);
     }
 
     getchar();
@@ -142,15 +146,19 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bo
 
   if(err < 0)
   {
+    char buf[10];
     if(env->loglevel >= LOG_FATAL)
-      FPRINTF(env->log, "Error loading environment: %i\n", err);
+      FPRINTF(env->log, "Error loading environment: %s\n", utility::EnumToString(utility::ERR_ENUM_MAP, err, buf, 10));
     return err;
   }
 
   err = wat::ParseWast(*env, data, sz, path, always_compile);
 
   if(env->loglevel >= LOG_ERROR && err < 0)
-    FPRINTF(env->log, "Error loading modules: %i\n", err);
+  {
+    char buf[10];
+    FPRINTF(env->log, "Error loading modules: %s\n", utility::EnumToString(utility::ERR_ENUM_MAP, err, buf, 10));
+  }
 
   if(env->loglevel >= LOG_NOTICE && path)
     FPRINTF(env->log, "Finished Script: %s\n", path);

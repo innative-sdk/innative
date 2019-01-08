@@ -195,12 +195,16 @@ int main(int argc, char** argv)
   IR_Entrypoint start = (*exports.LoadFunction)(assembly, 0, IR_INIT_FUNCTION);
   IR_Entrypoint exit = (*exports.LoadFunction)(assembly, 0, IR_EXIT_FUNCTION);
   if(!start)
+  {
+    (*exports.FreeAssembly)(assembly);
     return ERR_INVALID_START_FUNCTION;
+  }
 
   (*start)();
   if(exit)
     (*exit)();
 
+  (*exports.FreeAssembly)(assembly);
   return ERR_SUCCESS;
 }
 

@@ -74,6 +74,15 @@ void usage()
     << std::endl;
 }
 
+void printerr(FILE* f, const char* prefix, int err)
+{
+  const char* errstring = innative_error_string(err);
+  if(errstring)
+    fprintf(f, "%s: %s\n", prefix, errstring);
+  else
+    fprintf(f, "%s: %i\n", prefix, err);
+}
+
 int main(int argc, char *argv[])
 {
   std::vector<const char*> inputs;
@@ -289,7 +298,7 @@ int main(int argc, char *argv[])
   if(err < 0)
   {
     if(env->loglevel >= LOG_FATAL)
-      fprintf(env->log, "Error loading modules: 0x%x\n", -err);
+      printerr(env->log, "Error loading modules", err);
     return err;
   }
 
@@ -302,7 +311,7 @@ int main(int argc, char *argv[])
   if(err < 0)
   {
     if(env->loglevel >= LOG_FATAL)
-      fprintf(env->log, "Error loading environment: %i\n", err);
+      printerr(env->log, "Error loading environment", err);
     return err;
   }
 
@@ -322,10 +331,16 @@ int main(int argc, char *argv[])
   {
     if(env->loglevel >= LOG_ERROR)
     {
-      fprintf(env->log, "Compile error: %i\n", err);
+      printerr(env->log, "Compile error", err);
 
       for(ValidationError* error = env->errors; error != nullptr; error = error->next)
-        fprintf(env->log, "Error %i: %s\n", error->code, error->error);
+      {
+        const char* errstring = innative_error_string(err);
+        if(errstring)
+          fprintf(env->log, "Error %s: %s\n", errstring, error->error);
+        else
+          fprintf(env->log, "Error %i: %s\n", error->code, error->error);
+      }
     }
 
     getchar();
@@ -344,10 +359,16 @@ int main(int argc, char *argv[])
     IR_Entrypoint start = (*exports.LoadFunction)(assembly, 0, IR_INIT_FUNCTION);
     IR_Entrypoint exit = (*exports.LoadFunction)(assembly, 0, IR_EXIT_FUNCTION);
     if(!start)
+    {
+      (*exports.FreeAssembly)(assembly);
       return ERR_INVALID_START_FUNCTION;
+    }
+
     (*start)();
     if(exit)
       (*exit)();
+
+    (*exports.FreeAssembly)(assembly);
     return ERR_SUCCESS;
   }
 

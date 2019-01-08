@@ -2,6 +2,7 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "test.h"
+#include "benchmark.h"
 #include "innative/export.h"
 #include "innative/khash.h"
 #include <iostream>
@@ -64,6 +65,17 @@ size_t internal_tests()
   return failures;
 }
 
+void internal_benchmarks(const IRExports& exports, const char* arg0, int log)
+{
+  Benchmarks benchmarks(exports, arg0, log);
+  auto timing = benchmarks.DoBenchmark<int64_t, int64_t>("../scripts/benchmark-fac.wat", "main", &Benchmarks::fac, 35);
+  std::cout << timing.c << std::endl;
+  std::cout << timing.debug << std::endl;
+  std::cout << timing.strict << std::endl;
+  std::cout << timing.sandbox << std::endl;
+  std::cout << timing.native << std::endl;
+}
+
 int main(int argc, char *argv[])
 {
   innative_set_work_dir_to_bin(!argc ? 0 : argv[0]);
@@ -97,6 +109,9 @@ int main(int argc, char *argv[])
         kh_put_match(matchfiles.get(), argv[i], &r);
     }
   }
+
+  internal_benchmarks(exports, !argc ? 0 : argv[0], log);
+  return 0;
 
   path testdir("../spec/test/core");
   std::vector<path> testfiles;
@@ -136,7 +151,7 @@ int main(int argc, char *argv[])
     if(err >= 0)
       err = innative_compile_script(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env, false);
     if(err < 0)
-      return assert(false), -1; // If the environment injection fails, abort everything
+      return -1; // If the environment injection fails, abort everything
 
     FPRINTF(env->log, "%s: .", file.generic_u8string().c_str());
     fflush(env->log);

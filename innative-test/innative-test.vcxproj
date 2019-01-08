@@ -328,6 +328,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="benchmark.cpp" />
+    <ClCompile Include="benchmark_fac.cpp" />
+    <ClCompile Include="benchmark_n-body.cpp" />
+    <ClCompile Include="benchmark_vectorloop.cpp" />
     <ClCompile Include="test.cpp" />
     <ClCompile Include="test_allocator.cpp" />
     <ClCompile Include="test_environment.cpp" />
@@ -338,6 +342,7 @@
     <ClCompile Include="test_util.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="benchmark.h" />
     <ClInclude Include="test.h" />
   </ItemGroup>
   <ItemGroup>

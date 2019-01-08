@@ -284,7 +284,7 @@ IR_ERROR PopType(varsint7 ty, code::Context& context, llvmVal*& v, bool peek = f
   if(ty == TE_void)
     v = 0;
   else if(!context.values.Size())
-    return assert(false), ERR_INVALID_VALUE_STACK;
+    return ERR_INVALID_VALUE_STACK;
   else if(!context.values.Peek()) // polymorphic value
   {
     switch(ty)
@@ -316,9 +316,9 @@ IR_ERROR CompileBinaryOp(code::Context& context, llvmVal* (llvm::IRBuilder<>::*o
   // Pop in reverse order
   llvmVal *val2, *val1;
   if(err = PopType(Ty2, context, val2))
-    return assert(false), err;
+    return err;
   if(err = PopType(Ty1, context, val1))
-    return assert(false), err;
+    return err;
 
   return PushReturn(context, (context.builder.*op)(val1, val2, args...));
 }
@@ -332,9 +332,9 @@ IR_ERROR CompileBinaryIntrinsic(code::Context& context, llvm::Intrinsic::ID id, 
   // Pop in reverse order
   llvmVal *val2, *val1;
   if(err = PopType(Ty2, context, val2))
-    return assert(false), err;
+    return err;
   if(err = PopType(Ty1, context, val1))
-    return assert(false), err;
+    return err;
 
   return PushReturn(context, context.builder.CreateBinaryIntrinsic(id, val1, val2, nullptr, name));
 }
@@ -348,7 +348,7 @@ IR_ERROR CompileUnaryOp(code::Context& context, llvmVal* (llvm::IRBuilder<>::*op
   // Pop in reverse order
   llvmVal *val1;
   if(err = PopType(Ty1, context, val1))
-    return assert(false), err;
+    return err;
 
   return PushReturn(context, (context.builder.*op)(val1, args...));
 }
@@ -362,7 +362,7 @@ IR_ERROR CompileUnaryIntrinsic(code::Context& context, llvm::Intrinsic::ID id, c
   // Pop in reverse order
   llvmVal *val1;
   if(err = PopType(Ty1, context, val1))
-    return assert(false), err;
+    return err;
 
   llvmVal* values[sizeof...(Args) + 1] = { val1, args... };
 
@@ -378,7 +378,7 @@ IR_ERROR CompileSelectOp(code::Context& context, const Twine& name, llvm::Instru
   // Pop in reverse order
   llvmVal *cond, *valf, *valt;
   if(err = PopType(TE_i32, context, cond))
-    return assert(false), err;
+    return err;
 
   if(!context.values.Size())
     return ERR_INVALID_VALUE_STACK;
@@ -388,7 +388,7 @@ IR_ERROR CompileSelectOp(code::Context& context, const Twine& name, llvm::Instru
   valf = context.values.Pop();
 
   if(err = PopType(GetTypeEncoding(valf->getType()), context, valt))
-    return assert(false), err;
+    return err;
 
   return PushReturn(context, context.builder.CreateSelect(context.builder.CreateICmpNE(cond, context.builder.getInt32(0)), valt, valf, name, from));
 }
@@ -407,9 +407,9 @@ IR_ERROR CompileRotationOp(code::Context& context, const char* name)
   // Pop in reverse order
   llvmVal *count, *value;
   if(err = PopType(TYPE, context, count))
-    return assert(false), err;
+    return err;
   if(err = PopType(TYPE, context, value))
-    return assert(false), err;
+    return err;
 
   const int BITS = (TYPE == TE_i32) ? 32 : 64;
   llvmVal *l, *r;
@@ -439,9 +439,9 @@ IR_ERROR CompileBinaryShiftOp(code::Context& context, llvmVal* (llvm::IRBuilder<
   // Pop in reverse order
   llvmVal *val2, *val1;
   if(err = PopType(Ty2, context, val2))
-    return assert(false), err;
+    return err;
   if(err = PopType(Ty1, context, val1))
-    return assert(false), err;
+    return err;
 
   return PushReturn(context, (context.builder.*op)(val1, MaskShiftBits(context, val2), args...));
 }
@@ -499,7 +499,7 @@ IR_ERROR PopLabel(code::Context& context, BB* block)
   {
     IR_ERROR err;
     if(err = PopType(sig, context, push))
-      return assert(false), err;
+      return err;
     if(context.control.Peek().results != nullptr) // If there are results from other branches, perform a PHI merge. Otherwise, leave the value stack alone
     {
       unsigned int count = 1; // Start with 1 for our current branch's values 
@@ -516,12 +516,12 @@ IR_ERROR PopLabel(code::Context& context, BB* block)
     }
   }
   else if(context.control.Peek().results != nullptr)
-    return assert(false), ERR_INVALID_VALUE_STACK;
+    return ERR_INVALID_VALUE_STACK;
 
   if(context.values.Size() > 0 && !context.values.Peek()) // Pop at most 1 polymorphic type off the stack.
     context.values.Pop();
   if(context.values.Size() > 0) // value stack should be completely empty now
-    return assert(false), ERR_INVALID_VALUE_STACK;
+    return ERR_INVALID_VALUE_STACK;
 
   if(push)
     PushReturn(context, push);
@@ -538,7 +538,7 @@ IR_ERROR CompileIfBlock(varsint7 sig, code::Context& context)
   llvmVal* cond;
 
   if(err = PopType(TE_i32, context, cond))
-    return assert(false), err;
+    return err;
 
   llvmVal* cmp = context.builder.CreateICmpNE(cond, context.builder.getInt32(0), "if_cond");
 
@@ -568,7 +568,7 @@ void PolymorphicStack(code::Context& context)
 IR_ERROR CompileElseBlock(code::Context& context)
 {
   if(context.control.Size() == 0 || context.control.Peek().op != OP_if)
-    return assert(false), ERR_IF_ELSE_MISMATCH;
+    return ERR_IF_ELSE_MISMATCH;
 
   context.builder.CreateBr(context.control.Peek().block); // Add a branch-to-merge instruction to our if_true block
 
@@ -578,7 +578,7 @@ IR_ERROR CompileElseBlock(code::Context& context)
     IR_ERROR err;
     llvmVal* value;
     if(err = PopType(context.control.Peek().sig, context, value))
-      return assert(false), err;
+      return err;
     PushResult(&context.control.Peek().results, value, context.builder.GetInsertBlock(), context.env); // Push result
   }
 
@@ -606,7 +606,7 @@ IR_ERROR CompileReturn(code::Context& context, varsint7 sig)
     llvmVal* val;
     IR_ERROR err = PopType(sig, context, val);
     if(err)
-      return assert(false), err;
+      return err;
 
     context.builder.CreateRet(val);
   }
@@ -635,14 +635,14 @@ IR_ERROR CompileEndBlock(code::Context& context)
   {
   case OP_if:
     if(context.control.Peek().sig != TE_void) // An if statement with no else statement cannot return a value
-      return assert(false), ERR_EXPECTED_ELSE_INSTRUCTION;
+      return ERR_EXPECTED_ELSE_INSTRUCTION;
   case OP_else:
   case OP_block:
   case OP_loop:
   case OP_return:
     break;
   default:
-    return assert(false), ERR_END_MISMATCH;
+    return ERR_END_MISMATCH;
   }
 
   IR_ERROR err = PopLabel(context, cur); // Pop the label to assemble the phi node before pushing it.
@@ -676,7 +676,7 @@ IR_ERROR InsertConditionalTrap(llvmVal* cond, code::Context& context)
 IR_ERROR CompileBranch(varuint32 depth, code::Context& context)
 {
   if(depth >= context.control.Size())
-    return assert(false), ERR_INVALID_BRANCH_DEPTH;
+    return ERR_INVALID_BRANCH_DEPTH;
 
   code::Block& target = context.control[depth];
   context.builder.CreateBr(target.block);
@@ -688,12 +688,12 @@ IR_ERROR CompileBranch(varuint32 depth, code::Context& context)
 IR_ERROR CompileIfBranch(varuint32 depth, code::Context& context)
 {
   if(depth >= context.control.Size())
-    return assert(false), ERR_INVALID_BRANCH_DEPTH;
+    return ERR_INVALID_BRANCH_DEPTH;
 
   IR_ERROR err;
   llvmVal* cond;
   if(err = PopType(TE_i32, context, cond))
-    return assert(false), err;
+    return err;
 
   llvmVal* cmp = context.builder.CreateICmpNE(cond, context.builder.getInt32(0), "br_if_cond");
 
@@ -715,10 +715,10 @@ IR_ERROR CompileBranchTable(varuint32 n_table, varuint32* table, varuint32 def, 
   IR_ERROR err;
   llvmVal* index;
   if(err = PopType(TE_i32, context, index))
-    return assert(false), err;
+    return err;
 
   if(def >= context.control.Size())
-    return assert(false), ERR_INVALID_BRANCH_DEPTH;
+    return ERR_INVALID_BRANCH_DEPTH;
 
   llvm::SwitchInst* s = context.builder.CreateSwitch(index, context.control[def].block, n_table);
   err = (context.control[def].op != OP_loop) ? AddBranch(context.control[def], context) : ERR_SUCCESS;
@@ -726,7 +726,7 @@ IR_ERROR CompileBranchTable(varuint32 n_table, varuint32* table, varuint32 def, 
   for(varuint32 i = 0; i < n_table && err == ERR_SUCCESS; ++i)
   {
     if(table[i] >= context.control.Size())
-      return assert(false), ERR_INVALID_BRANCH_DEPTH;
+      return ERR_INVALID_BRANCH_DEPTH;
 
     code::Block& target = context.control[table[i]];
     s->addCase(context.builder.getInt32(i), target.block);
@@ -740,7 +740,7 @@ IR_ERROR CompileBranchTable(varuint32 n_table, varuint32* table, varuint32 def, 
 IR_ERROR CompileCall(varuint32 index, code::Context& context)
 {
   if(index >= context.functions.size())
-    return assert(false), ERR_INVALID_FUNCTION_INDEX;
+    return ERR_INVALID_FUNCTION_INDEX;
 
   // Because this is a static function call, we can call the imported C function directly with the appropriate calling convention.
   Func* fn = (!context.functions[index].imported) ? (context.functions[index].internal) : context.functions[index].imported;
@@ -752,7 +752,7 @@ IR_ERROR CompileCall(varuint32 index, code::Context& context)
   for(unsigned int i = num; i-- > 0;)
   {
     if(err = PopType(GetTypeEncoding(fn->getFunctionType()->getParamType(i)), context, ArgsV[i]))
-      return assert(false), err;
+      return err;
   }
 
   CallInst* call = context.builder.CreateCall(fn, llvm::makeArrayRef(ArgsV, num));
@@ -794,23 +794,23 @@ IR_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
 {
   index = GetFirstType(index, context);
   if(index >= context.m.type.n_functions)
-    return assert(false), ERR_INVALID_TYPE_INDEX;
+    return ERR_INVALID_TYPE_INDEX;
 
   IR_ERROR err;
   FunctionType& ftype = context.m.type.functions[index];
   llvmVal* callee;
   if(err = PopType(TE_i32, context, callee))
-    return assert(false), err;
+    return err;
 
   if(context.tables.size() < 1)
-    return assert(false), ERR_INVALID_TABLE_INDEX;
+    return ERR_INVALID_TABLE_INDEX;
 
   // Pop arguments in reverse order
   llvmVal** ArgsV = tmalloc<llvmVal*>(context.env, ftype.n_params);
   for(unsigned int i = ftype.n_params; i-- > 0;)
   {
     if(err = PopType(ftype.params[i], context, ArgsV[i]))
-      return assert(false), err;
+      return err;
   }
 
   uint64_t bytewidth = context.llvm->getDataLayout().getTypeAllocSize(context.tables[0]->getType()->getElementType()->getPointerElementType());
@@ -894,12 +894,12 @@ template<bool SIGNED>
 IR_ERROR CompileLoad(code::Context& context, varuint7 memory, varuint32 offset, varuint32 memflags, const char* name, llvmTy* ext, llvmTy* ty)
 {
   if(context.memories.size() < 1)
-    return assert(false), ERR_INVALID_MEMORY_INDEX;
+    return ERR_INVALID_MEMORY_INDEX;
 
   llvmVal* base;
   IR_ERROR err;
   if(err = PopType(TE_i32, context, base))
-    return assert(false), err;
+    return err;
 
   llvmVal* result = context.builder.CreateAlignedLoad(GetMemPointer(context, base, ty->getPointerTo(0), memory, offset), (1 << memflags), name);
 
@@ -913,14 +913,14 @@ template<WASM_TYPE_ENCODING TY>
 IR_ERROR CompileStore(code::Context& context, varuint7 memory, varuint32 offset, varuint32 memflags, const char* name, llvm::IntegerType* ext)
 {
   if(context.memories.size() < 1)
-    return assert(false), ERR_INVALID_MEMORY_INDEX;
+    return ERR_INVALID_MEMORY_INDEX;
 
   IR_ERROR err;
   llvmVal *value, *base;
   if(err = PopType(TY, context, value))
-    return assert(false), err;
+    return err;
   if(err = PopType(TE_i32, context, base))
-    return assert(false), err;
+    return err;
 
   llvmTy* PtrType = !ext ? GetLLVMType(TY, context) : ext;
 
@@ -941,12 +941,12 @@ llvmVal* CompileMemSize(llvm::GlobalVariable* target, code::Context& context)
 IR_ERROR CompileMemGrow(code::Context& context, const char* name)
 {
   if(context.memories.size() < 1)
-    return assert(false), ERR_INVALID_MEMORY_INDEX;
+    return ERR_INVALID_MEMORY_INDEX;
 
   IR_ERROR err;
   llvmVal *delta;
   if(err = PopType(TE_i32, context, delta))
-    return assert(false), err;
+    return err;
 
   llvmVal* old = CompileMemSize(context.memories[0], context);
 
@@ -981,9 +981,9 @@ IR_ERROR CompileSRem(code::Context& context, const Twine& name)
   // Pop in reverse order
   llvmVal *val2, *val1;
   if(err = PopType(Ty2, context, val2))
-    return assert(false), err;
+    return err;
   if(err = PopType(Ty1, context, val1))
-    return assert(false), err;
+    return err;
 
   if(context.env.flags & ENV_CHECK_INT_DIVISION)
     InsertConditionalTrap(context.builder.CreateICmpEQ(val2, CInt::get(val2->getType(), 0, true)), context);
@@ -1004,9 +1004,9 @@ IR_ERROR CompileDiv(code::Context& context, bool overflow, llvmVal* (llvm::IRBui
   // Pop in reverse order
   llvmVal *val2, *val1;
   if(err = PopType(Ty2, context, val2))
-    return assert(false), err;
+    return err;
   if(err = PopType(Ty1, context, val1))
-    return assert(false), err;
+    return err;
 
   llvmVal* cond = context.builder.CreateICmpEQ(val2, CInt::get(val2->getType(), 0, true));
   if(overflow)
@@ -1086,9 +1086,9 @@ IR_ERROR CompileFloatCmp(code::Context& context, llvm::Intrinsic::ID id, const T
   // Pop in reverse order
   llvmVal *val2, *val1;
   if(err = PopType(Ty2, context, val2))
-    return assert(false), err;
+    return err;
   if(err = PopType(Ty1, context, val1))
-    return assert(false), err;
+    return err;
 
   // WASM requires we return an NaN if either operand is NaN
   auto nancheck = context.builder.CreateFCmpUNO(val1, val2);
@@ -1156,16 +1156,16 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
     // Variable access
   case OP_local_get:
     if(ins.immediates[0]._varuint32 >= context.locals.size())
-      return assert(false), ERR_INVALID_LOCAL_INDEX;
+      return ERR_INVALID_LOCAL_INDEX;
     PushReturn(context, context.builder.CreateLoad(context.locals[ins.immediates[0]._varuint32]));
     return ERR_SUCCESS;
   case OP_local_set:
   case OP_local_tee:
   {
     if(ins.immediates[0]._varuint32 >= context.locals.size())
-      return assert(false), ERR_INVALID_LOCAL_INDEX;
+      return ERR_INVALID_LOCAL_INDEX;
     if(context.values.Size() < 1)
-      return assert(false), ERR_INVALID_VALUE_STACK;
+      return ERR_INVALID_VALUE_STACK;
     context.builder.CreateStore(!context.values.Peek() ? llvm::Constant::getAllOnesValue(context.locals[ins.immediates[0]._varuint32]->getType()->getElementType()) : context.values.Peek(), context.locals[ins.immediates[0]._varuint32]);
     if(context.values.Peek() != nullptr && ins.opcode == OP_local_set) // tee_local is the same as set_local except the operand isn't popped
       context.values.Pop();
@@ -1173,9 +1173,9 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   }
   case OP_global_set:
     if(ins.immediates[0]._varuint32 >= context.globals.size())
-      return assert(false), ERR_INVALID_GLOBAL_INDEX;
+      return ERR_INVALID_GLOBAL_INDEX;
     if(context.values.Size() < 1)
-      return assert(false), ERR_INVALID_VALUE_STACK;
+      return ERR_INVALID_VALUE_STACK;
     context.builder.CreateStore(!context.values.Peek() ? llvm::Constant::getAllOnesValue(context.globals[ins.immediates[0]._varuint32]->getType()->getElementType()) : context.values.Pop(), context.globals[ins.immediates[0]._varuint32]);
     return ERR_SUCCESS;
   case OP_global_get:
@@ -1512,7 +1512,7 @@ IR_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   case OP_f64_reinterpret_i64:
     return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const Twine&>(context, &llvm::IRBuilder<>::CreateBitCast, context.builder.getDoubleTy(), OPNAMES[ins.opcode]);
   default:
-    return assert(false), ERR_FATAL_UNKNOWN_INSTRUCTION;
+    return ERR_FATAL_UNKNOWN_INSTRUCTION;
   }
 
   assert(false); // ERROR NOT IMPLEMENTED
@@ -1610,11 +1610,11 @@ IR_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
   if(context.values.Size() > 0 && !context.values.Peek()) // Pop at most 1 polymorphic type off the stack. Any additional ones are an error.
     context.values.Pop();
   if(body.body[body.n_body - 1].opcode != OP_end)
-    return assert(false), ERR_FATAL_EXPECTED_END_INSTRUCTION;
+    return ERR_FATAL_EXPECTED_END_INSTRUCTION;
   if(context.control.Size() > 0 || context.control.Limit() > 0)
-    return assert(false), ERR_END_MISMATCH;
+    return ERR_END_MISMATCH;
   if(context.values.Size() > 0 || context.values.Limit() > 0)
-    return assert(false), ERR_INVALID_VALUE_STACK;
+    return ERR_INVALID_VALUE_STACK;
   return ERR_SUCCESS;
 }
 
@@ -1825,7 +1825,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       auto index = context.m.importsection.imports[i].func_desc.type_index;
 
       if(index >= context.m.type.n_functions)
-        return assert(false), ERR_INVALID_TYPE_INDEX;
+        return ERR_INVALID_TYPE_INDEX;
 
       auto fname = CanonImportName(context.m.importsection.imports[i]);
       khiter_t iter = code::kh_get_importhash(context.importhash, fname.c_str());
@@ -1949,7 +1949,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
 
   // Cache internal function start index
   if(context.m.function.n_funcdecl != context.m.code.n_funcbody)
-    return assert(false), ERR_INVALID_FUNCTION_BODY;
+    return ERR_INVALID_FUNCTION_BODY;
   size_t code_index = context.functions.size();
 
   // Declare function prototypes
@@ -1957,7 +1957,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   {
     auto index = context.m.function.funcdecl[i];
     if(index >= context.m.type.n_functions)
-      return assert(false), ERR_INVALID_TYPE_INDEX;
+      return ERR_INVALID_TYPE_INDEX;
 
     context.functions.emplace_back();
     context.functions.back().internal = CompileFunction(
@@ -1989,7 +1989,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
 
     uint64_t bytewidth = context.llvm->getDataLayout().getTypeAllocSize(context.tables.back()->getType()->getElementType()->getPointerElementType());
     if(!bytewidth)
-      return assert(false), ERR_INVALID_TABLE_TYPE;
+      return ERR_INVALID_TABLE_TYPE;
 
     CallInst* call = context.builder.CreateCall(
       context.memgrow,
@@ -2067,7 +2067,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     TableInit& e = context.m.element.elements[i]; // First we declare a constant array that stores the data in the EXE
     TableDesc* t = ModuleTable(context.m, e.index);
     if(!t)
-      return assert(false), ERR_INVALID_TABLE_INDEX;
+      return ERR_INVALID_TABLE_INDEX;
 
     if(t->element_type == TE_funcref)
     {
@@ -2080,7 +2080,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
       for(uint64_t j = 0; j < e.n_elements; ++j)
       {
         if(e.elements[j] >= context.functions.size())
-          return assert(false), ERR_INVALID_FUNCTION_INDEX;
+          return ERR_INVALID_FUNCTION_INDEX;
 
         // Store function pointer in correct table memory location
         auto ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tables[e.index]), { context.builder.CreateAdd(offset, CInt::get(offset->getType(), j, true)), context.builder.getInt32(0) });
@@ -2088,7 +2088,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
 
         varuint32 index = GetFirstType(ModuleFunctionType(context.m, e.elements[j]), context);
         if(index == (varuint32)~0)
-          return assert(false), ERR_INVALID_FUNCTION_INDEX;
+          return ERR_INVALID_FUNCTION_INDEX;
 
         ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tables[e.index]), { context.builder.CreateAdd(offset, CInt::get(offset->getType(), j, true)), context.builder.getInt32(1) });
         context.builder.CreateAlignedStore(context.builder.getInt32(index), ptr, 4);
@@ -2127,7 +2127,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
     if(fn)
     {
       if(context.m.function.funcdecl[i] >= context.m.type.n_functions)
-        return assert(false), ERR_INVALID_TYPE_INDEX;
+        return ERR_INVALID_TYPE_INDEX;
       if((err = CompileFunctionBody(fn, context.m.type.functions[context.m.function.funcdecl[i]], context.m.code.funcbody[i], context)) < 0)
         return err;
     }
@@ -2137,7 +2137,7 @@ IR_ERROR CompileModule(const Environment* env, code::Context& context)
   if(context.m.knownsections & (1 << WASM_SECTION_START))
   {
     if(context.m.start >= context.functions.size())
-      return assert(false), ERR_INVALID_START_FUNCTION;
+      return ERR_INVALID_START_FUNCTION;
     assert(!context.functions[context.m.start].imported);
     context.start = context.functions[context.m.start].internal;
   }
@@ -2167,7 +2167,7 @@ IR_ERROR OutputObjectFile(code::Context& context, const char* out)
       fputs("Could not open file: ", context.env.log);
       fputs(EC.message().c_str(), context.env.log);
     }
-    return assert(false), ERR_FATAL_FILE_ERROR;
+    return ERR_FATAL_FILE_ERROR;
   }
 
   llvm::legacy::PassManager pass;
@@ -2177,7 +2177,7 @@ IR_ERROR OutputObjectFile(code::Context& context, const char* out)
   {
     if(context.env.loglevel >= LOG_FATAL)
       fputs("TheTargetMachine can't emit a file of this type", context.env.log);
-    return assert(false), ERR_FATAL_FILE_ERROR;
+    return ERR_FATAL_FILE_ERROR;
   }
 
   pass.run(*context.llvm);
@@ -2374,7 +2374,7 @@ namespace innative {
     if(!arch)
     {
       llvm::errs() << llvm_err;
-      return assert(false), ERR_FATAL_UNKNOWN_TARGET;
+      return ERR_FATAL_UNKNOWN_TARGET;
     }
 
     // Detect current CPU feature set and create machine target for LLVM
@@ -2397,6 +2397,26 @@ namespace innative {
 
     if(!env->n_modules)
       return ERR_FATAL_INVALID_MODULE;
+
+    if(env->optimize&ENV_OPTIMIZE_FAST_MATH)
+    {
+      llvm::FastMathFlags fmf;
+      if(env->optimize&ENV_OPTIMIZE_FAST_MATH_REASSOCIATE)
+        fmf.setAllowReassoc();
+      if(env->optimize&ENV_OPTIMIZE_FAST_MATH_NO_NAN)
+        fmf.setNoNaNs();
+      if(env->optimize&ENV_OPTIMIZE_FAST_MATH_NO_INF)
+        fmf.setNoInfs();
+      if(env->optimize&ENV_OPTIMIZE_FAST_MATH_NO_SIGNED_ZERO)
+        fmf.setNoSignedZeros();
+      if(env->optimize&ENV_OPTIMIZE_FAST_MATH_ALLOW_RECIPROCAL)
+        fmf.setAllowReassoc();
+      if(env->optimize&ENV_OPTIMIZE_FAST_MATH_CONTRACT)
+        fmf.setAllowContract();
+      if(env->optimize&ENV_OPTIMIZE_FAST_MATH_ALLOW_APPROXIMATE_FUNCTIONS)
+        fmf.setApproxFunc();
+      builder.setFastMathFlags(fmf);
+    }
 
     // Compile all modules
     for(varuint32 i = 0; i < env->n_modules; ++i)
@@ -2556,7 +2576,7 @@ namespace innative {
       std::error_code EC;
       llvm::raw_fd_ostream dest(1, false, true);
       if(llvm::verifyModule(*context[i].llvm, &dest))
-        return assert(false), ERR_FATAL_INVALID_MODULE;
+        return ERR_FATAL_INVALID_MODULE;
     }
 
     {
@@ -2612,7 +2632,7 @@ namespace innative {
           FILE* f;
           FOPEN(f, cache.back().c_str(), "wb");
           if(!f)
-            return assert(false), ERR_FATAL_FILE_ERROR;
+            return ERR_FATAL_FILE_ERROR;
 
           fwrite(cur->data, 1, cur->size, f);
           fclose(f);
@@ -2626,7 +2646,7 @@ namespace innative {
         linkargs.push_back(v.c_str());
 
       if(CallLinker(env, linkargs) != 0)
-        return assert(false), ERR_FATAL_LINK_ERROR;
+        return ERR_FATAL_LINK_ERROR;
     }
     return ERR_SUCCESS;
   }

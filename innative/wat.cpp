@@ -95,7 +95,7 @@ namespace innative {
     int WatString(const Environment& env, ByteArray& str, StringRef t)
     {
       if(!t.s)
-        return assert(false), ERR_PARSE_INVALID_NAME;
+        return ERR_PARSE_INVALID_NAME;
 
       varuint32 index = 0;
       if(str.get())
@@ -104,7 +104,7 @@ namespace innative {
         size_t n = str.size() + t.len;
         uint8_t* b = tmalloc<uint8_t>(env, n + 1);
         if(!b)
-          return assert(false), ERR_FATAL_OUT_OF_MEMORY;
+          return ERR_FATAL_OUT_OF_MEMORY;
 
         tmemcpy(b, n, str.get(), str.size());
         new(&str) ByteArray(b, n);
@@ -116,7 +116,7 @@ namespace innative {
         return ERR_SUCCESS;
 
       if(!str.get())
-        return assert(false), ERR_FATAL_OUT_OF_MEMORY;
+        return ERR_FATAL_OUT_OF_MEMORY;
 
       for(size_t i = 0; i < t.len; ++i)
       {
@@ -163,7 +163,7 @@ namespace innative {
                 break;
               }
             }
-            return assert(false), ERR_WAT_BAD_ESCAPE;
+            return ERR_WAT_BAD_ESCAPE;
           }
         }
         else
@@ -177,11 +177,11 @@ namespace innative {
     int WatName(const Environment& env, ByteArray& name, const WatToken& t)
     {
       if(t.id != TOKEN_NAME || !t.pos || !t.len)
-        return assert(false), ERR_PARSE_INVALID_NAME;
+        return ERR_PARSE_INVALID_NAME;
 
       name.resize(t.len, true, env);
       if(!name.get() || t.len > numeric_limits<varuint32>::max())
-        return assert(false), ERR_FATAL_OUT_OF_MEMORY;
+        return ERR_FATAL_OUT_OF_MEMORY;
       tmemcpy((char*)name.get(), name.size(), t.pos, t.len);
 
       return ERR_SUCCESS;
@@ -191,7 +191,7 @@ namespace innative {
     int AppendArray(T item, T*& a, varuint32& n)
     {
       if(!(a = trealloc<T>(a, ++n)))
-        return assert(false), ERR_FATAL_OUT_OF_MEMORY;
+        return ERR_FATAL_OUT_OF_MEMORY;
       a[n - 1] = item;
       return ERR_SUCCESS;
     }
@@ -234,7 +234,7 @@ namespace innative {
           if(info) // You are legally allowed to put parameter names in typedefs in WAT, but the names are thrown away.
           {
             if(tokens.Peek().len >= numeric_limits<varuint32>::max())
-              return assert(false), ERR_WAT_OUT_OF_RANGE;
+              return ERR_WAT_OUT_OF_RANGE;
             DebugInfo debug = { src.line, src.column };
             WatName(env, debug.name, tokens.Peek());
 
@@ -307,7 +307,7 @@ namespace innative {
 
       *index = 0;
       if(!(m.importsection.imports = trealloc<Import>(m.importsection.imports, ++m.importsection.n_import)))
-        return assert(false), ERR_FATAL_OUT_OF_MEMORY;
+        return ERR_FATAL_OUT_OF_MEMORY;
 
       // Find the correct index to insert into
       for(varuint32 j = 0; j < m.importsection.n_import - 1; ++j)
@@ -389,7 +389,7 @@ namespace innative {
         EXPECTED(tokens, TOKEN_TYPE, ERR_WAT_EXPECTED_TYPE);
 
         if(tokens.Peek().id != TOKEN_NUMBER && tokens.Peek().id != TOKEN_NAME)
-          return assert(false), ERR_WAT_EXPECTED_VAR;
+          return ERR_WAT_EXPECTED_VAR;
 
         sig = WatGetFromHash(state, state.typehash, tokens.Pop());
 
@@ -493,7 +493,7 @@ namespace innative {
       case OP_global_get: // For constant initializers, this has to be an import, and thus must always already exist by the time we reach it.
         op.immediates[0]._varuint32 = WatGetFromHash(state, state.globalhash, tokens.Pop());
         if(op.immediates[0]._varuint32 == (varuint32)~0)
-          return assert(false), ERR_WAT_INVALID_VAR;
+          return ERR_WAT_INVALID_VAR;
         break;
       default:
         return ERR_INVALID_INITIALIZER;
@@ -516,7 +516,7 @@ namespace innative {
       switch(op.opcode)
       {
       case 0xFF:
-        return assert(false), ERR_FATAL_UNKNOWN_INSTRUCTION;
+        return ERR_FATAL_UNKNOWN_INSTRUCTION;
       case OP_br:
       case OP_br_if:
         op.immediates[0]._varuint32 = state.GetJump(state, tokens.Pop());
@@ -553,7 +553,7 @@ namespace innative {
         {
           varuint32 jump = state.GetJump(state, tokens.Pop());
           if(jump == (varuint32)~0)
-            return assert(false), ERR_WAT_EXPECTED_VAR;
+            return ERR_WAT_EXPECTED_VAR;
 
           if(err = AppendArray<varuint32>(jump, op.immediates[0].table, op.immediates[0].n_table))
             return err;
@@ -599,7 +599,7 @@ namespace innative {
         {
           tokens.Pop();
           if(err = ResolveTokenu32(tokens.Pop(), state.numbuf, op.immediates[0]._varuint32))
-            return assert(false), err;
+            return err;
           if(op.immediates[0]._varuint32 == 0 || !IsPowerOfTwo(op.immediates[0]._varuint32)) // Ensure this alignment is exactly a power of two
             return ERR_WAT_INVALID_ALIGNMENT;
           op.immediates[0]._varuint32 = Power2Log2(op.immediates[0]._varuint32); // Calculate proper power of two
@@ -644,17 +644,17 @@ namespace innative {
         if(tokens.Peek().id != TOKEN_CLOSE)
         {
           if(!(out = WatValType(tokens.Pop().id)))
-            return assert(false), ERR_WAT_EXPECTED_VALTYPE;
+            return ERR_WAT_EXPECTED_VALTYPE;
 
           if(tokens.Peek().id != TOKEN_CLOSE)
-            return assert(false), ERR_MULTIPLE_RETURN_VALUES;
+            return ERR_MULTIPLE_RETURN_VALUES;
         }
 
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       }
 
       if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_RESULT)
-        return assert(false), ERR_MULTIPLE_RETURN_VALUES;
+        return ERR_MULTIPLE_RETURN_VALUES;
       return ERR_SUCCESS;
     }
 
@@ -953,7 +953,7 @@ namespace innative {
     {
       varsint7 local = WatValType(tokens.Pop().id);
       if(!local)
-        return assert(false), ERR_WAT_EXPECTED_VALTYPE;
+        return ERR_WAT_EXPECTED_VALTYPE;
       return AppendArray<varsint7>(local, body.locals, body.n_locals);
     }
 
@@ -991,7 +991,7 @@ namespace innative {
         if(tokens.Peek().id == TOKEN_NAME)
         {
           if(tokens.Peek().len > numeric_limits<varuint32>::max())
-            return assert(false), ERR_WAT_OUT_OF_RANGE;
+            return ERR_WAT_OUT_OF_RANGE;
           DebugInfo debug = { src.line, src.column };
           WatName(state.env, debug.name, tokens.Pop());
 
@@ -1133,7 +1133,7 @@ namespace innative {
         return err;
 
       if(tokens.Peek().id != TOKEN_CLOSE)
-        return assert(false), ERR_INVALID_INITIALIZER;
+        return ERR_INVALID_INITIALIZER;
 
       return ERR_SUCCESS;
     }
@@ -1146,7 +1146,7 @@ namespace innative {
         EXPECTED(tokens, TOKEN_MUT, ERR_WAT_EXPECTED_MUT);
         g.mutability = true;
         if(!(g.type = WatValType(tokens.Pop().id)))
-          return assert(false), ERR_WAT_EXPECTED_VALTYPE;
+          return ERR_WAT_EXPECTED_VALTYPE;
 
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       }
@@ -1154,7 +1154,7 @@ namespace innative {
       {
         g.mutability = false;
         if(!(g.type = WatValType(tokens.Pop().id)))
-          return assert(false), ERR_WAT_EXPECTED_VALTYPE;
+          return ERR_WAT_EXPECTED_VALTYPE;
       }
 
       return ERR_SUCCESS;
@@ -1211,7 +1211,7 @@ namespace innative {
         while(tokens[0].id != TOKEN_CLOSE)
         {
           if(tokens[0].id != TOKEN_STRING)
-            return assert(false), ERR_WAT_EXPECTED_STRING;
+            return ERR_WAT_EXPECTED_STRING;
           if(err = WatString(state.env, init.data, tokens.Pop()))
             return err;
         }
@@ -1238,7 +1238,7 @@ namespace innative {
         int r;
         khiter_t iter = kh_put_indexname(h, StringRef{ t.pos, t.len }, &r);
         if(!r)
-          return assert(false), ERR_WAT_DUPLICATE_NAME;
+          return ERR_WAT_DUPLICATE_NAME;
         if(iter != kh_end(h))
           kh_val(h, iter) = index;
       }
@@ -1289,7 +1289,7 @@ namespace innative {
         hash = state.memoryhash;
         break;
       default:
-        return assert(false), ERR_WAT_EXPECTED_KIND;
+        return ERR_WAT_EXPECTED_KIND;
       }
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
@@ -1341,7 +1341,7 @@ namespace innative {
         e.index = WatGetFromHash(state, state.memoryhash, tokens.Pop());
         break;
       default:
-        return assert(false), ERR_WAT_EXPECTED_KIND;
+        return ERR_WAT_EXPECTED_KIND;
       }
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
@@ -1355,7 +1355,7 @@ namespace innative {
         index = WatGetFromHash(state, hash, tokens.Pop());
 
       if(index == (varuint32)~0)
-        return assert(false), ERR_WAT_INVALID_VAR;
+        return ERR_WAT_INVALID_VAR;
 
       if(tokens[0].id == TOKEN_OPEN)
       {
@@ -1385,7 +1385,7 @@ namespace innative {
         if(err)
           return err;
         if(e.elements[e.n_elements - 1] == (varuint32)~0)
-          return assert(false), ERR_WAT_INVALID_VAR;
+          return ERR_WAT_INVALID_VAR;
       }
 
       state.m.knownsections |= (1 << WASM_SECTION_ELEMENT);
@@ -1402,7 +1402,7 @@ namespace innative {
       while(tokens[0].id != TOKEN_CLOSE)
       {
         if(tokens[0].id != TOKEN_STRING)
-          return assert(false), ERR_WAT_EXPECTED_STRING;
+          return ERR_WAT_EXPECTED_STRING;
         if(err = WatString(state.env, d.data, tokens.Pop()))
           return err;
       }
@@ -1475,7 +1475,7 @@ namespace innative {
             int r;
             iter = kh_put_indexname(state.funchash, StringRef{ fname.pos, fname.len }, &r);
             if(!r)
-              return assert(false), ERR_WAT_DUPLICATE_NAME;
+              return ERR_WAT_DUPLICATE_NAME;
           }
 
           StringRef ref = { nullptr, 0 };
@@ -1521,7 +1521,7 @@ namespace innative {
           SkipSection(tokens);
           break;
         default:
-          return assert(false), ERR_WAT_INVALID_TOKEN;
+          return ERR_WAT_INVALID_TOKEN;
         }
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       }
@@ -1554,10 +1554,10 @@ namespace innative {
         case TOKEN_START:
           m.knownsections |= (1 << WASM_SECTION_START);
           if(tokens[0].id != TOKEN_NUMBER && tokens[0].id != TOKEN_NAME)
-            return assert(false), ERR_WAT_EXPECTED_VAR;
+            return ERR_WAT_EXPECTED_VAR;
           m.start = WatGetFromHash(state, state.funchash, tokens.Pop());
           if(m.start == (varuint32)~0)
-            return assert(false), ERR_WAT_INVALID_VAR;
+            return ERR_WAT_INVALID_VAR;
           break;
         default:
           SkipSection(tokens);
@@ -1607,10 +1607,10 @@ namespace innative {
           err = procRef(state, m, WatGetFromHash(state, state.funchash, state.defer[0].t));
           break;
         default:
-          return assert(false), ERR_WAT_INVALID_TOKEN;
+          return ERR_WAT_INVALID_TOKEN;
         }
         if(err)
-          return assert(false), err;
+          return err;
         state.defer.Pop();
       }
 

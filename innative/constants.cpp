@@ -480,6 +480,7 @@ namespace innative {
       if(!buf)
         return nullptr;
       snprintf(buf, n, "%i", i);
+      buf[n - 1] = 0;
       return buf;
     }
   }

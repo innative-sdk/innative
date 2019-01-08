@@ -115,7 +115,10 @@ void innative::ValidateFunctionSig(const FunctionType& sig, Environment& env, Mo
       AppendError(env, env.errors, m, ERR_MULTIPLE_RETURN_VALUES, "Return count of %u encountered: only 0 or 1 allowed.", sig.n_returns);
   }
   else
-    AppendError(env, env.errors, m, ERR_UNKNOWN_SIGNATURE_TYPE, "Illegal function type %hhi encountered: only -0x20 allowed", sig.form);
+  {
+    char buf[10];
+    AppendError(env, env.errors, m, ERR_UNKNOWN_SIGNATURE_TYPE, "Illegal function type %s encountered: only TE_func allowed", EnumToString(TYPE_ENCODING_MAP, sig.form, buf, 10));
+  }
 }
 
 bool innative::MatchFunctionType(const FunctionType& a, const FunctionType& b)
@@ -162,6 +165,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
               return AppendError(env, env.errors, m, ERR_ILLEGAL_C_IMPORT, "%s:%s is not a function. You can only import C functions at this time.", imp.module_name.str(), imp.export_name.str());
           }
         }
+        return; // This is valid
       }
       if(!imp.module_name.size() && !imp.export_name.size())
         return AppendError(env, env.errors, m, ERR_EMPTY_IMPORT, "Empty imports are invalid.");
@@ -252,7 +256,20 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
     if(!global)
       AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid exported global index %u", exp.index);
     else if(imp.global_desc.mutability != global->mutability || imp.global_desc.type != global->type)
-      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_IMPORT_TYPE, "Imported global type (%hhi) or mutability (%hhu) does not match exported type (%hhi) or mutability (%hhu)", imp.global_desc.type, imp.global_desc.mutability, global->type, global->mutability);
+    {
+      char buf[10];
+      char buf2[10];
+      AppendError(
+        env, 
+        env.errors,
+        m, 
+        ERR_INVALID_GLOBAL_IMPORT_TYPE, 
+        "Imported global type (%s) or mutability (%hhu) does not match exported type (%s) or mutability (%hhu)", 
+        EnumToString(TYPE_ENCODING_MAP, imp.global_desc.type, buf, 10), 
+        imp.global_desc.mutability, 
+        EnumToString(TYPE_ENCODING_MAP, global->type, buf2, 10),
+        global->mutability);
+    }
     else if(!(env.features & ENV_FEATURE_MUTABLE_GLOBALS) && imp.global_desc.mutability)
       AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_IMPORT_TYPE, "Imported global cannot be mutable.");
     break;
@@ -277,7 +294,10 @@ void innative::ValidateLimits(const ResizableLimits& limits, Environment& env, M
 void innative::ValidateTable(const TableDesc& table, Environment& env, Module* m)
 {
   if(table.element_type != TE_funcref)
-    AppendError(env, env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Table element type is %hhi: only funcref allowed.", table.element_type);
+  {
+    char buf[10];
+    AppendError(env, env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Table element type is %s: only funcref allowed.", EnumToString(TYPE_ENCODING_MAP, table.element_type, buf, 10));
+  }
   ValidateLimits(table.resizable, env, m);
 }
 

@@ -41,7 +41,7 @@ namespace innative {
 
         T* r = tmalloc<T>(env, size);
         if(!r)
-          return assert(false), ERR_FATAL_OUT_OF_MEMORY;
+          return ERR_FATAL_OUT_OF_MEMORY;
 
         for(varuint32 i = 0; i < size && err >= 0; ++i)
           err = PARSE(s, r[i], args...);
@@ -80,7 +80,7 @@ IR_ERROR innative::ParseByteArray(Stream& s, ByteArray& section, bool terminator
   if(n > 0)
   {
     if(!section.get())
-      return assert(false), ERR_FATAL_OUT_OF_MEMORY;
+      return ERR_FATAL_OUT_OF_MEMORY;
 
     uint32 bytes = static_cast<uint32>(s.ReadBytes(section.get(), section.size()));
     if(bytes != section.size())
@@ -505,7 +505,7 @@ IR_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, const Environme
   {
     f.body = tmalloc<Instruction>(env, f.body_size); // Overallocate maximum number of possible instructions we might have
     if(!f.body)
-      return assert(false), ERR_FATAL_OUT_OF_MEMORY;
+      return ERR_FATAL_OUT_OF_MEMORY;
 
     for(f.n_body = 0; s.pos < end && err >= 0; ++f.n_body)
       err = ParseInstruction(s, f.body[f.n_body], env);
@@ -676,7 +676,7 @@ IR_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, Byt
   {
     m.custom = tmalloc<CustomSection>(env, m.n_custom);
     if(!m.custom)
-      return assert(false), ERR_FATAL_OUT_OF_MEMORY;
+      return ERR_FATAL_OUT_OF_MEMORY;
   }
 
   while(err >= 0 && !s.End())
@@ -786,7 +786,7 @@ IR_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, Byt
   {
     m.name.resize(name.size(), true, env);
     if(!m.name.get())
-      return assert(false), ERR_FATAL_OUT_OF_MEMORY;
+      return ERR_FATAL_OUT_OF_MEMORY;
     tmemcpy(m.name.get(), m.name.size(), name.get(), name.size());
   }
   if(!m.name.size() || !ValidateIdentifier(m.name))
