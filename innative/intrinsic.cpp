@@ -56,3 +56,24 @@ llvm::Function* innative::code::IR_Intrinsic_FromC(llvm::Function* f, struct cod
   }
   return f;
 }
+
+llvm::Function* innative::code::IR_Intrinsic_Trap(llvm::Function* f, struct code::Context& context)
+{
+  if(!f)
+  {
+    f = llvm::Function::Create(
+      llvm::FunctionType::get(context.builder.getVoidTy(), { }, false),
+      llvm::Function::InternalLinkage,
+      "innative-intrinsic:trap",
+      context.llvm);
+    f->setCallingConv(llvm::CallingConv::Fast);
+    return f;
+  }
+
+  llvm::BasicBlock* bb = llvm::BasicBlock::Create(context.context, "from_block", f);
+  context.builder.SetInsertPoint(bb);
+  auto call = context.builder.CreateCall(llvm::Intrinsic::getDeclaration(context.llvm, llvm::Intrinsic::trap), { });
+  call->setDoesNotReturn();
+  context.builder.CreateUnreachable();
+  return f;
+}

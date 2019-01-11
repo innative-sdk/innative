@@ -25,20 +25,36 @@ class Benchmarks
 
 public:
   Benchmarks(const IRExports& exports, const char* arg0, int loglevel);
-  static int nbody(int n);
-  static int64_t vectorloop(int64_t n);
   static int64_t fac(int64_t n);
+  static int nbody(int n);
+  static int fannkuch_redux(int n);
 
   template<typename R, typename... Args>
-  Timing DoBenchmark(const char* wasm, const char* func, R(*f)(Args...), Args&&... args)
+  Timing DoBenchmark(FILE* out, const char* wasm, const char* func, const int (&COLUMNS)[6], R(*f)(Args...), Args&&... args)
   {
     Timing timing;
 
+    fprintf(out, "%-*s ", COLUMNS[0], func);
     timing.c = MeasureFunction<R, Args...>(f, std::forward<Args>(args)...);
+#ifndef IR_DEBUG
+    timing.c = MeasureFunction<R, Args...>(f, std::forward<Args>(args)...); // Do it again to account for CPU caching
+#endif
+    fprintf(out, "%-*lli ", COLUMNS[1], timing.c);
     timing.debug = MeasureWASM<R, Args...>(wasm, func, ENV_DEBUG|ENV_STRICT, ENV_OPTIMIZE_O0, std::forward<Args>(args)...);
+    fprintf(out, "%-*lli ", COLUMNS[2], timing.debug);
     timing.strict = MeasureWASM<R, Args...>(wasm, func, ENV_STRICT, ENV_OPTIMIZE_O3, std::forward<Args>(args)...);
+    fprintf(out, "%-*lli ", COLUMNS[3], timing.strict);
     timing.sandbox = MeasureWASM<R, Args...>(wasm, func, ENV_SANDBOX, ENV_OPTIMIZE_O3, std::forward<Args>(args)...);
-    timing.native = MeasureWASM<R, Args...>(wasm, func, 0, ENV_OPTIMIZE_O3, std::forward<Args>(args)...);
+    fprintf(out, "%-*lli ", COLUMNS[4], timing.sandbox);
+    timing.native = MeasureWASM<R, Args...>(wasm, func, ENV_EMIT_LLVM, ENV_OPTIMIZE_O3 | ENV_OPTIMIZE_FAST_MATH, std::forward<Args>(args)...);
+    fprintf(out, "%-*lli ", COLUMNS[5], timing.native);
+    fprintf(out, "\n%-*s %-*.2f %-*.2f %-*.2f %-*.2f %-*.2f\n", 
+      COLUMNS[0], "", 
+      COLUMNS[1], timing.c/double(timing.c),
+      COLUMNS[2], timing.debug / double(timing.c),
+      COLUMNS[3], timing.strict / double(timing.c),
+      COLUMNS[4], timing.sandbox / double(timing.c),
+      COLUMNS[5], timing.native / double(timing.c));
 
     return timing;
   }
