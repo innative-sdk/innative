@@ -73,7 +73,7 @@ IR_ERROR innative::OptimizeModules(const Environment* env, code::Context* contex
   llvm::ModulePassManager modulePassManager = passBuilder.buildPerModuleDefaultPipeline(optlevel, env->loglevel >= LOG_DEBUG);
 
   // Optimize all modules
-  for(size_t i = 1; i < env->n_modules; ++i)
+  for(size_t i = 0; i < env->n_modules; ++i)
     modulePassManager.run(*context[i].llvm, moduleAnalysisManager);
 
   /*{

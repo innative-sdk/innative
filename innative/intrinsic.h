@@ -85,6 +85,7 @@ namespace innative {
 
     llvm::Function* IR_Intrinsic_ToC(llvm::Function* f, struct Context& context);
     llvm::Function* IR_Intrinsic_FromC(llvm::Function* f, struct Context& context);
+    llvm::Function* IR_Intrinsic_Trap(llvm::Function* f, struct code::Context& context);
 
     struct Intrinsic
     {
@@ -95,7 +96,8 @@ namespace innative {
 
     static Intrinsic intrinsics[] = {
       Intrinsic{ "_innative_to_c", &IR_Intrinsic_ToC, nullptr },
-      Intrinsic{ "_innative_from_c", &IR_Intrinsic_FromC, nullptr }
+      Intrinsic{ "_innative_from_c", &IR_Intrinsic_FromC, nullptr },
+      Intrinsic{ "_innative_trap", &IR_Intrinsic_Trap, nullptr }
     };
   }
 }

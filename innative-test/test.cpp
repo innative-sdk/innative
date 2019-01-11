@@ -31,7 +31,7 @@ const char testenv[] = "(module $spectest "
 // We use khash instead of unordered_set so we can make it case-insensitive
 KHASH_INIT(match, kh_cstr_t, char, 0, kh_str_hash_funcins, kh_str_hash_insequal);
 
-size_t internal_tests()
+size_t internal_tests(FILE* out)
 {
   std::pair<const char*, void(TestHarness::*)()> tests[] = {
     { "internal.c", &TestHarness::test_environment },
@@ -46,8 +46,8 @@ size_t internal_tests()
   static constexpr int COLUMNS[3] = { 24, 11, 8 };
   TestHarness harness(stderr);
 
-  printf("%-*s %-*s %-*s\n", COLUMNS[0], "Internal Tests", COLUMNS[1], "Subtests", COLUMNS[2], "Pass/Fail");
-  printf("%-*s %-*s %-*s\n", COLUMNS[0], "--------------", COLUMNS[1], "--------", COLUMNS[2], "---------");
+  fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], "Internal Tests", COLUMNS[1], "Subtests", COLUMNS[2], "Pass/Fail");
+  fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], "--------------", COLUMNS[1], "--------", COLUMNS[2], "---------");
 
   size_t failures = 0;
   for(size_t i = 0; i < NUMTESTS; ++i)
@@ -58,22 +58,21 @@ size_t internal_tests()
 
     char buf[COLUMNS[1] + 1] = { 0 };
     snprintf(buf, COLUMNS[1] + 1, "%u/%u", results.first, results.second);
-    printf("%-*s %-*s %-*s\n", COLUMNS[0], tests[i].first, COLUMNS[1], buf, COLUMNS[2], (results.first == results.second) ? "PASS" : "FAIL");
+    fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], tests[i].first, COLUMNS[1], buf, COLUMNS[2], (results.first == results.second) ? "PASS" : "FAIL");
   }
 
-  printf("\n");
+  fprintf(out, "\n");
   return failures;
 }
 
-void internal_benchmarks(const IRExports& exports, const char* arg0, int log)
+void internal_benchmarks(FILE* out, const IRExports& exports, const char* arg0, int log)
 {
+  static constexpr int COLUMNS[6] = { 24,11,11,11,11,11 };
+  fprintf(out, "%-*s %-*s %-*s %-*s %-*s %-*s\n", COLUMNS[0], "Benchmark", COLUMNS[1], "C/C++", COLUMNS[2], "Debug", COLUMNS[3], "Strict", COLUMNS[4], "Sandbox", COLUMNS[5], "Native");
+  fprintf(out, "%-*s %-*s %-*s %-*s %-*s %-*s\n", COLUMNS[0], "---------", COLUMNS[1], "-----", COLUMNS[2], "-----", COLUMNS[3], "------", COLUMNS[4], "-------", COLUMNS[5], "------");
+
   Benchmarks benchmarks(exports, arg0, log);
-  auto timing = benchmarks.DoBenchmark<int64_t, int64_t>("../scripts/benchmark-fac.wat", "main", &Benchmarks::fac, 35);
-  std::cout << timing.c << std::endl;
-  std::cout << timing.debug << std::endl;
-  std::cout << timing.strict << std::endl;
-  std::cout << timing.sandbox << std::endl;
-  std::cout << timing.native << std::endl;
+  benchmarks.DoBenchmark<int64_t, int64_t>(out, "../scripts/benchmark-fac.wat", "fac", COLUMNS, &Benchmarks::fac, 38);
 }
 
 int main(int argc, char *argv[])
@@ -93,7 +92,7 @@ int main(int argc, char *argv[])
   std::cout << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
   std::cout << std::endl;
 
-  internal_tests();
+  internal_tests(stdout);
 
   std::unique_ptr<kh_match_t, void(*)(kh_match_t*)> matchfiles(kh_init_match(), kh_destroy_match);
   
@@ -110,8 +109,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  internal_benchmarks(exports, !argc ? 0 : argv[0], log);
-  return 0;
+  internal_benchmarks(stdout, exports, !argc ? 0 : argv[0], log);
 
   path testdir("../spec/test/core");
   std::vector<path> testfiles;

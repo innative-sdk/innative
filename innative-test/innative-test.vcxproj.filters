@@ -45,10 +45,10 @@
     <ClCompile Include="benchmark.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="benchmark_vectorloop.cpp">
+    <ClCompile Include="benchmark_fac.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="benchmark_fac.cpp">
+    <ClCompile Include="benchmark_fannkuch-redux.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
