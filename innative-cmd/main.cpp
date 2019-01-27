@@ -52,7 +52,7 @@ static const std::unordered_map<std::string, unsigned int> optimize_map = {
 
 void usage()
 {
-  std::cout << "Usage: innative-cmd [-r] [-f FLAG] [-l FILE] [-o FILE] [-a FILE] [-d PATH]\n"
+  std::cout << "Usage: innative-cmd [-r] [-f FLAG] [-l FILE] [-o FILE] [-a FILE] [-d PATH] [-s [FILE]]\n"
     "  -r : Run the compiled result immediately and display output. Requires a start function.\n"
     "  -f : Set a supported flag to true. Flags:\n";
  
@@ -63,10 +63,11 @@ void usage()
 
   std::cout << "\n"
     "  -l <FILE> : Links the input files against <FILE>, which must be a static library.\n"
-    "  -s <FILE> : Links the input files against <FILE>, which must be an ELF shared library.\n"
+    "  -L <FILE> : Links the input files against <FILE>, which must be an ELF shared library.\n"
     "  -o <FILE> : Sets the output path for the resulting executable or library.\n"
     "  -a <FILE> : Specifies an alternative linker to use instead of LLD.\n"
     "  -d <PATH> : Sets the directory that contains the SDK library and data files.\n"
+    "  -s [<FILE>] : Serializes all modules to .wat files. <FILE> can specify the output if only one module is present.\n"
     "  -w <[MODULE:]FUNCTION> : whitelists a given C import, does name-mangling if the module is specified.\n"
     "  -i : Installs this innative SDK to the host operating system.\n"
     "  -u : Uninstalls and deregisters this SDK from the host operating system.\n"
@@ -86,14 +87,15 @@ void printerr(FILE* f, const char* prefix, int err)
 int main(int argc, char *argv[])
 {
   std::vector<const char*> inputs;
-  std::vector<const char*> embeddings;
+  std::vector<std::pair<const char*, int>> embeddings;
   std::vector<const char*> whitelist;
   unsigned int flags = ENV_ENABLE_WAT; // Always enable WAT
   unsigned int optimize = 0;
   std::string out;
   std::vector<const char*> wast; // WAST files will be executed in the order they are specified, after all other modules are injected into the environment
-  const char* sdkpath = 0;
-  const char* linker = 0;
+  const char* sdkpath = nullptr;
+  const char* linker = nullptr;
+  const char* serialize = nullptr;
   bool run = false;
   bool generate = false;
   bool verbose = true;
@@ -131,9 +133,15 @@ int main(int argc, char *argv[])
         break;
       }
       case 'l': // lib
-        embeddings.push_back(argv[i] + 2);
+        embeddings.push_back({ argv[i] + 2, IR_TAG_ANY });
+        break;
+      case 'L': // shared lib
+        embeddings.push_back({ argv[i] + 2, IR_TAG_DYNAMIC });
         break;
       case 'o': // out
+        out = argv[i] + 2;
+        break;
+      case 's': // serialize
         out = argv[i] + 2;
         break;
       case 'g': // generate loader
@@ -303,10 +311,10 @@ int main(int argc, char *argv[])
   }
 
   // Add all embedding environments, plus the default environment
-  embeddings.push_back(INNATIVE_DEFAULT_ENVIRONMENT);
+  embeddings.push_back({ INNATIVE_DEFAULT_ENVIRONMENT, 0 });
   
   for(size_t i = 0; i < embeddings.size(); ++i)
-    (*exports.AddEmbedding)(env, 0, embeddings[i], 0);
+    (*exports.AddEmbedding)(env, embeddings[i].second, embeddings[i].first, 0);
 
   if(err < 0)
   {
@@ -317,6 +325,26 @@ int main(int argc, char *argv[])
 
   // Ensure all modules are loaded, in case we have multithreading enabled
   (*exports.WaitForLoad)(env);
+
+  if(serialize != nullptr) // If you want to serialize the results, we do so now that the modules have been loaded
+  {
+    if(serialize[0]) // If a name was specified, verify only one module exists
+    {
+      if(env->n_modules != 1)
+        fprintf(stderr, "If you have more than one module, you cannot specify an output file for serialization. Use [-s] by itself, instead.");
+    }
+
+    for(size_t i = 0; i < env->n_modules; ++i)
+    {
+      std::string target = env->modules[i].name.str();
+      target += ".wat";
+
+      if(serialize != nullptr)
+        target = serialize;
+
+      innative_serialize_module(env, i, target.c_str());
+    }
+  }
 
   // Check if this is a .wast file, which must be handled differently because it's an entire environment
   if(wast.size() > 0)

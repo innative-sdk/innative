@@ -87,13 +87,13 @@ extern "C" {
   // Tooling functions that exist for command line utilities that always statically link to the runtime
   IR_COMPILER_DLLEXPORT extern int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bool always_compile);
   IR_COMPILER_DLLEXPORT extern int innative_compile_file(const char* file, const char* out, uint64_t flags, uint64_t optimize, uint64_t features, bool dynamic, const struct _IR_WHITELIST* whitelist, unsigned int n_whitelist, const char* arg0);
+  IR_COMPILER_DLLEXPORT extern int innative_serialize_module(Environment* env, size_t m, const char* out);
   IR_COMPILER_DLLEXPORT extern int innative_build_loader(struct _IR_CHUNK* chunks, const char* out, bool dynamic);
   IR_COMPILER_DLLEXPORT extern void innative_set_work_dir_to_bin(const char* arg0);
   IR_COMPILER_DLLEXPORT extern int innative_install(const char* arg0, bool full); // full install requires elevation on windows
   IR_COMPILER_DLLEXPORT extern int innative_uninstall();
   IR_COMPILER_DLLEXPORT extern const char* innative_type_encoding_string(int type_encoding);
   IR_COMPILER_DLLEXPORT extern const char* innative_error_string(int error_code);
-  IR_COMPILER_DLLEXPORT extern void INNATIVE_DEBUG_TEST();
 #ifdef  __cplusplus
 }
 #endif

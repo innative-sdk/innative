@@ -144,14 +144,14 @@ namespace innative {
       char* end;
       out = (*fn)(numbuf.c_str(), &end, args...);
 #ifdef IR_PLATFORM_POSIX 
-      if(std::isinf(out)) // libc incorrectly parses certain edge cases as "inf" without setting errno to ERANGE
+     /* if(std::isinf(out)) // libc incorrectly parses certain edge cases as "inf" without setting errno to ERANGE
       {
         const char* p = numbuf.c_str();
         if(*p == '+' || *p == '-')
           ++p;
         if(strncasecmp(p, "inf", 3) != 0)
           return ERR_WAT_OUT_OF_RANGE;
-      }
+      }*/
       if(out < 1.1754942e-38f) // glibc incorrectly considers subnormal numbers as underflow and sets ERANGE in this case
         errno = 0;
 #endif

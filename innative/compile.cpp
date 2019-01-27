@@ -2640,6 +2640,11 @@ namespace innative {
         }
         else
           cache.emplace_back((const char*)cur->data);
+
+#ifdef IR_PLATFORM_POSIX
+        if(cur->tag == 2)
+          cache.back().insert(0, "-l");
+#endif
       }
 
       for(auto& v : cache) // We can only do this after we're finished adding everything to cache
@@ -2651,14 +2656,25 @@ namespace innative {
     return ERR_SUCCESS;
   }
 
+#if defined(IR_64BIT) && defined(IR_ENDIAN_LITTLE)
+#define IR_LINKER_PLATFORM_STRING "elf_x86_64"
+#elif defined(IR_32BIT) && defined(IR_ENDIAN_LITTLE)
+#define IR_LINKER_PLATFORM_STRING "elf_i386"
+#elif defined(IR_64BIT) && defined(IR_ENDIAN_BIG)
+#define IR_LINKER_PLATFORM_STRING "elf64btsmip"
+#elif defined(IR_32BIT) && defined(IR_ENDIAN_BIG)
+#define IR_LINKER_PLATFORM_STRING "elf32btsmip"
+#endif
+
   std::vector<std::string> GetSymbols(const char* file)
   {
     std::string outbuf;
     llvm::raw_string_ostream sso(outbuf);
+    
 #ifdef IR_PLATFORM_WIN32
     return lld::coff::GetSymbols(file, sso);
 #else
-    return lld::elf::GetSymbols(file, sso);
+    return lld::elf::GetSymbols(file, sso, IR_LINKER_PLATFORM_STRING);
 #endif
   }
 

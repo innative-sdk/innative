@@ -12,6 +12,12 @@
 #include <string.h>
 #include <chrono>
 
+#ifdef IR_PLATFORM_WIN32
+#define ALLOCA(sz) _alloca(sz)
+#else
+#define ALLOCA(sz) alloca(sz)
+#endif
+
 class Benchmarks
 {
   struct Timing
