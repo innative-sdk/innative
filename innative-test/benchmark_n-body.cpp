@@ -29,7 +29,7 @@ typedef intptr_t intnative_t;
 int Benchmarks::nbody(int n)
 {
   // Create and initialize factorial_Lookup_Table.
-  intnative_t* factorial_Lookup_Table = (intnative_t*)_alloca(sizeof(intnative_t) * (n + 1));
+  intnative_t* factorial_Lookup_Table = (intnative_t*)ALLOCA(sizeof(intnative_t) * (n + 1));
   //intnative_t factorial_Lookup_Table[n + 1];
 
   factorial_Lookup_Table[0] = 1;
@@ -47,9 +47,9 @@ int Benchmarks::nbody(int n)
 
   intnative_t maximum_Flip_Count = 0, checksum = 0;
 
-  intnative_t* count = (intnative_t*)_alloca(sizeof(intnative_t) * n);
-  int8_t* temp_Permutation = (int8_t*)_alloca(sizeof(int8_t) * n);
-  int8_t* current_Permutation = (int8_t*)_alloca(sizeof(int8_t) * n);
+  intnative_t* count = (intnative_t*)ALLOCA(sizeof(intnative_t) * n);
+  int8_t* temp_Permutation = (int8_t*)ALLOCA(sizeof(int8_t) * n);
+  int8_t* current_Permutation = (int8_t*)ALLOCA(sizeof(int8_t) * n);
 
   // Iterate over each block.
 #pragma omp parallel for reduction(max:maximum_Flip_Count) reduction(+:checksum)

@@ -3,10 +3,12 @@
 
 #include "innative/export.h"
 #include "innative/path.h"
+#include "serialize.h"
 #include "tools.h"
 #include "wast.h"
 #include <stdio.h>
 #include <iostream>
+#include <fstream>
 #include <memory>
 #include <string>
 
@@ -28,7 +30,16 @@ void innative_runtime(IRExports* exports)
   exports->DestroyEnvironment = &DestroyEnvironment;
 }
 
-int innative_compile_file(const char* file, const char* out, uint64_t flags, uint64_t optimize, uint64_t features, bool dynamic, const struct _IR_WHITELIST* whitelist, unsigned int n_whitelist, const char* arg0)
+int innative_compile_file(
+  const char* file, 
+  const char* out, 
+  uint64_t flags, 
+  uint64_t optimize,
+  uint64_t features,
+  bool dynamic,
+  const struct _IR_WHITELIST* whitelist, 
+  unsigned int n_whitelist,
+  const char* arg0)
 {
   // Then create the runtime environment with the module count.
   Environment* env = CreateEnvironment(1, 0, arg0);
@@ -186,4 +197,32 @@ const char* innative_type_encoding_string(int type_encoding)
 const char* innative_error_string(int error_code)
 {
   return utility::EnumToString(utility::ERR_ENUM_MAP, error_code, 0, 0);
+}
+
+int innative_serialize_module(Environment* env, size_t m, const char* out)
+{
+  if(!env)
+    return ERR_FATAL_NULL_POINTER;
+
+  if(m >= env->n_modules)
+    return ERR_FATAL_INVALID_MODULE;
+
+  Queue<wat::WatToken> tokens;
+  TokenizeModule(*env, tokens, env->modules[m]);
+  int err = wat::CheckWatTokens(*env, env->errors, tokens, "");
+  if(err < 0)
+    return err;
+
+  std::string name = env->modules[m].name.str();
+  if(out != nullptr)
+    name = out;
+  else
+    name += ".wat";
+
+  std::ofstream f(name, std::ios_base::binary|std::ios_base::out|std::ios_base::trunc);
+  if(f.bad())
+    return ERR_FATAL_FILE_ERROR;
+
+  WriteTokens(tokens, f);
+  return ERR_SUCCESS;
 }
