@@ -20,8 +20,8 @@ void innative_runtime(IRExports* exports)
   exports->CreateEnvironment = &CreateEnvironment;
   exports->AddModule = &AddModule;
   exports->AddWhitelist = &AddWhitelist;
-  exports->WaitForLoad = &WaitForLoad;
   exports->AddEmbedding = &AddEmbedding;
+  exports->FinalizeEnvironment = &FinalizeEnvironment;
   exports->Compile = &Compile;
   exports->LoadFunction = &LoadFunction;
   exports->LoadGlobal = &LoadGlobal;
@@ -90,6 +90,8 @@ int innative_compile_file(
       fprintf(env->log, "Error loading environment: %s\n", utility::EnumToString(utility::ERR_ENUM_MAP, err, buf, 10));
     return err;
   }
+
+  FinalizeEnvironment(env);
 
   // Attempt to compile. If an error happens, output it and any validation errors to the log
   err = Compile(env, out);

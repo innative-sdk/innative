@@ -140,12 +140,6 @@ void innative::AddWhitelist(Environment* env, const char* module_name, const cha
   //kh_val(env->whitelist, iter) = !ftype ? FunctionType{ TE_NONE, 0, 0, 0, 0 } : *ftype;
 }
 
-void innative::WaitForLoad(Environment* env)
-{
-  while(((std::atomic<size_t>&)env->size).load(std::memory_order_relaxed) > ((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed))
-    std::this_thread::sleep_for(std::chrono::milliseconds(5)); // Spin until all modules loaded
-}
-
 enum IR_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, uint64_t size)
 {
   if(!env)
@@ -158,23 +152,35 @@ enum IR_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data
   embed->next = env->embeddings;
   env->embeddings = embed;
 
-  if(env->cimports)
-  {
-    Path path(env->sdkpath);
-    path.Append((const char*)embed->data);
-    auto symbols = GetSymbols(path.c_str());
+  return ERR_SUCCESS;
+}
 
-    int r;
-    for(auto symbol : symbols)
+enum IR_ERROR innative::FinalizeEnvironment(Environment* env)
+{
+  // If we have an empty whitelist defined, all C function imports are illegal, so don't bother dumping symbols
+  if(env->cimports && (!(env->flags & ENV_WHITELIST) || kh_size(env->whitelist) > 0))
+  {
+    for(Embedding* embed = env->embeddings; embed != nullptr; embed = embed->next)
     {
-      Identifier id;
-      id.resize(symbol.size(), true, *env);
-      memcpy(id.get(), symbol.data(), symbol.size());
-      kh_put_cimport(env->cimports, id, &r);
-      if(!r)
-        return ERR_INVALID_EMBEDDING;
+      Path path(env->sdkpath);
+      path.Append((const char*)embed->data);
+      auto symbols = GetSymbols(path.c_str(), env->log);
+
+      int r;
+      for(auto symbol : symbols)
+      {
+        Identifier id;
+        id.resize(symbol.size(), true, *env);
+        memcpy(id.get(), symbol.data(), symbol.size());
+        kh_put_cimport(env->cimports, id, &r);
+        if(!r)
+          return ERR_INVALID_EMBEDDING;
+      }
     }
   }
+
+  while(((std::atomic<size_t>&)env->size).load(std::memory_order_relaxed) > ((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed))
+    std::this_thread::sleep_for(std::chrono::milliseconds(5)); // Spin until all modules have loaded
 
   return ERR_SUCCESS;
 }

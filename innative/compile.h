@@ -10,7 +10,7 @@
 
 namespace innative {
   IR_ERROR CompileEnvironment(const Environment* env, const char* file);
-  std::vector<std::string> GetSymbols(const char* file);
+  std::vector<std::string> GetSymbols(const char* file, FILE* log);
   void AppendIntrinsics(Environment& env);
 }
 
