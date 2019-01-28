@@ -2666,16 +2666,20 @@ namespace innative {
 #define IR_LINKER_PLATFORM_STRING "elf32btsmip"
 #endif
 
-  std::vector<std::string> GetSymbols(const char* file)
+  std::vector<std::string> GetSymbols(const char* file, FILE* log)
   {
     std::string outbuf;
     llvm::raw_string_ostream sso(outbuf);
     
 #ifdef IR_PLATFORM_WIN32
-    return lld::coff::GetSymbols(file, sso);
+    auto v = lld::coff::GetSymbols(file, sso);
 #else
-    return lld::elf::GetSymbols(file, sso, IR_LINKER_PLATFORM_STRING);
+    auto v = lld::elf::GetSymbols(file, sso, IR_LINKER_PLATFORM_STRING);
 #endif
+
+    if(!v.size())
+      fputs(outbuf.c_str(), log);
+    return v;
   }
 
   void AppendIntrinsics(Environment& env)

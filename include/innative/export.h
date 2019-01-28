@@ -55,8 +55,8 @@ extern "C" {
     Environment* (*CreateEnvironment)(unsigned int modules, unsigned int maxthreads, const char* arg0);
     void(*AddModule)(Environment* env, const void* data, uint64_t size, const char* name, int* err); // If size is 0, data points to a null terminated UTF8 file path
     void(*AddWhitelist)(Environment* env, const char* module_name, const char* export_name);
-    void(*WaitForLoad)(Environment* env);
     enum IR_ERROR(*AddEmbedding)(Environment* env, int tag, const void* data, uint64_t size); // If size is 0, data points to a null terminated UTF8 file path
+    enum IR_ERROR(*FinalizeEnvironment)(Environment* env); // Waits for all modules to finish loading and performs any cleanup necessary
     enum IR_ERROR(*Compile)(Environment* env, const char* file);
     IR_Entrypoint(*LoadFunction)(void* assembly, const char* module_name, const char* function); // if function is null, loads the entrypoint function
     IR_Entrypoint(*LoadTable)(void* assembly, const char* module_name, const char* table);

@@ -249,7 +249,7 @@ int main(int argc, char *argv[])
         UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, (void*)data, size);
       return ERR_SUCCESS;
     };
-    exports.WaitForLoad = [](Environment* env) {};
+    exports.FinalizeEnvironment = [](Environment* env) -> enum IR_ERROR { return ERR_SUCCESS; };
     exports.Compile = [](Environment* env, const char* file)->enum IR_ERROR { return ERR_SUCCESS; };
     exports.DestroyEnvironment = [](Environment* env) { EndUpdateResourceA((HANDLE)env->alloc, FALSE); };
 
@@ -324,7 +324,7 @@ int main(int argc, char *argv[])
   }
 
   // Ensure all modules are loaded, in case we have multithreading enabled
-  (*exports.WaitForLoad)(env);
+  (*exports.FinalizeEnvironment)(env);
 
   if(serialize != nullptr) // If you want to serialize the results, we do so now that the modules have been loaded
   {

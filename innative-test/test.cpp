@@ -81,6 +81,7 @@ int main(int argc, char *argv[])
   IRExports exports;
   innative_runtime(&exports);
   int log = LOG_WARNING;
+  bool onlyinternal = false;
 
   /*std::unique_ptr<FILE, void(*)(FILE*)> f(nullptr, [](FILE* f) { fclose(f); });
   {
@@ -92,8 +93,6 @@ int main(int argc, char *argv[])
   std::cout << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
   std::cout << std::endl;
 
-  internal_tests(stdout);
-
   std::unique_ptr<kh_match_t, void(*)(kh_match_t*)> matchfiles(kh_init_match(), kh_destroy_match);
   
   {
@@ -101,7 +100,7 @@ int main(int argc, char *argv[])
     for(int i = 1; i < argc; ++i)
     {
       if(!STRICMP(argv[i], "-internal"))
-        return 0; // If we only want the internal tests, just bail out at this point
+        onlyinternal = true;
       if(!STRICMP(argv[i], "-v"))
         log = LOG_DEBUG;
       else
@@ -109,7 +108,14 @@ int main(int argc, char *argv[])
     }
   }
 
-  internal_benchmarks(stdout, exports, !argc ? 0 : argv[0], log);
+  if(kh_size(matchfiles) == 0 || onlyinternal)
+    internal_tests(stdout);
+  
+  if(onlyinternal)
+    return 0;
+
+  if(kh_size(matchfiles) == 0)
+    internal_benchmarks(stdout, exports, !argc ? 0 : argv[0], log);
 
   path testdir("../spec/test/core");
   std::vector<path> testfiles;
@@ -118,7 +124,7 @@ int main(int argc, char *argv[])
   {
     if(!STRICMP(p.path().extension().u8string().data(), ".wast"))
     {
-      if(kh_end(matchfiles) > 0)
+      if(kh_size(matchfiles) > 0)
       {
         khiter_t iter = kh_get_match(matchfiles.get(), p.path().filename().u8string().data());
         if(!kh_exist2(matchfiles, iter))

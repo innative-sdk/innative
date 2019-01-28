@@ -135,9 +135,6 @@ int main(int argc, char** argv)
       return err;
     }
 
-    // Ensure all modules are loaded, in case we have multithreading enabled
-    (*exports.WaitForLoad)(env);
-
     // Then add each embedding environment payload to the environment.
     // These payloads have a tag, but have no set format. What the tag means depends on the runtime we've loaded.
 #ifdef IR_PLATFORM_WIN32
@@ -168,6 +165,9 @@ int main(int argc, char** argv)
 #elif defined(IR_PLATFORM_POSIX)
 #error TODO
 #endif
+
+    // Ensure all modules are loaded, in case we have multithreading enabled
+    (*exports.FinalizeEnvironment)(env);
 
     // Attempt to compile. If an error happens, output it and any validation errors to stderr
     err = (*exports.Compile)(env, "out.cache");

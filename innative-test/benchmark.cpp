@@ -22,7 +22,7 @@ void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
   if(err < 0)
     return 0;
 
-  (*_exports.WaitForLoad)(env);
+  (*_exports.FinalizeEnvironment)(env);
   std::string out(wasm);
   out += ".dll";
   err = (*_exports.Compile)(env, out.c_str());
