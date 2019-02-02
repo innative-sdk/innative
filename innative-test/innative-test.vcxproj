@@ -335,6 +335,7 @@
     <ClCompile Include="test.cpp" />
     <ClCompile Include="test_allocator.cpp" />
     <ClCompile Include="test_environment.cpp" />
+    <ClCompile Include="test_parallel_parsing.cpp" />
     <ClCompile Include="test_path.cpp" />
     <ClCompile Include="test_queue.cpp" />
     <ClCompile Include="test_stack.cpp" />

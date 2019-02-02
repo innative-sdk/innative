@@ -40,6 +40,8 @@ size_t internal_tests(FILE* out)
     { "stack.h", &TestHarness::test_stack },
     { "stream.h", &TestHarness::test_stream },
     { "util.h", &TestHarness::test_util },
+    { "allocator", &TestHarness::test_allocator },
+    { "parallel parsing", &TestHarness::test_parallel_parsing}
   };
 
   static const size_t NUMTESTS = sizeof(tests) / sizeof(decltype(tests[0]));

@@ -142,7 +142,7 @@ int main(int argc, char *argv[])
         out = argv[i] + 2;
         break;
       case 's': // serialize
-        out = argv[i] + 2;
+        serialize = argv[i] + 2;
         break;
       case 'g': // generate loader
         generate = true;

@@ -68,7 +68,10 @@ void innative::LoadModule(Environment* env, size_t index, const void* data, uint
   Stream s = { (uint8_t*)data, size, 0 };
 
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
+  {
+    env->modules[index] = { 0 };
     *err = innative::wat::ParseWatModule(*env, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
+  }
   else
     *err = ParseModule(s, *env, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
 
@@ -107,7 +110,7 @@ void innative::AddModule(Environment* env, const void* data, uint64_t size, cons
   }
 
   size_t index = ((std::atomic<size_t>&)env->size).fetch_add(1, std::memory_order_acq_rel);
-  if(index >= env->capacity)
+  if(index >= ((std::atomic<size_t>&)env->capacity).load(std::memory_order_acquire))
   {
     while(((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed) != index)
       std::this_thread::sleep_for(std::chrono::milliseconds(5)); // If we've exceeded our capacity, block until all other threads have finished

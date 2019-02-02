@@ -558,6 +558,7 @@ bool WastIsNaN(float f, bool canonical)
 {
   if(!isnan(f))
     return false;
+  if(!canonical) return true; // Due to webassembly's NaN requirements not mapping to hardware, we ignore this subcase right now.
   union { float f; uint32_t i; } u = { f };
   return ((u.i & 0x200000U) != 0) != canonical;
 }
@@ -566,6 +567,7 @@ bool WastIsNaN(double f, bool canonical)
 {
   if(!isnan(f))
     return false;
+  if(!canonical) return true; // Due to webassembly's NaN requirements not mapping to hardware, we ignore this subcase right now.
   union { double f; uint64_t i; } u = { f };
   return ((u.i & 0x4000000000000ULL) != 0) != canonical;
 }
