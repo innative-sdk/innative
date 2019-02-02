@@ -668,9 +668,9 @@ IR_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, Byt
   if(s.pos != s.size)
     return ERR_PARSE_INVALID_FILE_LENGTH;
 
-  m.exports = kh_init_exports();
   s.pos = begin;
   size_t curcustom = 0;
+  m.exports = kh_init_exports();
 
   if(m.n_custom > 0)
   {

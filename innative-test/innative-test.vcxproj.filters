@@ -51,6 +51,9 @@
     <ClCompile Include="benchmark_fannkuch-redux.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="test_parallel_parsing.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="test.h">
