@@ -94,6 +94,8 @@ extern "C" {
   IR_COMPILER_DLLEXPORT extern int innative_uninstall();
   IR_COMPILER_DLLEXPORT extern const char* innative_type_encoding_string(int type_encoding);
   IR_COMPILER_DLLEXPORT extern const char* innative_error_string(int error_code);
+  IR_COMPILER_DLLEXPORT extern int innative_compile_llvm(const char** files, size_t n, int flags, const char* out, FILE* log, const char* sdkpath, const char* arg0);
+
 #ifdef  __cplusplus
 }
 #endif

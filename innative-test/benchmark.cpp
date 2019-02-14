@@ -2,6 +2,7 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "benchmark.h"
+#include "innative/path.h"
 #include <chrono>
 
 Benchmarks::Benchmarks(const IRExports& exports, const char* arg0, int loglevel) : _exports(exports), _arg0(arg0), _loglevel(loglevel) {}
@@ -23,8 +24,8 @@ void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
     return 0;
 
   (*_exports.FinalizeEnvironment)(env);
-  std::string out(wasm);
-  out += ".dll";
+  std::string out = innative::Path(wasm).File().RemoveExtension().Get() + IR_LIBRARY_EXTENSION;
+
   err = (*_exports.Compile)(env, out.c_str());
   if(err < 0)
     return 0;
@@ -35,10 +36,12 @@ void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
 
   return m;
 }
+
 std::chrono::high_resolution_clock::time_point Benchmarks::start()
 {
   return std::chrono::high_resolution_clock::now();
 }
+
 int64_t Benchmarks::end(std::chrono::high_resolution_clock::time_point start)
 {
   return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count();
