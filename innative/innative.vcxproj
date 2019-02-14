@@ -377,6 +377,7 @@
     <ClCompile Include="export.cpp" />
     <ClCompile Include="intrinsic.cpp" />
     <ClCompile Include="lexer.cpp" />
+    <ClCompile Include="reverse.cpp" />
     <ClCompile Include="optimize.cpp" />
     <ClCompile Include="parse.cpp" />
     <ClCompile Include="schema.cpp" />

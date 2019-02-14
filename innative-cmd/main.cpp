@@ -69,6 +69,7 @@ void usage()
     "  -d <PATH> : Sets the directory that contains the SDK library and data files.\n"
     "  -s [<FILE>] : Serializes all modules to .wat files. <FILE> can specify the output if only one module is present.\n"
     "  -w <[MODULE:]FUNCTION> : whitelists a given C import, does name-mangling if the module is specified.\n"
+    "  -c : Assumes the input files are actually LLVM IR files and compiles them into a single webassembly module.\n"
     "  -i : Installs this innative SDK to the host operating system.\n"
     "  -u : Uninstalls and deregisters this SDK from the host operating system.\n"
     "  -v : Turns on verbose logging."
@@ -99,6 +100,7 @@ int main(int argc, char *argv[])
   bool run = false;
   bool generate = false;
   bool verbose = true;
+  bool reverse = false;
   int err = ERR_SUCCESS;
 
   for(int i = 1; i < argc; ++i) // skip first argument, which is the program path
@@ -172,6 +174,9 @@ int main(int argc, char *argv[])
         else
           std::cout << "Successfully uninstalled runtime!" << std::endl;
         return err;
+      case 'c': // Compile LLVM IR into webassembly
+        reverse = true;
+        break;
       default:
         std::cout << "Unknown command line option: " << argv[i] << std::endl;
         err = -5;
@@ -200,7 +205,18 @@ int main(int argc, char *argv[])
   }
 
   if(out.empty()) // If no out is specified, default to name of first input file
-    out = innative::Path(inputs[0]).RemoveExtension().Get() + ((flags&ENV_LIBRARY) ? IR_LIBRARY_EXTENSION : IR_EXE_EXTENSION);
+  {
+    out = innative::Path(inputs[0]).RemoveExtension().Get();
+    if(reverse)
+      out += ".wasm";
+    else if(flags&ENV_LIBRARY)
+      out += IR_LIBRARY_EXTENSION;
+    else
+      out += IR_EXE_EXTENSION;
+  }
+
+  if(reverse) // If we're compiling LLVM IR instead of webassembly, we divert to another code path
+    return innative_compile_llvm(inputs.data(), inputs.size(), flags, out.c_str(), stdout, sdkpath, (!argc ? 0 : argv[0]));
 
   IRExports exports = { 0 };
   if(generate) // If we are generating a loader, we replace all of the normal functions to reroute the resources into the EXE file

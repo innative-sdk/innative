@@ -7,7 +7,6 @@
 #include "validate.h"
 #include <limits>
 
-
 using std::string;
 using std::numeric_limits;
 
