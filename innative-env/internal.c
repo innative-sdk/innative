@@ -12,9 +12,18 @@
 #error unknown platform!
 #endif
 
+  // Very simple memcpy implementation because we don't have access to the C library
 IR_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz)
 {
-  // Very simple memcpy implementation because we don't have access to the C library
+  // Align dest pointer
+  while((size_t)dest % sizeof(uint64_t) && sz)
+  {
+    *dest = *src;
+    dest += 1;
+    src += 1;
+    sz -= 1;
+  }
+
   while(sz > sizeof(uint64_t))
   {
     *((uint64_t*)dest) = *((uint64_t*)src);
@@ -22,6 +31,7 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, cons
     src += sizeof(uint64_t);
     sz -= sizeof(uint64_t);
   }
+
   while(sz)
   {
     *dest = *src;

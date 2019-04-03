@@ -15,6 +15,7 @@
 #include "llvm/Linker/Linker.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "lld/Common/Driver.h"
+#include <fstream>
 
 using namespace innative;
 
@@ -37,7 +38,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
   llvm::InitializeAllAsmPrinters();
 
   std::string llvm_err;
-  auto arch = llvm::TargetRegistry::lookupTarget("wasm64-unknown-unknown", llvm_err);
+  auto arch = llvm::TargetRegistry::lookupTarget("wasm32-unknown-unknown", llvm_err);
 
   if(!arch)
     return ERR_FATAL_NULL_POINTER;
@@ -48,7 +49,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
   if(env->flags&ENV_LIBRARY)
     RM = llvm::Optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
 #endif
-  auto machine = arch->createTargetMachine("wasm64-unknown-unknown", llvm::sys::getHostCPUName(), "", opt, RM, llvm::None);
+  auto machine = arch->createTargetMachine("wasm32-unknown-unknown", llvm::sys::getHostCPUName(), "", opt, RM, llvm::None);
 
   // We link everything into one giant module, because wasm currently doesn't work well with multiple modules
   llvm::SMDiagnostic diag;
@@ -58,20 +59,27 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
 
   for(size_t i = 0; i < n; ++i)
   {
-    if(!link.linkInModule(llvm::parseIRFile(files[i], diag, llvm_context)))
+    if(!std::ifstream(files[i]))
+    {
+      fputs(files[i], log);
+      fputs(" does not exist!\n", log);
+      return ERR_FATAL_FILE_ERROR;
+    }
+
+    if(link.linkInModule(llvm::parseIRFile(files[i], diag, llvm_context)))
     {
       fputs("Failed to link module: ", log);
       fputs(files[0], log);
-      fputs("\n", log);
+      fputs("\nError: ", log);
+      fputs(diag.getMessage().data(), log);
+      return ERR_FATAL_LINK_ERROR;
     }
   }
   
-  if(!link.linkInModule(llvm::parseIRFile((sdkdir + "buddy-malloc.ll").Get().c_str(), diag, llvm_context)))
-    fputs("Failed to link utility IR\n", log);
-
+  if(link.linkInModule(llvm::parseIRFile((sdkdir + "buddy-malloc.ll").Get().c_str(), diag, llvm_context)))
   {
-    llvm::raw_fd_ostream fdo(1, false, true);
-    diag.print("inNative", fdo);
+    fputs("Failed to link utility IR\nError: ", log);
+    fputs(diag.getMessage().data(), log);
   }
 
   std::error_code EC;
@@ -92,16 +100,16 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
 
   if(machine->addPassesToEmitFile(pass, dest, nullptr, FileType))
   {
-    fputs("TheTargetMachine can't emit a file of this type", log);
+    fputs("TheTargetMachine can't emit a file of this type.\n", log);
     return ERR_FATAL_FILE_ERROR;
   }
 
   pass.run(*composite);
   dest.flush();
-  std::string outfile("--output=");
+  std::string outfile("-o");
   outfile += out;
   
-  std::vector<const char*> args = { "inNative", objfile.c_str(), "--allow-undefined", outfile.c_str() };
+  std::vector<const char*> args = { "inNative", "--strip-all", objfile.c_str(), "--allow-undefined", outfile.c_str() };
 
   if(flags&ENV_LIBRARY)
     args.push_back("--no-entry");
@@ -112,5 +120,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
       return ERR_FATAL_LINK_ERROR;
   }
 
+  fputs("Successfully compiled monolithic wasm module: ", log);
+  fputs(out, log);
   return ERR_SUCCESS;
 }

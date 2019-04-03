@@ -34,6 +34,7 @@ KHASH_INIT(match, kh_cstr_t, char, 0, kh_str_hash_funcins, kh_str_hash_insequal)
 size_t internal_tests(FILE* out)
 {
   std::pair<const char*, void(TestHarness::*)()> tests[] = {
+    { "wasm_malloc.c", &TestHarness::test_malloc },
     { "internal.c", &TestHarness::test_environment },
     { "path.h", &TestHarness::test_path },
     { "queue.h", &TestHarness::test_queue },

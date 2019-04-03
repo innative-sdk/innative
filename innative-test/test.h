@@ -22,6 +22,7 @@ public:
   void test_stream();
   void test_util();
   void test_parallel_parsing();
+  void test_malloc();
 
   inline std::pair<uint32_t, uint32_t> Results() { auto r = _testdata; _testdata = { 0,0 }; return r; }
 
@@ -46,6 +47,6 @@ protected:
   FILE* _target;
 };
 
-#define TEST(x) DoTest(x, ""#x, __FILE__, __LINE__);
+#define TEST(x) DoTest(x, ""#x, __FILE__, __LINE__)
 
 #endif
