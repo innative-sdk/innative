@@ -119,6 +119,17 @@ void FunctionDebugInfo(Func* fn, code::Context& context, bool definition, unsign
     llvm::DINode::FlagZero,
     (fn->getCallingConv() == llvm::CallingConv::C) ? llvm::dwarf::DW_CC_normal : llvm::dwarf::DW_CC_nocall);
 
+  llvm::DISubprogram::DISPFlags spflags = llvm::DISubprogram::DISPFlags::SPFlagZero;
+
+  if(!fn->hasValidDeclarationLinkage())
+    spflags |= llvm::DISubprogram::DISPFlags::SPFlagLocalToUnit;
+
+  if(definition)
+    spflags |= llvm::DISubprogram::DISPFlags::SPFlagDefinition;
+
+  if(context.env.optimize != 0)
+    spflags |= llvm::DISubprogram::DISPFlags::SPFlagOptimized;
+
   fn->setSubprogram(context.dbuilder->createFunction(
     context.dunit,
     fn->getName(),
@@ -126,11 +137,9 @@ void FunctionDebugInfo(Func* fn, code::Context& context, bool definition, unsign
     context.dunit,
     line,
     subtype,
-    !fn->hasValidDeclarationLinkage(),
-    definition,
     line,
     definition ? llvm::DINode::FlagZero : llvm::DINode::FlagFwdDecl,
-    context.env.optimize != 0));
+    spflags));
 }
 
 Func* CompileFunction(FunctionType& signature, const Twine& name, code::Context& context)
@@ -2520,6 +2529,15 @@ namespace innative {
     context[0].llvm->getFunctionList().push_back(main);
 
 #ifdef IR_PLATFORM_WIN32
+    // The windows linker requires this to be defined. It's not actually used, just... defined.
+   new llvm::GlobalVariable(
+      *context->llvm,
+      builder.getInt32Ty(),
+      false,
+      llvm::GlobalValue::ExternalLinkage,
+      builder.getInt32(0), // This value doesn't matter, it just needs to be something so LLVM exports the symbol.
+      "_fltused");
+
     if(env->flags&ENV_LIBRARY)
     {
       Func* mainstub = Func::Create(
