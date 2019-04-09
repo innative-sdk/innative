@@ -1,10 +1,7 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#include "benchmark.h"
 #include <stdint.h>
-#include <stdlib.h>
-#include <malloc.h>
 
 // The Computer Language Benchmarks Game
 // https://salsa.debian.org/benchmarksgame-team/benchmarksgame/
@@ -23,17 +20,22 @@
 // blocks to more evenly distribute the workload amongst the threads.
 #define PREFERRED_NUMBER_OF_BLOCKS_TO_USE 12
 
-// intptr_t should be the native integer type on most sane systems.
-typedef intptr_t intnative_t;
+#ifdef TESTING_WASM
+#include "benchmark.h"
 
 int Benchmarks::nbody(int n)
+#else
+extern "C" void* malloc(intptr_t n);
+extern "C" __attribute__((visibility("default")))
+int nbody(int n)
+#endif
 {
   // Create and initialize factorial_Lookup_Table.
-  intnative_t* factorial_Lookup_Table = (intnative_t*)ALLOCA(sizeof(intnative_t) * (n + 1));
-  //intnative_t factorial_Lookup_Table[n + 1];
+  intptr_t* factorial_Lookup_Table = (intptr_t*)malloc(sizeof(intptr_t) * (n + 1));
+  //intptr_t factorial_Lookup_Table[n + 1];
 
   factorial_Lookup_Table[0] = 1;
-  for(intnative_t i = 0; ++i <= n;)
+  for(intptr_t i = 0; ++i <= n;)
     factorial_Lookup_Table[i] = i * factorial_Lookup_Table[i - 1];
 
   // Determine the block_Size to use. If n! is less than
@@ -41,46 +43,46 @@ int Benchmarks::nbody(int n)
   // block_Size from being set to 0. This also causes smaller values of n to
   // be computed serially which is faster and uses less resources for small
   // values of n.
-  const intnative_t block_Size = factorial_Lookup_Table[n] /
+  const intptr_t block_Size = factorial_Lookup_Table[n] /
     (factorial_Lookup_Table[n] < PREFERRED_NUMBER_OF_BLOCKS_TO_USE ?
       1 : PREFERRED_NUMBER_OF_BLOCKS_TO_USE);
 
-  intnative_t maximum_Flip_Count = 0, checksum = 0;
+  intptr_t maximum_Flip_Count = 0, checksum = 0;
 
-  intnative_t* count = (intnative_t*)ALLOCA(sizeof(intnative_t) * n);
-  int8_t* temp_Permutation = (int8_t*)ALLOCA(sizeof(int8_t) * n);
-  int8_t* current_Permutation = (int8_t*)ALLOCA(sizeof(int8_t) * n);
+  intptr_t* count = (intptr_t*)malloc(sizeof(intptr_t) * n);
+  int8_t* temp_Permutation = (int8_t*)malloc(sizeof(int8_t) * n);
+  int8_t* current_Permutation = (int8_t*)malloc(sizeof(int8_t) * n);
 
   // Iterate over each block.
 #pragma omp parallel for reduction(max:maximum_Flip_Count) reduction(+:checksum)
 
-  for(intnative_t initial_Permutation_Index_For_Block = 0;
+  for(intptr_t initial_Permutation_Index_For_Block = 0;
     initial_Permutation_Index_For_Block < factorial_Lookup_Table[n];
     initial_Permutation_Index_For_Block += block_Size)
   {
     // Initialize count and current_Permutation.
     count[0] = 0;
-    for(intnative_t i = 0; i < n; ++i)
+    for(intptr_t i = 0; i < n; ++i)
       current_Permutation[i] = i;
-    for(intnative_t i = n - 1,
+    for(intptr_t i = n - 1,
       permutation_Index = initial_Permutation_Index_For_Block; i > 0; --i)
     {
-      const intnative_t d = permutation_Index / factorial_Lookup_Table[i];
+      const intptr_t d = permutation_Index / factorial_Lookup_Table[i];
       permutation_Index = permutation_Index % factorial_Lookup_Table[i];
       count[i] = d;
 
-      for(intnative_t j = 0; j < n; ++j)
+      for(intptr_t j = 0; j < n; ++j)
         temp_Permutation[j] = current_Permutation[j];
-      for(intnative_t j = 0; j <= i; ++j)
+      for(intptr_t j = 0; j <= i; ++j)
         current_Permutation[j] = j + d <= i ?
         temp_Permutation[j + d] : temp_Permutation[j + d - i - 1];
     }
 
 
     // Iterate over each permutation in the block.
-    const intnative_t last_Permutation_Index_In_Block =
+    const intptr_t last_Permutation_Index_In_Block =
       initial_Permutation_Index_For_Block + block_Size - 1;
-    for(intnative_t permutation_Index = initial_Permutation_Index_For_Block; ;
+    for(intptr_t permutation_Index = initial_Permutation_Index_For_Block; ;
       ++permutation_Index)
     {
 
@@ -92,14 +94,14 @@ int Benchmarks::nbody(int n)
         // Make a copy of current_Permutation[] to work on. Note that we
         // don't need to copy the first value since that will be stored
         // in a separate variable since it gets used a lot.
-        for(intnative_t i = 0; ++i < n;)
+        for(intptr_t i = 0; ++i < n;)
           temp_Permutation[i] = current_Permutation[i];
 
-        intnative_t flip_Count = 1;
+        intptr_t flip_Count = 1;
 
         // Flip temp_Permutation until the element at the first_Value
         // index is 1 (0).
-        for(intnative_t first_Value = current_Permutation[0];
+        for(intptr_t first_Value = current_Permutation[0];
           temp_Permutation[first_Value] > 0; ++flip_Count)
         {
 
@@ -114,7 +116,7 @@ int Benchmarks::nbody(int n)
           // temp_Permutation.
           if(first_Value > 2)
           {
-            intnative_t low_Index = 1, high_Index = first_Value - 1;
+            intptr_t low_Index = 1, high_Index = first_Value - 1;
             // Note that this loop is written so that it will run at
             // most 16 times so that compilers will be more willing
             // to unroll it. Consequently this won't work right when
@@ -160,13 +162,13 @@ int Benchmarks::nbody(int n)
       int8_t first_Value = current_Permutation[1];
       current_Permutation[1] = current_Permutation[0];
       current_Permutation[0] = first_Value;
-      for(intnative_t i = 1; ++count[i] > i;)
+      for(intptr_t i = 1; ++count[i] > i;)
       {
         count[i++] = 0;
         const int8_t new_First_Value = current_Permutation[0] =
           current_Permutation[1];
 
-        for(intnative_t j = 0; ++j < i;)
+        for(intptr_t j = 0; ++j < i;)
           current_Permutation[j] = current_Permutation[j + 1];
 
         current_Permutation[i] = first_Value;

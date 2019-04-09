@@ -37,7 +37,12 @@ uninstall:
 	$(RM) -r $(DESTDIR)$(PREFIX)/include/innative
 	$(RM) $(DESTDIR)$(PREFIX)/lib/libinnative.so
 
-.PHONY: all clean install uninstall
+benchmarks:
+	$(CXX) innative-test/benchmark_n-body.cpp wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 --output /scripts/benchmark_n-body.wasm -Xlinker --no-entry -Xlinker --export-dynamic
+	$(CXX) innative-test/benchmark_fac.cpp wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 --output /scripts/benchmark_fac.wasm -Xlinker --no-entry -Xlinker --export-dynamic
+	$(CXX) innative-test/benchmark_fannkuch-redux.cpp wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 --output /scripts/benchmark_fannkuch-redux.wasm -Xlinker --no-entry -Xlinker --export-dynamic
+
+.PHONY: all clean install uninstall benchmarks
 
 include innative-env/Makefile
 include innative/Makefile

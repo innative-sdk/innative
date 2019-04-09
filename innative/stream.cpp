@@ -8,6 +8,7 @@ using namespace utility;
 
 uint64_t Stream::DecodeLEB128(IR_ERROR& err, unsigned int maxbits, bool sign)
 {
+  size_t old = pos;
   size_t shift = 0;
   int byte = 0;
   uint64_t result = 0;
@@ -29,7 +30,7 @@ uint64_t Stream::DecodeLEB128(IR_ERROR& err, unsigned int maxbits, bool sign)
     shift += 7;
   } while((byte & 0x80) != 0);
 
-  int signbit = (1 << (maxbits + 6 - shift)) & byte;
+  int signbit = byte & 0x40;
 
   if(shift > maxbits)
   {
