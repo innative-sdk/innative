@@ -56,11 +56,11 @@ public:
     fprintf(out, "%-*lli ", COLUMNS[5], timing.native);
     fprintf(out, "\n%-*s %-*.2f %-*.2f %-*.2f %-*.2f %-*.2f\n", 
       COLUMNS[0], "", 
-      COLUMNS[1], timing.c/double(timing.c),
-      COLUMNS[2], timing.debug / double(timing.c),
-      COLUMNS[3], timing.strict / double(timing.c),
-      COLUMNS[4], timing.sandbox / double(timing.c),
-      COLUMNS[5], timing.native / double(timing.c));
+      COLUMNS[1], double(timing.c) / timing.c,
+      COLUMNS[2], double(timing.c) / timing.debug,
+      COLUMNS[3], double(timing.c) / timing.strict,
+      COLUMNS[4], double(timing.c) / timing.sandbox,
+      COLUMNS[5], double(timing.c) / timing.native);
 
     return timing;
   }

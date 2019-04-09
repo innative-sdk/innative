@@ -49,7 +49,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
   if(env->flags&ENV_LIBRARY)
     RM = llvm::Optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
 #endif
-  auto machine = arch->createTargetMachine("wasm32-unknown-unknown", llvm::sys::getHostCPUName(), "", opt, RM, llvm::None);
+  auto machine = arch->createTargetMachine("wasm32-unknown-unknown", "", "", opt, RM, llvm::None);
 
   // We link everything into one giant module, because wasm currently doesn't work well with multiple modules
   llvm::SMDiagnostic diag;
@@ -76,11 +76,11 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
     }
   }
   
-  if(link.linkInModule(llvm::parseIRFile((sdkdir + "buddy-malloc.ll").Get().c_str(), diag, llvm_context)))
+  /*if(link.linkInModule(llvm::parseIRFile((sdkdir + "buddy-malloc.ll").Get().c_str(), diag, llvm_context)))
   {
     fputs("Failed to link utility IR\nError: ", log);
     fputs(diag.getMessage().data(), log);
-  }
+  }*/
 
   std::error_code EC;
   std::string objfile(out);
@@ -109,7 +109,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
   std::string outfile("-o");
   outfile += out;
   
-  std::vector<const char*> args = { "inNative", "--strip-all", objfile.c_str(), "--allow-undefined", outfile.c_str() };
+  std::vector<const char*> args = { "inNative", "--strip-all", "--export-dynamic", objfile.c_str(), "--allow-undefined", outfile.c_str() };
 
   if(flags&ENV_LIBRARY)
     args.push_back("--no-entry");

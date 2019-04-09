@@ -54,7 +54,7 @@ namespace innative {
     struct LocalEntry
     {
       varuint32 count;
-      varuint7 type;
+      varsint7 type;
     };
 
     IR_ERROR ParseLocalEntry(Stream& s, LocalEntry& entry)
@@ -62,7 +62,7 @@ namespace innative {
       IR_ERROR err = ParseVarUInt32(s, entry.count);
 
       if(err >= 0)
-        err = ParseVarUInt7(s, entry.type);
+        err = ParseVarSInt7(s, entry.type);
 
       return err;
     }
@@ -237,7 +237,7 @@ IR_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_block:
   case OP_loop:
   case OP_if:
-    ins.immediates[0]._varuint7 = s.ReadVarUInt7(err);
+    ins.immediates[0]._varsint7 = s.ReadVarInt7(err);
     break;
   case OP_br:
   case OP_br_if:
