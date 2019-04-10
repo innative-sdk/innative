@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __BENCHMARK_H__IR__
-#define __BENCHMARK_H__IR__
+#ifndef __BENCHMARK_H__IN__
+#define __BENCHMARK_H__IN__
 
 #include "innative/export.h"
 #include <utility>
@@ -12,7 +12,7 @@
 #include <string.h>
 #include <chrono>
 
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
 #define ALLOCA(sz) _alloca(sz)
 #else
 #define ALLOCA(sz) alloca(sz)
@@ -42,7 +42,7 @@ public:
 
     fprintf(out, "%-*s ", COLUMNS[0], func);
     timing.c = MeasureFunction<R, Args...>(f, std::forward<Args>(args)...);
-#ifndef IR_DEBUG
+#ifndef IN_DEBUG
     timing.c = MeasureFunction<R, Args...>(f, std::forward<Args>(args)...); // Do it again to account for CPU caching
 #endif
     fprintf(out, "%-*lli ", COLUMNS[1], timing.c);

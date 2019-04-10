@@ -135,7 +135,7 @@ int main(int argc, char *argv[])
         if(!kh_exist2(matchfiles, iter))
           continue;
       }
-#ifdef IR_PLATFORM_WIN32 // It is impossible to catch the error this test is supposed to produce on windows
+#ifdef IN_PLATFORM_WIN32 // It is impossible to catch the error this test is supposed to produce on windows
       else if(!STRICMP(p.path().filename().u8string().data(), "skip-stack-guard-page.wast"))
         continue;
 #endif

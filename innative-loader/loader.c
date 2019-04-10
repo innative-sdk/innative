@@ -4,7 +4,7 @@
 #include "innative/export.h"
 #include <stdio.h>
 
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
 #include "../innative/win32.h"
 
 struct WinPass
@@ -67,7 +67,7 @@ BOOL CALLBACK EnumWhitelist(__in_opt HMODULE hModule, __in LPCSTR lpType, __in L
   return EnumHandler(hModule, lpType, lpName, lParam, &EnumWhitelistHandler);
 }
 
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
 #error TODO
 #else
 #error unknown platform!
@@ -88,7 +88,7 @@ int main(int argc, char** argv)
   if(!assembly)
   {
     // Count WASM module payloads.
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
     unsigned int modules = 0;
     if(EnumResourceNamesA(NULL, WIN32_RESOURCE_MODULE, &CountResource, (LONG_PTR)&modules) == FALSE)
     {
@@ -99,7 +99,7 @@ int main(int argc, char** argv)
     SYSTEM_INFO sysinfo;
     GetSystemInfo(&sysinfo);
     maxthreads = sysinfo.dwNumberOfProcessors;
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
     maxthreads = sysconf(_SC_NPROCESSORS_ONLN);
 #endif
 
@@ -113,7 +113,7 @@ int main(int argc, char** argv)
     }
 
     // Then add each module payload to the environment, checking for any fatal errors.
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
     int err = ERR_SUCCESS;
     struct WinPass pass = { &exports, env, &err };
 
@@ -125,7 +125,7 @@ int main(int argc, char** argv)
         return err;
       }
     }
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
 #error TODO
 #endif
 
@@ -137,7 +137,7 @@ int main(int argc, char** argv)
 
     // Then add each embedding environment payload to the environment.
     // These payloads have a tag, but have no set format. What the tag means depends on the runtime we've loaded.
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
     if(EnumResourceNamesA(NULL, WIN32_RESOURCE_EMBEDDING, &EnumEnvironment, (LONG_PTR)&pass) == FALSE || err < 0)
     {
       if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
@@ -147,12 +147,12 @@ int main(int argc, char** argv)
       }
     }
 
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
 #error TODO
 #endif
 
     // Add the whitelist values, the resource name being the module and the data being the function
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
     if(EnumResourceNamesA(NULL, WIN32_RESOURCE_WHITELIST, &EnumWhitelist, (LONG_PTR)&pass) == FALSE || err < 0)
     {
       if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
@@ -162,7 +162,7 @@ int main(int argc, char** argv)
       }
     }
 
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
 #error TODO
 #endif
 
@@ -192,8 +192,8 @@ int main(int argc, char** argv)
     return ERR_FATAL_NULL_POINTER;
 
   // Load the entry point and execute it
-  IR_Entrypoint start = (*exports.LoadFunction)(assembly, 0, IR_INIT_FUNCTION);
-  IR_Entrypoint exit = (*exports.LoadFunction)(assembly, 0, IR_EXIT_FUNCTION);
+  IN_Entrypoint start = (*exports.LoadFunction)(assembly, 0, IN_INIT_FUNCTION);
+  IN_Entrypoint exit = (*exports.LoadFunction)(assembly, 0, IN_EXIT_FUNCTION);
   if(!start)
   {
     (*exports.FreeAssembly)(assembly);
@@ -208,7 +208,7 @@ int main(int argc, char** argv)
   return ERR_SUCCESS;
 }
 
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
 struct HINSTANCE__;
 
 // WinMain function, simply a catcher that calls the main function

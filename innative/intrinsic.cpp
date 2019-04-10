@@ -11,7 +11,7 @@ namespace innative {
   }
 }
 
-llvm::Function* innative::code::IR_Intrinsic_ToC(llvm::Function* f, struct code::Context& context)
+llvm::Function* innative::code::IN_Intrinsic_ToC(llvm::Function* f, struct code::Context& context)
 {
   if(!f)
   {
@@ -34,7 +34,7 @@ llvm::Function* innative::code::IR_Intrinsic_ToC(llvm::Function* f, struct code:
   return f;
 }
 
-llvm::Function* innative::code::IR_Intrinsic_FromC(llvm::Function* f, struct code::Context& context)
+llvm::Function* innative::code::IN_Intrinsic_FromC(llvm::Function* f, struct code::Context& context)
 {
   if(!f)
   {
@@ -57,7 +57,7 @@ llvm::Function* innative::code::IR_Intrinsic_FromC(llvm::Function* f, struct cod
   return f;
 }
 
-llvm::Function* innative::code::IR_Intrinsic_Trap(llvm::Function* f, struct code::Context& context)
+llvm::Function* innative::code::IN_Intrinsic_Trap(llvm::Function* f, struct code::Context& context)
 {
   if(!f)
   {

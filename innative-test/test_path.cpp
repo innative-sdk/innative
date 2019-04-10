@@ -80,7 +80,7 @@ void TestHarness::test_path()
   p2 += FILEEXT;
   ftest1(p2);
 
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
   Path rootyes("C:\\");
   Path rootno("/");
 #else
@@ -117,7 +117,7 @@ void TestHarness::test_path()
   TEST(rootyes.IsAbsolute());
   TEST(!rootno.IsAbsolute());
 
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
   Path p3(FOOBAR);
   p3 += p2;
   TEST(!strcmp(p3.c_str(), "foobar\\foo\\file.ext"));

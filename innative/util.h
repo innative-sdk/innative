@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __UTIL_H__IR__
-#define __UTIL_H__IR__
+#ifndef __UTIL_H__IN__
+#define __UTIL_H__IN__
 
 #include "innative/schema.h"
 #include "innative/path.h"
@@ -34,7 +34,7 @@ extern "C" int64_t GetRSPValue();
 
 namespace innative {
   namespace utility {
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
     typedef int uintcpuinfo[5];
 #else
     typedef unsigned int uintcpuinfo[5];
@@ -87,7 +87,7 @@ namespace innative {
     }
 
     template<typename T>
-    IR_FORCEINLINE void FlipEndian(T* target) noexcept
+    IN_FORCEINLINE void FlipEndian(T* target) noexcept
     {
       FlipEndian(reinterpret_cast<uint8_t*>(target), sizeof(T));
     }
@@ -142,7 +142,7 @@ namespace innative {
     template<class T>
     inline void tmemcpy(T* dest, size_t destsize, const T* src, size_t srcsize)
     {
-#ifdef IR_COMPILER_MSC
+#ifdef IN_COMPILER_MSC
       memcpy_s(dest, destsize * sizeof(T), src, srcsize * sizeof(T));
 #else
       memcpy(dest, src, srcsize * sizeof(T));
@@ -161,7 +161,7 @@ namespace innative {
       return reinterpret_cast<T*>(env.alloc->allocate(n * sizeof(T)));
     }
 
-    IR_FORCEINLINE bool ModuleHasSection(const Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
+    IN_FORCEINLINE bool ModuleHasSection(const Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
 
     uint8_t GetInstruction(StringRef s);
     varuint32 ModuleFunctionType(const Module& m, varuint32 index);
@@ -197,10 +197,10 @@ namespace innative {
       {
         char buf[20] = { 0 };
         snprintf(buf, 20, "%d", index);
-        str = (!prefix.s ? strname + buf : (strprefix + IR_GLUE_STRING + strname + buf));
+        str = (!prefix.s ? strname + buf : (strprefix + IN_GLUE_STRING + strname + buf));
       }
       else
-        str = (!prefix.s ? strname : (strprefix + IR_GLUE_STRING + strname));
+        str = (!prefix.s ? strname : (strprefix + IN_GLUE_STRING + strname));
 
       std::string canonical;
       canonical.reserve(str.capacity());
@@ -233,10 +233,16 @@ namespace innative {
       return canonical;
     }
 
-    // Generates the correct mangled C function name
-    inline std::string CanonImportName(const Import& imp)
+    inline bool IsSystemImport(const Identifier& module_name, const char* system)
     {
-      if(!imp.module_name.size() || memchr(imp.module_name.get(), '!', imp.module_name.size()) != nullptr) // blank imports or imports with a calling convention are always raw function names
+      const char* module_end = strchr(module_name.str(), '!');
+      return !strncmp(system, module_name.str(), !module_end ? module_name.size() : (module_end - module_name.str()));
+    }
+
+    // Generates the correct mangled C function name
+    inline std::string CanonImportName(const Import& imp, const char* system)
+    {
+      if(IsSystemImport(imp.module_name, system)) // system module imports are always raw function names
         return CanonicalName(StringRef{ 0,0 }, StringRef::From(imp.export_name));
       return CanonicalName(StringRef::From(imp.module_name), StringRef::From(imp.export_name));
     }
@@ -244,21 +250,23 @@ namespace innative {
     // Generates a whitelist string for a module and export name, which includes calling convention information
     inline size_t CanonWhitelist(const void* module_name, const void* export_name, char* out)
     {
-      if(module_name != nullptr && !STRICMP((const char*)module_name, "!C"))
-        module_name = nullptr;
       if(!module_name)
         module_name = "";
+      size_t module_len = strlen((const char*)module_name);
+      const char* call = strchr((const char*)module_name, '!');
+      if(call && !strcmp(call, "!C")) // !C is the same as having no calling convention, so we remove it
+        module_len -= 2;
 
-      size_t module_len = strlen((const char*)module_name) + 1;
       size_t export_len = strlen((const char*)export_name) + 1;
       if(out)
       {
-        tmemcpy<char>(out, module_len + export_len, (const char*)module_name, module_len);
-        tmemcpy<char>(out + module_len, export_len, (const char*)export_name, export_len);
+        tmemcpy<char>(out, module_len + 1 + export_len, (const char*)module_name, module_len);
+        out[module_len] = 0;
+        tmemcpy<char>(out + module_len + 1, export_len, (const char*)export_name, export_len);
       }
-      return module_len + export_len;
+      return module_len + export_len + 1;
     }
-    IR_FORCEINLINE std::string CanonWhitelist(const void* module_name, const void* export_name)
+    IN_FORCEINLINE std::string CanonWhitelist(const void* module_name, const void* export_name)
     {
       std::string s;
       s.resize(CanonWhitelist(module_name, export_name, nullptr));

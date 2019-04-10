@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __TEST_H__IR__
-#define __TEST_H__IR__
+#ifndef __TEST_H__IN__
+#define __TEST_H__IN__
 
 #include <utility>
 #include <stdint.h>

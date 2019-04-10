@@ -391,9 +391,12 @@
     <ClCompile Include="wat.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\include\innative\errors.h" />
     <ClInclude Include="..\include\innative\export.h" />
+    <ClInclude Include="..\include\innative\flags.h" />
     <ClInclude Include="..\include\innative\khash.h" />
     <ClInclude Include="..\include\innative\innative.h" />
+    <ClInclude Include="..\include\innative\opcodes.h" />
     <ClInclude Include="..\include\innative\path.h" />
     <ClInclude Include="..\include\innative\schema.h" />
     <ClInclude Include="compile.h" />

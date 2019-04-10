@@ -24,7 +24,7 @@ void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
     return 0;
 
   (*_exports.FinalizeEnvironment)(env);
-  std::string out = innative::Path(wasm).File().RemoveExtension().Get() + IR_LIBRARY_EXTENSION;
+  std::string out = innative::Path(wasm).File().RemoveExtension().Get() + IN_LIBRARY_EXTENSION;
 
   err = (*_exports.Compile)(env, out.c_str());
   if(err < 0)

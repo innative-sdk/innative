@@ -1,31 +1,32 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __CONSTANTS_H__IR__
-#define __CONSTANTS_H__IR__
+#ifndef __CONSTANTS_H__IN__
+#define __CONSTANTS_H__IN__
 
 #include "innative/innative.h"
 #include "innative/khash.h"
+#include "innative/opcodes.h"
 #include <ostream>
+#include <array>
 
 #define MAKESTRING2(x) #x
 #define MAKESTRING(x) MAKESTRING2(x)
 
-#define IR_VERSION_STRING MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
+#define IN_VERSION_STRING MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
 
 KHASH_DECLARE(mapenum, int, const char*);
 
 namespace innative {
   namespace utility {
-    extern const char* IR_GETCPUINFO;
-    extern const char* IR_EXTENSION;
-    extern const char* IR_ENV_EXTENSION;
-    extern const char* IR_GLUE_STRING;
-    extern const char* IR_MEMORY_MAX_METADATA;
-    extern const char* IR_TEMP_PREFIX;
+    extern const char* IN_GETCPUINFO;
+    extern const char* IN_EXTENSION;
+    extern const char* IN_ENV_EXTENSION;
+    extern const char* IN_GLUE_STRING;
+    extern const char* IN_MEMORY_MAX_METADATA;
+    extern const char* IN_TEMP_PREFIX;
 
-    extern int OPNAMECOUNT;
-    extern const char OPNAMES[][20];
+    extern const std::array<const char*, OP_CODE_COUNT> OPNAMES;
 
     static const unsigned int WASM_MAGIC_COOKIE = 0x6d736100;
     static const unsigned int WASM_MAGIC_VERSION = 0x01;

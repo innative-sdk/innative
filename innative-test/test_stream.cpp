@@ -17,7 +17,7 @@ void TestHarness::test_stream()
   uint8_t a = 0;
   TEST(s.Read(a));
   TEST(a == 3);
-  IR_ERROR err;
+  IN_ERROR err;
   TEST(s.ReadByte(err) == 4);
   TEST(s.ReadVarInt7(err) == 5);
   TEST(s.ReadVarUInt7(err) == 6);

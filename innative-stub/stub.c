@@ -3,13 +3,13 @@
 
 #include "innative/export.h"
 
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
 #include "../innative/win32.h"
 
 const wchar_t* GetRegString(wchar_t* buf, size_t sz, int major, int  minor, int revision)
 {
   buf[0] = 0;
-  wcscat_s(buf, sz, IR_WIN32_REGPATH L"\\");
+  wcscat_s(buf, sz, IN_WIN32_REGPATH L"\\");
   _itow_s(major, buf + wcslen(buf), sz - wcslen(buf), 10);
   
   if(minor >= 0)
@@ -77,13 +77,13 @@ bool EnumKeyValue(HKEY hive, const wchar_t* key, uint16_t* version)
 
 // This is a stub loader for the runtime. It looks for an existing installation
 // of the runtime on the OS that is equal to or newer than the compiled version.
-IR_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
+IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
 {
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
   // On windows, we use the registry to store versions, with a key set to the DLL path of the runtime.
   // We prefer using an exact match to our compiled version if it is available. Otherwise, we get the next closest version.
 
-  wchar_t buf[(sizeof(IR_WIN32_REGPATH)/2) + 6 * 4]; // uint16_t is a maximum of 5 digits, plus the backspace character
+  wchar_t buf[(sizeof(IN_WIN32_REGPATH)/2) + 6 * 4]; // uint16_t is a maximum of 5 digits, plus the backspace character
 
   wchar_t* runtime = GetRuntimeVersion(buf, sizeof(buf)/2, INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR, INNATIVE_VERSION_REVISION);
   if(!runtime)
@@ -110,7 +110,7 @@ IR_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
     uint16_t minor = 0;
     uint16_t major = 0;
 
-    if(EnumKeyValue(HKEY_CURRENT_USER, IR_WIN32_REGPATH, &major))
+    if(EnumKeyValue(HKEY_CURRENT_USER, IN_WIN32_REGPATH, &major))
     {
       if(EnumKeyValue(HKEY_CURRENT_USER, GetRegString(buf, sizeof(buf) / 2, major, -1, -1), &minor))
       {
@@ -135,7 +135,7 @@ IR_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
     free(runtime);
   }
 
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
   // Try each symlink level sequentially
   void* lib = dlopen("libinnative.so." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION), RTLD_NOW);
   if(!lib)

@@ -149,7 +149,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   {
     if(env.cimports)
     {
-      std::string name = CanonImportName(imp);
+      std::string name = CanonImportName(imp, env.system);
       khiter_t iterimport = kh_get_cimport(env.cimports, Identifier((uint8_t*)name.c_str(), name.size()));
       if(kh_exist2(env.cimports, iterimport))
       {
@@ -167,10 +167,13 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
         }
         return; // This is valid
       }
-      if(!imp.module_name.size() && !imp.export_name.size())
-        return AppendError(env, env.errors, m, ERR_EMPTY_IMPORT, "Empty imports are invalid.");
-      if(!imp.module_name.size() || imp.module_name.str()[0] == '!') // Blank imports must have been C imports, otherwise it could have been a failed WASM module import attempt.
+
+      if(IsSystemImport(imp.module_name, env.system))
+      {
+        if(!imp.export_name.size())
+          return AppendError(env, env.errors, m, ERR_EMPTY_IMPORT, "Empty imports are invalid.");
         return AppendError(env, env.errors, m, ERR_UNKNOWN_BLANK_IMPORT, "%s not found in C library imports", name.c_str());
+      }
     }
 
     return AppendError(env, env.errors, m, ERR_UNKNOWN_MODULE, "%s module not found", imp.module_name.str());
@@ -388,7 +391,7 @@ void PolymorphStack(Stack<varsint7>& values)
   values.Push(TE_POLY);
 }
 
-IR_FORCEINLINE varsint7 GetBlockSig(const internal::ControlBlock& block) { return block.type == OP_loop ? TE_void : block.sig; }
+IN_FORCEINLINE varsint7 GetBlockSig(const internal::ControlBlock& block) { return block.type == OP_loop ? TE_void : block.sig; }
 
 void ValidateBranchTable(varuint32 n_table, varuint32* table, varuint32 def, Stack<varsint7>& values, Stack<internal::ControlBlock>& control, Environment& env, Module* m)
 {

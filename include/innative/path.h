@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __PATH_H__IR__
-#define __PATH_H__IR__
+#ifndef __PATH_H__IN__
+#define __PATH_H__IN__
 
 #include "innative/innative.h"
 #include <string>
@@ -12,10 +12,10 @@ namespace innative {
   class Path : std::string
   {
   public:
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
     static const char SEPERATOR = '\\';
     static const char OTHER = '/';
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
     static const char SEPERATOR = '/';
     static const char OTHER = '\\';
 #else
@@ -32,9 +32,9 @@ namespace innative {
     {
       const char* start = _path.c_str();
       const char* pos = strchr(start, SEPERATOR);
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
       return pos != nullptr && pos == start + 2 && pos[-1] == ':';
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
       return pos != nullptr && pos == start;
 #endif
     }
@@ -44,8 +44,8 @@ namespace innative {
     inline void Set(const std::string& path) { _path = path; _canonize(); }
     inline void Set(const char* path) { _path = path; _canonize(); }
 
-    IR_FORCEINLINE void Append(const Path& path) { Append(path._path.c_str()); }
-    IR_FORCEINLINE void Append(const std::string& path) { Append(path.c_str()); }
+    IN_FORCEINLINE void Append(const Path& path) { Append(path._path.c_str()); }
+    IN_FORCEINLINE void Append(const std::string& path) { Append(path.c_str()); }
     inline void Append(const char* path)
     {
       if(!path || !path[0])

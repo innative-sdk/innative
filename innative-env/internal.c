@@ -3,9 +3,9 @@
 
 #include "innative/export.h"
 
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
 #include "../innative/win32.h"
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
 #include <unistd.h>
 #include <sys/mman.h>
 #else
@@ -13,7 +13,7 @@
 #endif
 
   // Very simple memcpy implementation because we don't have access to the C library
-IR_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz)
+IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz)
 {
   // Align dest pointer
   while((size_t)dest % sizeof(uint64_t) && sz)
@@ -41,12 +41,12 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, cons
   }
 }
 
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
 HANDLE heap = 0;
 DWORD heapcount = 0;
-#elif defined(IR_PLATFORM_POSIX)
-#ifdef IR_CPU_x86_64
-IR_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2, size_t p3, size_t p4, size_t p5)
+#elif defined(IN_PLATFORM_POSIX)
+#ifdef IN_CPU_x86_64
+IN_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2, size_t p3, size_t p4, size_t p5)
 {
   __asm volatile(
     "movq %rdi, %rax\n\t"
@@ -74,10 +74,10 @@ const int MREMAP_MAYMOVE = 1;
 
 void _innative_internal_write_out(const void* buf, size_t num)
 {
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
   DWORD out;
   WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buf, num, &out, NULL);
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
   size_t cast = 1;
   _innative_syscall(SYSCALL_WRITE, (void*)cast, (size_t)buf, num, 0, 0);
 #else
@@ -87,7 +87,7 @@ void _innative_internal_write_out(const void* buf, size_t num)
 
 static const char lookup[16] = "0123456789ABCDEF";
 
-IR_COMPILER_DLLEXPORT extern void _innative_internal_env_print(uint64_t a)
+IN_COMPILER_DLLEXPORT extern void _innative_internal_env_print(uint64_t a)
 {
   char buf[25] = { 0 };
 
@@ -101,13 +101,13 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_print(uint64_t a)
   _innative_internal_write_out(buf, i);
 }
 
-IR_COMPILER_DLLEXPORT extern void _innative_internal_env_print_compiler(uint64_t a)
+IN_COMPILER_DLLEXPORT extern void _innative_internal_env_print_compiler(uint64_t a)
 {
   _innative_internal_env_print(a);
 }
 
 // Platform-specific implementation of the mem.grow instruction, except it works in bytes
-IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max)
+IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max)
 {
   uint64_t* info = (uint64_t*)p;
   if(info != 0)
@@ -115,9 +115,9 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
     i += info[-1];
     if(max > 0 && i > max)
       return 0;
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
     info = HeapReAlloc(heap, HEAP_ZERO_MEMORY, info - 1, i + sizeof(uint64_t));
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
     info = _innative_syscall(SYSCALL_MREMAP, info - 1, info[-1] + sizeof(uint64_t), i + sizeof(uint64_t), MREMAP_MAYMOVE, 0);
     if((void*)info >= (void*)0xfffffffffffff001) // This is a syscall error from -4095 to -1
       return 0;
@@ -127,12 +127,12 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
   }
   else if(!max || i <= max)
   {
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
     if(!heap)
       heap = HeapCreate(0, i, 0);
     ++heapcount;
     info = HeapAlloc(heap, HEAP_ZERO_MEMORY, i + sizeof(uint64_t));
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
     info = _innative_syscall(SYSCALL_MMAP, NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1);
     if((void*)info >= (void*)0xfffffffffffff001) // This is a syscall error from -4095 to -1
       return 0;
@@ -151,17 +151,17 @@ IR_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
 }
 
 // Platform-specific memory free, called by the exit function to clean up memory allocations
-IR_COMPILER_DLLEXPORT extern void _innative_internal_env_free_memory(void* p)
+IN_COMPILER_DLLEXPORT extern void _innative_internal_env_free_memory(void* p)
 {
   if(p)
   {
     uint64_t* info = (uint64_t*)p;
 
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
     HeapFree(heap, 0, info - 1);
     if(--heapcount == 0)
       HeapDestroy(heap);
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
     _innative_syscall(SYSCALL_MUNMAP, info - 1, info[-1], 0, 0, 0);
 #else
 #error unknown platform!
@@ -170,17 +170,17 @@ IR_COMPILER_DLLEXPORT extern void _innative_internal_env_free_memory(void* p)
 }
 
 // You cannot return from the entry point of a program, you must instead call a platform-specific syscall to terminate it.
-IR_COMPILER_DLLEXPORT extern void _innative_internal_env_exit(int status)
+IN_COMPILER_DLLEXPORT extern void _innative_internal_env_exit(int status)
 {
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
   ExitProcess(status);
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
   size_t cast = status;
   _innative_syscall(SYSCALL_EXIT, (void*)cast, 0, 0, 0, 0);
 #endif
 }
 
-IR_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned char* mem, uint64_t sz)
+IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned char* mem, uint64_t sz)
 {
   static const char prefix[] = "\n --- MEMORY DUMP ---\n\n";
   char buf[256];

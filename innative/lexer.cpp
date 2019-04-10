@@ -142,7 +142,7 @@ namespace innative {
       errno = 0;
       char* end;
       out = (*fn)(numbuf.c_str(), &end, args...);
-#ifdef IR_PLATFORM_POSIX 
+#ifdef IN_PLATFORM_POSIX 
      /* if(std::isinf(out)) // libc incorrectly parses certain edge cases as "inf" without setting errno to ERANGE
       {
         const char* p = numbuf.c_str();
@@ -246,7 +246,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    IR_FORCEINLINE const char* IncToken(const char*& s, const char* end, unsigned int& line, unsigned int& column)
+    IN_FORCEINLINE const char* IncToken(const char*& s, const char* end, unsigned int& line, unsigned int& column)
     {
       ++s;
       if(s + 1 < end && ((s[0] == '\r' && s[1] != '\n') || s[0] == '\n'))

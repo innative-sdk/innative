@@ -13,11 +13,11 @@
 #include <iostream>
 #include <atomic>
 
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
 #include "../innative/win32.h"
 #endif 
 
-#ifdef IR_PLATFORM_POSIX
+#ifdef IN_PLATFORM_POSIX
 #define LONGJMP(x,i) siglongjmp(x,i)
 #define SETJMP(x) sigsetjmp(x,1)
 #else
@@ -93,7 +93,7 @@ void InvalidateCache(void*& cache, const Path& cachepath)
 {
   if(cache)
   {
-    auto exit = LoadFunction(cache, 0, IR_EXIT_FUNCTION);
+    auto exit = LoadFunction(cache, 0, IN_EXIT_FUNCTION);
 
     if(exit)
       (*exit)();
@@ -121,7 +121,7 @@ int IsolateInitCall(Environment& env, void*& cache, Path& cachepath)
   if(env.wasthook != nullptr)
     (*env.wasthook)(cache);
 
-  auto entry = LoadFunction(cache, 0, IR_INIT_FUNCTION);
+  auto entry = LoadFunction(cache, 0, IN_INIT_FUNCTION);
 
   if(!entry)
     return ERR_RUNTIME_INIT_ERROR;
@@ -158,7 +158,7 @@ void SetTempName(Environment& env, Module& m)
 {
   static std::atomic_size_t modcount(1); // We can't use n_modules in case a module is malformed
 
-  auto buf = std::string(IR_TEMP_PREFIX) + std::to_string(modcount.fetch_add(1, std::memory_order::memory_order_relaxed));
+  auto buf = std::string(IN_TEMP_PREFIX) + std::to_string(modcount.fetch_add(1, std::memory_order::memory_order_relaxed));
   m.name.resize(buf.size(), true, env);
   tmemcpy((char*)m.name.get(), m.name.size(), buf.data(), buf.size());
 }
@@ -169,7 +169,7 @@ int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
   int err;
   WatToken name = { TOKEN_NONE };
   m = { 0 }; // We have to ensure this is zeroed, because an error could occur before ParseModule is called
-  std::string tempname(IR_TEMP_PREFIX);
+  std::string tempname(IN_TEMP_PREFIX);
   tempname += std::to_string(env.n_modules);
 
   if(tokens[0].id == TOKEN_BINARY || (tokens.Size() > 1 && tokens[1].id == TOKEN_BINARY))
@@ -314,7 +314,7 @@ int IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, WastResul
     return ERR_RUNTIME_TRAP;
   }
 
-#ifdef IR_COMPILER_MSC
+#ifdef IN_COMPILER_MSC
   __try // this catches division by zero on windows
   {
 #endif
@@ -350,7 +350,7 @@ int IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, WastResul
         return ERR_FATAL_UNKNOWN_KIND;
       }
     }
-#ifdef IR_COMPILER_MSC
+#ifdef IN_COMPILER_MSC
   }
   __except(1)
   {
@@ -358,9 +358,9 @@ int IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, WastResul
     if(GetExceptionCode() == EXCEPTION_STACK_OVERFLOW)
     {
       void* lpPage;
-#ifdef IR_CPU_x86
+#ifdef IN_CPU_x86
       __asm mov lpPage, esp;
-#elif defined(IR_CPU_x86_64)
+#elif defined(IN_CPU_x86_64)
       lpPage = (void*)GetRSPValue();
 #else
 #error unsupported CPU architecture
@@ -398,7 +398,7 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
   int err;
   int cache_err = 0;
   if(!cache) // If cache is null we need to recompile the current environment, but we can't bail on error messages yet or we'll corrupt the parse
-    cache_err = CompileWast(env, (path + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache, cachepath);
+    cache_err = CompileWast(env, (path + std::to_string(counter++) + IN_LIBRARY_EXTENSION).c_str(), cache, cachepath);
 
   switch(tokens.Pop().id)
   {
@@ -475,7 +475,7 @@ int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* m
     signal(SIGFPE, WastCrashHandler); // This catches division by zero on linux
     signal(SIGSEGV, WastCrashHandler);
 
-#ifdef IR_PLATFORM_POSIX
+#ifdef IN_PLATFORM_POSIX
     // Catch stack overflow on linux
     struct sigaction sa;
     stack_t ss;
@@ -688,7 +688,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
           return err;
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
-        err = CompileWast(env, (targetpath + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache, cachepath);
+        err = CompileWast(env, (targetpath + std::to_string(counter++) + IN_LIBRARY_EXTENSION).c_str(), cache, cachepath);
         --env.n_modules; // Remove the module from the environment to avoid poisoning other compilations
         if(err != ERR_RUNTIME_TRAP)
           AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
@@ -868,7 +868,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
       // If we get an unexpected token, try to parse it as an inline module
       WatToken t = WatToken{ TOKEN_NONE };
       env.modules = trealloc<Module>(env.modules, ++env.n_modules);
-      auto name = IR_TEMP_PREFIX + std::to_string(env.n_modules);
+      auto name = IN_TEMP_PREFIX + std::to_string(env.n_modules);
 
       last = &env.modules[env.n_modules - 1];
       tokens.SetPosition(tokens.GetPosition() - 1); // Recover the '('
@@ -887,7 +887,7 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
 
   if(always_compile && !cache) // If cache is null we must ensure we've at least tried to compile the test even if there's nothing to run.
   {
-    if(err = CompileWast(env, (targetpath + std::to_string(counter++) + IR_LIBRARY_EXTENSION).c_str(), cache, cachepath))
+    if(err = CompileWast(env, (targetpath + std::to_string(counter++) + IN_LIBRARY_EXTENSION).c_str(), cache, cachepath))
       return err;
     assert(cache);
   }

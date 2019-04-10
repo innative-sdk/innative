@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __WIN32_H__IR__
-#define __WIN32_H__IR__
+#ifndef __WIN32_H__IN__
+#define __WIN32_H__IN__
 
 #pragma pack(push)
 #pragma pack(8)
