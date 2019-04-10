@@ -134,6 +134,15 @@
     <ClInclude Include="win32.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\innative\opcodes.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\innative\errors.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\innative\flags.h">
+      <Filter>include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="innative.rc">

@@ -9,8 +9,8 @@
   (type $t7 (func (param i64) (result i64)))
   
   (import "!C" "_innative_internal_env_print" (func $impfunc (type $t2)))
-  (import "win32!STD" "GetStdHandle" (func $getstdhandle (type $t5)))
-  (import "win32!STD" "WriteConsoleA" (func $writeconsole (type $t6)))
+  (import "!STD" "GetStdHandle" (func $getstdhandle (type $t5)))
+  (import "!STD" "WriteConsoleA" (func $writeconsole (type $t6)))
   (import "" "_innative_to_c" (func $toc (type $t7)))
   (import "" "_innative_from_c" (func $fromc (type $t7)))
   

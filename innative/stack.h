@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __STACK_H__IR__
-#define __STACK_H__IR__
+#ifndef __STACK_H__IN__
+#define __STACK_H__IN__
 
 #include <malloc.h>
 #include <assert.h>

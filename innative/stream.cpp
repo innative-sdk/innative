@@ -6,7 +6,7 @@
 using namespace innative;
 using namespace utility;
 
-uint64_t Stream::DecodeLEB128(IR_ERROR& err, unsigned int maxbits, bool sign)
+uint64_t Stream::DecodeLEB128(IN_ERROR& err, unsigned int maxbits, bool sign)
 {
   size_t old = pos;
   size_t shift = 0;

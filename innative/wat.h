@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __WAT_H__IR__
-#define __WAT_H__IR__
+#ifndef __WAT_H__IN__
+#define __WAT_H__IN__
 
 #include "lexer.h"
 #include "stack.h"
@@ -47,14 +47,14 @@ namespace innative {
     int WatModule(Environment& env, Module& m, Queue<WatToken>& tokens, utility::StringRef name, WatToken& internalname);
     size_t WatLineNumber(const char* start, const char* pos);
 
-    IR_FORCEINLINE int WatString(const Environment& env, ByteArray& str, const WatToken& t)
+    IN_FORCEINLINE int WatString(const Environment& env, ByteArray& str, const WatToken& t)
     {
       if(t.id != TOKEN_STRING)
         return ERR_WAT_EXPECTED_STRING;
       return WatString(env, str, utility::StringRef{ t.pos, t.len });
     }
 
-    IR_FORCEINLINE WatToken GetWatNameToken(Queue<WatToken>& tokens)
+    IN_FORCEINLINE WatToken GetWatNameToken(Queue<WatToken>& tokens)
     {
       return (tokens.Peek().id == TOKEN_NAME) ? tokens.Pop() : WatToken{ TOKEN_NONE };
     }

@@ -28,7 +28,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
   Path sdkdir(!sdkpath ? utility::GetProgramPath(arg0).BaseDir().c_str() : sdkpath);
 
   bool has_start = false;
-  IR_ERROR err = ERR_SUCCESS;
+  IN_ERROR err = ERR_SUCCESS;
 
   // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
   llvm::InitializeAllTargetInfos();
@@ -45,7 +45,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
 
   llvm::TargetOptions opt;
   auto RM = llvm::Optional<llvm::Reloc::Model>();
-#ifdef IR_PLATFORM_POSIX
+#ifdef IN_PLATFORM_POSIX
   if(env->flags&ENV_LIBRARY)
     RM = llvm::Optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
 #endif

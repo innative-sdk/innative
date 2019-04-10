@@ -8,10 +8,10 @@
 #include <stdarg.h>
 #include <algorithm>
 
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
 #include "../innative/win32.h"
 #include <intrin.h>
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
 #include <unistd.h>
 #include <cpuid.h>
 #include <limits.h>
@@ -71,7 +71,7 @@ namespace innative {
       kh_opnames_t* h = kh_init_opnames();
       int r;
 
-      for(int i = 0; i < OPNAMECOUNT; ++i)
+      for(int i = 0; i < OPNAMES.size(); ++i)
       {
         if(strcmp(OPNAMES[i], "RESERVED") != 0)
         {
@@ -119,7 +119,9 @@ namespace innative {
       for(auto& i : legacy)
       {
         khiter_t iter = kh_put_opnames(h, StringRef{ i.first, strlen(i.first) }, &r);
-        kh_val(h, iter) = kh_val(h, kh_get_opnames(h, StringRef{ i.second, strlen(i.second) }));
+        khint_t k = kh_get_opnames(h, StringRef{ i.second, strlen(i.second) });
+        assert(k != kh_end(h));
+        kh_val(h, iter) = kh_val(h, k);
       }
 
       return h;
@@ -249,7 +251,7 @@ namespace innative {
     Path GetProgramPath(const char* arg0)
     {
       string buf;
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
       buf.resize(MAX_PATH);
       buf.resize(GetModuleFileNameA(NULL, const_cast<char*>(buf.data()), (DWORD)buf.capacity()));
 #else
@@ -261,10 +263,10 @@ namespace innative {
     Path GetWorkingDir()
     {
       string buf;
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
       buf.resize(GetCurrentDirectoryA(0, 0));
       buf.resize(GetCurrentDirectoryA((DWORD)buf.capacity(), const_cast<char*>(buf.data())));
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
       buf.resize(PATH_MAX);
       getcwd(const_cast<char*>(buf.data()), buf.capacity());
       buf.resize(strlen(buf.data()));
@@ -277,10 +279,10 @@ namespace innative {
     Path GetAbsolutePath(const char* path)
     {
       string buf;
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
       buf.resize(GetFullPathNameA(path, 0, 0, 0));
       buf.resize(GetFullPathNameA(path, (DWORD)buf.capacity(), const_cast<char*>(buf.data()), 0));
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
       buf.resize(PATH_MAX);
       const char* resolve = realpath(path, const_cast<char*>(buf.data()));
       if(!resolve)
@@ -293,32 +295,32 @@ namespace innative {
     }
     bool SetWorkingDir(const char* path)
     {
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
       return SetCurrentDirectoryA(path) != 0;
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
       return chdir(path) != 0;
 #endif
     }
 
     void GetCPUInfo(uintcpuinfo& info, int flags)
     {
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
       SYSTEM_INFO sysinfo;
       GetSystemInfo(&sysinfo);
       info[4] = sysinfo.wProcessorArchitecture | (flags << 16);
       __cpuid(info, 1);
-#elif defined(IR_PLATFORM_POSIX)
-#ifdef IR_CPU_x86_64
+#elif defined(IN_PLATFORM_POSIX)
+#ifdef IN_CPU_x86_64
       info[4] = 1;
-#elif defined(IR_CPU_IA_64)
+#elif defined(IN_CPU_IA_64)
       info[4] = 2;
-#elif defined(IR_CPU_x86)
+#elif defined(IN_CPU_x86)
       info[4] = 3;
-#elif defined(IR_CPU_ARM)
+#elif defined(IN_CPU_ARM)
       info[4] = 4;
-#elif defined(IR_CPU_MIPS)
+#elif defined(IN_CPU_MIPS)
       info[4] = 5;
-#elif defined(IR_CPU_POWERPC)
+#elif defined(IN_CPU_POWERPC)
       info[4] = 6;
 #endif
       info[4] |= (flags << 16);
@@ -340,11 +342,11 @@ namespace innative {
       return s;
     }
 
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
     void* LoadDLL(const char* path) { return LoadLibraryA(path); }
     void* LoadDLLFunction(void* dll, const char* name) { return GetProcAddress((HMODULE)dll, name); }
     void FreeDLL(void* dll) { FreeLibrary((HMODULE)dll); }
-#elif defined(IR_PLATFORM_POSIX)
+#elif defined(IN_PLATFORM_POSIX)
     void* LoadDLL(const char* path) { return dlopen(path, RTLD_NOW); } // We MUST load and initialize WASM dlls immediately for init function testing
     void* LoadDLLFunction(void* dll, const char* name) { return dlsym(dll, name); }
     void FreeDLL(void* dll) { dlclose(dll); }

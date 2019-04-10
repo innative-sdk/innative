@@ -37,7 +37,7 @@ int innative_compile_file(
   uint64_t optimize,
   uint64_t features,
   bool dynamic,
-  const struct _IR_WHITELIST* whitelist, 
+  const struct _IN_WHITELIST* whitelist, 
   unsigned int n_whitelist,
   const char* arg0)
 {
@@ -115,14 +115,14 @@ int innative_compile_file(
   void* assembly = LoadAssembly(out);
   if(!assembly)
     return ERR_FATAL_FILE_ERROR;
-  IR_Entrypoint start = LoadFunction(assembly, 0, 0);
+  IN_Entrypoint start = LoadFunction(assembly, 0, 0);
   if(!start)
     return ERR_INVALID_START_FUNCTION;
   (*start)();
   return ERR_SUCCESS;
 }
 
-int innative_build_loader(struct _IR_CHUNK* chunks, const char* out, bool dynamic)
+int innative_build_loader(struct _IN_CHUNK* chunks, const char* out, bool dynamic)
 {
   return -1;
 }
@@ -131,7 +131,7 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bo
 {
   int err = ERR_SUCCESS;
   char buf[40];
-#ifdef IR_PLATFORM_WIN32
+#ifdef IN_PLATFORM_WIN32
   snprintf(buf, 40, "memory--%p", data);
 #else
   snprintf(buf, 40, "/memory--%p", data);

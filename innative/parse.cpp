@@ -17,19 +17,19 @@ __KHASH_IMPL(modules, , Identifier, size_t, 1, __ac_X31_hash_bytearray, kh_int_h
 
 namespace innative {
   namespace internal {
-    IR_FORCEINLINE IR_ERROR ParseVarUInt32(Stream& s, varuint32& target) { IR_ERROR err; target = static_cast<varuint32>(s.DecodeLEB128(err, 32, false)); return err; }
-    IR_FORCEINLINE IR_ERROR ParseVarSInt7(Stream& s, varsint7& target) { IR_ERROR err; target = static_cast<varsint7>(s.DecodeLEB128(err, 7, true)); return err; }
-    IR_FORCEINLINE IR_ERROR ParseVarUInt7(Stream& s, varuint7& target) { IR_ERROR err; target = static_cast<varuint7>(s.DecodeLEB128(err, 7, false)); return err; }
-    IR_FORCEINLINE IR_ERROR ParseVarUInt1(Stream& s, varuint1& target) { IR_ERROR err; target = static_cast<varuint1>(s.DecodeLEB128(err, 1, false)); return err; }
-    IR_FORCEINLINE IR_ERROR ParseByte(Stream& s, uint8_t& target) { return !s.Read(target) ? ERR_PARSE_UNEXPECTED_EOF : ERR_SUCCESS; }
+    IN_FORCEINLINE IN_ERROR ParseVarUInt32(Stream& s, varuint32& target) { IN_ERROR err; target = static_cast<varuint32>(s.DecodeLEB128(err, 32, false)); return err; }
+    IN_FORCEINLINE IN_ERROR ParseVarSInt7(Stream& s, varsint7& target) { IN_ERROR err; target = static_cast<varsint7>(s.DecodeLEB128(err, 7, true)); return err; }
+    IN_FORCEINLINE IN_ERROR ParseVarUInt7(Stream& s, varuint7& target) { IN_ERROR err; target = static_cast<varuint7>(s.DecodeLEB128(err, 7, false)); return err; }
+    IN_FORCEINLINE IN_ERROR ParseVarUInt1(Stream& s, varuint1& target) { IN_ERROR err; target = static_cast<varuint1>(s.DecodeLEB128(err, 1, false)); return err; }
+    IN_FORCEINLINE IN_ERROR ParseByte(Stream& s, uint8_t& target) { return !s.Read(target) ? ERR_PARSE_UNEXPECTED_EOF : ERR_SUCCESS; }
 
     template<class T, typename... Args>
     struct Parse
     {
-      template<IR_ERROR(*PARSE)(Stream&, T&, Args...)>
-      static IR_ERROR Array(Stream& s, T*& ptr, varuint32& size, const Environment& env, Args... args)
+      template<IN_ERROR(*PARSE)(Stream&, T&, Args...)>
+      static IN_ERROR Array(Stream& s, T*& ptr, varuint32& size, const Environment& env, Args... args)
       {
-        IR_ERROR err = ParseVarUInt32(s, size);
+        IN_ERROR err = ParseVarUInt32(s, size);
         if(err < 0)
           return err;
 
@@ -57,9 +57,9 @@ namespace innative {
       varsint7 type;
     };
 
-    IR_ERROR ParseLocalEntry(Stream& s, LocalEntry& entry)
+    IN_ERROR ParseLocalEntry(Stream& s, LocalEntry& entry)
     {
-      IR_ERROR err = ParseVarUInt32(s, entry.count);
+      IN_ERROR err = ParseVarUInt32(s, entry.count);
 
       if(err >= 0)
         err = ParseVarSInt7(s, entry.type);
@@ -69,10 +69,10 @@ namespace innative {
   }
 }
 
-IR_ERROR innative::ParseByteArray(Stream& s, ByteArray& section, bool terminator, const Environment& env)
+IN_ERROR innative::ParseByteArray(Stream& s, ByteArray& section, bool terminator, const Environment& env)
 {
   varuint32 n;
-  IR_ERROR err = ParseVarUInt32(s, n);
+  IN_ERROR err = ParseVarUInt32(s, n);
   if(err < 0)
     return err;
 
@@ -90,14 +90,14 @@ IR_ERROR innative::ParseByteArray(Stream& s, ByteArray& section, bool terminator
   return ERR_SUCCESS;
 }
 
-IR_ERROR innative::ParseIdentifier(Stream& s, ByteArray& section, const Environment& env)
+IN_ERROR innative::ParseIdentifier(Stream& s, ByteArray& section, const Environment& env)
 {
   return ParseByteArray(s, section, true, env); // For identifiers, we allocate one extra null terminator byte that isn't included in the size
 }
 
-IR_ERROR innative::ParseInitializer(Stream& s, Instruction& ins, const Environment& env)
+IN_ERROR innative::ParseInitializer(Stream& s, Instruction& ins, const Environment& env)
 {
-  IR_ERROR err = ParseInstruction(s, ins, env);
+  IN_ERROR err = ParseInstruction(s, ins, env);
   Instruction end;
 
   if(err >= 0)
@@ -109,9 +109,9 @@ IR_ERROR innative::ParseInitializer(Stream& s, Instruction& ins, const Environme
   return err;
 }
 
-IR_ERROR innative::ParseFunctionType(Stream& s, FunctionType& sig, const Environment& env)
+IN_ERROR innative::ParseFunctionType(Stream& s, FunctionType& sig, const Environment& env)
 {
-  IR_ERROR err = ParseVarSInt7(s, sig.form);
+  IN_ERROR err = ParseVarSInt7(s, sig.form);
   if(err < 0)
     return err;
 
@@ -128,9 +128,9 @@ IR_ERROR innative::ParseFunctionType(Stream& s, FunctionType& sig, const Environ
   return err;
 }
 
-IR_ERROR innative::ParseResizableLimits(Stream& s, ResizableLimits& limits)
+IN_ERROR innative::ParseResizableLimits(Stream& s, ResizableLimits& limits)
 {
-  IR_ERROR err = ParseVarUInt32(s, limits.flags);
+  IN_ERROR err = ParseVarUInt32(s, limits.flags);
 
   if(err >= 0)
     err = ParseVarUInt32(s, limits.minimum);
@@ -140,14 +140,14 @@ IR_ERROR innative::ParseResizableLimits(Stream& s, ResizableLimits& limits)
 
   return err;
 }
-IR_ERROR innative::ParseMemoryDesc(Stream& s, MemoryDesc& mem)
+IN_ERROR innative::ParseMemoryDesc(Stream& s, MemoryDesc& mem)
 {
   return ParseResizableLimits(s, mem.limits);
 }
 
-IR_ERROR innative::ParseTableDesc(Stream& s, TableDesc& t)
+IN_ERROR innative::ParseTableDesc(Stream& s, TableDesc& t)
 {
-  IR_ERROR err = ParseVarSInt7(s, t.element_type);
+  IN_ERROR err = ParseVarSInt7(s, t.element_type);
 
   if(err >= 0)
     err = ParseResizableLimits(s, t.resizable);
@@ -155,9 +155,9 @@ IR_ERROR innative::ParseTableDesc(Stream& s, TableDesc& t)
   return err;
 }
 
-IR_ERROR innative::ParseGlobalDesc(Stream& s, GlobalDesc& g)
+IN_ERROR innative::ParseGlobalDesc(Stream& s, GlobalDesc& g)
 {
-  IR_ERROR err = ParseVarSInt7(s, g.type);
+  IN_ERROR err = ParseVarSInt7(s, g.type);
 
   if(err >= 0 && (err = ParseVarUInt1(s, g.mutability)))
     return ERR_INVALID_MUTABILITY; // Translate parse error to invalid mutability error
@@ -165,9 +165,9 @@ IR_ERROR innative::ParseGlobalDesc(Stream& s, GlobalDesc& g)
   return err;
 }
 
-IR_ERROR innative::ParseGlobalDecl(Stream& s, GlobalDecl& g, const Environment& env)
+IN_ERROR innative::ParseGlobalDecl(Stream& s, GlobalDecl& g, const Environment& env)
 {
-  IR_ERROR err = ParseGlobalDesc(s, g.desc);
+  IN_ERROR err = ParseGlobalDesc(s, g.desc);
 
   if(err >= 0)
     err = ParseInitializer(s, g.init, env);
@@ -175,9 +175,9 @@ IR_ERROR innative::ParseGlobalDecl(Stream& s, GlobalDecl& g, const Environment& 
   return err;
 }
 
-IR_ERROR innative::ParseImport(Stream& s, Import& i, const Environment& env)
+IN_ERROR innative::ParseImport(Stream& s, Import& i, const Environment& env)
 {
-  IR_ERROR err = ParseIdentifier(s, i.module_name, env);
+  IN_ERROR err = ParseIdentifier(s, i.module_name, env);
 
   if(err < 0)
     return err;
@@ -213,9 +213,9 @@ IR_ERROR innative::ParseImport(Stream& s, Import& i, const Environment& env)
   return err;
 }
 
-IR_ERROR innative::ParseExport(Stream& s, Export& e, const Environment& env)
+IN_ERROR innative::ParseExport(Stream& s, Export& e, const Environment& env)
 {
-  IR_ERROR err = ParseIdentifier(s, e.name, env);
+  IN_ERROR err = ParseIdentifier(s, e.name, env);
 
   if(err >= 0)
     err = ParseVarUInt7(s, e.kind);
@@ -226,9 +226,9 @@ IR_ERROR innative::ParseExport(Stream& s, Export& e, const Environment& env)
   return err;
 }
 
-IR_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environment& env)
+IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environment& env)
 {
-  IR_ERROR err = ParseByte(s, ins.opcode);
+  IN_ERROR err = ParseByte(s, ins.opcode);
   if(err < 0)
     return err;
 
@@ -452,9 +452,9 @@ IR_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   return err;
 }
 
-IR_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const Environment& env)
+IN_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const Environment& env)
 {
-  IR_ERROR err = ParseVarUInt32(s, init.index);
+  IN_ERROR err = ParseVarUInt32(s, init.index);
 
   if(err >= 0)
     err = ParseInitializer(s, init.offset, env);
@@ -473,9 +473,9 @@ IR_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const E
   return err;
 }
 
-IR_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, const Environment& env)
+IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, const Environment& env)
 {
-  IR_ERROR err = ParseVarUInt32(s, f.body_size);
+  IN_ERROR err = ParseVarUInt32(s, f.body_size);
   size_t end = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
 
   if(err >= 0) // Parse local entries into a temporary array, then expand them into a usable local type array.
@@ -517,9 +517,9 @@ IR_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, const Environme
   return err;
 }
 
-IR_ERROR innative::ParseDataInit(Stream& s, DataInit& data, const Environment& env)
+IN_ERROR innative::ParseDataInit(Stream& s, DataInit& data, const Environment& env)
 {
-  IR_ERROR err = ParseVarUInt32(s, data.index);
+  IN_ERROR err = ParseVarUInt32(s, data.index);
 
   if(err >= 0)
     err = ParseInitializer(s, data.offset, env);
@@ -530,9 +530,9 @@ IR_ERROR innative::ParseDataInit(Stream& s, DataInit& data, const Environment& e
   return err;
 }
 
-IR_ERROR innative::ParseNameSectionLocal(Stream& s, size_t num, DebugInfo*& target, const Environment& env)
+IN_ERROR innative::ParseNameSectionLocal(Stream& s, size_t num, DebugInfo*& target, const Environment& env)
 {
-  IR_ERROR err;
+  IN_ERROR err;
   auto index = s.ReadVarUInt32(err);
   if(err < 0) return err;
   if(index >= num)
@@ -549,9 +549,9 @@ IR_ERROR innative::ParseNameSectionLocal(Stream& s, size_t num, DebugInfo*& targ
   return err;
 }
 
-IR_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Environment& env)
+IN_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Environment& env)
 {
-  IR_ERROR err = ERR_SUCCESS;
+  IN_ERROR err = ERR_SUCCESS;
 
   while(s.pos < end && err >= ERR_SUCCESS)
   {
@@ -628,11 +628,11 @@ IR_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Envi
   return err;
 }
 
-IR_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, ByteArray name, ValidationError*& errors)
+IN_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, ByteArray name, ValidationError*& errors)
 {
   m = { 0 };
 
-  IR_ERROR err = ERR_SUCCESS;
+  IN_ERROR err = ERR_SUCCESS;
   m.magic_cookie = s.ReadUInt32(err);
 
   if(err < 0)
@@ -798,7 +798,7 @@ IR_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, Byt
   return ParseExportFixup(m, errors, env);
 }
 
-IR_ERROR innative::ParseExportFixup(Module& m, ValidationError*& errors, const Environment& env)
+IN_ERROR innative::ParseExportFixup(Module& m, ValidationError*& errors, const Environment& env)
 {
   for(varuint32 i = 0; i < m.exportsection.n_exports; ++i)
   {

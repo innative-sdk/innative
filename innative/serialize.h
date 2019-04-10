@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __SERIALIZE_H__IR__
-#define __SERIALIZE_H__IR__
+#ifndef __SERIALIZE_H__IN__
+#define __SERIALIZE_H__IN__
 
 #include "wat.h"
 

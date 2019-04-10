@@ -42,6 +42,7 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
     char* tmp = tmalloc<char>(*env, sdkpath.size() + 1);
     tmemcpy<char>(tmp, sdkpath.size() + 1, sdkpath.c_str(), sdkpath.size() + 1);
     env->sdkpath = tmp;
+    env->system = "";
     env->wasthook = 0;
   }
   return env;
@@ -143,7 +144,7 @@ void innative::AddWhitelist(Environment* env, const char* module_name, const cha
   //kh_val(env->whitelist, iter) = !ftype ? FunctionType{ TE_NONE, 0, 0, 0, 0 } : *ftype;
 }
 
-enum IR_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, uint64_t size)
+enum IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, uint64_t size)
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;
@@ -158,7 +159,7 @@ enum IR_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data
   return ERR_SUCCESS;
 }
 
-enum IR_ERROR innative::FinalizeEnvironment(Environment* env)
+enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
 {
   // If we have an empty whitelist defined, all C function imports are illegal, so don't bother dumping symbols
   if(env->cimports && (!(env->flags & ENV_WHITELIST) || kh_size(env->whitelist) > 0))
@@ -188,7 +189,7 @@ enum IR_ERROR innative::FinalizeEnvironment(Environment* env)
   return ERR_SUCCESS;
 }
 
-enum IR_ERROR innative::Compile(Environment* env, const char* file)
+enum IN_ERROR innative::Compile(Environment* env, const char* file)
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;
@@ -212,20 +213,20 @@ enum IR_ERROR innative::Compile(Environment* env, const char* file)
 
   return CompileEnvironment(env, file);
 }
-IR_Entrypoint innative::LoadFunction(void* assembly, const char* module_name, const char* function)
+IN_Entrypoint innative::LoadFunction(void* assembly, const char* module_name, const char* function)
 {
-  return (IR_Entrypoint)LoadDLLFunction(assembly, !function ? IR_INIT_FUNCTION : utility::CanonicalName(StringRef::From(module_name), StringRef::From(function)).c_str());
+  return (IN_Entrypoint)LoadDLLFunction(assembly, !function ? IN_INIT_FUNCTION : utility::CanonicalName(StringRef::From(module_name), StringRef::From(function)).c_str());
 }
 
-struct IR_TABLE
+struct IN_TABLE
 {
-  IR_Entrypoint func;
+  IN_Entrypoint func;
   varuint32 type;
 };
 
-IR_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const char* table, varuint32 index)
+IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const char* table, varuint32 index)
 {
-  IR_TABLE* ref = (IR_TABLE*)LoadDLLFunction(assembly, utility::CanonicalName(StringRef::From(module_name), StringRef::From(table)).c_str());
+  IN_TABLE* ref = (IN_TABLE*)LoadDLLFunction(assembly, utility::CanonicalName(StringRef::From(module_name), StringRef::From(table)).c_str());
   return !ref ? nullptr : ref[index].func;
 }
 
@@ -236,7 +237,7 @@ IRGlobal* innative::LoadGlobal(void* assembly, const char* module_name, const ch
 
 void* innative::LoadAssembly(const char* file)
 {
-  Path path(file != nullptr ? Path(file) : GetProgramPath(0) + IR_EXTENSION);
+  Path path(file != nullptr ? Path(file) : GetProgramPath(0) + IN_EXTENSION);
   return LoadDLL(path.c_str());
 }
 

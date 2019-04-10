@@ -26,7 +26,7 @@
 
 using namespace innative;
 
-IR_ERROR innative::OptimizeModules(const Environment* env, code::Context* context)
+IN_ERROR innative::OptimizeModules(const Environment* env, code::Context* context)
 {
   llvm::PassBuilder passBuilder;
   llvm::LoopAnalysisManager loopAnalysisManager(env->loglevel >= LOG_DEBUG);

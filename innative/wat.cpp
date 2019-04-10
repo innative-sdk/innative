@@ -437,10 +437,10 @@ namespace innative {
     inline uint32_t Power2Log2(uint32_t v) noexcept
     {
       assert(IsPowerOfTwo(v));
-#ifdef IR_COMPILER_MSC
+#ifdef IN_COMPILER_MSC
       unsigned long r;
       _BitScanReverse(&r, v);
-#elif defined(IR_COMPILER_GCC)
+#elif defined(IN_COMPILER_GCC)
       uint32_t r = (sizeof(uint32_t) << 3) - 1 - __builtin_clz(v);
 #else
       const uint32_t b[] = { 0xAAAAAAAA, 0xCCCCCCCC, 0xF0F0F0F0, 0xFF00FF00, 0xFFFF0000 };

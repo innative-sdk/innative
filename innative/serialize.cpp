@@ -68,7 +68,7 @@ void innative::wat::PushLocalName(const Environment& env, Queue<WatToken>& token
 
 void innative::wat::TokenizeInstruction(const Environment& env, Queue<WatToken>& tokens, const Module& m, const Instruction& ins, const FunctionBody* body, const FunctionType* ftype)
 {
-  if(ins.opcode >= OPNAMECOUNT)
+  if(ins.opcode >= OPNAMES.size())
   {
     tokens.Push(WatToken{ TOKEN_NONE });
     return;
@@ -504,7 +504,7 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out)
         for(size_t k = 0; k < stack * 2; ++k)
           out.put(' ');
       }
-      if(tokens[i].i < OPNAMECOUNT)
+      if(tokens[i].i < OPNAMES.size())
         out << OPNAMES[tokens[i].i];
       else
         out << "[UNKNOWN OPERATOR: " << tokens[i].i << "]";
