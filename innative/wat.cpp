@@ -1117,8 +1117,27 @@ namespace innative {
         }
       }
 
-      if(blank.n_body != 1)
-        AppendError(state.env, state.env.errors, 0, ERR_INVALID_INITIALIZER, "Only one instruction is allowed as an initializer");
+      if(blank.n_body == 0)
+        AppendError(state.env, state.env.errors, 0, ERR_INVALID_INITIALIZER_TYPE, "Only one instruction is allowed as an initializer");
+
+      if(blank.n_body > 1)
+      {
+        int i = 0; // For some reason, webassembly wants a type mismatch error if there are multiple constant instructions that would otherwise be valid.
+        for(; i < blank.n_body; ++i)
+        {
+          switch(blank.body[i].opcode)
+          {
+          case OP_i32_const:
+          case OP_i64_const: 
+          case OP_f32_const:
+          case OP_f64_const:
+          case OP_global_get:
+            continue;
+          }
+          break;
+        }
+        AppendError(state.env, state.env.errors, 0, (i == blank.n_body) ? ERR_INVALID_INITIALIZER_TYPE : ERR_INVALID_INITIALIZER, "Only one instruction is allowed as an initializer");
+      }
 
       if(blank.n_body > 0)
         op = blank.body[0];

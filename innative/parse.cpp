@@ -264,7 +264,7 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_memory_grow:
   case OP_memory_size:
     ins.immediates[0]._varuint1 = s.ReadVarUInt1(err);
-    if(err >= 0 && ins.immediates[0]._varuint1 != 0)
+    if(err < 0 || ins.immediates[0]._varuint1 != 0) // We override any error here with ERR_INVALID_RESERVED_VALUE because that's what webassembly expects
       err = ERR_INVALID_RESERVED_VALUE;
     break;
   case OP_br_table:
@@ -280,7 +280,7 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
     {
       ins.immediates[1]._varuint1 = s.ReadVarUInt1(err);
 
-      if(err >= 0 && ins.immediates[1]._varuint1 != 0)
+      if(err < 0 || ins.immediates[1]._varuint1 != 0) // We override any error here with ERR_INVALID_RESERVED_VALUE because that's what webassembly expects
         err = ERR_INVALID_RESERVED_VALUE;
     }
 
