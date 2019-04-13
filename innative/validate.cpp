@@ -361,6 +361,8 @@ void ValidateBranchSignature(varsint7 sig, Stack<varsint7>& values, Environment&
       //  AppendError(env, env.errors, m, ERR_INVALID_TYPE, "block signature expected one value, but value stack had %zu!", values.Size());
       if(values.Peek() != TE_POLY && values.Peek() != sig)
         AppendError(env, env.errors, m, ERR_INVALID_TYPE, "block signature expected %s, but value stack had %s instead!", EnumToString(TYPE_ENCODING_MAP, sig, buf, 10), EnumToString(TYPE_ENCODING_MAP, values.Peek(), buf2, 10));
+      if(values.Peek() == TE_POLY) // If this is a polymorphic type, it now HAS to evaluate to this branch's type regardless of which branch is chosen.
+        values.Push(sig);
     }
     else
       AppendError(env, env.errors, m, ERR_EMPTY_VALUE_STACK, "block signature expected %s, but value stack was empty!", EnumToString(TYPE_ENCODING_MAP, sig, buf, 10));
@@ -937,6 +939,13 @@ void innative::ValidateTableOffset(const TableInit& init, Environment& env, Modu
 void ValidateEndBlock(internal::ControlBlock block, Stack<varsint7>& values, Environment& env, Module* m, bool restore)
 {
   ValidateSignature(block.sig, values, env, m);
+
+  if(block.sig != TE_void && values.Size() > 0)
+  {
+    values.Pop();
+    if(values.Size() > 0 && values.Peek() != TE_POLY)
+      AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK, "block signature wanted one value, but found %i values!", values.Size());
+  }
 
   // Replace the value stack with the expected signature
   while(values.Size())
