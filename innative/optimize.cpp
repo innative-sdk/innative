@@ -1,10 +1,10 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
+#include "optimize.h"
 #pragma warning(push)
 #pragma warning(disable : 4146 4267 4141 4244 4624)
 #define _SCL_SECURE_NO_WARNINGS
-#include "optimize.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Transforms/AggressiveInstCombine/AggressiveInstCombine.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
@@ -26,7 +26,7 @@
 
 using namespace innative;
 
-IN_ERROR innative::OptimizeModules(const Environment* env, code::Context* context)
+IN_ERROR innative::OptimizeModules(const Environment* env)
 {
   llvm::PassBuilder passBuilder;
   llvm::LoopAnalysisManager loopAnalysisManager(env->loglevel >= LOG_DEBUG);
@@ -74,7 +74,7 @@ IN_ERROR innative::OptimizeModules(const Environment* env, code::Context* contex
 
   // Optimize all modules
   for(size_t i = 0; i < env->n_modules; ++i)
-    modulePassManager.run(*context[i].llvm, moduleAnalysisManager);
+    modulePassManager.run(*env->modules[i].cache->llvm, moduleAnalysisManager);
 
   /*{
     auto manager = llvm::make_unique<llvm::legacy::FunctionPassManager>(context[i].llvm);

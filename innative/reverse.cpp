@@ -4,6 +4,9 @@
 #include "innative/export.h"
 #include "innative/path.h"
 #include "util.h"
+#pragma warning(push)
+#pragma warning(disable : 4146 4267 4141 4244 4624)
+#define _SCL_SECURE_NO_WARNINGS
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
@@ -15,6 +18,7 @@
 #include "llvm/Linker/Linker.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "lld/Common/Driver.h"
+#pragma warning(pop)
 #include <fstream>
 
 using namespace innative;

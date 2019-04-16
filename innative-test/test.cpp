@@ -119,8 +119,8 @@ int main(int argc, char *argv[])
   if(onlyinternal)
     return 0;
 
-  if(kh_size(matchfiles) == 0)
-    internal_benchmarks(stdout, exports, !argc ? 0 : argv[0], log);
+  //if(kh_size(matchfiles) == 0)
+  //  internal_benchmarks(stdout, exports, !argc ? 0 : argv[0], log);
 
   path testdir("../spec/test/core");
   std::vector<path> testfiles;

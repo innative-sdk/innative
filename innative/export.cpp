@@ -27,6 +27,7 @@ void innative_runtime(IRExports* exports)
   exports->LoadGlobal = &LoadGlobal;
   exports->LoadAssembly = &LoadAssembly;
   exports->FreeAssembly = &FreeAssembly;
+  exports->ClearEnvironmentCache = &ClearEnvironmentCache;
   exports->DestroyEnvironment = &DestroyEnvironment;
 }
 

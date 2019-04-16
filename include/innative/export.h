@@ -63,6 +63,7 @@ extern "C" {
     IRGlobal*(*LoadGlobal)(void* assembly, const char* module_name, const char* export_name);
     void*(*LoadAssembly)(const char* file);
     void(*FreeAssembly)(void* assembly);
+    void(*ClearEnvironmentCache)(Environment* env, Module* m);
     void(*DestroyEnvironment)(Environment* env);
   } IRExports;
 

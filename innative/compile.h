@@ -10,6 +10,7 @@
 
 namespace innative {
   IN_ERROR CompileEnvironment(const Environment* env, const char* file);
+  void DeleteCache(const Environment* env, void* cache);
   std::vector<std::string> GetSymbols(const char* file, FILE* log);
   void AppendIntrinsics(Environment& env);
 }

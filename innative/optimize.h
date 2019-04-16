@@ -4,10 +4,10 @@
 #ifndef __OPTIMIZE_H__IN__
 #define __OPTIMIZE_H__IN__
 
-#include "intrinsic.h"
+#include "llvm.h"
 
 namespace innative {
-  IN_ERROR OptimizeModules(const Environment* env, code::Context* context);
+  IN_ERROR OptimizeModules(const Environment* env);
 }
 
 #endif
