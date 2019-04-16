@@ -48,13 +48,46 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
   return env;
 }
 
+void innative::ClearEnvironmentCache(Environment* env, Module* m)
+{
+  assert(env != nullptr);
+
+  if(m)
+  {
+    if(m->cache != nullptr)
+    {
+      DeleteCache(env, m->cache);
+      m->cache = nullptr;
+    }
+  }
+  else
+  {
+    for(varuint32 i = 0; i < env->n_modules; ++i)
+    {
+      if(env->modules[i].cache != nullptr)
+      {
+        DeleteCache(env, env->modules[i].cache);
+        env->modules[i].cache = nullptr;
+      }
+    }
+
+    delete env->context;
+    env->context = nullptr;
+  }
+}
+
 void innative::DestroyEnvironment(Environment* env)
 {
   if(!env)
     return;
 
+  ClearEnvironmentCache(env, 0);
+
   for(varuint32 i = 0; i < env->n_modules; ++i)
+  {
     kh_destroy_exports(env->modules[i].exports);
+    assert(!env->modules[i].cache);
+  }
 
   delete env->alloc;
   kh_destroy_modulepair(env->whitelist);

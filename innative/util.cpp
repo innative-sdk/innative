@@ -37,7 +37,7 @@ void* __WASM_ALLOCATOR::allocate(size_t n)
       while(commit.load(std::memory_order_acquire) != index); // Spin until all reads are done
 
       size_t len = std::max<size_t>(end, 4096) * 2;
-      void* prev = malloc(len); // = mem.load(std::memory_order_acquire);
+      void* prev = malloc(len);
       list.push_back({ prev, len }); // Add real pointer and size to our destructor list
       mem.exchange((char*)prev - index, std::memory_order_release); // backtrack to trick the current index into pointing to the right address
       sz.exchange(len + index, std::memory_order_release); // Actual "end" is our previous allocation endpoint (not the memory endpoint) plus current size
@@ -45,7 +45,7 @@ void* __WASM_ALLOCATOR::allocate(size_t n)
   }
 
   void* m = mem.load(std::memory_order_acquire);
-  commit.fetch_add(n, std::memory_order_release);
+  commit.fetch_add(n, std::memory_order_acq_rel);
   return (char*)m + index;
 }
 

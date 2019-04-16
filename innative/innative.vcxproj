@@ -403,6 +403,7 @@
     <ClInclude Include="constants.h" />
     <ClInclude Include="intrinsic.h" />
     <ClInclude Include="lexer.h" />
+    <ClInclude Include="llvm.h" />
     <ClInclude Include="optimize.h" />
     <ClInclude Include="parse.h" />
     <ClInclude Include="queue.h" />

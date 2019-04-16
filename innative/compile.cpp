@@ -1,13 +1,14 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#pragma warning(push)
-#pragma warning(disable : 4146 4267 4141 4244 4624)
-#define _SCL_SECURE_NO_WARNINGS
 #include "util.h"
 #include "validate.h"
 #include "optimize.h"
+#include "intrinsic.h"
 #include "innative/export.h"
+#pragma warning(push)
+#pragma warning(disable : 4146 4267 4141 4244 4624)
+#define _SCL_SECURE_NO_WARNINGS
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/TargetSelect.h"
@@ -16,9 +17,9 @@
 #include "llvm/MC/SubtargetFeature.h"
 #include "lld/Common/Driver.h"
 #include "lld/Common/ErrorHandler.h"
+#pragma warning(pop)
 #include <iostream>
 #include <sstream>
-#pragma warning(pop)
 
 using namespace innative;
 using namespace utility;
@@ -2197,60 +2198,57 @@ IN_ERROR OutputObjectFile(code::Context& context, const char* out)
 }
 
 // Resolve all exports in the module they originated from (in case any module is exporting an import)
-void ResolveModuleExports(const Environment* env, llvm::LLVMContext& llvm_context, code::Context* context)
+void ResolveModuleExports(const Environment* env, Module* root, llvm::LLVMContext& context)
 {
   // Set ENV_HOMOGENIZE_FUNCTIONS flag appropriately.
   auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &HomogenizeFunction : &WrapFunction;
 
-  for(varuint32 i = 0; i < env->n_modules; ++i)
+  for(varuint32 j = 0; j < root->exportsection.n_exports; ++j)
   {
-    for(varuint32 j = 0; j < context[i].m.exportsection.n_exports; ++j)
+    Module* m = root;
+    Export* e = &m->exportsection.exports[j];
+
+    // Calculate the canonical name we wish to export as using the initial export object
+    auto canonical = CanonicalName(StringRef::From(m->name), StringRef::From(e->name));
+
+    // Resolve the export/module pair to the concrete source
+    for(;;)
     {
-      Export* e = &context[i].m.exportsection.exports[j];
-      Module* m = &context[i].m;
+      Import* imp = ResolveImport(*m, *e);
 
-      // Calculate the canonical name we wish to export as using the initial export object
-      auto canonical = CanonicalName(StringRef::From(context[i].m.name), StringRef::From(e->name));
+      if(!imp)
+        break;
 
-      // Resolve the export/module pair to the concrete source
-      for(;;)
+      auto pair = ResolveExport(*env, *imp);
+      m = pair.first;
+      e = pair.second;
+    }
+
+    code::Context* ctx = m->cache;
+
+    switch(e->kind)
+    {
+    case WASM_KIND_FUNCTION:
+      if(!ctx->functions[e->index].exported)
       {
-        Import* imp = ResolveImport(*m, *e);
+        if(ctx->dbuilder)
+          ctx->builder.SetCurrentDebugLocation(llvm::DILocation::get(context, ctx->init->getSubprogram()->getLine(), 0, ctx->init->getSubprogram()));
 
-        if(!imp)
-          break;
-
-        auto pair = ResolveExport(*env, *imp);
-        m = pair.first;
-        e = pair.second;
+        ctx->functions[e->index].exported = (*wrapperfn)(ctx->functions[e->index].imported ? ctx->functions[e->index].imported : ctx->functions[e->index].internal, canonical, *ctx, Func::ExternalLinkage, llvm::CallingConv::C);
+        ctx->functions[e->index].exported->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
       }
-
-      code::Context* ctx = context + (m - env->modules); // Figure out what the corresponding context is for this module
-
-      switch(e->kind)
-      {
-      case WASM_KIND_FUNCTION:
-        if(!ctx->functions[e->index].exported)
-        {
-          if(ctx->dbuilder)
-            ctx->builder.SetCurrentDebugLocation(llvm::DILocation::get(llvm_context, ctx->init->getSubprogram()->getLine(), 0, ctx->init->getSubprogram()));
-
-          ctx->functions[e->index].exported = (*wrapperfn)(ctx->functions[e->index].imported ? ctx->functions[e->index].imported : ctx->functions[e->index].internal, canonical, *ctx, Func::ExternalLinkage, llvm::CallingConv::C);
-          ctx->functions[e->index].exported->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
-        }
-        else
-          llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, ctx->functions[e->index].exported)->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
-        break;
-      case WASM_KIND_TABLE:
-        llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, ctx->tables[e->index])->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
-        break;
-      case WASM_KIND_MEMORY:
-        llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, ctx->memories[e->index])->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
-        break;
-      case WASM_KIND_GLOBAL:
-        llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, ctx->globals[e->index])->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
-        break;
-      }
+      else
+        llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, ctx->functions[e->index].exported)->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+      break;
+    case WASM_KIND_TABLE:
+      llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, ctx->tables[e->index])->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+      break;
+    case WASM_KIND_MEMORY:
+      llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, ctx->memories[e->index])->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+      break;
+    case WASM_KIND_GLOBAL:
+      llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, ctx->globals[e->index])->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+      break;
     }
   }
 }
@@ -2326,14 +2324,27 @@ int CallLinker(const Environment* env, const vector<const char*>& linkargs)
   return err;
 }
 
-void GenerateLinkerObjects(const Environment* env, code::Context* context, vector<string>& cache, vector<string>& garbage)
+void GenerateLinkerObjects(const Environment* env, vector<string>& cache)
 {
   for(size_t i = 0; i < env->n_modules; ++i)
   {
-    assert(context[i].m.name.get() != nullptr);
-    cache.emplace_back(std::string(context[i].m.name.str(), context[i].m.name.size()) + ".o");
-    OutputObjectFile(context[i], cache.back().c_str());
-    garbage.emplace_back(cache.back());
+    assert(env->modules[i].cache != 0);
+    assert(env->modules[i].name.get() != nullptr);
+    if(!env->modules[i].cache->cache.size())
+    {
+      env->modules[i].cache->cache = std::string(env->modules[i].name.str(), env->modules[i].name.size()) + ".o";
+      cache.emplace_back(env->modules[i].cache->cache);
+      unlink(env->modules[i].cache->cache.c_str());
+    }
+    else
+      cache.emplace_back(env->modules[i].cache->cache);
+
+    FILE* f;
+    FOPEN(f, env->modules[i].cache->cache.c_str(), "rb");
+    if(f)
+      fclose(f);
+    else
+      OutputObjectFile(*env->modules[i].cache, env->modules[i].cache->cache.c_str());
 
 #ifdef IN_PLATFORM_POSIX
     if(i == 0)
@@ -2351,10 +2362,22 @@ void GenerateLinkerObjects(const Environment* env, code::Context* context, vecto
 }
 
 namespace innative {
+  void DeleteCache(const Environment* env, void* cache)
+  {
+    if(cache != nullptr)
+    {
+      auto context = static_cast<code::Context*>(cache);
+      unlink((env->sdkpath + context->cache).c_str());
+      delete context->llvm;
+      delete context;
+    }
+  }
+
   IN_ERROR CompileEnvironment(const Environment* env, const char* filepath)
   {
     // Construct the LLVM environment and current working directories
-    llvm::LLVMContext llvm_context;
+    if(!env->context)
+      const_cast<Environment*>(env)->context = new llvm::LLVMContext();
     Path file(filepath);
     Path workdir = GetWorkingDir();
     Path programpath(env->sdkpath);
@@ -2365,11 +2388,10 @@ namespace innative {
     if(!file.IsAbsolute())
       file = workdir + file;
 
-    llvm::IRBuilder<> builder(llvm_context);
+    llvm::IRBuilder<> builder(*env->context);
     bool has_start = false;
     IN_ERROR err = ERR_SUCCESS;
 
-    code::Context* context = tmalloc<code::Context>(*env, env->n_modules);
     string triple = llvm::sys::getProcessTriple();
 
     // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
@@ -2429,76 +2451,85 @@ namespace innative {
       builder.setFastMathFlags(fmf);
     }
 
+    std::vector<Module*> new_modules;
+
     // Compile all modules
     for(varuint32 i = 0; i < env->n_modules; ++i)
     {
-      new(context + i) code::Context{ *env, env->modules[i], llvm_context, 0, builder, machine, code::kh_init_importhash() };
-      if((err = CompileModule(env, context[i])) < 0)
-        return err;
-      has_start |= context[i].start != nullptr;
+      if(!i || !env->modules[i].cache) // Always recompile the 0th module because it stores the main entry point.
+      {
+        DeleteCache(env, env->modules[i].cache);
+        env->modules[i].cache = new code::Context{ *env, env->modules[i], *env->context, 0, builder, machine, code::kh_init_importhash() };
+        if((err = CompileModule(env, *env->modules[i].cache)) < 0)
+          return err;
+        new_modules.push_back(env->modules + i);
+      }
+      has_start |= env->modules[i].cache->start != nullptr;
     }
 
-    ResolveModuleExports(env, llvm_context, context);
+    for(auto m : new_modules)
+      ResolveModuleExports(env, m, *env->context);
 
     if((!has_start || env->flags & ENV_NO_INIT) && !(env->flags&ENV_LIBRARY))
       return ERR_FATAL_INVALID_MODULE; // We can't compile an EXE without at least one start function
 
     // Create cleanup function
-    Func* cleanup = TopLevelFunction(llvm_context, builder, IN_EXIT_FUNCTION, context[0].llvm);
+    code::Context& mainctx = *env->modules[0].cache;
+    Func* cleanup = TopLevelFunction(*env->context, builder, IN_EXIT_FUNCTION, mainctx.llvm);
 
-    if(context[0].dbuilder)
+    if(mainctx.dbuilder)
     {
-      FunctionDebugInfo(cleanup, context[0], true, 0);
-      builder.SetCurrentDebugLocation(llvm::DILocation::get(context[0].context, cleanup->getSubprogram()->getLine(), 0, cleanup->getSubprogram()));
+      FunctionDebugInfo(cleanup, mainctx, true, 0);
+      builder.SetCurrentDebugLocation(llvm::DILocation::get(mainctx.context, cleanup->getSubprogram()->getLine(), 0, cleanup->getSubprogram()));
     }
 
-    builder.CreateCall(context[0].exit, {})->setCallingConv(context[0].exit->getCallingConv());
+    builder.CreateCall(mainctx.exit, {})->setCallingConv(mainctx.exit->getCallingConv());
 
     for(size_t i = 1; i < env->n_modules; ++i)
     {
-      Func* stub = Func::Create(context[i].exit->getFunctionType(),
-        context[i].exit->getLinkage(),
-        context[i].exit->getName(),
-        context[0].llvm); // Create function prototype in main module
+      Func* stub = Func::Create(env->modules[i].cache->exit->getFunctionType(),
+        env->modules[i].cache->exit->getLinkage(),
+        env->modules[i].cache->exit->getName(),
+        mainctx.llvm); // Create function prototype in main module
       builder.CreateCall(stub, {})->setCallingConv(stub->getCallingConv());
     }
 
     builder.CreateRetVoid();
 
     // Create main function that calls all init functions for all modules and all start functions
-    Func* main = TopLevelFunction(llvm_context, builder, IN_INIT_FUNCTION, nullptr);
+    Func* main = TopLevelFunction(*env->context, builder, IN_INIT_FUNCTION, nullptr);
 
-    if(context[0].dbuilder)
+    if(mainctx.dbuilder)
     {
-      FunctionDebugInfo(main, context[0], true, 0);
-      builder.SetCurrentDebugLocation(llvm::DILocation::get(context[0].context, main->getSubprogram()->getLine(), 0, main->getSubprogram()));
+      FunctionDebugInfo(main, mainctx, true, 0);
+      builder.SetCurrentDebugLocation(llvm::DILocation::get(mainctx.context, main->getSubprogram()->getLine(), 0, main->getSubprogram()));
     }
 
-    builder.CreateCall(context[0].init, {})->setCallingConv(context[0].init->getCallingConv());
+    builder.CreateCall(mainctx.init, {})->setCallingConv(mainctx.init->getCallingConv());
 
     for(size_t i = 1; i < env->n_modules; ++i)
     {
-      Func* stub = Func::Create(context[i].init->getFunctionType(),
-        context[i].init->getLinkage(),
-        context[i].init->getName(),
-        context[0].llvm); // Create function prototype in main module
+      Func* stub = Func::Create(env->modules[i].cache->init->getFunctionType(),
+        env->modules[i].cache->init->getLinkage(),
+        env->modules[i].cache->init->getName(),
+        mainctx.llvm); // Create function prototype in main module
       builder.CreateCall(stub, {})->setCallingConv(stub->getCallingConv());
     }
 
     // Call every single start function in all modules AFTER we initialize them.
-    if(context[0].start != nullptr)
-      builder.CreateCall(context[0].start, {})->setCallingConv(context[0].start->getCallingConv());
+    if(mainctx.start != nullptr)
+      builder.CreateCall(mainctx.start, {})->setCallingConv(mainctx.start->getCallingConv());
 
     for(size_t i = 1; i < env->n_modules; ++i)
     {
-      if(context[i].start != nullptr)
+      if(env->modules[i].cache->start != nullptr)
       {
-        Func* stub = context[0].llvm->getFunction(context[i].start->getName()); // Catch the case where an import from this module is being called from another module
+        Func* stub = mainctx.llvm->getFunction(env->modules[i].cache->start->getName()); // Catch the case where an import from this module is being called from another module
         if(!stub)
-          stub = Func::Create(context[i].start->getFunctionType(),
-            context[i].start->getLinkage(),
-            context[i].start->getName(),
-            context[0].llvm); // Create function prototype in main module
+          stub = Func::Create(env->modules[i].cache->start->getFunctionType(),
+            env->modules[i].cache->start->getLinkage(),
+            env->modules[i].cache->start->getName(),
+            mainctx.llvm); // Create function prototype in main module
         builder.CreateCall(stub, {})->setCallingConv(stub->getCallingConv());
       }
     }
@@ -2519,7 +2550,7 @@ namespace innative {
         FuncTy::get(builder.getVoidTy(), { builder.getInt32Ty() }, false),
         Func::ExternalLinkage,
         "_innative_internal_env_exit",
-        context[0].llvm);
+        mainctx.llvm);
       fn_exit->setDoesNotReturn();
 
       builder.CreateCall(cleanup, {})->setCallingConv(cleanup->getCallingConv()); // Call cleanup function
@@ -2528,12 +2559,12 @@ namespace innative {
       builder.CreateUnreachable(); // This function never returns
     }
 
-    context[0].llvm->getFunctionList().push_back(main);
+    mainctx.llvm->getFunctionList().push_back(main);
 
 #ifdef IN_PLATFORM_WIN32
     // The windows linker requires this to be defined. It's not actually used, just... defined.
    new llvm::GlobalVariable(
-      *context->llvm,
+      *mainctx.llvm,
       builder.getInt32Ty(),
       false,
       llvm::GlobalValue::ExternalLinkage,
@@ -2543,22 +2574,22 @@ namespace innative {
     if(env->flags&ENV_LIBRARY)
     {
       Func* mainstub = Func::Create(
-        FuncTy::get(builder.getInt32Ty(), { builder.getInt8PtrTy(), context[0].builder.getInt32Ty(), builder.getInt8PtrTy() }, false),
+        FuncTy::get(builder.getInt32Ty(), { builder.getInt8PtrTy(), mainctx.builder.getInt32Ty(), builder.getInt8PtrTy() }, false),
         Func::ExternalLinkage,
         IN_INIT_FUNCTION "-stub");
       mainstub->setCallingConv(llvm::CallingConv::X86_StdCall);
-      BB* entryblock = BB::Create(llvm_context, "entry", mainstub);
+      BB* entryblock = BB::Create(*env->context, "entry", mainstub);
       builder.SetInsertPoint(entryblock);
 
       if(!(env->flags&ENV_NO_INIT)) // Only actually initialize things on DLL load if we actually want to, otherwise create a stub function
       {
-        BB* endblock = BB::Create(llvm_context, "end", mainstub);
-        BB* initblock = BB::Create(llvm_context, "init", mainstub);
-        BB* exitblock = BB::Create(llvm_context, "exit", mainstub);
+        BB* endblock = BB::Create(*env->context, "end", mainstub);
+        BB* initblock = BB::Create(*env->context, "init", mainstub);
+        BB* exitblock = BB::Create(*env->context, "exit", mainstub);
 
         llvm::SwitchInst* s = builder.CreateSwitch(mainstub->arg_begin() + 1, endblock, 2);
-        s->addCase(context->builder.getInt32(1), initblock); // DLL_PROCESS_ATTACH
-        s->addCase(context->builder.getInt32(0), exitblock); // DLL_PROCESS_DETACH
+        s->addCase(mainctx.builder.getInt32(1), initblock); // DLL_PROCESS_ATTACH
+        s->addCase(mainctx.builder.getInt32(0), exitblock); // DLL_PROCESS_DETACH
 
         builder.SetInsertPoint(initblock);
         builder.CreateCall(main, {})->setCallingConv(main->getCallingConv());
@@ -2572,29 +2603,29 @@ namespace innative {
       }
 
       builder.CreateRet(builder.getInt32(1)); // Always return 1, since an error will trap instead.
-      context[0].llvm->getFunctionList().push_back(mainstub);
+      mainctx.llvm->getFunctionList().push_back(mainstub);
     }
 #endif
 
     if(env->optimize & ENV_OPTIMIZE_OMASK)
-      OptimizeModules(env, context);
+      OptimizeModules(env);
 
     // Finalize all modules
     for(varuint32 i = 0; i < env->n_modules; ++i)
     {
-      if(context[i].dbuilder)
-        context[i].dbuilder->finalize();
+      if(env->modules[i].cache->dbuilder)
+        env->modules[i].cache->dbuilder->finalize();
 
       if(env->flags&ENV_EMIT_LLVM)
       {
         std::error_code EC;
-        llvm::raw_fd_ostream dest(string(context[i].llvm->getName()) + ".llvm", EC, llvm::sys::fs::F_None);
-        context[i].llvm->print(dest, nullptr);
+        llvm::raw_fd_ostream dest(string(env->modules[i].cache->llvm->getName()) + ".llvm", EC, llvm::sys::fs::F_None);
+        env->modules[i].cache->llvm->print(dest, nullptr);
       }
 
       // Verify module
       llvm::raw_fd_ostream dest(1, false, true);
-      if(llvm::verifyModule(*context[i].llvm, &dest))
+      if(llvm::verifyModule(*env->modules[i].cache->llvm, &dest))
         return ERR_FATAL_INVALID_MODULE;
     }
 
@@ -2639,7 +2670,7 @@ namespace innative {
       );
 
       // Generate object code
-      GenerateLinkerObjects(env, context, cache, garbage);
+      GenerateLinkerObjects(env, cache);
 
       // Write all in-memory environments to cache files
       for(Embedding* cur = env->embeddings; cur != nullptr; cur = cur->next)

@@ -248,6 +248,22 @@ typedef struct __WASM_CUSTOM_SECTION
   uint8_t* data;
 } CustomSection;
 
+#ifdef  __cplusplus
+namespace innative {
+  namespace code {
+    struct Context;
+  }
+}
+typedef innative::code::Context __IN_CONTEXT;
+namespace llvm {
+  class LLVMContext;
+}
+typedef llvm::LLVMContext __LLVM_CONTEXT;
+#else
+typedef void __IN_CONTEXT;
+typedef void __LLVM_CONTEXT;
+#endif
+
 typedef struct __WASM_MODULE
 {
   uint32 magic_cookie;
@@ -329,6 +345,7 @@ typedef struct __WASM_MODULE
 
   struct kh_exports_s* exports;
   const char* path; // For debugging purposes, store path to source .wat file, if it exists.
+  __IN_CONTEXT* cache; // If non-zero, points to a cached compilation of this module
 } Module;
 
 typedef struct __WASM_VALIDATION_ERROR
@@ -384,6 +401,7 @@ typedef struct __WASM_ENVIRONMENT
   struct kh_modules_s* modulemap;
   struct kh_modulepair_s* whitelist;
   struct kh_cimport_s* cimports;
+  __LLVM_CONTEXT* context;
 } Environment;
 
 #ifdef  __cplusplus
