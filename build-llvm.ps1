@@ -11,7 +11,7 @@ Function Find-MsBuild()
 		
     If (Test-Path $communityPath2019) { return $communityPath } 
     If (Test-Path $fallback2017Path) { return $fallback2017Path } 
-    If ((Test-Path $fallback2015Path) { return $fallback2015Path } 
+    If (Test-Path $fallback2015Path) { return $fallback2015Path } 
     If (Test-Path $fallback2013Path) { return $fallback2013Path } 
     If (Test-Path $fallbackPath4) { return $fallbackPath4 } 
     If (Test-Path $fallbackPath3) { return $fallbackPath3 } 

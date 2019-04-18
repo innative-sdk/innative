@@ -771,13 +771,16 @@ IN_ERROR CompileCall(varuint32 index, code::Context& context)
   call->setCallingConv(fn->getCallingConv());
   call->setAttributes(fn->getAttributes());
 
+  if(context.memories.size() > 0)
+    context.builder.CreateStore(context.builder.CreateLoad(context.memories[0]), context.memlocal);
+
   if(!fn->getReturnType()->isVoidTy()) // Only push a value if there is one to push
     return PushReturn(context, call);
 
   return ERR_SUCCESS;
 }
 
-llvmVal* GetMemSize(llvm::GlobalVariable* target, code::Context& context)
+llvmVal* GetMemSize(llvmVal* target, code::Context& context)
 {
   return context.builder.CreateLoad(
     context.builder.CreateGEP(
@@ -852,6 +855,8 @@ IN_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
 
   // CreateCall will then do the final dereference of the function pointer to make the indirect call
   CallInst* call = context.builder.CreateCall(funcptr, llvm::makeArrayRef(ArgsV, ftype.n_params));
+  if(context.memories.size() > 0)
+    context.builder.CreateStore(context.builder.CreateLoad(context.memories[0]), context.memlocal);
 
   if(context.env.flags & ENV_DISABLE_TAIL_CALL) // In strict mode, tail call optimization is not allowed
     call->setTailCallKind(CallInst::TCK_NoTail);
@@ -887,17 +892,19 @@ IN_ERROR CompileConstant(Instruction& instruction, code::Context& context, llvm:
 
 llvmVal* GetMemPointer(code::Context& context, llvmVal* base, llvm::PointerType* pointer_type, varuint7 memory, varuint32 offset)
 {
+  assert(context.memories.size() > 0);
   llvmVal* loc = context.builder.CreateAdd(context.builder.CreateIntCast(base, context.builder.getInt64Ty(), false), context.builder.getInt64(offset), "", true, true);
+  llvmVal* src = !memory ? context.memlocal : static_cast<llvmVal*>(context.memories[memory]);
 
   if(context.env.flags&ENV_CHECK_MEMORY_ACCESS) // In strict mode, generate a check that traps if this is an invalid memory access
     InsertConditionalTrap(
       context.builder.CreateICmpUGT(
         context.builder.CreateAdd(loc, context.builder.getInt64(pointer_type->getPointerElementType()->getPrimitiveSizeInBits() / 8)),
-        GetMemSize(context.memories[memory], context),
+        GetMemSize(src, context),
         "invalid_mem_access_cond"),
       context);
 
-  return context.builder.CreatePointerCast(context.builder.CreateGEP(context.builder.CreateLoad(context.memories[memory]), loc), pointer_type);
+  return context.builder.CreatePointerCast(context.builder.CreateGEP(context.builder.CreateLoad(src), loc), pointer_type);
 }
 
 template<bool SIGNED>
@@ -943,7 +950,7 @@ IN_ERROR CompileStore(code::Context& context, varuint7 memory, varuint32 offset,
 }
 
 // Gets memory size in pages, not bytes
-llvmVal* CompileMemSize(llvm::GlobalVariable* target, code::Context& context)
+llvmVal* CompileMemSize(llvmVal* target, code::Context& context)
 {
   return context.builder.CreateIntCast(context.builder.CreateLShr(GetMemSize(target, context), 16), context.builder.getInt32Ty(), true);
 }
@@ -972,6 +979,7 @@ IN_ERROR CompileMemGrow(code::Context& context, const char* name)
   context.builder.CreateCondBr(success, successblock, contblock);
   context.builder.SetInsertPoint(successblock); // Only set new memory if call succeeded
   context.builder.CreateAlignedStore(call, context.memories[0], context.builder.getInt64Ty()->getPrimitiveSizeInBits() / 8);
+  context.builder.CreateStore(context.builder.CreateLoad(context.memories[0]), context.memlocal);
   context.builder.CreateBr(contblock);
 
   context.builder.SetInsertPoint(contblock);
@@ -1242,7 +1250,7 @@ IN_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   case OP_i64_store32:
     return CompileStore<TE_i64>(context, 0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OPNAMES[ins.opcode], context.builder.getInt32Ty());
   case OP_memory_size:
-    return PushReturn(context, CompileMemSize(context.memories[0], context));
+    return PushReturn(context, CompileMemSize(context.memlocal, context));
   case OP_memory_grow:
     return CompileMemGrow(context, OPNAMES[ins.opcode]);
 
@@ -1607,6 +1615,12 @@ IN_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
   if(stacksize > 2048)
     fn->addFnAttr("probe-stack");
 
+  if(context.memories.size() > 0)
+  {
+    context.memlocal = context.builder.CreateAlloca(context.memories[0]->getType()->getElementType(), nullptr, "IN_!memlocal");
+    context.builder.CreateStore(context.builder.CreateLoad(context.memories[0]), context.memlocal);
+  }
+
   // Begin iterating through the instructions until there aren't any left
   for(varuint32 i = 0; i < body.n_body; ++i)
   {
@@ -1617,6 +1631,7 @@ IN_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
       return err;
   }
 
+  context.memlocal = nullptr;
   if(context.values.Size() > 0 && !context.values.Peek()) // Pop at most 1 polymorphic type off the stack. Any additional ones are an error.
     context.values.Pop();
   if(body.body[body.n_body - 1].opcode != OP_end)
@@ -2334,7 +2349,7 @@ void GenerateLinkerObjects(const Environment* env, vector<string>& cache)
     {
       env->modules[i].cache->cache = std::string(env->modules[i].name.str(), env->modules[i].name.size()) + ".o";
       cache.emplace_back(env->modules[i].cache->cache);
-      unlink(env->modules[i].cache->cache.c_str());
+      UNLINK(env->modules[i].cache->cache.c_str());
     }
     else
       cache.emplace_back(env->modules[i].cache->cache);
@@ -2367,7 +2382,7 @@ namespace innative {
     if(cache != nullptr)
     {
       auto context = static_cast<code::Context*>(cache);
-      unlink((env->sdkpath + context->cache).c_str());
+      UNLINK((env->sdkpath + context->cache).c_str());
       delete context->llvm;
       delete context;
     }
