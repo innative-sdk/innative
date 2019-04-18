@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#include "test.h"
 #include "benchmark.h"
+#include "test.h"
 #include "innative/export.h"
 #include "innative/khash.h"
 #include <iostream>
@@ -75,9 +75,10 @@ void internal_benchmarks(FILE* out, const IRExports& exports, const char* arg0, 
   fprintf(out, "%-*s %-*s %-*s %-*s %-*s %-*s\n", COLUMNS[0], "---------", COLUMNS[1], "-----", COLUMNS[2], "-----", COLUMNS[3], "------", COLUMNS[4], "-------", COLUMNS[5], "------");
 
   Benchmarks benchmarks(exports, arg0, log);
-  benchmarks.DoBenchmark<int, int>(out, "../scripts/benchmark_fannkuch-redux.wasm", "fannkuch_redux", COLUMNS, &Benchmarks::fannkuch_redux, 11);
-  benchmarks.DoBenchmark<int64_t, int64_t>(out, "../scripts/benchmark-fac.wat", "fac", COLUMNS, &Benchmarks::fac, 38);
+  benchmarks.DoBenchmark<int, int>(out, "../scripts/benchmark_minimum.wasm", "minimum", COLUMNS, &Benchmarks::minimum, 36);
+  benchmarks.DoBenchmark<int64_t, int64_t>(out, "../scripts/benchmark-fac.wat", "fac", COLUMNS, &Benchmarks::fac, 37);
   benchmarks.DoBenchmark<int, int>(out, "../scripts/benchmark_n-body.wasm", "nbody", COLUMNS, &Benchmarks::nbody, 11);
+  benchmarks.DoBenchmark<int, int>(out, "../scripts/benchmark_fannkuch-redux.wasm", "fannkuch_redux", COLUMNS, &Benchmarks::fannkuch_redux, 11);
 }
 
 int main(int argc, char *argv[])
@@ -113,14 +114,14 @@ int main(int argc, char *argv[])
     }
   }
 
-  if(kh_size(matchfiles) == 0 || onlyinternal)
-    internal_tests(stdout);
+  //if(kh_size(matchfiles) == 0 || onlyinternal)
+  //  internal_tests(stdout);
   
   if(onlyinternal)
     return 0;
 
-  //if(kh_size(matchfiles) == 0)
-  //  internal_benchmarks(stdout, exports, !argc ? 0 : argv[0], log);
+  if(kh_size(matchfiles) == 0)
+    internal_benchmarks(stdout, exports, !argc ? 0 : argv[0], log);
 
   path testdir("../spec/test/core");
   std::vector<path> testfiles;
