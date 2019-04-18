@@ -332,6 +332,7 @@
     <ClCompile Include="benchmark.cpp" />
     <ClCompile Include="benchmark_fac.cpp" />
     <ClCompile Include="benchmark_fannkuch-redux.cpp" />
+    <ClCompile Include="benchmark_minimum.cpp" />
     <ClCompile Include="benchmark_n-body.cpp" />
     <ClCompile Include="test.cpp" />
     <ClCompile Include="test_allocator.cpp" />
