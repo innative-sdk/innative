@@ -1,8 +1,6 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#include <stdint.h>
-
 // The Computer Language Benchmarks Game
 // https://salsa.debian.org/benchmarksgame-team/benchmarksgame/
 //
@@ -22,9 +20,12 @@
 
 #ifdef TESTING_WASM
 #include "benchmark.h"
+#include <stdint.h>
 
 int Benchmarks::nbody(int n)
 #else
+#include <stdint.h>
+
 extern "C" void* malloc(intptr_t n);
 extern "C" __attribute__((visibility("default")))
 int nbody(int n)
@@ -177,5 +178,5 @@ int nbody(int n)
     }
   }
 
-  return checksum + n;
+  return (int)checksum + n;
 }

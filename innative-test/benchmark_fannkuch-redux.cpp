@@ -18,13 +18,14 @@
 // blocks to more evenly distribute the workload amongst the threads.
 #define PREFERRED_NUMBER_OF_BLOCKS_TO_USE 12
 
-#include <stdint.h>
-
 #ifdef TESTING_WASM
 #include "benchmark.h"
+#include <stdint.h>
 
 int Benchmarks::fannkuch_redux(int n)
 #else
+#include <stdint.h>
+
 extern "C" void* malloc(intptr_t n);
 extern "C" __attribute__((visibility("default")))
 int fannkuch_redux(int n)

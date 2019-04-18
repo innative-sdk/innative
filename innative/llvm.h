@@ -73,6 +73,7 @@ namespace innative {
       Stack<llvm::Value*> values; // Tracks the current value stack
       Stack<Block> control; // Control flow stack
       std::vector<llvm::AllocaInst*> locals;
+      llvm::AllocaInst* memlocal;
       std::vector<llvm::GlobalVariable*> memories;
       std::vector<llvm::GlobalVariable*> tables;
       std::vector<llvm::GlobalVariable*> globals;

@@ -152,12 +152,14 @@ limitations under the License.
 #define STRTOK(str,delim,context) strtok_s(str,delim,context)
 #define FPRINTF(f,format,...) fprintf_s(f, format, __VA_ARGS__)
 #define SPRINTF(b, c, f, ...) sprintf_s(b, c, f, __VA_ARGS__)
+#define UNLINK(s) _unlink(s)
 #else
 #define FOPEN(f, path, mode) f = fopen(path, mode)
 #define STRICMP(a, b) strcasecmp(a, b)
 #define STRTOK(str,delim,context) strtok_r(str,delim,context)
 #define FPRINTF(f,format,...) fprintf(f, format, __VA_ARGS__)
 #define SPRINTF(b, c, f, ...) sprintf(b, f, __VA_ARGS__)
+#define UNLINK(s) unlink(s)
 #endif
 
 #endif
