@@ -86,6 +86,8 @@ void innative::DestroyEnvironment(Environment* env)
   for(varuint32 i = 0; i < env->n_modules; ++i)
   {
     kh_destroy_exports(env->modules[i].exports);
+    if(env->modules[i].importsection.imports)
+      free(env->modules[i].importsection.imports);
     assert(!env->modules[i].cache);
   }
 

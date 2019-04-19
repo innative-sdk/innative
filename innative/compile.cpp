@@ -2383,6 +2383,7 @@ namespace innative {
     {
       auto context = static_cast<code::Context*>(cache);
       UNLINK((env->sdkpath + context->cache).c_str());
+      kh_destroy_importhash(context->importhash);
       delete context->llvm;
       delete context;
     }
@@ -2752,6 +2753,6 @@ namespace innative {
     int r;
     if(env.cimports)
       for(auto intrinsic : code::intrinsics)
-        kh_put_cimport(env.cimports, Identifier((uint8_t*)intrinsic.name, strlen(intrinsic.name)), &r);
+        kh_put_cimport(env.cimports, Identifier((uint8_t*)intrinsic.name, (varuint32)strlen(intrinsic.name)), &r);
   }
 }

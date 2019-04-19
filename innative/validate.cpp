@@ -856,7 +856,6 @@ void innative::ValidateExport(const Export& e, Environment& env, Module* m)
 
 varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env, Module* m)
 {
-  char buf[10];
   switch(ins.opcode)
   {
   case OP_i32_const:
