@@ -386,17 +386,17 @@ typedef struct __WASM_ENVIRONMENT
   Module* modules;
   Embedding* embeddings;
   ValidationError* errors; //A linked list of non-fatal validation errors that prevent proper execution.
-  uint64_t flags;
-  uint64_t features;
-  uint64_t optimize;
+  uint64_t flags; // WASM_ENVIRONMENT_FLAGS
+  uint64_t features; // WASM_FEATURE_FLAGS
+  uint64_t optimize; // WASM_OPTIMIZE_FLAGS
   unsigned int maxthreads; // Max number of threads for any multithreaded action. If 0, there is no limit.
   const char* sdkpath; // Path to look for SDK components, which usually aren't in the working directory
   const char* linker; // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
   const char* system; // prefix for the "system" module, which simply attempts to link the function name as a C function. Defaults to a blank string.
   struct __WASM_ALLOCATOR* alloc; // Stores a pointer to the allocator
-  int loglevel;
+  int loglevel; // WASM_LOG_LEVEL
   FILE* log;
-  void(*wasthook)(void*);
+  void(*wasthook)(void*); // Optional hook for WAST debugging cases
 
   struct kh_modules_s* modulemap;
   struct kh_modulepair_s* whitelist;

@@ -76,7 +76,7 @@ void _innative_internal_write_out(const void* buf, size_t num)
 {
 #ifdef IN_PLATFORM_WIN32
   DWORD out;
-  WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buf, num, &out, NULL);
+  WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buf, (DWORD)num, &out, NULL);
 #elif defined(IN_PLATFORM_POSIX)
   size_t cast = 1;
   _innative_syscall(SYSCALL_WRITE, (void*)cast, (size_t)buf, num, 0, 0);

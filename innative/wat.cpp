@@ -187,11 +187,31 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    template<class T>
-    int AppendArray(T item, T*& a, varuint32& n)
+    inline varuint32 NextPow2(varuint32 v) noexcept
     {
-      if(!(a = trealloc<T>(a, ++n)))
-        return ERR_FATAL_OUT_OF_MEMORY;
+      v -= 1;
+      v |= (v >> 1);
+      v |= (v >> 2);
+      v |= (v >> 4);
+      v |= (v >> 8);
+      v |= (v >> 16);
+
+      return v + 1;
+    }
+
+    template<class T>
+    int AppendArray(const Environment& env, T item, T*& a, varuint32& n)
+    {
+      // We only allocate power of two chunks from our greedy allocator
+      varuint32 i = NextPow2(n++);
+      if(n <= 2 || n == i)
+      {
+        T* old = a;
+        if(!(a = tmalloc<T>(env, n * 2)))
+          return ERR_FATAL_OUT_OF_MEMORY;
+        tmemcpy<T>(a, n * 2, old, n - 1); // Don't free old because it was from a greedy allocator.
+      }
+
       a[n - 1] = item;
       return ERR_SUCCESS;
     }
@@ -209,12 +229,12 @@ namespace innative {
       return 0;
     }
 
-    int AddWatValType(WatTokenID id, varsint7*& a, varuint32& n)
+    int AddWatValType(const Environment& env, WatTokenID id, varsint7*& a, varuint32& n)
     {
       varsint7 ty = WatValType(id);
       if(!ty)
         return ERR_WAT_EXPECTED_VALTYPE;
-      return AppendArray<varsint7>(ty, a, n);
+      return AppendArray<varsint7>(env, ty, a, n);
     }
 
     int WatFunctionTypeInner(const Environment& env, Queue<WatToken>& tokens, FunctionType& sig, DebugInfo** info, bool anonymous)
@@ -239,11 +259,11 @@ namespace innative {
             WatName(env, debug.name, tokens.Peek());
 
             varuint32 sz = sig.n_params;
-            if(err = AppendArray<DebugInfo>(debug, *info, sz))
+            if(err = AppendArray<DebugInfo>(env, debug, *info, sz))
               return err;
           }
           tokens.Pop();
-          if(err = AddWatValType(tokens.Pop().id, sig.params, sig.n_params))
+          if(err = AddWatValType(env, tokens.Pop().id, sig.params, sig.n_params))
             return err;
         }
         else
@@ -253,10 +273,10 @@ namespace innative {
             if(info)
             {
               varuint32 sz = sig.n_params;
-              if(err = AppendArray<DebugInfo>(DebugInfo{ src.line, src.column }, *info, sz))
+              if(err = AppendArray<DebugInfo>(env, DebugInfo{ src.line, src.column }, *info, sz))
                 return err;
             }
-            if(err = AddWatValType(tokens.Pop().id, sig.params, sig.n_params))
+            if(err = AddWatValType(env, tokens.Pop().id, sig.params, sig.n_params))
               return err;
           }
         }
@@ -270,7 +290,7 @@ namespace innative {
         EXPECTED(tokens, TOKEN_RESULT, ERR_WAT_EXPECTED_TOKEN);
 
         while(tokens.Peek().id != TOKEN_CLOSE)
-          if(err = AddWatValType(tokens.Pop().id, sig.returns, sig.n_returns))
+          if(err = AddWatValType(env, tokens.Pop().id, sig.returns, sig.n_returns))
             return err;
 
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
@@ -293,7 +313,7 @@ namespace innative {
         return err;
       *index = state.m.type.n_functions;
       state.m.knownsections |= (1 << WASM_SECTION_TYPE);
-      if(err = AppendArray<FunctionType>(sig, state.m.type.functions, state.m.type.n_functions))
+      if(err = AppendArray<FunctionType>(state.env, sig, state.m.type.functions, state.m.type.n_functions))
         return err;
 
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
@@ -377,7 +397,7 @@ namespace innative {
 
       out = state.m.type.n_functions;
       state.m.knownsections |= (1 << WASM_SECTION_TYPE);
-      return AppendArray<FunctionType>(ftype, state.m.type.functions, state.m.type.n_functions);
+      return AppendArray<FunctionType>(state.env, ftype, state.m.type.functions, state.m.type.n_functions);
     }
 
     int WatTypeUse(WatState& state, Queue<WatToken>& tokens, varuint32& sig, DebugInfo** info, bool anonymous)
@@ -555,7 +575,7 @@ namespace innative {
           if(jump == (varuint32)~0)
             return ERR_WAT_EXPECTED_VAR;
 
-          if(err = AppendArray<varuint32>(jump, op.immediates[0].table, op.immediates[0].n_table))
+          if(err = AppendArray<varuint32>(state.env, jump, op.immediates[0].table, op.immediates[0].n_table))
             return err;
         } while(tokens.Peek().id == TOKEN_NAME || tokens.Peek().id == TOKEN_NUMBER);
 
@@ -681,7 +701,7 @@ namespace innative {
           op.immediates[0]._varsint7 = blocktype;
           op.line = t.line;
           op.column = t.column;
-          if(err = AppendArray<Instruction>(op, f.body, f.n_body))
+          if(err = AppendArray<Instruction>(state.env, op, f.body, f.n_body))
             return err;
         }
 
@@ -692,7 +712,7 @@ namespace innative {
         Instruction op = { OP_end };
         op.line = tokens.Peek().line;
         op.column = tokens.Peek().column;
-        if(err = AppendArray<Instruction>(op, f.body, f.n_body))
+        if(err = AppendArray<Instruction>(state.env, op, f.body, f.n_body))
           return err;
         state.stack.Pop();
         break;
@@ -713,7 +733,7 @@ namespace innative {
           op.immediates[0]._varsint7 = blocktype;
           op.line = t.line;
           op.column = t.column;
-          if(err = AppendArray<Instruction>(op, f.body, f.n_body)) // We append the if instruction _after_ the optional condition expression
+          if(err = AppendArray<Instruction>(state.env, op, f.body, f.n_body)) // We append the if instruction _after_ the optional condition expression
             return err;
         }
       }
@@ -737,7 +757,7 @@ namespace innative {
 
           op.line = t.line;
           op.column = t.column;
-          if(err = AppendArray<Instruction>(op, f.body, f.n_body))
+          if(err = AppendArray<Instruction>(state.env, op, f.body, f.n_body))
             return err;
 
           while(tokens.Peek().id != TOKEN_CLOSE)
@@ -751,7 +771,7 @@ namespace innative {
           Instruction op = { OP_end };
           op.line = tokens.Peek().line;
           op.column = tokens.Peek().column;
-          if(err = AppendArray<Instruction>(op, f.body, f.n_body))
+          if(err = AppendArray<Instruction>(state.env, op, f.body, f.n_body))
             return err;
         }
 
@@ -771,7 +791,7 @@ namespace innative {
 
         if(defer.id) // Only perform the defer after we evaluate the folded instructions, so f.n_body is correct
           state.defer.Push(DeferWatAction{ defer.id, defer.t, index, f.n_body });
-        if(err = AppendArray<Instruction>(op, f.body, f.n_body)) // Now we append the operator
+        if(err = AppendArray<Instruction>(state.env, op, f.body, f.n_body)) // Now we append the operator
           return err;
         break;
       }
@@ -802,7 +822,7 @@ namespace innative {
           op.immediates[0]._varsint7 = blocktype;
           op.line = t.line;
           op.column = t.column;
-          if(err = AppendArray<Instruction>(op, f.body, f.n_body))
+          if(err = AppendArray<Instruction>(state.env, op, f.body, f.n_body))
             return err;
         }
 
@@ -819,7 +839,7 @@ namespace innative {
           Instruction op = { OP_end };
           op.line = tokens.Peek().line;
           op.column = tokens.Peek().column;
-          if(err = AppendArray<Instruction>(op, f.body, f.n_body))
+          if(err = AppendArray<Instruction>(state.env, op, f.body, f.n_body))
             return err;
         }
 
@@ -838,7 +858,7 @@ namespace innative {
           op.immediates[0]._varsint7 = blocktype;
           op.line = t.line;
           op.column = t.column;
-          if(err = AppendArray<Instruction>(op, f.body, f.n_body)) // We append the if instruction _after_ the optional condition expression
+          if(err = AppendArray<Instruction>(state.env, op, f.body, f.n_body)) // We append the if instruction _after_ the optional condition expression
             return err;
         }
 
@@ -855,7 +875,7 @@ namespace innative {
           Instruction op = { OP_else };
           op.line = t.line;
           op.column = t.column;
-          if(err = AppendArray<Instruction>(op, f.body, f.n_body))
+          if(err = AppendArray<Instruction>(state.env, op, f.body, f.n_body))
             return err;
 
           while(tokens.Peek().id != TOKEN_END)
@@ -873,7 +893,7 @@ namespace innative {
           Instruction op = { OP_end };
           op.line = tokens.Peek().line;
           op.column = tokens.Peek().column;
-          if(err = AppendArray<Instruction>(op, f.body, f.n_body))
+          if(err = AppendArray<Instruction>(state.env, op, f.body, f.n_body))
             return err;
         }
 
@@ -888,7 +908,7 @@ namespace innative {
 
         if(defer.id)
           state.defer.Push(DeferWatAction{ defer.id, defer.t, index, f.n_body });
-        return AppendArray<Instruction>(op, f.body, f.n_body);
+        return AppendArray<Instruction>(state.env, op, f.body, f.n_body);
       }
       }
 
@@ -912,7 +932,7 @@ namespace innative {
         if(!ValidateIdentifier(e.name))
           return ERR_INVALID_UTF8_ENCODING;
         m.knownsections |= (1 << WASM_SECTION_EXPORT);
-        if(err = AppendArray<Export>(e, m.exportsection.exports, m.exportsection.n_exports))
+        if(err = AppendArray<Export>(env, e, m.exportsection.exports, m.exportsection.n_exports))
           return err;
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       }
@@ -949,12 +969,12 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int WatLocalAppend(FunctionBody& body, Queue<WatToken>& tokens)
+    int WatLocalAppend(const Environment& env, FunctionBody& body, Queue<WatToken>& tokens)
     {
       varsint7 local = WatValType(tokens.Pop().id);
       if(!local)
         return ERR_WAT_EXPECTED_VALTYPE;
-      return AppendArray<varsint7>(local, body.locals, body.n_locals);
+      return AppendArray<varsint7>(env, local, body.locals, body.n_locals);
     }
 
     int WatFunction(WatState& state, Queue<WatToken>& tokens, varuint32* index, StringRef name)
@@ -996,10 +1016,10 @@ namespace innative {
           WatName(state.env, debug.name, tokens.Pop());
 
           varuint32 sz = body.n_locals; // n_locals is the count, but we don't want to increment it yet
-          if(err = AppendArray<DebugInfo>(debug, body.local_names, sz))
+          if(err = AppendArray<DebugInfo>(state.env, debug, body.local_names, sz))
             return err;
 
-          if(err = WatLocalAppend(body, tokens)) // Must have exactly one val_type to associate with the name
+          if(err = WatLocalAppend(state.env, body, tokens)) // Must have exactly one val_type to associate with the name
             return err;
         }
         else // Otherwise can have zero or more val_types
@@ -1007,9 +1027,9 @@ namespace innative {
           while(tokens[0].id != TOKEN_CLOSE)
           {
             varuint32 sz = body.n_locals; // n_locals is the count, but we don't want to increment it yet
-            if(err = AppendArray<DebugInfo>(DebugInfo{ src.line, src.column }, body.local_names, sz))
+            if(err = AppendArray<DebugInfo>(state.env, DebugInfo{ src.line, src.column }, body.local_names, sz))
               return err;
-            if(err = WatLocalAppend(body, tokens))
+            if(err = WatLocalAppend(state.env, body, tokens))
               return err;
           }
         }
@@ -1028,15 +1048,15 @@ namespace innative {
       Instruction op = { OP_end };
       op.line = tokens.Peek().line;
       op.column = tokens.Peek().column;
-      if(err = AppendArray(op, body.body, body.n_body))
+      if(err = AppendArray(state.env, op, body.body, body.n_body))
         return err;
 
       state.m.knownsections |= (1 << WASM_SECTION_FUNCTION);
-      if(err = AppendArray(sig, state.m.function.funcdecl, state.m.function.n_funcdecl))
+      if(err = AppendArray(state.env, sig, state.m.function.funcdecl, state.m.function.n_funcdecl))
         return err;
 
       state.m.knownsections |= (1 << WASM_SECTION_CODE);
-      return AppendArray(body, state.m.code.funcbody, state.m.code.n_funcbody);
+      return AppendArray(state.env, body, state.m.code.funcbody, state.m.code.n_funcbody);
     }
 
     int WatResizableLimits(WatState& state, ResizableLimits& limits, Queue<WatToken>& tokens)
@@ -1094,7 +1114,7 @@ namespace innative {
       }
 
       state.m.knownsections |= (1 << WASM_SECTION_TABLE);
-      return AppendArray(table, state.m.table.tables, state.m.table.n_tables);
+      return AppendArray(state.env, table, state.m.table.tables, state.m.table.n_tables);
     }
 
     int WatInitializerInstruction(WatState& state, Queue<WatToken>& tokens, Instruction& op, bool expr)
@@ -1122,7 +1142,7 @@ namespace innative {
 
       if(blank.n_body > 1)
       {
-        int i = 0; // For some reason, webassembly wants a type mismatch error if there are multiple constant instructions that would otherwise be valid.
+        varuint32 i = 0; // For some reason, webassembly wants a type mismatch error if there are multiple constant instructions that would otherwise be valid.
         for(; i < blank.n_body; ++i)
         {
           switch(blank.body[i].opcode)
@@ -1198,7 +1218,7 @@ namespace innative {
         return err;
 
       state.m.knownsections |= (1 << WASM_SECTION_GLOBAL);
-      return AppendArray(g, state.m.global.globals, state.m.global.n_globals);
+      return AppendArray(state.env, g, state.m.global.globals, state.m.global.n_globals);
     }
 
     int WatMemoryDesc(WatState& state, MemoryDesc& m, Queue<WatToken>& tokens)
@@ -1236,7 +1256,7 @@ namespace innative {
         }
 
         state.m.knownsections |= (1 << WASM_SECTION_DATA);
-        if(err = AppendArray(init, state.m.data.data, state.m.data.n_data))
+        if(err = AppendArray(state.env, init, state.m.data.data, state.m.data.n_data))
           return err;
 
         mem.limits.flags = 0;
@@ -1247,7 +1267,7 @@ namespace innative {
         return err;
 
       state.m.knownsections |= (1 << WASM_SECTION_MEMORY);
-      return AppendArray(mem, state.m.memory.memories, state.m.memory.n_memories);
+      return AppendArray(state.env, mem, state.m.memory.memories, state.m.memory.n_memories);
     }
 
     int AddWatName(kh_indexname_t* h, WatToken t, varuint32 index)
@@ -1365,7 +1385,7 @@ namespace innative {
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
       state.m.knownsections |= (1 << WASM_SECTION_EXPORT);
-      return AppendArray(e, state.m.exportsection.exports, state.m.exportsection.n_exports);
+      return AppendArray(state.env, e, state.m.exportsection.exports, state.m.exportsection.n_exports);
     }
 
     int WatElemData(WatState& state, Queue<WatToken>& tokens, varuint32& index, Instruction& op, kh_indexname_t* hash)
@@ -1400,7 +1420,7 @@ namespace innative {
     {
       while(tokens[0].id != TOKEN_CLOSE)
       {
-        int err = AppendArray(WatGetFromHash(state, state.funchash, tokens.Pop()), e.elements, e.n_elements);
+        int err = AppendArray(state.env, WatGetFromHash(state, state.funchash, tokens.Pop()), e.elements, e.n_elements);
         if(err)
           return err;
         if(e.elements[e.n_elements - 1] == (varuint32)~0)
@@ -1408,7 +1428,7 @@ namespace innative {
       }
 
       state.m.knownsections |= (1 << WASM_SECTION_ELEMENT);
-      return AppendArray(e, state.m.element.elements, state.m.element.n_elements);
+      return AppendArray(state.env, e, state.m.element.elements, state.m.element.n_elements);
     }
 
     int WatData(WatState& state, Queue<WatToken>& tokens)
@@ -1427,7 +1447,7 @@ namespace innative {
       }
 
       state.m.knownsections |= (1 << WASM_SECTION_DATA);
-      return AppendArray(d, state.m.data.data, state.m.data.n_data);
+      return AppendArray(state.env, d, state.m.data.data, state.m.data.n_data);
     }
 
     // Skips over an entire section of tokens by counting paranthesis, assuming they are well-formed

@@ -12,6 +12,7 @@
 #include <setjmp.h>
 #include <iostream>
 #include <atomic>
+#include <functional>
 
 #ifdef IN_PLATFORM_WIN32
 #include "../innative/win32.h"
@@ -613,6 +614,8 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
     return ERR_WAT_INVALID_TOKEN;
 
   kh_indexname_t* mapping = kh_init_indexname(); // This is a special mapping for all modules using the module name itself, not just registered ones.
+  DeferLambda<std::function<void()>> defer([&]() { kh_destroy_indexname(mapping); });
+
   Module* last = nullptr; // For anything not providing a module name, this was the most recently defined module.
   void* cache = nullptr;
   Path cachepath;
