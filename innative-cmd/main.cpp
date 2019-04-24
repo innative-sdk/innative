@@ -170,6 +170,9 @@ int main(int argc, char* argv[])
         case 'g': // generate loader
           generate = true;
           break;
+        case 'v': // verbose logging
+          verbose = true;
+          break;
         case 'w': // whitelist
           checkarg(++i, argc, argv, err, [&]() { whitelist.push_back(argv[i]); });
           break;
