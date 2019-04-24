@@ -22,6 +22,7 @@
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionAliasAnalysis.h"
 #include "llvm/Analysis/PostDominators.h"
+#include "llvm/Support/FileSystem.h"
 #pragma warning(pop)
 
 using namespace innative;
@@ -41,15 +42,16 @@ IN_ERROR innative::OptimizeModules(const Environment* env)
   loopAnalysisManager.registerPass([&]() { return llvm::PassInstrumentationAnalysis(&PIC); });
   cGSCCAnalysisManager.registerPass([&]() { return llvm::PassInstrumentationAnalysis(&PIC); });
 
+  FILE* aux = fopen("passes.txt", "wb");
   int counter = 0;
   PIC.registerAfterPassCallback([&](const llvm::StringRef& name, const llvm::Any&) {
-    if(name.contains_lower("PassManager"))
+    if(name.contains_lower("PassManager") && env->n_modules > 1)
     {
       std::error_code EC;
-      llvm::raw_fd_ostream dest(string(context[1].llvm->getName()) + "_" + std::to_string(++counter) + ".llvm", EC, llvm::sys::fs::F_None);
-      context[1].llvm->print(dest, nullptr);
+      llvm::raw_fd_ostream dest(std::string(env->modules[1].cache->llvm->getName()) + "_" + std::to_string(++counter) + ".llvm", EC, llvm::sys::fs::OpenFlags::OF_None);
+      env->modules[1].cache->llvm->print(dest, nullptr);
     }
-    std::cout << std::to_string(counter) << ": " << name.begin() << std::endl;
+    fprintf(aux, "%i: %s\n", counter, name.begin());
     });*/
 
   passBuilder.registerModuleAnalyses(moduleAnalysisManager);
@@ -146,5 +148,6 @@ IN_ERROR innative::OptimizeModules(const Environment* env)
     manager->doInitialization();
   }*/
 
+  //fclose(aux);
   return ERR_SUCCESS;
 }

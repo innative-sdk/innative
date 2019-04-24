@@ -79,12 +79,6 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
       return ERR_FATAL_LINK_ERROR;
     }
   }
-  
-  /*if(link.linkInModule(llvm::parseIRFile((sdkdir + "buddy-malloc.ll").Get().c_str(), diag, llvm_context)))
-  {
-    fputs("Failed to link utility IR\nError: ", log);
-    fputs(diag.getMessage().data(), log);
-  }*/
 
   std::error_code EC;
   std::string objfile(out);
@@ -124,6 +118,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
       return ERR_FATAL_LINK_ERROR;
   }
 
+  delete composite;
   fputs("Successfully compiled monolithic wasm module: ", log);
   fputs(out, log);
   return ERR_SUCCESS;
