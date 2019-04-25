@@ -6,6 +6,7 @@
 
 #include "innative/innative.h"
 #include <string>
+#include <string.h>
 
 namespace innative {
   // Represents an operating system path for pre-C++17 compilers

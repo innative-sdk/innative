@@ -2350,7 +2350,7 @@ void GenerateLinkerObjects(const Environment* env, vector<string>& cache)
     {
       env->modules[i].cache->cache = std::string(env->modules[i].name.str(), env->modules[i].name.size()) + ".o";
       cache.emplace_back(env->modules[i].cache->cache);
-      UNLINK(env->modules[i].cache->cache.c_str());
+      remove(env->modules[i].cache->cache.c_str());
     }
     else
       cache.emplace_back(env->modules[i].cache->cache);
@@ -2383,7 +2383,7 @@ namespace innative {
     if(cache != nullptr)
     {
       auto context = static_cast<code::Context*>(cache);
-      UNLINK((env->sdkpath + context->cache).c_str());
+      remove((env->sdkpath + context->cache).c_str());
       kh_destroy_importhash(context->importhash);
       delete context->llvm;
       delete context;

@@ -21,7 +21,15 @@ LDFLAGS  := -L$(LIBDIR) -Lbin/llvm/lib
 PREFIX  ?= /usr/local
 DESTDIR ?=
 
+ifeq ($(MAKECMDGOALS), debug)
+CPPFLAGS += -DDEBUG -g
+else
+CPPFLAGS += -march=native -O3
+endif
+
+debug: innative-env innative innative-cmd innative-test
 all: innative-env innative innative-cmd innative-test
+
 clean: innative-env-clean innative-clean innative-cmd-clean innative-test-clean
 	#$(RM) -r $(LIBDIR)
 	#$(RM) -r $(BINDIR)
@@ -42,7 +50,7 @@ benchmarks:
 	$(CXX) innative-test/benchmark_fac.cpp wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 --output /scripts/benchmark_fac.wasm -Xlinker --no-entry -Xlinker --export-dynamic
 	$(CXX) innative-test/benchmark_fannkuch-redux.cpp wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 --output /scripts/benchmark_fannkuch-redux.wasm -Xlinker --no-entry -Xlinker --export-dynamic
 
-.PHONY: all clean install uninstall benchmarks
+.PHONY: all clean install uninstall benchmarks debug
 
 include innative-env/Makefile
 include innative/Makefile

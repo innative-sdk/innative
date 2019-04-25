@@ -6,7 +6,9 @@
 
 int Benchmarks::minimum(int n)
 #else
-extern "C" void* malloc(size_t n);
+#include <stdint.h>
+
+extern "C" void* malloc(uintptr_t n);
 extern "C" __attribute__((visibility("default")))
 int minimum(int n)
 #endif
