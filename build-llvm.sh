@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 git submodule update --init --recursive
 
 mkdir -p bin/llvm
