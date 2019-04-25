@@ -32,15 +32,41 @@ limitations under the License.
 #elif defined(_M_IX86) || defined(__i386) || defined(__i386__) || defined(__X86__) || defined(_X86_) || defined(__I86__) || defined(__THW_INTEL__) || defined(__INTEL__)
 #define IN_CPU_x86  //x86 architecture
 #define IN_32BIT
-#elif defined(__arm__) || defined(__thumb__) || defined(__TARGET_ARCH_ARM) || defined(__TARGET_ARCH_THUMB) || defined(_ARM)
-#define IN_CPU_ARM //ARM architecture
+#elif defined(__arm__) || defined(__thumb__) || defined(__TARGET_ARCH_ARM) || defined(__TARGET_ARCH_THUMB) || defined(_ARM) || defined(__aarch64__) 
+#ifdef __aarch64__  
+#define IN_CPU_ARM64 //ARM 64-bit architecture
+#define IN_64BIT
+#else
+#define IN_CPU_ARM //ARM 32-bit architecture
 #define IN_32BIT
+#endif
+
+#ifdef __ARM_ARCH_2_
+#define IN_CPU_ARM2
+#elif defined(__ARM_ARCH_3__) || defined(__ARM_ARCH_3M__)
+#define IN_CPU_ARM3
+#elif defined(__ARM_ARCH_4T__) || defined(__TARGET_ARM_4T)
+#define IN_CPU_ARM4
+#elif defined(__ARM_ARCH_5__) || defined(__ARM_ARCH_5E__) || defined(__ARM_ARCH_5T__) || defined(__ARM_ARCH_5TE__) || defined(__ARM_ARCH_5TEJ__) || (_M_ARM == 5)
+#define IN_CPU_ARM5
+#elif defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) || defined(__ARM_ARCH_6ZK__) || defined(__ARM_ARCH_6T2__) || (_M_ARM == 6)
+#define IN_CPU_ARM6
+#elif defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7S__) || (_M_ARM == 7)
+#define IN_CPU_ARM7
+#elif defined(__ARM_ARCH_8__) || (_M_ARM == 8)
+#define IN_CPU_ARM8
+#endif
 #elif defined(__mips__) || defined(mips) || defined(_MIPS_ISA) || defined(__mips) || defined(__MIPS__)
 #define IN_CPU_MIPS
 #define IN_64BIT
 #elif defined(__powerpc) || defined(__powerpc__) || defined(__POWERPC__) || defined(__ppc__) || defined(_M_PPC) || defined(_ARCH_PPC)
+#if defined(__powerpc64__) || defined(__ppc64__) || defined(__PPC64__) || defined(__64BIT__) || defined(_LP64) || defined(__LP64__)
+#define IN_CPU_POWERPC64
+#define IN_64BIT
+#else
 #define IN_CPU_POWERPC
 #define IN_32BIT
+#endif
 #else
 #define IN_CPU_UNKNOWN //Unknown CPU architecture (should force architecture independent C implementations)
 #endif

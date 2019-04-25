@@ -239,6 +239,7 @@ namespace innative {
     const char* IN_ENV_EXTENSION = ".ir-env-cache";
     const char* IN_GLUE_STRING = "_WASM_";
     const char* IN_MEMORY_MAX_METADATA = "__IN_MEMORY_MAX_METADATA";
+    const char* IN_MEMORY_GROW_METADATA = "__IN_MEMORY_GROW_METADATA";
     const char* IN_TEMP_PREFIX = "wast_m";
 
     struct kh_mapenum_s* GenMapEnum(std::initializer_list<std::pair<int, const char*>> list)
