@@ -50,7 +50,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
   llvm::TargetOptions opt;
   auto RM = llvm::Optional<llvm::Reloc::Model>();
 #ifdef IN_PLATFORM_POSIX
-  if(env->flags&ENV_LIBRARY)
+  if(flags&ENV_LIBRARY)
     RM = llvm::Optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
 #endif
   auto machine = arch->createTargetMachine("wasm32-unknown-unknown", "", "", opt, RM, llvm::None);

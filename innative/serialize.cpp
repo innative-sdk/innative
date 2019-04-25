@@ -393,7 +393,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_PARAM });
-      PushLocalName(env, tokens, j, m.code.funcbody[i].param_names, fn.n_params, 'p');
+      PushLocalName(env, tokens, (varuint32)j, m.code.funcbody[i].param_names, fn.n_params, 'p');
       tokens.Push(WatToken{ TypeEncodingToken(fn.params[j]) });
       tokens.Push(WatToken{ TOKEN_CLOSE });
     }
@@ -410,7 +410,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_LOCAL });
-      PushLocalName(env, tokens, j, m.code.funcbody[i].local_names, m.code.funcbody[i].n_locals, 'l');
+      PushLocalName(env, tokens, (varuint32)j, m.code.funcbody[i].local_names, m.code.funcbody[i].n_locals, 'l');
       tokens.Push(WatToken{ TypeEncodingToken(m.code.funcbody[i].locals[j]) });
       tokens.Push(WatToken{ TOKEN_CLOSE });
     }
@@ -483,9 +483,9 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out)
       out.write(tokens[i].pos, tokens[i].len);
       break;
     case TOKEN_OPERATOR:
-      if(!stack && tokens[i].i == OP_end)
+      if(!stack && tokens[i].u == OP_end)
         break; // Skip the final end in the function
-      switch(tokens[i].i)
+      switch(tokens[i].u)
       {
       case OP_end:
         --stack;
@@ -504,10 +504,10 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out)
         for(size_t k = 0; k < stack * 2; ++k)
           out.put(' ');
       }
-      if(tokens[i].i < OPNAMES.size())
-        out << OPNAMES[tokens[i].i];
+      if(tokens[i].u < OPNAMES.size())
+        out << OPNAMES[tokens[i].u];
       else
-        out << "[UNKNOWN OPERATOR: " << tokens[i].i << "]";
+        out << "[UNKNOWN OPERATOR: " << tokens[i].u << "]";
       break;
     case TOKEN_COMMENT:
       out << "(;";

@@ -987,7 +987,8 @@ IN_ERROR CompileMemGrow(code::Context& context, const char* name)
   auto phi = context.builder.CreatePHI(context.builder.getInt32Ty(), 2);
   phi->addIncoming(old, successblock);
   phi->addIncoming(CInt::get(context.builder.getInt32Ty(), -1, true), oldblock);
-
+  
+  context.builder.GetInsertBlock()->getParent()->setMetadata(IN_MEMORY_GROW_METADATA, llvm::MDNode::get(context.context, { /*llvm::ConstantAsMetadata::get(context.builder.getInt1(true))*/ }));
   return PushReturn(context, phi);
 }
 
@@ -1877,7 +1878,7 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
         //if(context.dbuilder)
         //  FunctionDebugInfo(context.functions.back().imported, context, false, context.m.importsection.imports[i].func_desc.debug.line);
 
-        llvm::Twine name = (context.m.importsection.imports[i].func_desc.debug.name.get()) ?
+        auto name = (context.m.importsection.imports[i].func_desc.debug.name.get()) ?
           "|" + context.functions.back().imported->getName() + "#internal" :
           context.m.importsection.imports[i].func_desc.debug.name.str() + ("#" + std::to_string(i));
 
@@ -2387,6 +2388,24 @@ namespace innative {
       delete context->llvm;
       delete context;
     }
+  }
+
+  void DeleteContext(Environment* env, bool shutdown)
+  {
+    for(varuint32 i = 0; i < env->n_modules; ++i)
+    {
+      if(env->modules[i].cache != nullptr)
+      {
+        DeleteCache(env, env->modules[i].cache);
+        env->modules[i].cache = nullptr;
+      }
+    }
+
+    delete env->context;
+    env->context = nullptr;
+
+    if(shutdown)
+      llvm::llvm_shutdown();
   }
 
   IN_ERROR CompileEnvironment(const Environment* env, const char* filepath)

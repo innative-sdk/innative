@@ -9,6 +9,9 @@
 *.h.gch
 *.pch
 *.user
+*.llvm
+*.dll
+*.lib
 /bin/
 /bin32/
 /innative/x64/

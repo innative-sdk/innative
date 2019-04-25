@@ -81,6 +81,7 @@ namespace innative {
       union
       {
         int64_t i;
+        uint64_t u;
         double f;
         size_t len;
       };
