@@ -20,4 +20,10 @@
 /innative-test/x64/
 /innative-loader/x64/
 /innative-stub/x64/
+/innative/Win32/
+/innative-env/Win32/
+/innative-cmd/Win32/
+/innative-test/Win32/
+/innative-loader/Win32/
+/innative-stub/Win32/
 /.vs/
