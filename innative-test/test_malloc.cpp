@@ -45,19 +45,19 @@ void TestHarness::test_malloc()
   memset(wasm_buf, 0xAA, WASM_PAGE * MAX_PAGES);
   void* begin_test = (char*)wasm_buf + WASM_PAGE;
 
-  void* p = wasm_malloc(1);
-  TEST(p == begin_test);
-  TEST(wasm_realloc(p, 2) == p);
-  TEST(wasm_realloc(p, 3) == p);
-  TEST(wasm_realloc(p, 16) == p);
+  void* ptr = wasm_malloc(1);
+  TEST(ptr == begin_test);
+  TEST(wasm_realloc(ptr, 2) == ptr);
+  TEST(wasm_realloc(ptr, 3) == ptr);
+  TEST(wasm_realloc(ptr, 16) == ptr);
   void* x = wasm_malloc(32);
-  TEST(p != x);
-  wasm_free(p);
+  TEST(ptr != x);
+  wasm_free(ptr);
   wasm_free(x);
-  p = wasm_malloc(1);
-  TEST(p == begin_test);
-  void* p2 = wasm_realloc(p, 62);
-  TEST(p2 != p);
+  ptr = wasm_malloc(1);
+  TEST(ptr == begin_test);
+  void* p2 = wasm_realloc(ptr, 62);
+  TEST(p2 != ptr);
   TEST(wasm_realloc(p2, 64) == p2);
   wasm_free(p2);
 
@@ -74,9 +74,9 @@ void TestHarness::test_malloc()
   for(uint32_t i = 0; i < MAX_POWER; ++i)
     wasm_free(powers[i]);
 
-  p = wasm_malloc(1);
-  TEST(p == begin_test);
-  wasm_free(p);
+  ptr = wasm_malloc(1);
+  TEST(ptr == begin_test);
+  wasm_free(ptr);
 
   // Fuzzing
   const int MAXSIZE = 5000;
@@ -128,9 +128,9 @@ void TestHarness::test_malloc()
 
   TEST(!tracker.size());
 
-  p = wasm_malloc(99999);
-  TEST(p == begin_test);
-  wasm_free(p);
+  ptr = wasm_malloc(99999);
+  TEST(ptr == begin_test);
+  wasm_free(ptr);
   const int FILL_MAX = WASM_PAGE / 2;
   void* pfill[FILL_MAX];
 
@@ -145,7 +145,7 @@ void TestHarness::test_malloc()
     pfill[index] = pfill[i - 1];
   }
 
-  p = wasm_malloc(1);
-  TEST(p == begin_test);
-  wasm_free(p);
+  ptr = wasm_malloc(1);
+  TEST(ptr == begin_test);
+  wasm_free(ptr);
 }

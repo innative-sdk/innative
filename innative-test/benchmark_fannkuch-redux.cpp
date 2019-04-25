@@ -26,7 +26,7 @@ int Benchmarks::fannkuch_redux(int n)
 #else
 #include <stdint.h>
 
-extern "C" void* malloc(intptr_t n);
+extern "C" void* malloc(uintptr_t n);
 extern "C" __attribute__((visibility("default")))
 int fannkuch_redux(int n)
 #endif

@@ -129,7 +129,7 @@ void _wasm_allocate_to_end(uint8_t* target, uint8_t* end)
     __builtin_wasm_memory_grow(0, (target - end + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE);
 }
 
-inline uint8_t * _find_bucket(void* ptr, size_t * capacity)
+uint8_t * _find_bucket(void* ptr, size_t * capacity)
 {
   uint8_t* end = (uint8_t*)(__builtin_wasm_memory_size(0) * WASM_PAGE_SIZE);
   uint8_t* heap = HeapRoot;
@@ -149,7 +149,7 @@ inline uint8_t * _find_bucket(void* ptr, size_t * capacity)
   return 0;
 }
 
-inline size_t _find_indice(void* ptr, uint8_t * heap, size_t capacity, uint8_t * size)
+size_t _find_indice(void* ptr, uint8_t * heap, size_t capacity, uint8_t * size)
 {
   uint8_t* mem = heap + (capacity * WASM_PAGE_SIZE);
   ptrdiff_t offset = (uint8_t*)ptr - mem;
