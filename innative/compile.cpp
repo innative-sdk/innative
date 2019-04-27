@@ -838,7 +838,7 @@ IN_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
   }
 
   // Deference global variable to get the actual array of function pointers, index into them, then dereference that array index to get the actual function pointer
-  llvmVal* funcptr = context.builder.CreateLoad(context.builder.CreateGEP(context.builder.CreateLoad(context.tables[0]), { callee, context.builder.getInt32(0) }), "indirect_call_load_func_ptr");
+  llvmVal* funcptr = context.builder.CreateLoad(context.builder.CreateInBoundsGEP(context.builder.CreateLoad(context.tables[0]), { callee, context.builder.getInt32(0) }), "indirect_call_load_func_ptr");
 
   if(context.env.flags & ENV_CHECK_INDIRECT_CALL) // In strict mode, trap if function pointer is NULL
     InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(funcptr, context.intptrty), CInt::get(context.intptrty, 0), "indirect_call_null_check"), context);
@@ -849,7 +849,7 @@ IN_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
 
   if(context.env.flags & ENV_CHECK_INDIRECT_CALL) // In strict mode, trap if the expected type does not match the actual type of the function
   {
-    auto sig = context.builder.CreateLoad(context.builder.CreateGEP(context.builder.CreateLoad(context.tables[0]), { callee, context.builder.getInt32(1) }));
+    auto sig = context.builder.CreateLoad(context.builder.CreateInBoundsGEP(context.builder.CreateLoad(context.tables[0]), { callee, context.builder.getInt32(1) }));
     InsertConditionalTrap(context.builder.CreateICmpNE(sig, context.builder.getInt32(index), "indirect_call_sig_check"), context);
   }
 
@@ -893,18 +893,47 @@ IN_ERROR CompileConstant(Instruction& instruction, code::Context& context, llvm:
 llvmVal* GetMemPointer(code::Context& context, llvmVal* base, llvm::PointerType* pointer_type, varuint7 memory, varuint32 offset)
 {
   assert(context.memories.size() > 0);
-  llvmVal* loc = context.builder.CreateAdd(context.builder.CreateIntCast(base, context.builder.getInt64Ty(), false), context.builder.getInt64(offset), "", true, true);
   llvmVal* src = !memory ? context.memlocal : static_cast<llvmVal*>(context.memories[memory]);
+  llvm::IntegerType* ty = context.machine->getPointerSizeInBits(memory) == 32 ? context.builder.getInt32Ty() : context.builder.getInt64Ty();
+  Func* uadd_with_overflow = llvm::Intrinsic::getDeclaration(context.llvm, llvm::Intrinsic::uadd_with_overflow, { ty });
 
-  if(context.env.flags&ENV_CHECK_MEMORY_ACCESS) // In strict mode, generate a check that traps if this is an invalid memory access
-    InsertConditionalTrap(
-      context.builder.CreateICmpUGT(
-        context.builder.CreateAdd(loc, context.builder.getInt64(pointer_type->getPointerElementType()->getPrimitiveSizeInBits() / 8)),
-        GetMemSize(src, context),
-        "invalid_mem_access_cond"),
-      context);
+  // If our native integer size is larger than the webassembly memory pointer size, then overflow is not possible and we can bypass the check.
+  bool bypass = ty->getBitWidth() > base->getType()->getIntegerBitWidth();
+  base = context.builder.CreateZExtOrTrunc(base, ty);
 
-  return context.builder.CreatePointerCast(context.builder.CreateGEP(context.builder.CreateLoad(src), loc), pointer_type);
+  llvmVal* loc;
+  if(context.env.flags & ENV_CHECK_MEMORY_ACCESS) // In strict mode, generate a check that traps if this is an invalid memory access
+  {
+    llvmVal* end = context.builder.CreateIntCast(GetMemSize(src, context), ty, false);
+    llvmVal* cond;
+
+    if(bypass) // If we can bypass the overflow check because we have enough bits, only check the upper bound
+    {
+      loc = context.builder.CreateAdd(base, CInt::get(ty, offset, false), "", true, true);
+      auto upper = context.builder.CreateAdd(loc, CInt::get(ty, pointer_type->getPointerElementType()->getPrimitiveSizeInBits() / 8, false));
+      cond = context.builder.CreateICmpUGT(upper, end, "invalid_mem_access_cond");
+    }
+    else
+    {
+      llvmVal* v = context.builder.CreateCall(uadd_with_overflow, { base, CInt::get(ty, offset, false) });
+      llvmVal* overflow = context.builder.CreateExtractValue(v, 1);
+      loc = context.builder.CreateExtractValue(v, 0);
+
+      v = context.builder.CreateCall(uadd_with_overflow, { loc, CInt::get(ty, pointer_type->getPointerElementType()->getPrimitiveSizeInBits() / 8, false) });
+      overflow = context.builder.CreateOr(overflow, context.builder.CreateExtractValue(v, 1), "invalid_mem_access_cond_overflow");
+      auto upper = context.builder.CreateExtractValue(v, 0);
+      cond = context.builder.CreateOr(
+        overflow,
+        context.builder.CreateICmpUGT(upper, end, "invalid_mem_access_cond_upper"),
+        "invalid_mem_access_cond");
+    }
+
+    InsertConditionalTrap(cond, context);
+  }
+  else
+    loc = context.builder.CreateAdd(base, CInt::get(ty, offset, false), "", true, true);
+
+  return context.builder.CreatePointerCast(context.builder.CreateInBoundsGEP(context.builder.CreateLoad(src), loc), pointer_type);
 }
 
 template<bool SIGNED>
@@ -918,6 +947,7 @@ IN_ERROR CompileLoad(code::Context& context, varuint7 memory, varuint32 offset, 
   if(err = PopType(TE_i32, context, base))
     return err;
 
+  // TODO: In strict mode, we may have to disregard the alignment hint
   llvmVal* result = context.builder.CreateAlignedLoad(GetMemPointer(context, base, ty->getPointerTo(0), memory, offset), (1 << memflags), name);
 
   if(ext != nullptr)
@@ -941,6 +971,7 @@ IN_ERROR CompileStore(code::Context& context, varuint7 memory, varuint32 offset,
 
   llvmTy* PtrType = !ext ? GetLLVMType(TY, context) : ext;
 
+  // TODO: In strict mode, we may have to disregard the alignment hint
   llvmVal* ptr = GetMemPointer(context, base, PtrType->getPointerTo(0), memory, offset);
   context.builder.CreateAlignedStore(!ext ? value : context.builder.CreateIntCast(value, ext, false), ptr, (1 << memflags), name);
 
@@ -2378,31 +2409,31 @@ void GenerateLinkerObjects(const Environment* env, vector<string>& cache)
 }
 
 namespace innative {
-  void DeleteCache(const Environment* env, void* cache)
+  void DeleteCache(const Environment& env, void* cache)
   {
     if(cache != nullptr)
     {
       auto context = static_cast<code::Context*>(cache);
-      remove((env->sdkpath + context->cache).c_str());
+      remove((env.sdkpath + context->cache).c_str());
       kh_destroy_importhash(context->importhash);
       delete context->llvm;
       delete context;
     }
   }
 
-  void DeleteContext(Environment* env, bool shutdown)
+  void DeleteContext(Environment& env, bool shutdown)
   {
-    for(varuint32 i = 0; i < env->n_modules; ++i)
+    for(varuint32 i = 0; i < env.n_modules; ++i)
     {
-      if(env->modules[i].cache != nullptr)
+      if(env.modules[i].cache != nullptr)
       {
-        DeleteCache(env, env->modules[i].cache);
-        env->modules[i].cache = nullptr;
+        DeleteCache(env, env.modules[i].cache);
+        env.modules[i].cache = nullptr;
       }
     }
 
-    delete env->context;
-    env->context = nullptr;
+    delete env.context;
+    env.context = nullptr;
 
     if(shutdown)
       llvm::llvm_shutdown();
@@ -2493,7 +2524,7 @@ namespace innative {
     {
       if(!i || !env->modules[i].cache) // Always recompile the 0th module because it stores the main entry point.
       {
-        DeleteCache(env, env->modules[i].cache);
+        DeleteCache(*env, env->modules[i].cache);
         env->modules[i].cache = new code::Context{ *env, env->modules[i], *env->context, 0, builder, machine, code::kh_init_importhash() };
         if((err = CompileModule(env, *env->modules[i].cache)) < 0)
           return err;
@@ -2669,7 +2700,14 @@ namespace innative {
       vector<const char*> linkargs = { "lld", "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO",
         "/nodefaultlib", /*"/MANIFEST", "/MANIFEST:embed",*/ "/SUBSYSTEM:CONSOLE", "/VERBOSE",
         "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT",
-        "/MACHINE:X64", "/machine:x64", };
+#ifdef IN_CPU_x86_64
+        "/MACHINE:X64", "/machine:x64",
+#elif defined(IN_CPU_x86)
+        "/MACHINE:X86", "/machine:x86",
+#elif defined(IN_CPU_ARM) || defined(IN_CPU_ARM64)
+        "/MACHINE:ARM", "/machine:arm",
+#endif
+      };
 
       if(env->flags&ENV_LIBRARY)
       {

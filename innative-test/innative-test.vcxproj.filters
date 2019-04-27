@@ -60,9 +60,6 @@
     <ClCompile Include="test_malloc.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="benchmark_minimum.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="test.h">

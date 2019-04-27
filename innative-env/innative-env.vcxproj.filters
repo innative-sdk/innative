@@ -18,5 +18,8 @@
     <ClCompile Include="internal.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="win32_x86.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
