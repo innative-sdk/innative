@@ -56,12 +56,12 @@ void innative::ClearEnvironmentCache(Environment* env, Module* m)
   {
     if(m->cache != nullptr)
     {
-      DeleteCache(env, m->cache);
+      DeleteCache(*env, m->cache);
       m->cache = nullptr;
     }
   }
   else
-    DeleteContext(env, false); // We can't actually shutdown LLVM here because that permanently shuts it down and there is no way to restore it.
+    DeleteContext(*env, false); // We can't actually shutdown LLVM here because that permanently shuts it down and there is no way to restore it.
 }
 
 void innative::DestroyEnvironment(Environment* env)

@@ -680,6 +680,12 @@ int innative::wat::ParseWast(Environment& env, const uint8_t* data, size_t sz, c
       break;
     }
     case TOKEN_ASSERT_EXHAUSTION:
+      if(env.optimize != 0)
+      {
+        env.optimize = 0; // If we need to catch stack overflows, we must disable optimizations
+        InvalidateCache(cache, cachepath);
+        DeleteContext(env);
+      }
     case TOKEN_ASSERT_TRAP:
     {
       WatToken t = tokens.Pop();
