@@ -12,6 +12,7 @@
 *.llvm
 *.dll
 *.lib
+*.exe
 /bin/
 /bin32/
 /innative/x64/

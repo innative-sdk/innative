@@ -10,6 +10,9 @@
 #pragma warning(disable : 4146 4267 4141 4244 4624)
 #define _SCL_SECURE_NO_WARNINGS
 #include "llvm/IR/Verifier.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/CallSite.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -771,9 +774,6 @@ IN_ERROR CompileCall(varuint32 index, code::Context& context)
   call->setCallingConv(fn->getCallingConv());
   call->setAttributes(fn->getAttributes());
 
-  if(context.memories.size() > 0)
-    context.builder.CreateStore(context.builder.CreateLoad(context.memories[0]), context.memlocal);
-
   if(!fn->getReturnType()->isVoidTy()) // Only push a value if there is one to push
     return PushReturn(context, call);
 
@@ -857,6 +857,7 @@ IN_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
   CallInst* call = context.builder.CreateCall(funcptr, llvm::makeArrayRef(ArgsV, ftype.n_params));
   if(context.memories.size() > 0)
     context.builder.CreateStore(context.builder.CreateLoad(context.memories[0]), context.memlocal);
+  context.builder.GetInsertBlock()->getParent()->setMetadata(IN_MEMORY_GROW_METADATA, llvm::MDNode::get(context.context, { }));
 
   if(context.env.flags & ENV_DISABLE_TAIL_CALL) // In strict mode, tail call optimization is not allowed
     call->setTailCallKind(CallInst::TCK_NoTail);
@@ -1019,7 +1020,7 @@ IN_ERROR CompileMemGrow(code::Context& context, const char* name)
   phi->addIncoming(old, successblock);
   phi->addIncoming(CInt::get(context.builder.getInt32Ty(), -1, true), oldblock);
   
-  context.builder.GetInsertBlock()->getParent()->setMetadata(IN_MEMORY_GROW_METADATA, llvm::MDNode::get(context.context, { /*llvm::ConstantAsMetadata::get(context.builder.getInt1(true))*/ }));
+  context.builder.GetInsertBlock()->getParent()->setMetadata(IN_MEMORY_GROW_METADATA, llvm::MDNode::get(context.context, { }));
   return PushReturn(context, phi);
 }
 
@@ -1569,7 +1570,7 @@ IN_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   return ERR_SUCCESS;
 }
 
-IN_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, code::Context& context)
+IN_ERROR CompileFunctionBody(Func* fn, llvm::AllocaInst*& memlocal, FunctionType& sig, FunctionBody& body, code::Context& context)
 {
   // Ensure context is reset
   assert(!context.control.Size() && !context.control.Limit());
@@ -1649,7 +1650,7 @@ IN_ERROR CompileFunctionBody(Func* fn, FunctionType& sig, FunctionBody& body, co
 
   if(context.memories.size() > 0)
   {
-    context.memlocal = context.builder.CreateAlloca(context.memories[0]->getType()->getElementType(), nullptr, "IN_!memlocal");
+    memlocal = context.memlocal = context.builder.CreateAlloca(context.memories[0]->getType()->getElementType(), nullptr, "IN_!memlocal");
     context.builder.CreateStore(context.builder.CreateLoad(context.memories[0]), context.memlocal);
   }
 
@@ -1899,6 +1900,7 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
         khiter_t iter = code::kh_put_importhash(context.importhash, context.functions.back().internal->getName().data(), &r);
         kh_val(context.importhash, iter) = context.functions.back().internal;
       }
+      context.functions.back().internal->setMetadata(IN_MEMORY_GROW_METADATA, llvm::MDNode::get(context.context, { })); // Assume all external functions change the metadata
 
       auto e = ResolveExport(*env, context.m.importsection.imports[i]);
       if(!e.second)
@@ -2181,15 +2183,16 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
   for(varuint32 i = 0; i < context.m.code.n_funcbody; ++i)
   {
     assert(!context.functions[code_index].imported);
-    Func* fn = context.functions[code_index++].internal;
+    Func* fn = context.functions[code_index].internal;
 
     if(fn)
     {
       if(context.m.function.funcdecl[i] >= context.m.type.n_functions)
         return ERR_INVALID_TYPE_INDEX;
-      if((err = CompileFunctionBody(fn, context.m.type.functions[context.m.function.funcdecl[i]], context.m.code.funcbody[i], context)) < 0)
+      if((err = CompileFunctionBody(fn, context.functions[code_index].memlocal, context.m.type.functions[context.m.function.funcdecl[i]], context.m.code.funcbody[i], context)) < 0)
         return err;
     }
+    ++code_index;
   }
 
   // If the start section exists, lift the start function to the context so our environment knows about it.
@@ -2242,6 +2245,79 @@ IN_ERROR OutputObjectFile(code::Context& context, const char* out)
   pass.run(*context.llvm);
   dest.flush();
   return ERR_SUCCESS;
+}
+
+void PostOrderTraversal(Func* f)
+{
+  if(!f || f->isDeclaration() || f->getMetadata(IN_MEMORY_GROW_METADATA) != nullptr || f->getMetadata(IN_FUNCTION_TRAVERSED) != nullptr)
+    return;
+
+  f->setMetadata(IN_FUNCTION_TRAVERSED, llvm::MDNode::get(f->getContext(), { }));
+
+  for(auto& i : llvm::instructions(f))
+  {
+    if(auto cs = llvm::CallSite(&i))
+    {
+      if(auto called = cs.getCalledFunction())
+      {
+        PostOrderTraversal(called);
+        if(auto md = called->getMetadata(IN_MEMORY_GROW_METADATA))
+        {
+          f->setMetadata(IN_MEMORY_GROW_METADATA, md);
+          break;
+        }
+      }
+    }
+  }
+}
+
+// Runs a pass to propagate all memory_grow metadata up the call graph, then adds store instructions where necessary
+void AddMemLocalCaching(code::Context& ctx)
+{
+  if(!ctx.memories.size())
+    return;
+
+  for(auto fn : ctx.functions) // Because it's crucial we cover the entire call graph, we just go through every single function that has a definition
+  {
+    PostOrderTraversal(fn.internal);
+    PostOrderTraversal(fn.exported);
+    PostOrderTraversal(fn.imported);
+  }
+
+  for(auto fn : ctx.functions)
+  {
+    fn.internal->setMetadata(IN_FUNCTION_TRAVERSED, 0); // This cleanup is optional, but keeps the IR clean when inspecting it.
+    if(fn.exported)
+      fn.exported->setMetadata(IN_FUNCTION_TRAVERSED, 0);
+    if(fn.imported)
+      fn.imported->setMetadata(IN_FUNCTION_TRAVERSED, 0);
+
+    if(fn.memlocal != nullptr)
+    {
+      Func* f = (fn.memlocal->getFunction() == fn.exported) ? fn.exported : 
+        ((fn.memlocal->getFunction() == fn.imported) ? fn.imported : 
+        ((fn.memlocal->getFunction() == fn.internal) ? fn.internal :
+          nullptr));
+
+      assert(f != nullptr);
+      for(auto& i : llvm::instructions(f))
+      {
+        if(auto cs = llvm::CallSite(&i))
+        {
+          if(auto called = cs.getCalledFunction())
+          {
+            if(called->getMetadata(IN_MEMORY_GROW_METADATA) != nullptr)
+            {
+              ctx.builder.SetInsertPoint(&i); // Setting the insert point doesn't actually gaurantee the instructions come after the call
+              auto load = ctx.builder.CreateLoad(ctx.memories[0]);
+              load->moveAfter(&i); // So we manually move them after the call instruction just to be sure.
+              ctx.builder.CreateStore(load, fn.memlocal)->moveAfter(load);
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 // Resolve all exports in the module they originated from (in case any module is exporting an import)
@@ -2536,6 +2612,9 @@ namespace innative {
     for(auto m : new_modules)
       ResolveModuleExports(env, m, *env->context);
 
+    for(auto m : new_modules)
+      AddMemLocalCaching(*m->cache);
+
     if((!has_start || env->flags & ENV_NO_INIT) && !(env->flags&ENV_LIBRARY))
       return ERR_FATAL_INVALID_MODULE; // We can't compile an EXE without at least one start function
 
@@ -2685,7 +2764,7 @@ namespace innative {
       if(env->flags&ENV_EMIT_LLVM)
       {
         std::error_code EC;
-        llvm::raw_fd_ostream dest(string(env->modules[i].cache->llvm->getName()) + ".llvm", EC, llvm::sys::fs::F_None);
+        llvm::raw_fd_ostream dest((file.BaseDir() += (std::string(env->modules[i].cache->llvm->getName()) + ".llvm")).Get(), EC, llvm::sys::fs::F_None);
         env->modules[i].cache->llvm->print(dest, nullptr);
       }
 
