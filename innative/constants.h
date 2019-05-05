@@ -25,6 +25,7 @@ namespace innative {
     extern const char* IN_GLUE_STRING;
     extern const char* IN_MEMORY_MAX_METADATA;
     extern const char* IN_MEMORY_GROW_METADATA;
+    extern const char* IN_FUNCTION_TRAVERSED;
     extern const char* IN_TEMP_PREFIX;
 
     extern const std::array<const char*, OP_CODE_COUNT> OPNAMES;

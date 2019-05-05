@@ -14,7 +14,7 @@
   (import "" "_innative_to_c" (func $toc (type $t7)))
   (import "" "_innative_from_c" (func $fromc (type $t7)))
   
-  (memory (;0;) 200 200)
+  (memory (;0;) 1 1)
   
   (func $t1 (type $t0) (result i32) i32.const 1)
   (func $t2 (type $t0) (result i32) i32.const 2)
