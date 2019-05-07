@@ -2845,7 +2845,7 @@ namespace innative {
 
 #ifdef IN_PLATFORM_POSIX
         if(cur->tag == 2)
-          cache.back().insert(0, "-l");
+          cache.back().insert(0, (cache.back()[0] == '/') ? "-l:" : "-l");
 #endif
       }
 

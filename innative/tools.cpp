@@ -179,6 +179,15 @@ enum IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data
   embed->next = env->embeddings;
   env->embeddings = embed;
 
+  if(!size)
+  {
+    FILE* f;
+    FOPEN(f, (const char*)data, "rb");
+    if(!f)
+      return ERR_FATAL_FILE_ERROR;
+    fclose(f);
+  }
+
   return ERR_SUCCESS;
 }
 
@@ -192,6 +201,8 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
       Path path(env->sdkpath);
       path.Append((const char*)embed->data);
       auto symbols = GetSymbols(path.c_str(), env->log);
+      if(!symbols.size()) // If we get no symbols, try just the raw path instead.
+        symbols = GetSymbols((const char*)embed->data, env->log);
 
       int r;
       for(auto symbol : symbols)

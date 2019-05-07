@@ -359,7 +359,11 @@ int main(int argc, char* argv[])
   embeddings.push_back({ INNATIVE_DEFAULT_ENVIRONMENT, 0 });
 
   for(size_t i = 0; i < embeddings.size(); ++i)
-    (*exports.AddEmbedding)(env, embeddings[i].second, embeddings[i].first, 0);
+    if((*exports.AddEmbedding)(env, embeddings[i].second, embeddings[i].first, 0) == ERR_FATAL_FILE_ERROR)
+    {
+      fprintf(env->log, "Error loading file: %s\n", embeddings[i].first);
+      return ERR_FATAL_FILE_ERROR;
+    }
 
   if(err < 0)
   {
@@ -416,7 +420,6 @@ int main(int argc, char* argv[])
       }
     }
 
-    getchar();
     return err;
   }
 
