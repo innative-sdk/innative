@@ -45,8 +45,15 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, cons
 HANDLE heap = 0;
 DWORD heapcount = 0;
 #elif defined(IN_PLATFORM_POSIX)
+const int SYSCALL_WRITE = 1;
+const int SYSCALL_MMAP = 9;
+const int SYSCALL_MUNMAP = 11;
+const int SYSCALL_MREMAP = 25;
+const int SYSCALL_EXIT = 60;
+const int MREMAP_MAYMOVE = 1;
+
 #ifdef IN_CPU_x86_64
-IN_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2, size_t p3, size_t p4, size_t p5)
+IN_COMPILER_DLLEXPORT extern IN_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2, size_t p3, size_t p4, size_t p5, size_t p6)
 {
   __asm volatile(
     "movq %rdi, %rax\n\t"
@@ -55,23 +62,48 @@ IN_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1,
     "movq %rcx, %rdx\n\t"
     "movq %r8, %r10\n\t"
     "movq %r9, %r8\n\t"
-    "movq $0, %r9\n\t" // movq 8(%rsp), %r9
+    "movq 8(%rsp), %r9\n\t"
     "syscall\n\t"
     "ret");
 }
-
-const int SYSCALL_WRITE = 1;
-const int SYSCALL_MMAP = 9;
-const int SYSCALL_MUNMAP = 11;
-const int SYSCALL_MREMAP = 25;
-const int SYSCALL_EXIT = 60;
-const int MREMAP_MAYMOVE = 1;
-
+#elif defined(IN_CPU_x86)
+#error unsupported architecture!
+#elif defined(IN_CPU_ARM)
+IN_COMPILER_DLLEXPORT extern IN_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2, size_t p3, size_t p4, size_t p5, size_t p6)
+{
+  __asm volatile(
+    "mov	ip, sp\n\t"
+    "push{ r4, r5, r6, r7 }\n\t"
+    "cfi_adjust_cfa_offset(16)\n\t"
+    "cfi_rel_offset(r4, 0)\n\t"
+    "cfi_rel_offset(r5, 4)\n\t"
+    "cfi_rel_offset(r6, 8)\n\t"
+    "cfi_rel_offset(r7, 12)\n\t"
+    "mov	r7, r0\n\t"
+    "mov	r0, r1\n\t"
+    "mov	r1, r2\n\t"
+    "mov	r2, r3\n\t"
+    "ldmfd	ip, { r3, r4, r5, r6 }\n\t"
+    "swi	0x0\n\t"
+    "pop{ r4, r5, r6, r7 }\n\t"
+    "cfi_adjust_cfa_offset(-16)\n\t"
+    "cfi_restore(r4)\n\t"
+    "cfi_restore(r5)\n\t"
+    "cfi_restore(r6)\n\t"
+    "cfi_restore(r7)\n\t"
+    "cmn	r0, #4096\n\t"
+    "it	cc\n\t"
+#ifdef ARCH_HAS_BX
+    "bxcc lr\n\t"
+#else
+    "movcc pc, lr\n\t"
+#endif
 #else
 #error unsupported architecture!
 #endif
 #endif
 
+// Writes a buffer to the standard output using system calls
 void _innative_internal_write_out(const void* buf, size_t num)
 {
 #ifdef IN_PLATFORM_WIN32
@@ -79,7 +111,7 @@ void _innative_internal_write_out(const void* buf, size_t num)
   WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buf, (DWORD)num, &out, NULL);
 #elif defined(IN_PLATFORM_POSIX)
   size_t cast = 1;
-  _innative_syscall(SYSCALL_WRITE, (void*)cast, (size_t)buf, num, 0, 0);
+  _innative_syscall(SYSCALL_WRITE, (void*)cast, (size_t)buf, num, 0, 0, 0);
 #else
 #error unknown platform!
 #endif
@@ -118,7 +150,7 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
 #ifdef IN_PLATFORM_WIN32
     info = HeapReAlloc(heap, HEAP_ZERO_MEMORY, info - 1, i + sizeof(uint64_t));
 #elif defined(IN_PLATFORM_POSIX)
-    info = _innative_syscall(SYSCALL_MREMAP, info - 1, info[-1] + sizeof(uint64_t), i + sizeof(uint64_t), MREMAP_MAYMOVE, 0);
+    info = _innative_syscall(SYSCALL_MREMAP, info - 1, info[-1] + sizeof(uint64_t), i + sizeof(uint64_t), MREMAP_MAYMOVE, 0, 0);
     if((void*)info >= (void*)0xfffffffffffff001) // This is a syscall error from -4095 to -1
       return 0;
 #else
@@ -133,7 +165,7 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
     ++heapcount;
     info = HeapAlloc(heap, HEAP_ZERO_MEMORY, i + sizeof(uint64_t));
 #elif defined(IN_PLATFORM_POSIX)
-    info = _innative_syscall(SYSCALL_MMAP, NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1);
+    info = _innative_syscall(SYSCALL_MMAP, NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if((void*)info >= (void*)0xfffffffffffff001) // This is a syscall error from -4095 to -1
       return 0;
 #else
@@ -162,7 +194,7 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_free_memory(void* p)
     if(--heapcount == 0)
       HeapDestroy(heap);
 #elif defined(IN_PLATFORM_POSIX)
-    _innative_syscall(SYSCALL_MUNMAP, info - 1, info[-1], 0, 0, 0);
+    _innative_syscall(SYSCALL_MUNMAP, info - 1, info[-1], 0, 0, 0, 0);
 #else
 #error unknown platform!
 #endif
@@ -176,7 +208,7 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_exit(int status)
   ExitProcess(status);
 #elif defined(IN_PLATFORM_POSIX)
   size_t cast = status;
-  _innative_syscall(SYSCALL_EXIT, (void*)cast, 0, 0, 0, 0);
+  _innative_syscall(SYSCALL_EXIT, (void*)cast, 0, 0, 0, 0, 0);
 #endif
 }
 

@@ -12,7 +12,6 @@ extern "C" {
 void TestHarness::test_environment()
 {
   // We've linked ourselves with the innative_env library file, so we can directly test these functions
-
   _innative_internal_env_memcpy(0, 0, 0);
 
   {
@@ -53,6 +52,7 @@ void TestHarness::test_environment()
 
     for(int i = 0; i < n; ++i)
       TEST(dest[i] == src[i]);
+
     for(int i = n; i < 64; ++i)
       TEST(!dest[i]);
   }
@@ -81,8 +81,4 @@ void TestHarness::test_environment()
   TEST(p != 0);
   TEST(p[-1] == 101002);
   TEST(!_innative_internal_env_grow_memory(p, 100000, 200000));
-
-  //_innative_internal_env_print(0);
-  //_innative_internal_env_print(~0ULL);
-  //_innative_internal_env_print(1ULL << 62ULL);
 }

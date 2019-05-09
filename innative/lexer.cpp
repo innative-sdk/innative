@@ -12,6 +12,7 @@ using std::numeric_limits;
 
 using namespace innative;
 using namespace utility;
+using namespace wat;
 
 namespace innative {
   namespace wat {
@@ -76,7 +77,7 @@ namespace innative {
       return s;
     }
 
-    const char* CheckTokenNAN(const char* s, const char* end, std::string* target)
+    const char* CheckTokenNAN(const char* s, const char* end, std::string * target)
     {
       if(s >= end)
         return nullptr;
@@ -112,7 +113,7 @@ namespace innative {
     }
 
     template<typename T, typename Arg, typename... Args>
-    int ResolveTokenNumber(const WatToken& token, string& numbuf, Arg(*fn)(const char*, char**, Args...), T& out, Args... args)
+    int ResolveTokenNumber(const WatToken & token, string & numbuf, Arg(*fn)(const char*, char**, Args...), T & out, Args... args)
     {
       numbuf.clear();
       int length = token.len;
@@ -146,13 +147,13 @@ namespace innative {
       if(std::is_floating_point<T>::value)
       {
         if(std::isinf(out)) // libc incorrectly parses certain edge cases as "inf" without setting errno to ERANGE
-         {
-           const char* p = numbuf.c_str();
-           if(*p == '+' || *p == '-')
-             ++p;
-           if(strncasecmp(p, "inf", 3) != 0)
-             return ERR_WAT_OUT_OF_RANGE;
-         }
+        {
+          const char* p = numbuf.c_str();
+          if(*p == '+' || *p == '-')
+            ++p;
+          if(strncasecmp(p, "inf", 3) != 0)
+            return ERR_WAT_OUT_OF_RANGE;
+        }
         if(std::is_same<float, T>::value && fabs(out) <= 1.1754942e-38f) // glibc incorrectly considers subnormal numbers as underflow and sets ERANGE in this case
           errno = 0;
         if(std::is_same<double, T>::value && fabs(out) <= 2.2250738585072012e-308)
@@ -165,7 +166,7 @@ namespace innative {
       return (errno != 0 || (end - numbuf.c_str()) != length) ? ERR_WAT_INVALID_NUMBER : ERR_SUCCESS;
     }
 
-    int ResolveTokenf32(const WatToken& token, string& numbuf, float32& out)
+    int ResolveTokenf32(const WatToken & token, string & numbuf, float32 & out)
     {
       char* last;
 
@@ -188,7 +189,7 @@ namespace innative {
       return ResolveTokenNumber<float32>(token, numbuf, &strtof, out);
     }
 
-    int ResolveTokenf64(const WatToken& token, string& numbuf, float64& out)
+    int ResolveTokenf64(const WatToken & token, string & numbuf, float64 & out)
     {
       char* last;
 
@@ -211,21 +212,21 @@ namespace innative {
       return ResolveTokenNumber<float64>(token, numbuf, &strtod, out);
     }
 
-    int ResolveTokeni64(const WatToken& token, string& numbuf, varsint64& out)
+    int ResolveTokeni64(const WatToken & token, string & numbuf, varsint64 & out)
     {
       if(token.len > 0 && token.pos[0] == '-')
         return ResolveTokenNumber<varsint64, long long, int>(token, numbuf, strtoll, out, 0);
       return ResolveTokenNumber<varsint64, unsigned long long, int>(token, numbuf, strtoull, out, 0);
     }
 
-    int ResolveTokenu64(const WatToken& token, string& numbuf, varuint64& out)
+    int ResolveTokenu64(const WatToken & token, string & numbuf, varuint64 & out)
     {
       if(token.len > 0 && token.pos[0] == '-')
         return ERR_WAT_OUT_OF_RANGE;
       return ResolveTokeni64(token, numbuf, reinterpret_cast<varsint64&>(out));
     }
 
-    int ResolveTokeni32(const WatToken& token, string& numbuf, varsint32& out)
+    int ResolveTokeni32(const WatToken & token, string & numbuf, varsint32 & out)
     {
       varsint64 buf;
       int err = ResolveTokeni64(token, numbuf, buf);
@@ -238,7 +239,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int ResolveTokenu32(const WatToken& token, string& numbuf, varuint32& out)
+    int ResolveTokenu32(const WatToken & token, string & numbuf, varuint32 & out)
     {
       varsint64 buf;
       int err = ResolveTokeni64(token, numbuf, buf);
@@ -263,221 +264,244 @@ namespace innative {
         ++column;
       return s;
     }
+  }
+}
 
-    void TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* end)
+void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* end)
+{
+  unsigned int line = 0;
+  unsigned int column = 0;
+  while(s < end)
+  {
+    while(s < end && (s[0] == ' ' || s[0] == '\n' || s[0] == '\r' || s[0] == '\t' || s[0] == '\f'))
+      IncToken(s, end, line, column);
+
+    if(s >= end)
+      break;
+
+    switch(s[0])
     {
-      unsigned int line = 0;
-      unsigned int column = 0;
-      while(s < end)
+    case 0:
+      assert(s < end);
+      IncToken(s, end, line, column);
+      break;
+    case '(':
+      if(s + 1 < end && s[1] == ';') // This is a comment
       {
-        while(s < end && (s[0] == ' ' || s[0] == '\n' || s[0] == '\r' || s[0] == '\t' || s[0] == '\f'))
-          IncToken(s, end, line, column);
-
-        if(s >= end)
-          break;
-
-        switch(s[0])
+        IncToken(s, end, line, column);
+        IncToken(s, end, line, column);
+        size_t depth = 1;
+        while(depth > 0 && s < end)
         {
-        case 0:
-          assert(s < end);
-          IncToken(s, end, line, column);
-          break;
-        case '(':
-          if(s + 1 < end && s[1] == ';') // This is a comment
+          switch(*s)
           {
+          case '(':
+            if(s + 1 < end && s[1] == ';')
+              depth += 1;
             IncToken(s, end, line, column);
+            break;
+          case ';':
+            if(s + 1 < end && s[1] == ')')
+              depth -= 1;
             IncToken(s, end, line, column);
-            size_t depth = 1;
-            while(depth > 0 && s < end)
-            {
-              switch(*s)
-              {
-              case '(':
-                if(s + 1 < end && s[1] == ';')
-                  depth += 1;
-                IncToken(s, end, line, column);
-                break;
-              case ';':
-                if(s + 1 < end && s[1] == ')')
-                  depth -= 1;
-                IncToken(s, end, line, column);
-                break;
-              }
-              IncToken(s, end, line, column);
-            }
-          }
-          else
-          {
-            tokens.Push(WatToken{ TOKEN_OPEN, s, line, column });
-            IncToken(s, end, line, column);
-          }
-          break;
-        case ')':
-          tokens.Push(WatToken{ TOKEN_CLOSE, s, line, column });
-          IncToken(s, end, line, column);
-          break;
-        case ';': // A comment
-        {
-          if(s + 1 < end && s[1] == ';')
-          {
-            do
-            {
-              IncToken(s, end, line, column);
-            } while(s < end && s[0] != '\n');
-          }
-          else
-          {
-            tokens.Push(WatToken{ TOKEN_NONE });
-          }
-
-          if(s < end)
-            IncToken(s, end, line, column);
-
-          break;
-        }
-        case '"': // A string
-        {
-          const char* begin = IncToken(s, end, line, column);
-          while(s[0] != '"' && s + 1 < end)
-          {
-            if(s[0] == '\\')
-              IncToken(s, end, line, column);
-            IncToken(s, end, line, column);
-          }
-
-          WatToken t = { TOKEN_STRING, begin, line };
-          t.len = s - begin;
-          tokens.Push(t);
-
-          if(s[0] == '"')
-            IncToken(s, end, line, column);
-          break;
-        }
-        case '$': // A name
-        {
-          WatToken t = { TOKEN_NAME, s + 1, line };
-
-          // We avoid using a regex here because extremely long names are still technically valid but can overwhelm the standard C++ regex evaluator
-          while(s < end)
-          {
-            IncToken(s, end, line, column);
-            switch(*s)
-            {
-            case '!':
-            case '#':
-            case '$':
-            case '%':
-            case '&':
-            case '\'':
-            case '*':
-            case '+':
-            case '-':
-            case '.':
-            case '/':
-            case ':':
-            case '<':
-            case '=':
-            case '>':
-            case '?':
-            case '@':
-            case '\\':
-            case '^':
-            case '_':
-            case '`':
-            case '|':
-            case '~':
-              t.len++;
-              continue;
-            default:
-              if(isalnum(s[0]))
-              {
-                t.len++;
-                continue;
-              }
-            }
             break;
           }
-
-          if(!t.len) // Empty names are invalid
-            t.id = TOKEN_NONE;
-
-          tokens.Push(t);
-          break;
+          IncToken(s, end, line, column);
         }
-        case '-':
-        case '+':
-        case '0':
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-        case '5':
-        case '6':
-        case '7':
-        case '8':
-        case '9': // Either an integer or a float
+      }
+      else
+      {
+        tokens.Push(WatToken{ TOKEN_OPEN, s, line, column });
+        IncToken(s, end, line, column);
+      }
+      break;
+    case ')':
+      tokens.Push(WatToken{ TOKEN_CLOSE, s, line, column });
+      IncToken(s, end, line, column);
+      break;
+    case ';': // A comment
+    {
+      if(s + 1 < end && s[1] == ';')
+      {
+        do
         {
-          const char* last = s;
-          if(!(last = CheckTokenNAN(s, end, 0)) && !(last = CheckTokenINF(s, end, 0))) // Check if this is an NaN or an INF
+          IncToken(s, end, line, column);
+        } while(s < end && s[0] != '\n');
+      }
+      else
+      {
+        tokens.Push(WatToken{ TOKEN_NONE });
+      }
+
+      if(s < end)
+        IncToken(s, end, line, column);
+
+      break;
+    }
+    case '"': // A string
+    {
+      const char* begin = IncToken(s, end, line, column);
+      while(s[0] != '"' && s + 1 < end)
+      {
+        if(s[0] == '\\')
+          IncToken(s, end, line, column);
+        IncToken(s, end, line, column);
+      }
+
+      WatToken t = { TOKEN_STRING, begin, line };
+      t.len = s - begin;
+      tokens.Push(t);
+
+      if(s[0] == '"')
+        IncToken(s, end, line, column);
+      break;
+    }
+    case '$': // A name
+    {
+      WatToken t = { TOKEN_NAME, s + 1, line };
+
+      // We avoid using a regex here because extremely long names are still technically valid but can overwhelm the standard C++ regex evaluator
+      while(s < end)
+      {
+        IncToken(s, end, line, column);
+        switch(*s)
+        {
+        case '!':
+        case '#':
+        case '$':
+        case '%':
+        case '&':
+        case '\'':
+        case '*':
+        case '+':
+        case '-':
+        case '.':
+        case '/':
+        case ':':
+        case '<':
+        case '=':
+        case '>':
+        case '?':
+        case '@':
+        case '\\':
+        case '^':
+        case '_':
+        case '`':
+        case '|':
+        case '~':
+          t.len++;
+          continue;
+        default:
+          if(isalnum(s[0]))
           {
-            last = s; // If it's not an NAN, estimate what the number is
-            if(last[0] == '-' || last[0] == '+')
-              ++last;
-            if(last + 2 < end && last[0] == '0' && last[1] == 'x')
-              last += 2;
-            if(last >= end || !isxdigit(last[0]))
-            {
-              tokens.Push(WatToken{ TOKEN_NONE, s, line, column, last - s });
-              column += last - s;
-              s = last;
-              break;
-            }
-            while(last < end && (isalnum(last[0]) || last[0] == '.' || last[0] == '_' || last[0] == '-' || last[0] == '+'))
-              ++last;
+            t.len++;
+            continue;
           }
-          tokens.Push(WatToken{ TOKEN_NUMBER, s, line, column, last - s });
+        }
+        break;
+      }
+
+      if(!t.len) // Empty names are invalid
+        t.id = TOKEN_NONE;
+
+      tokens.Push(t);
+      break;
+    }
+    case '-':
+    case '+':
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9': // Either an integer or a float
+    {
+      const char* last = s;
+      if(!(last = CheckTokenNAN(s, end, 0)) && !(last = CheckTokenINF(s, end, 0))) // Check if this is an NaN or an INF
+      {
+        last = s; // If it's not an NAN, estimate what the number is
+        if(last[0] == '-' || last[0] == '+')
+          ++last;
+        if(last + 2 < end && last[0] == '0' && last[1] == 'x')
+          last += 2;
+        if(last >= end || !isxdigit(last[0]))
+        {
+          tokens.Push(WatToken{ TOKEN_NONE, s, line, column, last - s });
           column += last - s;
           s = last;
           break;
         }
-        default:
+        while(last < end && (isalnum(last[0]) || last[0] == '.' || last[0] == '_' || last[0] == '-' || last[0] == '+'))
+          ++last;
+      }
+      tokens.Push(WatToken{ TOKEN_NUMBER, s, line, column, last - s });
+      column += last - s;
+      s = last;
+      break;
+    }
+    default:
+    {
+      const char* begin = s;
+      if((begin = CheckTokenNAN(s, end, 0)) != 0 || (begin = CheckTokenINF(s, end, 0)) != 0) // Check if this is an NaN
+      {
+        tokens.Push(WatToken{ TOKEN_NUMBER, s, line, column, begin - s });
+        column += begin - s;
+        s = begin;
+      }
+      else
+      {
+        begin = s;
+
+        while(s < end && s[0] != ' ' && s[0] != '\n' && s[0] != '\r' && s[0] != '\t' && s[0] != '\f' && s[0] != '=' && s[0] != ')' && s[0] != '(' && s[0] != ';')
+          IncToken(s, end, line, column);
+
+        StringRef ref = { begin, static_cast<size_t>(s - begin) };
+        khiter_t iter = kh_get_tokens(tokenhash, ref);
+        if(kh_exist2(tokenhash, iter))
+          tokens.Push(WatToken{ kh_val(tokenhash, iter), begin, line, column });
+        else
         {
-          const char* begin = s;
-          if((begin = CheckTokenNAN(s, end, 0)) != 0 || (begin = CheckTokenINF(s, end, 0)) != 0) // Check if this is an NaN
-          {
-            tokens.Push(WatToken{ TOKEN_NUMBER, s, line, column, begin - s });
-            column += begin - s;
-            s = begin;
-          }
+          uint8_t op = GetInstruction(ref);
+          if(op != 0xFF)
+            tokens.Push(WatToken{ TOKEN_OPERATOR, begin, line, column, (int64_t)op });
           else
           {
-            begin = s;
-
-            while(s < end && s[0] != ' ' && s[0] != '\n' && s[0] != '\r' && s[0] != '\t' && s[0] != '\f' && s[0] != '=' && s[0] != ')' && s[0] != '(' && s[0] != ';')
-              IncToken(s, end, line, column);
-
-            StringRef ref = { begin, static_cast<size_t>(s - begin) };
-            khiter_t iter = kh_get_tokens(tokenhash, ref);
-            if(kh_exist2(tokenhash, iter))
-              tokens.Push(WatToken{ kh_val(tokenhash, iter), begin, line, column });
-            else
-            {
-              uint8_t op = GetInstruction(ref);
-              if(op != 0xFF)
-                tokens.Push(WatToken{ TOKEN_OPERATOR, begin, line, column, (int64_t)op });
-              else
-              {
-                tokens.Push(WatToken{ TOKEN_NONE, begin, line, column, (int64_t)ref.len });
-              }
-            }
-            if(*s == '=')
-              IncToken(s, end, line, column);
+            tokens.Push(WatToken{ TOKEN_NONE, begin, line, column, (int64_t)ref.len });
           }
         }
-        }
-        if(tokens.Size() > 0)
-          assert(tokens.Peek().id < TOKEN_TOTALCOUNT);
+        if(*s == '=')
+          IncToken(s, end, line, column);
       }
     }
+    }
+    if(tokens.Size() > 0)
+      assert(tokens.Peek().id < TOKEN_TOTALCOUNT);
   }
+}
+
+// Checks for parse errors in the tokenization process
+int innative::CheckWatTokens(const Environment& env, ValidationError*& errors, Queue<WatToken>& tokens, const char* start)
+{
+  int err = ERR_SUCCESS;
+  for(size_t i = 0; i < tokens.Size(); ++i)
+  {
+    switch(tokens[i].id)
+    {
+    case TOKEN_NONE:
+      AppendError(env, errors, nullptr, ERR_WAT_INVALID_TOKEN, "[%zu] Invalid token: %s", WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
+      break;
+    case TOKEN_RANGE_ERROR:
+      AppendError(env, errors, nullptr, ERR_WAT_OUT_OF_RANGE, "[%zu] Constant out of range: %s", WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
+      break;
+    default:
+      continue;
+    }
+    err = ERR_WAT_INVALID_TOKEN;
+  }
+
+  return err;
 }

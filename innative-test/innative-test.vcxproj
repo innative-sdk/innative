@@ -338,6 +338,7 @@
     <ClCompile Include="test.cpp" />
     <ClCompile Include="test_allocator.cpp" />
     <ClCompile Include="test_environment.cpp" />
+    <ClCompile Include="test_harness.cpp" />
     <ClCompile Include="test_malloc.cpp" />
     <ClCompile Include="test_parallel_parsing.cpp" />
     <ClCompile Include="test_path.cpp" />

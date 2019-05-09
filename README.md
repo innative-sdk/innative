@@ -1,39 +1,25 @@
 # inNative
-[![inNative Discord](https://img.shields.io/badge/Discord-%23inNative-blue.svg)](https://discord.gg/)
+[![inNative Discord](https://img.shields.io/badge/Discord-%23inNative-blue.svg)](https://discord.gg/teQ9Uz5)
 
 An AOT (ahead-of-time) compiler for WebAssembly that creates **C compatible binaries**, either as **sandboxed plugins** you can dynamically load, or as **stand-alone executables** that interface *directly with the operating system*. This allows webassembly modules to participate in C linking and the build process, either statically, dynamically, or with access to the host operating system. The runtime can be installed standalone on a user's machine, or it can be embedded inside your program. It's highly customizable, letting you choose the features, isolation level, and optimization amount you need for your use-case.
  
 ## Community
-Join a team of webassembly enthusiasts working hard to make inNative a more viable target for compilers, and building better integration options for non-web embeddings in general. We maintain an [active discord server](https://discord.gg/), and post articles from community members [on our website](https://innative.io). If you find a bug, or your program can't compile on inNative until we implement a specific feature, [file an issue](https://github.com/innative-sdk/innative/issues/new) on GitHub so we can track the needs of developers.
+Join a team of webassembly enthusiasts working hard to make inNative a more viable target for compilers, and building better integration options for non-web embeddings in general. We maintain an [active discord server](https://discord.gg/teQ9Uz5), and post articles from community members [on our website](https://innative.dev). If you find a bug, or your program can't compile on inNative until we implement a specific feature, [file an issue](https://github.com/innative-sdk/innative/issues/new) on GitHub so we can track the needs of developers.
 
 ### Documentation
-The primary source of documentation for inNative is the [GitHub Wiki](), which lists all the externally accessible functions and how to use them. This wiki *should* be kept up to date, but always double-check the source code comments if something seems amiss. Feel free to [file an issue]() if there is misleading or missing documentation.
+The primary source of documentation for inNative is the [GitHub Wiki](https://github.com/innative-sdk/innative/wiki), which lists all the externally accessible functions and how to use them. This wiki *should* be kept up to date, but always double-check the source code comments if something seems amiss. Feel free to [file an issue](https://github.com/innative-sdk/innative/issues/new) if there is misleading or missing documentation.
 
 ## Installing
-Precompiled binaries for common platforms are provided in [releases](https://github.com/innative-sdk/innative/releases) for those who do not want to build from source. It is **highly recommended** that you use precompiled binaries, because building from source requires building inNative's custom fork of LLVM, which can take a long time. The SDK is portable and can be unzipped to any directory, but can also be installed and registered on the target system. The provided installers will register the SDK with the system, which enables dynamic loaders to find the runtime, and register it as a `.wasm`, `.wat` and `.wast` file extension handler on windows. Even if you did not use an installer, you can always install a portable version by running `innative-cmd.exe -i` on windows or `./innative-cmd -i` on linux.
+Precompiled binaries for common platforms are provided in [releases](https://github.com/innative-sdk/innative/releases) for those who do not want to build from source. It is **highly recommended** that you use precompiled binaries, because building from source requires building inNative's custom fork of LLVM, which can take a long time. The SDK is portable and can be unzipped to any directory, but can also be installed and registered on the target system. The provided installers will register the SDK with the system, which enables dynamic loaders to find the runtime, and register it as a `.wasm`, `.wat` and `.wast` file extension handler on windows. Even if you did not use an installer, you can always install a portable version by running `innative-cmd.exe -i` on windows or `./innative-cmd -i` on linux. Read the wiki articles for [the SDK](https://github.com/innative-sdk/innative/wiki/Install-the-SDK) and [the Redistributable](https://github.com/innative-sdk/innative/wiki/Install-the-Redistributable-Package) for more information.
 
 ### Command Line Utility
 The inNative SDK comes with a command line utility with many useful features for webassembly developers.
 
-    Usage: innative-cmd [-r] [-f FLAG] [-l FILE] [-o FILE] [-a FILE] [-d PATH] [-s [FILE]]
+    Usage: innative-cmd [-r] [-c] [-i] [-u] [-v] [-f FLAG...] [-l FILE] [-L FILE] [-o FILE] [-a FILE] [-d PATH] [-s [FILE]] [-w [MODULE:]FUNCTION] FILE...
       -r : Run the compiled result immediately and display output. Requires a start function.
       -f <FLAG>: Set a supported flag to true. Flags:
-             sandbox
-             homogenize
-             llvm
-             strict
-             multithreaded
-             library
-             noinit
-             debug
-             wat
-             o0
-             o1
-             o2
-             os
-             o3
-             fastmath
-
+             sandbox, homogenize, llvm, strict, whitelist, multithreaded, library, noinit, debug, check_stack_overflow, check_float_trunc, check_memory_access, check_indirect_call, check_int_division, disable_tail_call
+             o0, o1, o2, os, o3, fastmath
       -l <FILE> : Links the input files against <FILE>, which must be a static library.
       -L <FILE> : Links the input files against <FILE>, which must be an ELF shared library.
       -o <FILE> : Sets the output path for the resulting executable or library.
@@ -49,15 +35,15 @@ The inNative SDK comes with a command line utility with many useful features for
 
 Example usage:
 
-    innative-cmd yourfile.wasm -f debug -f o3 -r
+    innative-cmd yourfile.wasm -f debug o3 -r
     
 ## Building
-LLVM uses CMake to build, but CMake currently has issues with the nested LLD project, so build instructions are still provided on a per-platform basis. The version of LLVM used in this project is a **fork** with additions to LLD, so attempting to compile inNative with a different build of LLVM **will not work**. Ninja has been unreliable when trying to compile both LLVM and LLD at the moment, so the steps below use either Visual Studio 2017 or Unix Makefiles to build LLVM+LLD.
- 
-All build steps start with `git submodule update --init --recursive`. **This is critical** because of nested git submodules that the project relies on. If you get errors, be sure to double check that you have acquired `llvm`, `llvm/tools/lld`, `spec`, and `spec/document/core/util/katex`.
- 
+LLVM uses CMake to build, but CMake currently has issues with the nested LLD project, so build instructions are still provided on a per-platform basis. The version of LLVM used in this project is a fork with additions to LLD, so attempting to compile inNative with a different build of LLVM **will not work**.
+
+All build steps start with `git submodule update --init --recursive`. This is **mandatory** because of nested git submodules that the project relies on. If you get errors, be sure to double check that you have acquired `llvm`, `llvm/tools/lld`, `spec`, and `spec/document/core/util/katex`.
+
 ### Windows
-**Make sure you've installed the v141_xp toolkit for Visual Studio, first.** Run `build-llvm.ps1` if you have Visual Studio 2019, or run `build-llvm.ps1 2017` if you have Visual Studio 2017, and wait for it to complete. If the script was successful, open `innative.sln` in Visual Studio and build the project, or run `msbuild innative.sln`. **Note for Visual Studio 2019: MSBuild is broken outside of the developer prompt, so you will have to open the .sln file and compile Debug and MinSizeRel yourself, or run the script inside a developer prompt.**
+Regardless of whether you are using Visual Studio 2017 or 2019, **make sure you have the v141_xp toolkit installed**, first. Run `build-llvm.ps1` if you have Visual Studio 2019, or run `build-llvm.ps1 2017` if you have Visual Studio 2017, and wait for it to complete. If the script was successful, open `innative.sln` in Visual Studio and build the project, or run `msbuild innative.sln`. **Visual Studio 2019 broke MSBuild outside the developer prompt, so you'll have to open the .sln file and manually compile Debug and MinSizeRel yourself, or run `build-llvm.ps1` inside a developer prompt.**
  
 The script downloads a portable cmake and python3 into the `bin` directory. If you would rather run the commands yourself, have existing installations of cmake/python, or want to modify the LLVM compilation flags, you can run the commands for your version of Visual Studio yourself:
 
@@ -76,7 +62,7 @@ The script downloads a portable cmake and python3 into the `bin` directory. If y
     msbuild llvm.sln /p:Configuration=Debug
 
 ### Linux
-Ensure that you have `cmake` and `python` installed, as the script can't do this for you. Run `build-llvm.sh` and wait for it to complete. If it was successful, run `make` from the top level source directory to build all innative projects. If you would rather run the commands yourself or want to adjust the LLVM compilation flags, you can run the steps manually below:
+**Ensure that you have `cmake` and `python` installed**, as the script can't do this for you. Run `build-llvm.sh` if you want to use `make`, or you can run `build-llvm.sh ninja` if you have `ninja` installed to compile LLVM with ninja (you'll still need to use make for inNative). If it was successful, run `make` from the top level source directory to build all inNative projects. If you would rather run the commands yourself or want to adjust the LLVM compilation flags, you can run the steps manually below:
  
     #!/bin/bash
     git submodule update --init --recursive
@@ -84,8 +70,21 @@ Ensure that you have `cmake` and `python` installed, as the script can't do this
     mkdir -p bin/llvm
     cd bin/llvm
 
-    cmake ../../llvm -DCMAKE_BUILD_TYPE:STRING="MinSizeRel" -DLLVM_TARGETS_TO_BUILD:STRING="X86;WebAssembly" -DLLVM_BUILD_LLVM_DYLIB:BOOL=OFF -DLLVM_OPTIMIZED_TABLEGEN:BOOL=ON -DLLVM_INCLUDE_EXAMPLES:BOOL=OFF -DLLVM_INCLUDE_TESTS:BOOL=OFF -DLLVM_INCLUDE_BENCHMARKS:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF
+    # Makefiles
+    cmake ../../llvm -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE:STRING="MinSizeRel" -DLLVM_TARGETS_TO_BUILD:STRING="X86;WebAssembly" -DLLVM_BUILD_LLVM_DYLIB:BOOL=OFF -DLLVM_OPTIMIZED_TABLEGEN:BOOL=ON -DLLVM_INCLUDE_EXAMPLES:BOOL=OFF -DLLVM_INCLUDE_TESTS:BOOL=OFF -DLLVM_INCLUDE_BENCHMARKS:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF
     make
+
+    # Ninja
+    cmake -GNinja ../../llvm -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE:STRING="MinSizeRel" -DLLVM_TARGETS_TO_BUILD:STRING="X86;WebAssembly" -DLLVM_BUILD_LLVM_DYLIB:BOOL=OFF -DLLVM_OPTIMIZED_TABLEGEN:BOOL=ON -DLLVM_INCLUDE_EXAMPLES:BOOL=OFF -DLLVM_INCLUDE_TESTS:BOOL=OFF -DLLVM_INCLUDE_BENCHMARKS:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF
+    ninja
+
+### Build benchmarks
+The benchmarks are already compiled to webassembly, but if you want to recompile them yourself, you can run `make benchmarks` from the root directory, assuming you have a webassembly-enabled compiler available. If you are on windows, it is recommended you simply use WSL to build the benchmarks.
+
+### Build Docker Image
+A `Dockerfile` is included in the source that uses a two-stage build process to create an alpine docker image. When assembling a docker image, it is recommended you make a *shallow clone* of the repository (without any submodules) and then run `docker build .` from the root directory, without building anything. Docker will copy the repository and clone the submodules itself, before building both LLVM and inNative, which can take quite some time. Once compiled, inNative will be copied into a fresh alpine image and installed so it is usable from the command line, while the LLVM compilation result will be discarded.
+
+A prebuilt version of this image is [available here]()
     
 ## Targeting inNative
  

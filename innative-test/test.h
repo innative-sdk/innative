@@ -13,7 +13,8 @@
 class TestHarness
 {
 public:
-  inline TestHarness(FILE* out) : _target(out), _testdata(0,0) {}
+  TestHarness(FILE* out);
+  size_t Run(FILE* out);
   void test_allocator();
   void test_environment();
   void test_path();

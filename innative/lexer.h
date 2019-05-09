@@ -9,9 +9,24 @@
 #include "queue.h"
 
 namespace innative {
-  namespace wat {
-    typedef unsigned short WatTokenID;
+  typedef unsigned short WatTokenID;
 
+  typedef struct __WAT_TOKEN
+  {
+    WatTokenID id;
+    const char* pos;
+    unsigned int line;
+    unsigned int column;
+    union
+    {
+      int64_t i;
+      uint64_t u;
+      double f;
+      size_t len;
+    };
+  } WatToken;
+
+  namespace wat {
     enum WatTokens : WatTokenID
     {
       TOKEN_NONE = 0, // Error state
@@ -72,23 +87,6 @@ namespace innative {
       TOKEN_TOTALCOUNT,
     };
 
-    typedef struct __WAT_TOKEN
-    {
-      WatTokenID id;
-      const char* pos;
-      unsigned int line;
-      unsigned int column;
-      union
-      {
-        int64_t i;
-        uint64_t u;
-        double f;
-        size_t len;
-      };
-    } WatToken;
-
-    void TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* end);
-    int CheckWatTokens(const Environment& env, ValidationError*& errors, Queue<WatToken>& tokens, const char* start);
     const char* GetTokenString(WatTokenID token);
     int ResolveTokeni32(const WatToken& token, std::string& numbuf, varsint32& out);
     int ResolveTokenu32(const WatToken& token, std::string& numbuf, varuint32& out);
@@ -97,6 +95,9 @@ namespace innative {
     int ResolveTokenu64(const WatToken& token, std::string& numbuf, varuint64& out);
     int ResolveTokenf64(const WatToken& token, std::string& numbuf, float64& out);
   }
+
+  void TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* end);
+  int CheckWatTokens(const Environment& env, ValidationError*& errors, Queue<WatToken>& tokens, const char* start);
 }
 
 #endif

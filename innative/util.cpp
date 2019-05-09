@@ -322,6 +322,8 @@ namespace innative {
       info[4] = 5;
 #elif defined(IN_CPU_POWERPC)
       info[4] = 6;
+#elif defined(IN_CPU_ARM64)
+      info[4] = 7;
 #endif
       info[4] |= (flags << 16);
       __get_cpuid(1, info + 0, info + 1, info + 2, info + 3);

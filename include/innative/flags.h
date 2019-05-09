@@ -10,24 +10,70 @@ extern "C" {
 
 enum WASM_ENVIRONMENT_FLAGS
 {
-  ENV_DEBUG = (1 << 0), // Enables debug information
-  ENV_LIBRARY = (1 << 1), // Builds a dynamic library instead of an executable.
-  ENV_WHITELIST = (1 << 2), // Enables the C import whitelist (if the whitelist is empty, no C imports will be allowed)
-  ENV_ENABLE_WAT = (1 << 3), // Enables compiling .wat and .wast files
-  ENV_MULTITHREADED = (1 << 4), // Compiles each module in parallel (experimental)
-  ENV_EMIT_LLVM = (1 << 5), // Emits intermediate LLVM IR files for debugging
-  ENV_HOMOGENIZE_FUNCTIONS = (1 << 6), // Converts all exported functions to i64 types for testing
-  ENV_NO_INIT = (1 << 7), // Disables automatic initialization in DLLs, requiring you to manually call IN_INIT_FUNCTION and IN_EXIT_FUNCTION
-  ENV_CHECK_STACK_OVERFLOW = (1 << 10), // Ensures a stack probe exists for large stack allocations even on systems where it is optional (linux)
-  ENV_CHECK_FLOAT_TRUNC = (1 << 11),
-  ENV_CHECK_MEMORY_ACCESS = (1 << 12), // Put in bounds checks around all memory accesses
-  ENV_CHECK_INDIRECT_CALL = (1 << 13), // Verifies the function call signature of all indirect calls
-  ENV_CHECK_INT_DIVISION = (1 << 14), 
-  ENV_DISABLE_TAIL_CALL = (1 << 15), // Disables tail calls (demanded by current webassembly standard)
+  // Adds debugging information to the webassembly module, which may include producing a `.pdb` file in addition to the normal output, depending on platform. Currently, this will
+  // only produce meaningful debug output for `.wat`and `.wast` files, as inNative can't automatically deserialize webassembly yet.
+  ENV_DEBUG = (1 << 0),
 
-  // Strictly adheres to the standard, provided the optimization level does not exceed ENV_OPTIMIZE_STRICT
+  // Specifies that the result should be a dynamic library instead of an executable. Any start function will be ignored, and the resulting DLL or `.so` file will export all
+  // symbols that are exported from all the modules being compiled. These symbol names will be mangled, but can be accessed from C if you know the resulting mangled name. This does
+  // not produce a static library because the dynamic library performs initialization and cleanup of global variables when loaded and unloaded. If you know what you're doing, you
+  // can perform this initialization yourself by specifying ENV_NOINIT.
+  ENV_LIBRARY = (1 << 1),
+
+  // Enables the C function whitelist.If the whitelist is not enabled, the webassembly module will be able to call any C function that it is linked to, which includes all kernel
+  // functions on windows. Enabling the whitelist without providing a list of functions will effectively prevent the webassembly module from calling any external C function.
+  ENV_WHITELIST = (1 << 2),
+
+  // Enables compiling .wat and .wast files
+  ENV_ENABLE_WAT = (1 << 3), 
+
+  // Attempts to compile the modules in parallel as much as possible (Experimental).
+  ENV_MULTITHREADED = (1 << 4),
+
+  // Outputs a `.llvm` file in the target output directory for each module being compiled that outputs the optimized, final LLVM IR that is compiled to machine code. This can be
+  // used to investigate compiler bugs or unexpected behavior.
+  ENV_EMIT_LLVM = (1 << 5),
+
+  // When testing, due to C++ not being able to dynamically generate calling conventions, it is useful to "homogenize" all functions to always return `i64` and transform every single
+  // parameter into an `i64` parameter. This makes it easier to generate function pointers for the test harness.This may be useful for game scripting APIs in certain contexts, but in
+  // most cases is unnecessary and simply adds overhead.
+  ENV_HOMOGENIZE_FUNCTIONS = (1 << 6),
+
+  // Normally, inNative will create a dynamic library that automatically calls it's initialization function when it is loaded into memory, using the operating system's global
+  // initialization handles, and free it's global resources when it is unloaded. However, a game may want more precise control over when a webassembly module is actually instantiated
+  // or freed, and may want the option of freeing and re-instantiating the module without having to unload it from memory. To prevent the initialization and cleanup functions from
+  // being automatically called, use this flag, but be sure you call them from your code correctly.
+  ENV_NO_INIT = (1 << 7), 
+  
+  // Some platforms, like windows, always require a stack probe if there is any possibility of skipping the stack guard page. This option ensures that a stack probe is always done,
+  // even on linux, if a large stack space is requested. This is critical for sandboxing, because otherwise the stack overflow can be used to break out of the program memory space.
+  ENV_CHECK_STACK_OVERFLOW = (1 << 10), 
+
+  // This forces a trap if any floating point truncation to an integer would overflow or underflow the integer due to precision issues. For example, a 64-bit float can accurate hold
+  // 52-bit integers with no precision loss, but if you truncate this 64-bit float into a 32-bit integer, the result could potentially overflow the 32-bit integer.
+  ENV_CHECK_FLOAT_TRUNC = (1 << 11),
+  
+  // This inserts memory bounds checks on all load and store operations, which is critical for sandboxing applications, but comes at a significant performance cost. Some of these
+  // checks can be simplified for certain platforms - 32-bit linear memories on a 64-bit machine only require a single instruction plus a jump, whereas a 64-bit linear memory on a
+  // 64-bit platform requires five instructions and a jump.
+  ENV_CHECK_MEMORY_ACCESS = (1 << 12),
+
+  // This inserts a check that verifies the expected type of the indirect function call matches the actual type of the function that is about to be called. This is required for
+  // sandboxing because a function call mismatch can smash the stack, but comes at a small performance cost.
+  ENV_CHECK_INDIRECT_CALL = (1 << 13),
+
+  // Integer division is not actually guaranteed to throw a trap on most hardware, and is considered undefined behavior by LLVM, which can affect optimizations. The webassembly
+  // standard requires that division by zero always throws a trap, so this inserts checks for both division by zero and MAX_INT overflow edge cases.
+  ENV_CHECK_INT_DIVISION = (1 << 14),
+
+  // The webassembly standard currently does not allow tail calls to prevent stack overflows from turning into endless loops that lock up a web browser. This option is provided purely
+  // for compatibility with the standard.
+  ENV_DISABLE_TAIL_CALL = (1 << 15),
+
+  // Strictly adheres to the standard, provided the optimization level does not exceed ENV_OPTIMIZE_STRICT.
   ENV_STRICT = ENV_CHECK_STACK_OVERFLOW | ENV_CHECK_FLOAT_TRUNC | ENV_CHECK_MEMORY_ACCESS | ENV_CHECK_INDIRECT_CALL | ENV_DISABLE_TAIL_CALL | ENV_CHECK_INT_DIVISION | ENV_WHITELIST,
-  // Only inserts checks required to maintain a sandbox
+
+  // Only inserts checks required to safely isolate a webassembly module in a sandbox.
   ENV_SANDBOX = ENV_CHECK_STACK_OVERFLOW | ENV_CHECK_MEMORY_ACCESS | ENV_CHECK_INDIRECT_CALL | ENV_WHITELIST,
 };
 
@@ -53,7 +99,7 @@ enum WASM_OPTIMIZE_FLAGS
 
 enum WASM_FEATURE_FLAGS
 {
-  ENV_FEATURE_MUTABLE_GLOBALS = (1 << 0),
+  ENV_FEATURE_MUTABLE_GLOBALS = (1 << 0), // https://github.com/WebAssembly/mutable-global
   ENV_FEATURE_ALL = ~0,
 };
 
