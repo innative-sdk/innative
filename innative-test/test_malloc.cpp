@@ -19,6 +19,7 @@ extern "C" {
   {
     return ((size_t)wasm_buf + wasm_end) / WASM_PAGE;
   }
+
   size_t __builtin_wasm_memory_grow(size_t memory, size_t delta)
   {
     delta *= WASM_PAGE;

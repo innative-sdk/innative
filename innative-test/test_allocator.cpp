@@ -23,6 +23,7 @@ void TestHarness::test_allocator()
     std::unique_ptr<std::thread[]> threads(new std::thread[NUM]);
     std::unique_ptr<std::vector<std::pair<void*, size_t>>[]> maps(new std::vector<std::pair<void*, size_t>>[NUM]);
     __WASM_ALLOCATOR alloc;
+
     auto fn = [&](int id) {
       while(!start.load());
       size_t total = 0;

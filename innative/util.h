@@ -161,6 +161,44 @@ namespace innative {
       return reinterpret_cast<T*>(env.alloc->allocate(n * sizeof(T)));
     }
 
+    // Checks if an integer is a power of two
+    inline bool IsPowerOfTwo(varuint32 x) noexcept
+    {
+      return (x & (x - 1)) == 0;
+    }
+
+    // Given an exact power of two, quickly gets the log2 value
+    inline uint32_t Power2Log2(uint32_t v) noexcept
+    {
+      assert(IsPowerOfTwo(v));
+#ifdef IN_COMPILER_MSC
+      unsigned long r;
+      _BitScanReverse(&r, v);
+#elif defined(IN_COMPILER_GCC)
+      uint32_t r = (sizeof(uint32_t) << 3) - 1 - __builtin_clz(v);
+#else
+      const uint32_t b[] = { 0xAAAAAAAA, 0xCCCCCCCC, 0xF0F0F0F0, 0xFF00FF00, 0xFFFF0000 };
+      uint32_t r = (v & b[0]) != 0;
+      r |= ((v & b[4]) != 0) << 4;
+      r |= ((v & b[3]) != 0) << 3;
+      r |= ((v & b[2]) != 0) << 2;
+      r |= ((v & b[1]) != 0) << 1;
+#endif
+      return r;
+    }
+
+    inline varuint32 NextPow2(varuint32 v) noexcept
+    {
+      v -= 1;
+      v |= (v >> 1);
+      v |= (v >> 2);
+      v |= (v >> 4);
+      v |= (v >> 8);
+      v |= (v >> 16);
+
+      return v + 1;
+    }
+
     IN_FORCEINLINE bool ModuleHasSection(const Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
 
     uint8_t GetInstruction(StringRef s);

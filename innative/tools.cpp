@@ -94,7 +94,7 @@ void innative::LoadModule(Environment* env, size_t index, const void* data, uint
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
   {
     env->modules[index] = { 0 };
-    *err = innative::wat::ParseWatModule(*env, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
+    *err = innative::ParseWatModule(*env, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
   }
   else
     *err = ParseModule(s, *env, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
@@ -179,15 +179,6 @@ enum IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data
   embed->next = env->embeddings;
   env->embeddings = embed;
 
-  if(!size)
-  {
-    FILE* f;
-    FOPEN(f, (const char*)data, "rb");
-    if(!f)
-      return ERR_FATAL_FILE_ERROR;
-    fclose(f);
-  }
-
   return ERR_SUCCESS;
 }
 
@@ -199,10 +190,30 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
     for(Embedding* embed = env->embeddings; embed != nullptr; embed = embed->next)
     {
       Path path(env->sdkpath);
-      path.Append((const char*)embed->data);
+
+      if(!embed->size)
+      {
+        path.Append((const char*)embed->data);
+
+        FILE* f;
+        FOPEN(f, path.c_str(), "rb");
+        if(!f)
+          path = (const char*)embed->data;
+
+        FOPEN(f, path.c_str(), "rb");
+        if(!f)
+        {
+          fprintf(env->log, "Error loading file: %s\n", path.c_str());
+          return ERR_FATAL_FILE_ERROR;
+        }
+        fclose(f);
+      }
+      else
+      {
+        return ERR_INVALID_EMBEDDING; // We do not support in-memory embeddings yet
+      }
+
       auto symbols = GetSymbols(path.c_str(), env->log);
-      if(!symbols.size()) // If we get no symbols, try just the raw path instead.
-        symbols = GetSymbols((const char*)embed->data, env->log);
 
       int r;
       for(auto symbol : symbols)

@@ -32,13 +32,19 @@ inline std::unique_ptr<uint8_t[]> LoadFile(const char* file, long& sz)
 static const std::unordered_map<std::string, unsigned int> flag_map = {
   { "strict", ENV_STRICT },
   { "sandbox", ENV_SANDBOX },
+  { "whitelist", ENV_WHITELIST },
   { "multithreaded", ENV_MULTITHREADED },
   { "debug", ENV_DEBUG },
   { "library", ENV_LIBRARY },
-  { "wat", ENV_ENABLE_WAT },
   { "llvm", ENV_EMIT_LLVM },
   { "homogenize", ENV_HOMOGENIZE_FUNCTIONS },
   { "noinit", ENV_NO_INIT },
+  { "check_stack_overflow", ENV_CHECK_STACK_OVERFLOW },
+  { "check_float_trunc", ENV_CHECK_FLOAT_TRUNC },
+  { "check_memory_access", ENV_CHECK_MEMORY_ACCESS },
+  { "check_indirect_call", ENV_CHECK_INDIRECT_CALL },
+  { "check_int_division", ENV_CHECK_INT_DIVISION },
+  { "disable_tail_call", ENV_DISABLE_TAIL_CALL },
 };
 
 static const std::unordered_map<std::string, unsigned int> optimize_map = {
@@ -52,14 +58,15 @@ static const std::unordered_map<std::string, unsigned int> optimize_map = {
 
 void usage()
 {
-  std::cout << "Usage: innative-cmd [-r] [-f FLAG] [-l FILE] [-o FILE] [-a FILE] [-d PATH] [-s [FILE]]\n"
+  std::cout << "Usage: innative-cmd [-r] [-c] [-i] [-u] [-v] [-f FLAG...] [-l FILE] [-L FILE] [-o FILE] [-a FILE] [-d PATH] [-s [FILE]] [-w [MODULE:]FUNCTION] FILE...\n"
     "  -r : Run the compiled result immediately and display output. Requires a start function.\n"
-    "  -f <FLAG>: Set a supported flag to true. Flags:\n";
+    "  -f <FLAG>: Set a supported flag to true. Flags:\n         ";
 
   for(auto& f : flag_map)
-    std::cout << "         " << f.first << "\n";
+    std::cout << ((&f == &*flag_map.begin()) ? "" : ", ") << f.first;
+  std::cout << "\n         ";
   for(auto& f : optimize_map)
-    std::cout << "         " << f.first << "\n";
+    std::cout << ((&f == &*optimize_map.begin()) ? "" : ", ") << f.first;
 
   std::cout << "\n"
     "  -l <FILE> : Links the input files against <FILE>, which must be a static library.\n"
@@ -135,10 +142,20 @@ int main(int argc, char* argv[])
           flags |= ENV_LIBRARY | ENV_NO_INIT;
           break;
         case 'f': // flag
-          checkarg(++i, argc, argv, err, [&]() {
+          ++i; // Increment to next position
+          if(i >= argc || argv[i][0] == '-') // If this isn't valid, there were no valid flags, so log an error
+          {
+            std::cout << "Missing command line argument parameter for " << argv[--i] << std::endl;
+            err = ERR_MISSING_COMMAND_LINE_PARAMETER;
+            break;
+          }
+
+          do
+          {
             auto raw = std::string(argv[i]);
             std::transform(raw.begin(), raw.end(), raw.begin(), ::tolower);
             auto flag = flag_map.find(raw);
+
             if(flag == flag_map.end())
             {
               flag = optimize_map.find(raw);
@@ -153,7 +170,11 @@ int main(int argc, char* argv[])
             }
             else
               flags |= flag->second;
-            });
+
+            ++i; // Increment and check if we've either hit the end or hit another parameter
+          } while(i < argc && argv[i][0] != '-');
+
+          --i; // We must decrement after we hit another parameter so it gets processed correctly
           break;
         case 'l': // lib
           checkarg(++i, argc, argv, err, [&]() { embeddings.push_back({ argv[i], IN_TAG_ANY }); });
@@ -179,7 +200,7 @@ int main(int argc, char* argv[])
         case 'e': // environment/system module
           checkarg(++i, argc, argv, err, [&]() { system = argv[i]; });
           break;
-        case 'a': // animal sacrifice (specify an alternative linker)
+        case 'a': // alternative linker
           checkarg(++i, argc, argv, err, [&]() { linker = argv[i]; });
           break;
         case 'd': // Specify EXE directory, or any directory containing SDK libraries.
@@ -365,15 +386,16 @@ int main(int argc, char* argv[])
       return ERR_FATAL_FILE_ERROR;
     }
 
+  // Ensure all modules are loaded, in case we have multithreading enabled
+  if(err >= 0)
+    err = (*exports.FinalizeEnvironment)(env);
+
   if(err < 0)
   {
     if(env->loglevel >= LOG_FATAL)
       printerr(env->log, "Error loading environment", err);
     return err;
   }
-
-  // Ensure all modules are loaded, in case we have multithreading enabled
-  (*exports.FinalizeEnvironment)(env);
 
   if(serialize != nullptr) // If you want to serialize the results, we do so now that the modules have been loaded
   {

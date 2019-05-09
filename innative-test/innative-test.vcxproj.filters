@@ -60,12 +60,15 @@
     <ClCompile Include="test_malloc.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="test_harness.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="test.h">
+    <ClInclude Include="benchmark.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="benchmark.h">
+    <ClInclude Include="test.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

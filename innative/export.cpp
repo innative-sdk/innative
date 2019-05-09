@@ -24,6 +24,7 @@ void innative_runtime(IRExports* exports)
   exports->FinalizeEnvironment = &FinalizeEnvironment;
   exports->Compile = &Compile;
   exports->LoadFunction = &LoadFunction;
+  exports->LoadTable = &LoadTable;
   exports->LoadGlobal = &LoadGlobal;
   exports->LoadAssembly = &LoadAssembly;
   exports->FreeAssembly = &FreeAssembly;
@@ -166,7 +167,7 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bo
     return err;
   }
 
-  err = wat::ParseWast(*env, data, sz, path, always_compile);
+  err = ParseWast(*env, data, sz, path, always_compile);
 
   if(env->loglevel >= LOG_ERROR && err < 0)
   {
@@ -210,9 +211,9 @@ int innative_serialize_module(Environment* env, size_t m, const char* out)
   if(m >= env->n_modules)
     return ERR_FATAL_INVALID_MODULE;
 
-  Queue<wat::WatToken> tokens;
-  TokenizeModule(*env, tokens, env->modules[m]);
-  int err = wat::CheckWatTokens(*env, env->errors, tokens, "");
+  Queue<WatToken> tokens;
+  wat::TokenizeModule(*env, tokens, env->modules[m]);
+  int err = CheckWatTokens(*env, env->errors, tokens, "");
   if(err < 0)
     return err;
 
@@ -226,6 +227,6 @@ int innative_serialize_module(Environment* env, size_t m, const char* out)
   if(f.bad())
     return ERR_FATAL_FILE_ERROR;
 
-  WriteTokens(tokens, f);
+  wat::WriteTokens(tokens, f);
   return ERR_SUCCESS;
 }

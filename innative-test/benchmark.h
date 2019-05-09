@@ -31,6 +31,7 @@ class Benchmarks
 
 public:
   Benchmarks(const IRExports& exports, const char* arg0, int loglevel);
+  void Run(FILE* out);
   static int64_t fac(int64_t n);
   static int nbody(int n);
   static int fannkuch_redux(int n);

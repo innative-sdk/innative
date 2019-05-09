@@ -42,20 +42,28 @@ limitations under the License.
 #endif
 
 #ifdef __ARM_ARCH_2_
-#define IN_CPU_ARM2
+#define IN_CPU_ARM_V 2
 #elif defined(__ARM_ARCH_3__) || defined(__ARM_ARCH_3M__)
-#define IN_CPU_ARM3
+#define IN_CPU_ARM_V 3
 #elif defined(__ARM_ARCH_4T__) || defined(__TARGET_ARM_4T)
-#define IN_CPU_ARM4
+#define IN_CPU_ARM_V 4
 #elif defined(__ARM_ARCH_5__) || defined(__ARM_ARCH_5E__) || defined(__ARM_ARCH_5T__) || defined(__ARM_ARCH_5TE__) || defined(__ARM_ARCH_5TEJ__) || (_M_ARM == 5)
-#define IN_CPU_ARM5
+#define IN_CPU_ARM_V 5
 #elif defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) || defined(__ARM_ARCH_6ZK__) || defined(__ARM_ARCH_6T2__) || (_M_ARM == 6)
-#define IN_CPU_ARM6
+#define IN_CPU_ARM_V 6
 #elif defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7S__) || (_M_ARM == 7)
-#define IN_CPU_ARM7
+#define IN_CPU_ARM_V 7
 #elif defined(__ARM_ARCH_8__) || (_M_ARM == 8)
-#define IN_CPU_ARM8
+#define IN_CPU_ARM_V 8
 #endif
+
+#if (IN_CPU_ARM_V > 4) || defined(__ARM_ARCH_4T__)
+#define ARCH_HAS_BX
+#endif
+#if IN_CPU_ARM_V > 4
+#define ARCH_HAS_BLX
+#endif
+
 #elif defined(__mips__) || defined(mips) || defined(_MIPS_ISA) || defined(__mips) || defined(__MIPS__)
 #define IN_CPU_MIPS
 #define IN_64BIT
