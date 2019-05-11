@@ -210,7 +210,7 @@ int main(int argc, char* argv[])
           std::cout << "Installing inNative Runtime..." << std::endl;
           err = innative_install(argv[0], true);
           if(err < 0)
-            std::cout << "Installation failed!" << std::endl;
+            std::cout << "Installation failed! " << err << std::endl;
           else
             std::cout << "Installation succeeded!" << std::endl;
           return err;
@@ -218,7 +218,7 @@ int main(int argc, char* argv[])
           std::cout << "Uninstalling inNative Runtime..." << std::endl;
           err = innative_uninstall();
           if(err < 0)
-            std::cout << "Failed to uninstalled runtime!" << std::endl;
+            std::cout << "Failed to uninstall runtime!" << err << std::endl;
           else
             std::cout << "Successfully uninstalled runtime!" << std::endl;
           return err;

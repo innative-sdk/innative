@@ -184,13 +184,13 @@ limitations under the License.
 #define FOPEN(f, path, mode) fopen_s((&f), (path), (mode))
 #define STRICMP(a, b) _stricmp(a, b)
 #define STRTOK(str,delim,context) strtok_s(str,delim,context)
-#define FPRINTF(f,format,...) fprintf_s(f, format, __VA_ARGS__)
+#define FPRINTF(f,...) fprintf_s(f, __VA_ARGS__)
 #define SPRINTF(b, c, f, ...) sprintf_s(b, c, f, __VA_ARGS__)
 #else
 #define FOPEN(f, path, mode) f = fopen(path, mode)
 #define STRICMP(a, b) strcasecmp(a, b)
 #define STRTOK(str,delim,context) strtok_r(str,delim,context)
-#define FPRINTF(f,format,...) fprintf(f, format, __VA_ARGS__)
+#define FPRINTF(f,...) fprintf(f, __VA_ARGS__)
 #define SPRINTF(b, c, f, ...) sprintf(b, f, __VA_ARGS__)
 #endif
 

@@ -3,7 +3,8 @@
 
 #include "innative/innative.h"
 
-#ifdef IN_PLATFORM_WIN32 // Only compile this file for 32-bit windows, as it implements functions emitted by the MSVC compiler
+// Only compile this file for 32-bit windows, as it implements functions emitted by the MSVC compiler
+#ifdef IN_COMPILER_MSC
 #ifdef IN_CPU_x86
 
 #define CRT_LOWORD(x) dword ptr [x+0]

@@ -1411,7 +1411,7 @@ int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens,
     switch(t.id) // This initial pass is for types and function types only
     {
     case TOKEN_TYPE:
-      if(err = state.ParseIndexProcess<&ParseFunctionType>(tokens, state.typehash))
+      if(err = state.ParseIndexProcess<&WatParser::ParseFunctionType>(tokens, state.typehash))
         return err;
       break;
     default:
@@ -1465,15 +1465,15 @@ int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens,
         return err;
       break;
     case TOKEN_TABLE:
-      if(err = state.ParseIndexProcess<&ParseTable>(tokens, state.tablehash))
+      if(err = state.ParseIndexProcess<&WatParser::ParseTable>(tokens, state.tablehash))
         return err;
       break;
     case TOKEN_MEMORY:
-      if(err = state.ParseIndexProcess<&ParseMemory>(tokens, state.memoryhash))
+      if(err = state.ParseIndexProcess<&WatParser::ParseMemory>(tokens, state.memoryhash))
         return err;
       break;
     case TOKEN_GLOBAL:
-      if(err = state.ParseIndexProcess<&ParseGlobal>(tokens, state.globalhash))
+      if(err = state.ParseIndexProcess<&WatParser::ParseGlobal>(tokens, state.globalhash))
         return err;
       break;
     case TOKEN_EXPORT:

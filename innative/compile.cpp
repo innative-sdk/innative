@@ -41,9 +41,6 @@ using BB = llvm::BasicBlock;
 using std::vector;
 using std::string;
 
-Func* fn_print;
-Func* fn_memdump;
-
 llvmTy* GetLLVMType(varsint7 type, code::Context& context)
 {
   switch(type)
@@ -976,8 +973,6 @@ IN_ERROR CompileStore(code::Context& context, varuint7 memory, varuint32 offset,
   llvmVal* ptr = GetMemPointer(context, base, PtrType->getPointerTo(0), memory, offset);
   context.builder.CreateAlignedStore(!ext ? value : context.builder.CreateIntCast(value, ext, false), ptr, (1 << memflags), name);
 
-  //context.builder.CreateCall(fn_memdump, { context.builder.CreateLoad(context.memories[0]), GetMemSize(context.memories[0], context) });
-
   return ERR_SUCCESS;
 }
 
@@ -1864,9 +1859,6 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
     Func::ExternalLinkage,
     "_innative_internal_env_free_memory",
     context.llvm);
-
-  fn_memdump = Func::Create(FuncTy::get(context.builder.getVoidTy(), { context.builder.getInt8PtrTy(0), context.builder.getInt64Ty() }, false), Func::ExternalLinkage, "_innative_internal_env_memdump", context.llvm);
-  fn_print = Func::Create(FuncTy::get(context.builder.getVoidTy(), { context.builder.getInt64Ty() }, false), Func::ExternalLinkage, "_innative_internal_env_print_compiler", context.llvm);
 
   context.functions.reserve(context.m.importsection.functions + context.m.function.n_funcdecl);
   context.tables.reserve(context.m.importsection.tables - context.m.importsection.functions + context.m.table.n_tables);
@@ -2805,8 +2797,8 @@ namespace innative {
 
       if(env->flags&ENV_LIBRARY)
         linkargs.push_back("-shared");
-      //if(!(env->flags&ENV_DEBUG))
-      //  linkargs.push_back("--strip-debug");
+      if(!(env->flags&ENV_DEBUG))
+        linkargs.push_back("--strip-debug");
 
       vector<string> cache = { string("--output=") + file.Get(), "-L" + programpath.Get(), "-L" + workdir.Get() };
 #else 

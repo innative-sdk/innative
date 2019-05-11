@@ -18,6 +18,8 @@
 #include <dlfcn.h>
 #include <sys/mman.h>
 #include <dirent.h>
+#include <fstream>
+#include <sys/stat.h>
 #else
 #error unknown platform
 #endif
@@ -160,8 +162,25 @@ namespace innative {
     }
 
 #elif defined(IN_PLATFORM_POSIX)
-#define POSIX_LIB_BASE "/usr/lib/libinnative.so"
-#define POSIX_LIB_PATH POSIX_LIB_BASE "." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
+#define POSIX_VERSION_STR "." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
+    int CopyFile(const char* from, const char* to)
+    {
+      std::ifstream source(from, std::ios::binary | std::ios::in);
+      if(!source.is_open())
+        return -16;
+      std::ofstream dest(to, std::ios::binary | std::ios::out | std::ios::trunc);
+      if(!dest.is_open())
+      {
+        printf("Could not open %s, did you try using sudo?", to);
+        return -17;
+      }
+
+      dest << source.rdbuf();
+
+      dest.close();
+      source.close();
+      return 0;
+    }
 
     int FindLatestVersion(const std::string& prefix, const std::vector<std::string>& files)
     {
@@ -184,10 +203,30 @@ namespace innative {
       return v;
     }
 
-    bool GenSymlink(const std::vector<std::string>& files, int major, int minor)
+    bool GenSymlink(const char* file, const char* folder, int major, int minor)
     {
-      std::string link(POSIX_LIB_BASE);
-      std::string src(POSIX_LIB_BASE);
+      std::vector<std::string> files;
+
+      {
+        size_t len = strlen(file);
+        DIR* pdir;
+        if((pdir = opendir(folder)) == nullptr)
+          return -18;
+
+        struct dirent* d;
+        while((d = readdir(pdir)) != NULL)
+        {
+          if(strlen(d->d_name) >= len && !strncasecmp(d->d_name, file, len))
+            files.emplace_back(d->d_name);
+        }
+
+        closedir(pdir);
+      }
+
+      std::string link(folder);
+      link += file;
+      std::string src(file);
+
       if(major >= 0)
       {
         link += '.';
@@ -212,38 +251,33 @@ namespace innative {
       int revision = FindLatestVersion(src, files);
 
       if(revision < 0 || minor < 0 || major < 0)
-        return unlink(link.c_str()) != 0; // No version exists here, so just delete it
+        return !unlink(link.c_str()); // No version exists here, so just delete it
 
       unlink(link.c_str());
-      auto origin = POSIX_LIB_BASE "." + std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(revision);
-      return symlink(origin.c_str(), link.c_str()) != 0;
+      auto origin = std::string(folder) + file + "." + std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(revision);
+      return !symlink(origin.c_str(), link.c_str());
     }
 
     // Finds the latest version for each level: revision, minor, major. Then sets the /usr/bin symlink to the executable corresponding to the latest version
-    bool UpdateSymlinks()
+    int UpdateSymlinks(const char* file, const char* folder)
     {
-      std::vector<std::string> files;
+      if(!GenSymlink(file, folder, INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR))
+        return -19;
 
-      DIR* pdir;
-      if((pdir = opendir("/usr/lib/")) == nullptr)
-        return false;
+      if(!GenSymlink(file, folder, INNATIVE_VERSION_MAJOR, -1))
+        return -20;
 
-      struct dirent *d;
-      while((d = readdir(pdir)) != NULL)
-      {
-        if(strlen(d->d_name) >= sizeof("libinnative.so") && !strncasecmp(d->d_name, "libinnative.so", sizeof("libinnative.so")))
-          files.emplace_back(d->d_name);
-      }
+      return GenSymlink(file, folder, -1, -1) ? 0 : -21;
+    }
 
-      closedir(pdir);
+    int InstallFile(const char* arg0, const char* file, const char* folder)
+    {
+      Path path = GetProgramPath(arg0).BaseDir() += file;
+      auto target = std::string(folder) + file + POSIX_VERSION_STR;
+      int err = CopyFile(path.c_str(), target.c_str());
 
-      if(!GenSymlink(files, INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR))
-        return false;
-
-      if(!GenSymlink(files, INNATIVE_VERSION_MAJOR, -1))
-        return false;
-
-      return GenSymlink(files, -1, -1);
+      // Calculate new master symlinks
+      return !err ? UpdateSymlinks(file, folder) : err;
     }
 #endif
 
@@ -302,15 +336,16 @@ namespace innative {
           return -3;
 
 #elif defined(IN_PLATFORM_POSIX)
-      Path path = GetProgramPath(arg0).BaseDir() += "/libinnative.so";
-
-      // Install symlinks to /usr/lib
-      if(symlink(path.c_str(), POSIX_LIB_PATH) != 0)
-        return -4;
-
-      // Calculate new master symlinks for lib and exe
-      if(!UpdateSymlinks())
-        return -5;
+      int err = 0;
+      if((err = InstallFile(arg0, "libinnative.so", "/usr/lib/")) < 0)
+        return err - 256;
+      if((err = InstallFile(arg0, "innative-env.a", "/usr/lib/")) < 0)
+        return err - 512;
+      if((err = InstallFile(arg0, "innative-env_d.a", "/usr/lib/")) < 0)
+        return err - 768;
+      if((err = InstallFile(arg0, "innative-cmd", "/usr/bin/")) < 0)
+        return err - 1024;
+      chmod("/usr/bin/innative-cmd" POSIX_VERSION_STR, 0777); // Make the actual file executable (we don't need to fix the symlinks)
 #endif
       return 0;
     }
@@ -363,13 +398,25 @@ namespace innative {
 
       return r ? 0 : -1;
 #elif defined(IN_PLATFORM_POSIX)
-      // Remove symlink from /usr/lib
-      if(unlink(POSIX_LIB_PATH) != 0)
+      if(unlink("/usr/lib/libinnative.so" POSIX_VERSION_STR) != 0)
         return -1;
+      if(unlink("/usr/lib/innative-env.a" POSIX_VERSION_STR) != 0)
+        return -2;
+      if(unlink("/usr/lib/innative-env_d.a" POSIX_VERSION_STR) != 0)
+        return -3;
+      if(unlink("/usr/bin/innative-cmd" POSIX_VERSION_STR) != 0)
+        return -4;
 
       // Calculate new symlinks
-      if(!UpdateSymlinks())
-        return -2;
+      int err = 0;
+      if((err = UpdateSymlinks("libinnative.so", "/usr/lib/")) < 0)
+        return err - 256;
+      if((err = UpdateSymlinks("innative-env.a", "/usr/lib/")) < 0)
+        return err - 512;
+      if((err = UpdateSymlinks("innative-env_d.a", "/usr/lib/")) < 0)
+        return err - 768;
+      if((err = UpdateSymlinks("innative-cmd", "/usr/bin/")) < 0)
+        return err - 1024;
       return 0;
 #endif
     }
