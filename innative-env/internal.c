@@ -12,35 +12,6 @@
 #error unknown platform!
 #endif
 
-  // Very simple memcpy implementation because we don't have access to the C library
-IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz)
-{
-  // Align dest pointer
-  while((size_t)dest % sizeof(uint64_t) && sz)
-  {
-    *dest = *src;
-    dest += 1;
-    src += 1;
-    sz -= 1;
-  }
-
-  while(sz > sizeof(uint64_t))
-  {
-    *((uint64_t*)dest) = *((uint64_t*)src);
-    dest += sizeof(uint64_t);
-    src += sizeof(uint64_t);
-    sz -= sizeof(uint64_t);
-  }
-
-  while(sz)
-  {
-    *dest = *src;
-    dest += 1;
-    src += 1;
-    sz -= 1;
-  }
-}
-
 #ifdef IN_PLATFORM_WIN32
 HANDLE heap = 0;
 DWORD heapcount = 0;
@@ -119,23 +90,46 @@ void _innative_internal_write_out(const void* buf, size_t num)
 
 static const char lookup[16] = "0123456789ABCDEF";
 
-IN_COMPILER_DLLEXPORT extern void _innative_internal_env_print(uint64_t a)
+IN_COMPILER_DLLEXPORT extern void _innative_internal_env_print(uint64_t n)
 {
-  char buf[25] = { 0 };
-
   int i = 0;
   do
   {
-    buf[i++] = lookup[a >> 60];
-    a <<= 4;
+    // This is inefficient, but avoids using the stack (since i gets optimized out), which can segfault if other functions are misbehaving.
+    _innative_internal_write_out(&lookup[(n >> 60) & 0xF], 1);
+    i++;
+    n <<= 4;
   } while(i < 16);
-  buf[i++] = '\n';
-  _innative_internal_write_out(buf, i);
+  _innative_internal_write_out("\n", 1);
 }
 
-IN_COMPILER_DLLEXPORT extern void _innative_internal_env_print_compiler(uint64_t a)
+// Very simple memcpy implementation because we don't have access to the C library
+IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz)
 {
-  _innative_internal_env_print(a);
+  // Align dest pointer
+  while((size_t)dest % sizeof(uint64_t) && sz)
+  {
+    *dest = *src;
+    dest += 1;
+    src += 1;
+    sz -= 1;
+  }
+
+  while(sz > sizeof(uint64_t))
+  {
+    *((uint64_t*)dest) = *((uint64_t*)src);
+    dest += sizeof(uint64_t);
+    src += sizeof(uint64_t);
+    sz -= sizeof(uint64_t);
+  }
+
+  while(sz)
+  {
+    *dest = *src;
+    dest += 1;
+    src += 1;
+    sz -= 1;
+  }
 }
 
 // Platform-specific implementation of the mem.grow instruction, except it works in bytes
@@ -215,13 +209,14 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_exit(int status)
 IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned char* mem, uint64_t sz)
 {
   static const char prefix[] = "\n --- MEMORY DUMP ---\n\n";
-  char buf[256];
+  static const int BUFSIZE = 256;
+  char buf[BUFSIZE];
 
   _innative_internal_write_out(prefix, sizeof(prefix));
   for(uint64_t i = 0; i < sz;)
   {
     uint64_t j;
-    for(j = 0; j < 128 && i < sz; ++j, ++i)
+    for(j = 0; j < (BUFSIZE / 2) && i < sz; ++j, ++i)
     {
       buf[j * 2] = lookup[(mem[i] & 0xF0) >> 4];
       buf[j * 2 + 1] = lookup[mem[i] & 0x0F];

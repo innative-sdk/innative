@@ -173,9 +173,9 @@ namespace innative {
       numbuf.assign("400000"); // Hex for the first bit in the mantissa
       if(CheckTokenNAN(token.pos, token.pos + token.len, &numbuf))
       {
-        union { uint32_t i; float f; } u = { 0x7F800000UL | strtoul(numbuf.c_str(), &last, 16) };
+        union { uint32_t i; float f; } u = { 0x7F800000U | strtoul(numbuf.c_str(), &last, 16) };
         if(token.pos[0] == '-')
-          u.i |= 0x80000000UL;
+          u.i |= 0x80000000U;
 
         out = u.f;
         return ERR_SUCCESS;

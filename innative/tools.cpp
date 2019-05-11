@@ -201,6 +201,17 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
           path = (const char*)embed->data;
 
         FOPEN(f, path.c_str(), "rb");
+#ifdef IN_PLATFORM_POSIX
+        if(!f)
+        {
+          path = Path("/usr/lib/") + (const char*)embed->data;
+          char* tmp = tmalloc<char>(*env, path.Get().size() + 1);
+          tmemcpy<char>(tmp, path.Get().size() + 1, path.c_str(), path.Get().size() + 1);
+          embed->data = tmp;
+        }
+
+        FOPEN(f, path.c_str(), "rb");
+#endif
         if(!f)
         {
           fprintf(env->log, "Error loading file: %s\n", path.c_str());

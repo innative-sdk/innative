@@ -10,7 +10,7 @@
 
 namespace innative {
   // Represents an operating system path for pre-C++17 compilers
-  class Path : std::string
+  class Path
   {
   public:
 #ifdef IN_PLATFORM_WIN32
@@ -26,7 +26,7 @@ namespace innative {
     Path() {}
     Path(const Path& copy) : _path(copy._path) {}
     Path(Path&& mov) : _path(std::move(mov._path)) {}
-    explicit Path(const char* path) : _path(path) { _canonize(); }
+    explicit Path(const char* path) : _path(!path ? "" : path) { _canonize(); }
     explicit Path(const std::string& path) : _path(path) { _canonize(); }
     explicit Path(std::string&& path) : _path(std::move(path)) { _canonize(); }
     inline bool IsAbsolute() const
