@@ -17,9 +17,14 @@ RUN make
 FROM alpine:latest
 RUN apk add --no-cache libstdc++
 RUN apk add --no-cache libgcc
-COPY --from=builder /bin/innative-cmd /innative-cmd
-RUN /innative-cmd -i
-rm /innative-cmd
+RUN mkdir /innative/
+COPY --from=builder /bin/innative-cmd /innative/innative-cmd
+COPY --from=builder /bin/innative-test /usr/bin/innative-test
+COPY --from=builder /bin/innative-env.a /innative/innative-env.a
+COPY --from=builder /bin/innative-env_d.a /innative/innative-env_d.a
+COPY --from=builder /bin/libinnative.so /innative/libinnative.so
+RUN cd innative;./innative-cmd -i
+RUN rm -rf /innative/
 COPY --from=builder ./include/ /usr/include/
 COPY --from=builder ./scripts/ /usr/scripts/
 COPY --from=builder ./wasm_malloc.c /usr/wasm_malloc.c
