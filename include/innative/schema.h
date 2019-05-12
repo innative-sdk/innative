@@ -45,6 +45,7 @@ enum WASM_TYPE_ENCODING
   TE_f32 = -0x03,
   TE_f64 = -0x04,
   TE_funcref = -0x10,
+  TE_cref = -0x19,
   TE_func = -0x20,
   TE_void = -0x40,
 

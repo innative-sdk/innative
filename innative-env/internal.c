@@ -209,14 +209,13 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_exit(int status)
 IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned char* mem, uint64_t sz)
 {
   static const char prefix[] = "\n --- MEMORY DUMP ---\n\n";
-  static const int BUFSIZE = 256;
-  char buf[BUFSIZE];
+  char buf[256];
 
   _innative_internal_write_out(prefix, sizeof(prefix));
   for(uint64_t i = 0; i < sz;)
   {
     uint64_t j;
-    for(j = 0; j < (BUFSIZE / 2) && i < sz; ++j, ++i)
+    for(j = 0; j < (sizeof(buf) / 2) && i < sz; ++j, ++i)
     {
       buf[j * 2] = lookup[(mem[i] & 0xF0) >> 4];
       buf[j * 2 + 1] = lookup[mem[i] & 0x0F];

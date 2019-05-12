@@ -397,6 +397,7 @@ namespace innative {
       {TE_f32, "TE_f32"},
       {TE_f64, "TE_f64"},
       {TE_funcref, "TE_funcref"},
+      {TE_cref, "TE_cref"},
       {TE_func, "TE_func"},
       {TE_void, "TE_void"},
       {TE_iPTR, "TE_iPTR"},

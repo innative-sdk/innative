@@ -41,7 +41,7 @@ namespace innative {
     }
 
     static const char* tokenlist[] = { "(", ")", "module", "import", "type", "start", "func", "table", "memory", "global", "export",
-      "data", "elem", "offset", "align", "local", "result", "param", "i32", "i64", "f32", "f64", "funcref", "mut", "block", "loop",
+      "data", "elem", "offset", "align", "local", "result", "param", "i32", "i64", "f32", "f64", "funcref", "cref", "mut", "block", "loop",
       "if", "then", "else", "end", /* script extensions */ "binary", "quote", "register", "invoke", "get", "assert_return",
       "assert_return_canonical_nan", "assert_return_arithmetic_nan", "assert_trap", "assert_malformed", "assert_invalid",
       "assert_unlinkable", "assert_exhaustion", "script", "input", "output" };
