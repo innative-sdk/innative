@@ -51,6 +51,7 @@ llvmTy* GetLLVMType(varsint7 type, code::Context& context)
   case TE_f64: return llvmTy::getDoubleTy(context.context);
   case TE_void: return llvmTy::getVoidTy(context.context);
   case TE_funcref: return FuncTy::get(llvmTy::getVoidTy(context.context), false)->getPointerTo(0); // placeholder (*void)() function pointer
+  case TE_cref: return llvmTy::getInt8PtrTy(context.context);
   }
 
   assert(false);
@@ -69,6 +70,9 @@ WASM_TYPE_ENCODING GetTypeEncoding(llvmTy* t)
     return TE_i32;
   if(t->isIntegerTy() && static_cast<llvm::IntegerType*>(t)->getBitWidth() == 64)
     return TE_i64;
+  if(t->isPointerTy() && t->getPointerElementType()->isIntegerTy())
+    return TE_cref;
+
   return TE_NONE;
 }
 
@@ -273,6 +277,8 @@ bool CheckType(varsint7 ty, llvmVal* v)
     return t->isDoubleTy();
   case TE_void:
     return t->isVoidTy();
+  case TE_cref:
+    return t->isPointerTy() && t->getPointerElementType()->isIntegerTy();
   }
 
   return true;
@@ -306,6 +312,13 @@ IN_ERROR PopType(varsint7 ty, code::Context& context, llvmVal*& v, bool peek = f
     default:
       return ERR_INVALID_TYPE;
     }
+  }
+  else if(ty == TE_cref && context.values.Peek()->getType()->isIntegerTy())
+  { // If this is true, we need to do an int -> cref conversion
+    v = context.builder.CreatePtrToInt(context.builder.CreateLoad(context.memories[0]), context.builder.getInt64Ty());
+    v = context.builder.CreateAdd(context.builder.CreateZExt(peek ? context.values.Peek() : context.values.Pop(), context.builder.getInt64Ty()), v, "", true, true);
+    v = context.builder.CreateIntToPtr(v, GetLLVMType(TE_cref, context));
+    return ERR_SUCCESS;
   }
   else if(!CheckType(ty, context.values.Peek()))
     return ERR_INVALID_TYPE;

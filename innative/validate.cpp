@@ -339,6 +339,8 @@ namespace innative {
       varsint7 t = values.Pop();
       if(type != 0 && t != type)
       {
+        if(type == TE_cref && (t == TE_i32 || t == TE_i64)) // Special case for imaginary cref type
+          return t;
         char buf[10];
         char buf2[10];
         AppendError(env, env.errors, m, ERR_INVALID_TYPE, "Expected %s on the stack, but found %s.", EnumToString(TYPE_ENCODING_MAP, type, buf, 10), EnumToString(TYPE_ENCODING_MAP, t, buf2, 10));

@@ -190,6 +190,7 @@ varsint7 WatParser::WatValType(WatTokenID id)
   case TOKEN_i64: return TE_i64;
   case TOKEN_f32: return TE_f32;
   case TOKEN_f64: return TE_f64;
+  case TOKEN_CREF: return TE_cref;
   }
 
   return 0;
