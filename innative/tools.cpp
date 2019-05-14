@@ -53,13 +53,7 @@ void innative::ClearEnvironmentCache(Environment* env, Module* m)
   assert(env != nullptr);
 
   if(m)
-  {
-    if(m->cache != nullptr)
-    {
-      DeleteCache(*env, m->cache);
-      m->cache = nullptr;
-    }
-  }
+    DeleteCache(*env, *m, false);
   else
     DeleteContext(*env, false); // We can't actually shutdown LLVM here because that permanently shuts it down and there is no way to restore it.
 }
@@ -190,15 +184,29 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
     for(Embedding* embed = env->embeddings; embed != nullptr; embed = embed->next)
     {
       Path path(env->sdkpath);
+      std::string tmp;
+      const char* src = (const char*)embed->data;
 
-      if(!embed->size)
+      if(embed->size)
       {
-        path.Append((const char*)embed->data);
+        // TODO: Allow GetSymbols to take a raw memory pointer to avoid this
+        tmp = std::to_string((size_t)embed->data) + ".tmp";
+        src = tmp.c_str();
+        FILE* f;
+        FOPEN(f, src, "wb");
+        if(!f)
+          return ERR_FATAL_FILE_ERROR;
+        fwrite(embed->data, 1, embed->size, f);
+        fclose(f);
+      }
+
+      {
+        path.Append(src);
 
         FILE* f;
         FOPEN(f, path.c_str(), "rb");
         if(!f)
-          path = (const char*)embed->data;
+          path = src;
 
         FOPEN(f, path.c_str(), "rb");
 #ifdef IN_PLATFORM_POSIX
@@ -219,12 +227,10 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
         }
         fclose(f);
       }
-      else
-      {
-        return ERR_INVALID_EMBEDDING; // We do not support in-memory embeddings yet
-      }
 
       auto symbols = GetSymbols(path.c_str(), env->log);
+      if(!tmp.empty())
+        std::remove(tmp.c_str());
 
       int r;
       for(auto symbol : symbols)

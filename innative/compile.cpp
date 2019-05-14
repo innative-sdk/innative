@@ -2452,27 +2452,25 @@ int CallLinker(const Environment* env, const vector<const char*>& linkargs)
   return err;
 }
 
+std::string GetLinkerObjectPath(Module& m)
+{
+  return std::string(m.name.str(), m.name.size()) + ".o";
+}
+
 void GenerateLinkerObjects(const Environment* env, vector<string>& cache)
 {
   for(size_t i = 0; i < env->n_modules; ++i)
   {
     assert(env->modules[i].cache != 0);
     assert(env->modules[i].name.get() != nullptr);
-    if(!env->modules[i].cache->cache.size())
-    {
-      env->modules[i].cache->cache = std::string(env->modules[i].name.str(), env->modules[i].name.size()) + ".o";
-      cache.emplace_back(env->modules[i].cache->cache);
-      remove(env->modules[i].cache->cache.c_str());
-    }
-    else
-      cache.emplace_back(env->modules[i].cache->cache);
+    cache.emplace_back(GetLinkerObjectPath(env->modules[i]));
 
     FILE* f;
-    FOPEN(f, env->modules[i].cache->cache.c_str(), "rb");
+    FOPEN(f, cache.back().c_str(), "rb");
     if(f)
       fclose(f);
     else
-      OutputObjectFile(*env->modules[i].cache, env->modules[i].cache->cache.c_str());
+      OutputObjectFile(*env->modules[i].cache, cache.back().c_str());
 
 #ifdef IN_PLATFORM_POSIX
     if(i == 0)
@@ -2490,15 +2488,16 @@ void GenerateLinkerObjects(const Environment* env, vector<string>& cache)
 }
 
 namespace innative {
-  void DeleteCache(const Environment& env, void* cache)
+  void DeleteCache(const Environment& env, Module& m, bool relative)
   {
-    if(cache != nullptr)
+    std::remove(((relative ? "" : env.sdkpath) + GetLinkerObjectPath(m)).c_str()); // Always remove the file if it exists
+    if(m.cache != nullptr)
     {
-      auto context = static_cast<code::Context*>(cache);
-      remove((env.sdkpath + context->cache).c_str());
+      auto context = static_cast<code::Context*>(m.cache);
       kh_destroy_importhash(context->importhash);
       delete context->llvm;
       delete context;
+      m.cache = nullptr;
     }
   }
 
@@ -2506,11 +2505,7 @@ namespace innative {
   {
     for(varuint32 i = 0; i < env.n_modules; ++i)
     {
-      if(env.modules[i].cache != nullptr)
-      {
-        DeleteCache(env, env.modules[i].cache);
-        env.modules[i].cache = nullptr;
-      }
+      DeleteCache(env, env.modules[i], false);
     }
 
     delete env.context;
@@ -2605,7 +2600,7 @@ namespace innative {
     {
       if(!i || !env->modules[i].cache) // Always recompile the 0th module because it stores the main entry point.
       {
-        DeleteCache(*env, env->modules[i].cache);
+        DeleteCache(*env, env->modules[i], true);
         env->modules[i].cache = new code::Context{ *env, env->modules[i], *env->context, 0, builder, machine, code::kh_init_importhash() };
         if((err = CompileModule(env, *env->modules[i].cache)) < 0)
           return err;

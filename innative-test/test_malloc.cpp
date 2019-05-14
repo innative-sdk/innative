@@ -66,9 +66,9 @@ void TestHarness::test_malloc()
   void* powers[MAX_POWER];
   for(uint32_t i = 0; i < MAX_POWER; ++i)
   {
-    powers[i] = wasm_malloc(1 << (i + 4));
+    powers[i] = wasm_malloc((size_t)1 << (i + 4));
 
-    for(int j = 0; j < i; ++j)
+    for(uint32_t j = 0; j < i; ++j)
       TEST(powers[j] != powers[i]);
   }
 
@@ -82,7 +82,7 @@ void TestHarness::test_malloc()
   // Fuzzing
   const int MAXSIZE = 5000;
   const int ITERATIONS = 200000;
-  int total = 0;
+  int64_t total = 0;
   std::map<void*, int> tracker;
 
   for(uint32_t i = 0; i < ITERATIONS; ++i)

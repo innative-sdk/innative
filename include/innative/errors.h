@@ -24,6 +24,7 @@ enum IN_ERROR
   ERR_UNKNOWN_ENVIRONMENT_ERROR,
   ERR_COMMAND_LINE_CONFLICT,
   ERR_UNKNOWN_FLAG,
+  ERR_MISSING_LOADER,
 
   // Fatal errors that prevent properly parsing the module
   ERR_FATAL_INVALID_WASM_SECTION_ORDER = -0xFF,
@@ -45,6 +46,7 @@ enum IN_ERROR
   ERR_FATAL_LINK_ERROR,
   ERR_FATAL_TOO_MANY_LOCALS,
   ERR_FATAL_OUT_OF_MEMORY,
+  ERR_FATAL_RESOURCE_ERROR,
 
   // Validation errors that prevent compiling the module
   ERR_VALIDATION_ERROR = -0xFFF,

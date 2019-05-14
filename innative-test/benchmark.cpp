@@ -6,6 +6,12 @@
 #include <chrono>
 
 Benchmarks::Benchmarks(const IRExports& exports, const char* arg0, int loglevel) : _exports(exports), _arg0(arg0), _loglevel(loglevel) {}
+Benchmarks::~Benchmarks()
+{
+  // Clean up all the files we just produced
+  for(auto f : _garbage)
+    std::remove(f.c_str());
+}
 
 void Benchmarks::Run(FILE* out)
 {
@@ -20,6 +26,8 @@ void Benchmarks::Run(FILE* out)
 
 void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
 {
+  static int counter = 0; // We must gaurantee all file names are unique because windows basically never unloads DLLs properly
+  ++counter;
   Environment* env = (*_exports.CreateEnvironment)(1, 0, _arg0);
   env->flags = flags | ENV_ENABLE_WAT | ENV_LIBRARY;
   env->optimize = optimize;
@@ -36,13 +44,19 @@ void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
     return 0;
 
   (*_exports.FinalizeEnvironment)(env);
-  std::string out = innative::Path(wasm).File().RemoveExtension().Get() + IN_LIBRARY_EXTENSION;
+  std::string base = innative::Path(wasm).File().RemoveExtension().Get() + std::to_string(counter);
+  std::string out = base + IN_LIBRARY_EXTENSION;
 
   err = (*_exports.Compile)(env, out.c_str());
   if(err < 0)
     return 0;
-
-  std::remove((std::string(wasm) + ".pdb").c_str()); // Don't allow visual studio to break itself
+  
+  _garbage.push_back(out);
+#ifdef IN_PLATFORM_WIN32
+  _garbage.push_back(base + ".lib");
+  if(flags & ENV_DEBUG)
+    _garbage.push_back(base + ".pdb");
+#endif
   void* m = (*_exports.LoadAssembly)(out.c_str());
   (*_exports.DestroyEnvironment)(env);
 
