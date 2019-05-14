@@ -71,7 +71,7 @@ namespace innative {
       kh_opnames_t* h = kh_init_opnames();
       int r;
 
-      for(int i = 0; i < OPNAMES.size(); ++i)
+      for(size_t i = 0; i < OPNAMES.size(); ++i)
       {
         if(strcmp(OPNAMES[i], "RESERVED") != 0)
         {

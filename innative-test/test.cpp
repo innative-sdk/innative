@@ -31,13 +31,18 @@ const char testenv[] = "(module $spectest "
 // We use khash instead of unordered_set so we can make it case-insensitive
 KHASH_INIT(match, kh_cstr_t, char, 0, kh_str_hash_funcins, kh_str_hash_insequal);
 
+enum TEST_STAGES
+{
+  TEST_INTERNAL = (1 << 0),
+  TEST_BENCHMARK = (1 << 1),
+  TEST_WASM_CORE = (1 << 2),
+};
+
 int main(int argc, char *argv[])
 {
   innative_set_work_dir_to_bin(!argc ? 0 : argv[0]);
-  IRExports exports;
-  innative_runtime(&exports);
   int log = LOG_WARNING;
-  bool onlyinternal = false;
+  int stages = 0;
 
   std::cout << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
   std::cout << std::endl;
@@ -48,120 +53,130 @@ int main(int argc, char *argv[])
   {
     int r;
     if(!STRICMP(argv[i], "-internal"))
-      onlyinternal = true;
-    if(!STRICMP(argv[i], "-v"))
+      stages |= TEST_INTERNAL;
+    else if(!STRICMP(argv[i], "-benchmark"))
+      stages |= TEST_BENCHMARK;
+    else if(!STRICMP(argv[i], "-core"))
+      stages |= TEST_WASM_CORE;
+    else if(!STRICMP(argv[i], "-v"))
       log = LOG_DEBUG;
     else
       kh_put_match(matchfiles.get(), argv[i], &r);
   }
 
-  if(kh_size(matchfiles) == 0 || onlyinternal)
+  if(!stages) // If no stages were specified, we default to all of them
+  {
+    if(kh_size(matchfiles) == 0)
+      stages = TEST_INTERNAL | TEST_BENCHMARK | TEST_WASM_CORE;
+    else // However, if you specify a specific test to run, we instead default to only running the core tests
+      stages = TEST_WASM_CORE;
+  }
+
+  IRExports exports;
+  innative_runtime(&exports);
+
+  if(stages & TEST_INTERNAL)
   {
     TestHarness harness(stderr);
     harness.Run(stdout);
   }
-  
-  if(onlyinternal)
-    return 0;
 
-  if(kh_size(matchfiles) == 0)
+  if(stages & TEST_BENCHMARK)
   {
     Benchmarks benchmarks(exports, !argc ? 0 : argv[0], log);
     benchmarks.Run(stdout);
   }
 
-  path testdir("../spec/test/core");
-  std::vector<path> testfiles;
-
-  for(auto& p : recursive_directory_iterator(testdir, directory_options::skip_permission_denied))
+  if(stages & TEST_WASM_CORE)
   {
-    if(!STRICMP(p.path().extension().u8string().data(), ".wast"))
-    {
-      if(kh_size(matchfiles) > 0)
-      {
-        khiter_t iter = kh_get_match(matchfiles.get(), p.path().filename().u8string().data());
+    path testdir("../spec/test/core");
+    std::vector<path> testfiles;
 
-        if(!kh_exist2(matchfiles, iter))
-          continue;
-      }
+    for(auto& p : recursive_directory_iterator(testdir, directory_options::skip_permission_denied))
+    {
+      if(!STRICMP(p.path().extension().u8string().data(), ".wast"))
+      {
+        if(kh_size(matchfiles) > 0)
+        {
+          khiter_t iter = kh_get_match(matchfiles.get(), p.path().filename().u8string().data());
+
+          if(!kh_exist2(matchfiles, iter))
+            continue;
+        }
 #ifdef IN_PLATFORM_WIN32 // It is impossible to catch the error this test is supposed to produce on windows
-      else if(!STRICMP(p.path().filename().u8string().data(), "skip-stack-guard-page.wast"))
-        continue;
+        else if(!STRICMP(p.path().filename().u8string().data(), "skip-stack-guard-page.wast"))
+          continue;
 #endif
         testfiles.push_back(p.path());
+      }
     }
-  }
 
-  std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
+    std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
 
-  for(auto file : testfiles)
-  {
-    Environment* env = (*exports.CreateEnvironment)(1, 0, (!argc ? 0 : argv[0]));
-    env->flags = ENV_LIBRARY | ENV_DEBUG | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS;
+    for(auto file : testfiles)
+    {
+      Environment* env = (*exports.CreateEnvironment)(1, 0, (!argc ? 0 : argv[0]));
+      env->flags = ENV_LIBRARY | ENV_DEBUG | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS;
 #ifdef IN_DEBUG
-    env->optimize = ENV_OPTIMIZE_O0;
+      env->optimize = ENV_OPTIMIZE_O0;
 #else
-    env->optimize = ENV_OPTIMIZE_O3;
+      env->optimize = ENV_OPTIMIZE_O3;
 #endif
-    env->features = ENV_FEATURE_ALL;
-    env->log = stdout;
-    env->loglevel = log;
-    env->wasthook = [](void*) { fputc('.', stdout); fflush(stdout); };
+      env->features = ENV_FEATURE_ALL;
+      env->log = stdout;
+      env->loglevel = log;
+      env->wasthook = [](void*) { fputc('.', stdout); fflush(stdout); };
 
-    int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
-    if(err >= 0)
-      err = innative_compile_script(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env, false);
-
-    if(err < 0)
-    {
-      FPRINTF(env->log, "Error injecting test environment, aborting.");
-      return -1; // If the environment injection fails, abort everything
-    }
-
-    FPRINTF(env->log, "%s: .", file.generic_u8string().c_str());
-    fflush(env->log);
-    err = innative_compile_script((const uint8_t*)file.generic_u8string().data(), 0, env, true);
-
-    if(!err && !env->errors)
-      fputs("SUCCESS\n", env->log);
-    else
-    {
-      fputs("FAILED\n", env->log);
+      int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
+      if(err >= 0)
+        err = innative_compile_script(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env, false);
 
       if(err < 0)
       {
-        const char* strerr = innative_error_string(err);
-        if(strerr)
-          FPRINTF(env->log, "Error running script %s: %s\n", file.generic_u8string().c_str(), strerr);
-        else
-          FPRINTF(env->log, "Error running script %s: %i\n", file.generic_u8string().c_str(), err);
+        FPRINTF(env->log, "Error injecting test environment, aborting.");
+        return -1; // If the environment injection fails, abort everything
       }
 
-      while(env->errors != nullptr)
-      {
-        fputs("  ", env->log);
+      FPRINTF(env->log, "%s: .", file.generic_u8string().c_str());
+      fflush(env->log);
+      err = innative_compile_script((const uint8_t*)file.generic_u8string().data(), 0, env, true);
 
-        if(env->errors->m >= 0)
+      if(!err && !env->errors)
+        fputs("SUCCESS\n", env->log);
+      else
+      {
+        fputs("FAILED\n", env->log);
+
+        if(err < 0)
         {
-          fputs(env->modules[env->errors->m].name.str(), env->log);
-          fputs(": ", env->log);
+          const char* strerr = innative_error_string(err);
+          if(strerr)
+            FPRINTF(env->log, "Error running script %s: %s\n", file.generic_u8string().c_str(), strerr);
+          else
+            FPRINTF(env->log, "Error running script %s: %i\n", file.generic_u8string().c_str(), err);
         }
 
-        fputs(env->errors->error, env->log);
+        while(env->errors != nullptr)
+        {
+          fputs("  ", env->log);
+
+          if(env->errors->m >= 0)
+          {
+            fputs(env->modules[env->errors->m].name.str(), env->log);
+            fputs(": ", env->log);
+          }
+
+          fputs(env->errors->error, env->log);
+          fputc('\n', env->log);
+          env->errors = env->errors->next;
+        }
+
         fputc('\n', env->log);
-        env->errors = env->errors->next;
+        fflush(env->log);
       }
-
-      fputc('\n', env->log);
-      fflush(env->log);
+      (*exports.DestroyEnvironment)(env);
     }
-    (*exports.DestroyEnvironment)(env);
   }
-
-  // Test compiling EXE
-  // Test compiling DLL with no entry point, ensure init function is called
-  // Test compiling DLL with entry point that gets called in the init function
-  // Test compiling DLL with entry point that doesn't get called in init function
 
   std::cout << std::endl << "Finished running tests, press enter to exit." << std::endl;
   getchar();

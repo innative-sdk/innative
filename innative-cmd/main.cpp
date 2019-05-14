@@ -27,6 +27,16 @@ inline std::unique_ptr<uint8_t[]> LoadFile(const char* file, long& sz)
   fclose(f);
   return data;
 }
+
+std::string GetProgramPath()
+{
+  std::string programpath;
+  programpath.resize(MAX_PATH);
+  programpath.resize(GetModuleFileNameA(NULL, const_cast<char*>(programpath.data()), (DWORD)programpath.capacity()));
+  programpath.resize(strrchr(programpath.data(), '\\') - programpath.data());
+  return programpath;
+}
+
 #endif
 
 static const std::unordered_map<std::string, unsigned int> flag_map = {
@@ -281,45 +291,74 @@ int main(int argc, char* argv[])
       env->log = stdout;
       return env;
     };
-    exports.AddModule = [](Environment * env, const void* data, uint64_t size, const char* name, int* err) {
+    exports.AddModule = [](Environment* env, const void* data, uint64_t size, const char* name, int* err) {
       if(!size)
       {
         long sz = 0;
         auto file = LoadFile((const char*)data, sz);
         if(!sz)
-          * err = ERR_FATAL_FILE_ERROR;
+          *err = ERR_FATAL_FILE_ERROR;
         else
-          UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_MODULE, name, 0, file.get(), sz);
+          if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_MODULE, name, 0, file.get(), sz))
+            *err = ERR_FATAL_RESOURCE_ERROR;
       }
       else
-        UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_MODULE, name, 0, (void*)data, size);
+        if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_MODULE, name, 0, (void*)data, size))
+          *err = ERR_FATAL_RESOURCE_ERROR;
     };
-    exports.AddWhitelist = [](Environment * env, const char* module_name, const char* export_name) {
-      UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_WHITELIST, module_name, 0, (void*)export_name, strlen(export_name) + 1);
+    exports.AddWhitelist = [](Environment* env, const char* module_name, const char* export_name) {
+      if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_WHITELIST, module_name, 0, (void*)export_name, strlen(export_name) + 1))
+        std::cout << "Failed to add whitelist entry: " << (!module_name ? "" : module_name) << "|" << export_name << std::endl;
     };
-    exports.AddEmbedding = [](Environment * env, int tag, const void* data, uint64_t size)->enum IN_ERROR {
+    exports.AddEmbedding = [](Environment* env, int tag, const void* data, uint64_t size)->enum IN_ERROR {
       char buf[20];
       _itoa_s(tag, buf, 10);
       if(!size)
       {
         long sz = 0;
-        auto file = LoadFile((const char*)data, sz);
+        innative::Path path((const char*)data);
+        FILE* f;
+        FOPEN(f, path.c_str(), "rb");
+        if(!f)
+        {
+          path = innative::Path(!env->sdkpath ? GetProgramPath().c_str() : env->sdkpath) + path;
+        }
+        else
+          fclose(f);
+
+        auto file = LoadFile(path.c_str(), sz);
         if(!sz)
           return ERR_FATAL_FILE_ERROR;
-        else
-          UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, file.get(), sz);
+        if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, file.get(), sz))
+          return ERR_FATAL_RESOURCE_ERROR;
       }
       else
-        UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, (void*)data, size);
+        if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, (void*)data, size))
+          return ERR_FATAL_RESOURCE_ERROR;
       return ERR_SUCCESS;
     };
-    exports.FinalizeEnvironment = [](Environment * env) -> enum IN_ERROR { return ERR_SUCCESS; };
-    exports.Compile = [](Environment * env, const char* file)->enum IN_ERROR { return ERR_SUCCESS; };
-    exports.DestroyEnvironment = [](Environment * env) { EndUpdateResourceA((HANDLE)env->alloc, FALSE); };
+    exports.FinalizeEnvironment = [](Environment* env) -> enum IN_ERROR { 
+      if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_FLAGS, "flags", 0, &env->flags, sizeof(env->flags)))
+        return ERR_FATAL_RESOURCE_ERROR;
+      if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_FLAGS, "optimize", 0, &env->optimize, sizeof(env->optimize)))
+        return ERR_FATAL_RESOURCE_ERROR;
+      if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_FLAGS, "features", 0, &env->features, sizeof(env->features)))
+        return ERR_FATAL_RESOURCE_ERROR;
+      return ERR_SUCCESS; 
+    };
+    exports.Compile = [](Environment* env, const char* file)->enum IN_ERROR { return ERR_SUCCESS; };
+    exports.DestroyEnvironment = [](Environment * env) { if(!EndUpdateResourceA((HANDLE)env->alloc, FALSE)) std::cout << "Failed to end resource update!" << std::endl; };
 
-    std::ifstream src("loader.exe", std::ios::binary);
-    std::ofstream dst(out.c_str(), std::ios::binary);
-    dst << src.rdbuf();
+#ifdef IN_DEBUG
+    std::string exe = "innative-loader_d" IN_EXE_EXTENSION;
+#else
+    std::string exe = "innative-loader" IN_EXE_EXTENSION;
+#endif
+    if(!CopyFileA((innative::Path(GetProgramPath()) + exe).c_str(), out.c_str(), FALSE))
+    {
+      std::cout << "Could not find or copy loader EXE!" << std::endl;
+      return ERR_MISSING_LOADER;
+    }
 #endif
   }
   else
@@ -334,6 +373,11 @@ int main(int argc, char* argv[])
 #ifdef IN_PLATFORM_WIN32
   if(generate)
     env->alloc = (__WASM_ALLOCATOR*)BeginUpdateResourceA(out.c_str(), TRUE);
+  if(!env->alloc)
+  {
+    std::cout << "Failed to begin resource update!" << std::endl;
+    return ERR_MISSING_LOADER;
+  }
 #endif
 
   if(!env)

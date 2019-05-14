@@ -82,7 +82,6 @@ namespace innative {
       llvm::Function* exit;
       llvm::Function* start;
       llvm::Function* memgrow;
-      std::string cache;
     };
   }
 }

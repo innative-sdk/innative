@@ -37,6 +37,11 @@ size_t TestHarness::Run(FILE* out)
     fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], tests[i].first, COLUMNS[1], buf, COLUMNS[2], (results.first == results.second) ? "PASS" : "FAIL");
   }
 
+  // Test compiling EXE
+  // Test compiling DLL with no entry point, ensure init function is called
+  // Test compiling DLL with entry point that gets called in the init function
+  // Test compiling DLL with entry point that doesn't get called in init function
+
   fprintf(out, "\n");
   return failures;
 }

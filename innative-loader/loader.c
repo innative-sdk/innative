@@ -41,7 +41,7 @@ BOOL CALLBACK EnumHandler(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPS
 
 void EnumEnvironmentHandler(struct WinPass* pass, uint8_t* data, DWORD sz, const char* name)
 {
-  (*pass->exports->AddEmbedding)(pass->env, data[0], data + 1, sz - 1);
+  *pass->err = (*pass->exports->AddEmbedding)(pass->env, atoi(name), data, sz);
 }
 
 void EnumModuleHandler(struct WinPass* pass, uint8_t* data, DWORD sz, const char* name)
@@ -52,6 +52,24 @@ void EnumWhitelistHandler(struct WinPass* pass, uint8_t* data, DWORD sz, const c
 {
   *pass->err = 0;
   (*pass->exports->AddWhitelist)(pass->env, name, data);
+}
+void EnumFlagsHandler(struct WinPass* pass, uint8_t* data, DWORD sz, const char* name)
+{
+  if(sz != sizeof(uint64_t))
+    *pass->err = ERR_FATAL_RESOURCE_ERROR;
+  else
+  {
+    uint64_t flags = *(uint64_t*)data;
+
+    if(!STRICMP(name, WIN32_RESOURCE_FLAGS_FLAGS))
+      pass->env->flags = flags;
+    else if(!STRICMP(name, WIN32_RESOURCE_FLAGS_OPTIMIZE))
+      pass->env->optimize = flags;
+    else if(!STRICMP(name, WIN32_RESOURCE_FLAGS_FEATURES))
+      pass->env->features = flags;
+    else
+      *pass->err = ERR_FATAL_RESOURCE_ERROR;
+  }
 }
 
 BOOL CALLBACK EnumEnvironment(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPSTR lpName, __in LONG_PTR lParam)
@@ -65,6 +83,10 @@ BOOL CALLBACK EnumModule(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPST
 BOOL CALLBACK EnumWhitelist(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPSTR lpName, __in LONG_PTR lParam)
 {
   return EnumHandler(hModule, lpType, lpName, lParam, &EnumWhitelistHandler);
+}
+BOOL CALLBACK EnumFlags(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPSTR lpName, __in LONG_PTR lParam)
+{
+  return EnumHandler(hModule, lpType, lpName, lParam, &EnumFlagsHandler);
 }
 
 #elif defined(IN_PLATFORM_POSIX)
@@ -105,18 +127,31 @@ int main(int argc, char** argv)
 
     // Then create the runtime environment with the module count.
     Environment* env = (*exports.CreateEnvironment)(modules, maxthreads, argv[0]);
-    env->flags = ENV_NO_INIT; //ENV_MULTITHREADED;
     if(!env)
     {
       fprintf(stderr, "Unknown error creating environment.\n");
       return -1;
     }
 
-    // Then add each module payload to the environment, checking for any fatal errors.
+    // Set the flag values
 #ifdef IN_PLATFORM_WIN32
     int err = ERR_SUCCESS;
     struct WinPass pass = { &exports, env, &err };
+    if(EnumResourceNamesA(NULL, WIN32_RESOURCE_FLAGS, &EnumFlags, (LONG_PTR)& pass) == FALSE || err < 0)
+    {
+      if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
+      {
+        fprintf(stderr, "Error enumerating flag values: %u - %i\n", GetLastError(), err);
+        return err;
+      }
+    }
+#elif defined(IN_PLATFORM_POSIX)
+#error TODO
+#endif
+    env->flags |= ENV_NO_INIT | ENV_LIBRARY;
 
+    // Then add each module payload to the environment, checking for any fatal errors.
+#ifdef IN_PLATFORM_WIN32
     if(EnumResourceNamesA(NULL, WIN32_RESOURCE_MODULE, &EnumModule, (LONG_PTR)&pass) == FALSE)
     {
       if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
@@ -146,7 +181,6 @@ int main(int argc, char** argv)
         return err;
       }
     }
-
 #elif defined(IN_PLATFORM_POSIX)
 #error TODO
 #endif
@@ -161,16 +195,16 @@ int main(int argc, char** argv)
         return err;
       }
     }
-
 #elif defined(IN_PLATFORM_POSIX)
 #error TODO
 #endif
 
     // Ensure all modules are loaded, in case we have multithreading enabled
-    (*exports.FinalizeEnvironment)(env);
+    err = (*exports.FinalizeEnvironment)(env);
 
     // Attempt to compile. If an error happens, output it and any validation errors to stderr
-    err = (*exports.Compile)(env, "out.cache");
+    if(err >= 0)
+      err = (*exports.Compile)(env, "out.cache");
     if(err < 0)
     {
       fprintf(stderr, "Compile error: %i\n", err);

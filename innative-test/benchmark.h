@@ -31,6 +31,7 @@ class Benchmarks
 
 public:
   Benchmarks(const IRExports& exports, const char* arg0, int loglevel);
+  ~Benchmarks();
   void Run(FILE* out);
   static int64_t fac(int64_t n);
   static int nbody(int n);
@@ -54,7 +55,7 @@ public:
     fprintf(out, "%-*lli ", COLUMNS[3], timing.strict);
     timing.sandbox = MeasureWASM<R, Args...>(wasm, func, ENV_SANDBOX, ENV_OPTIMIZE_O3, std::forward<Args>(args)...);
     fprintf(out, "%-*lli ", COLUMNS[4], timing.sandbox);
-    timing.native = MeasureWASM<R, Args...>(wasm, func, ENV_EMIT_LLVM, ENV_OPTIMIZE_O3, std::forward<Args>(args)...);
+    timing.native = MeasureWASM<R, Args...>(wasm, func, 0, ENV_OPTIMIZE_O3, std::forward<Args>(args)...);
     fprintf(out, "%-*lli ", COLUMNS[5], timing.native);
     fprintf(out, "\n%-*s %-*.2f %-*.2f %-*.2f %-*.2f %-*.2f\n", 
       COLUMNS[0], "", 
@@ -94,6 +95,7 @@ protected:
   const IRExports& _exports;
   const char* _arg0;
   int _loglevel;
+  std::vector<std::string> _garbage;
 };
 
 #endif
