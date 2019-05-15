@@ -24,7 +24,7 @@ innative-clean:
 
 $(LIBDIR)/libinnative.so: $(LIBDIR)/innative-env.a $(LIBDIR)/innative-env_d.a $(INNATIVE_OBJS)
 	$(CXXLD) $(INNATIVE_CPPFLAGS) $(INNATIVE_OBJS) $(INNATIVE_LDFLAGS) -shared -o $@
-    
+
 $(LIBDIR)/innative.a: $(LIBDIR)/innative-env.a $(LIBDIR)/innative-env_d.a $(INNATIVE_OBJS)
 	$(AR) rcs $@ $(INNATIVE_OBJS)
 
