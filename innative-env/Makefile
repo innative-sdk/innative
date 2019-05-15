@@ -14,10 +14,10 @@ INNATIVE_ENV_DEBUG_CPPFLAGS := $(CPPFLAGS) -g3 -fPIC -fno-stack-protector
 
 .PHONY: innative-env innative-env-clean
 
-innative-env: $(LIBDIR)/innative-env.a $(LIBDIR)/innative-env_d.a
+innative-env: $(LIBDIR)/innative-env.a $(LIBDIR)/innative-env-d.a
 
 innative-env-clean:
-	$(RM) $(LIBDIR)/innative-env.a $(LIBDIR)/innative-env_d.a
+	$(RM) $(LIBDIR)/innative-env.a $(LIBDIR)/innative-env-d.a
 	$(RM) -r $(INNATIVE_ENV_DEBUG_OBJDIR)
 	$(RM) -r $(INNATIVE_ENV_OBJDIR)
 
@@ -28,7 +28,7 @@ $(INNATIVE_ENV_OBJDIR)/%.o: innative-env/%.c
 	@mkdir -p $(INNATIVE_ENV_OBJDIR)
 	$(CC) $(INNATIVE_ENV_CPPFLAGS) -MMD -c $< -o $@
 
-$(LIBDIR)/innative-env_d.a: $(INNATIVE_ENV_DEBUG_OBJS)
+$(LIBDIR)/innative-env-d.a: $(INNATIVE_ENV_DEBUG_OBJS)
 	$(AR) rcs $@ $(INNATIVE_ENV_DEBUG_OBJS)
 
 $(INNATIVE_ENV_DEBUG_OBJDIR)/%.o: innative-env/%.c

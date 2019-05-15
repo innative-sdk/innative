@@ -330,20 +330,6 @@ namespace innative {
 #endif
     }
 
-    string StrFormat(const char* fmt, ...)
-    {
-      va_list args;
-      string s;
-      va_start(args, fmt);
-      s.resize(vsnprintf(0, 0, fmt, args) + 1);
-      va_end(args);
-      va_start(args, fmt);
-      s.resize(vsnprintf((char*)s.data(), s.capacity(), fmt, args));
-      va_end(args);
-
-      return s;
-    }
-
 #ifdef IN_PLATFORM_WIN32
     void* LoadDLL(const char* path) { return LoadLibraryA(path); }
     void* LoadDLLFunction(void* dll, const char* name) { return GetProcAddress((HMODULE)dll, name); }

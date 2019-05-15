@@ -350,7 +350,7 @@ int main(int argc, char* argv[])
     exports.DestroyEnvironment = [](Environment * env) { if(!EndUpdateResourceA((HANDLE)env->alloc, FALSE)) std::cout << "Failed to end resource update!" << std::endl; };
 
 #ifdef IN_DEBUG
-    std::string exe = "innative-loader_d" IN_EXE_EXTENSION;
+    std::string exe = "innative-loader-d" IN_EXE_EXTENSION;
 #else
     std::string exe = "innative-loader" IN_EXE_EXTENSION;
 #endif

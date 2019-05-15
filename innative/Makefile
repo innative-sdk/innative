@@ -15,14 +15,18 @@ INNATIVE_LDFLAGS  := $(LDFLAGS) -Wl,-whole-archive $(INNATIVE_ARCHIVES) -Wl,-no-
 
 .PHONY: innative innative-clean
 
-innative: $(LIBDIR)/libinnative.so
+innative: $(LIBDIR)/libinnative.so $(LIBDIR)/innative.a
 
 innative-clean:
 	$(RM) $(LIBDIR)/libinnative.so
+	$(RM) $(LIBDIR)/innative.a
 	$(RM) -r $(INNATIVE_OBJDIR)
 
 $(LIBDIR)/libinnative.so: $(LIBDIR)/innative-env.a $(LIBDIR)/innative-env_d.a $(INNATIVE_OBJS)
 	$(CXXLD) $(INNATIVE_CPPFLAGS) $(INNATIVE_OBJS) $(INNATIVE_LDFLAGS) -shared -o $@
+    
+$(LIBDIR)/innative.a: $(LIBDIR)/innative-env.a $(LIBDIR)/innative-env_d.a $(INNATIVE_OBJS)
+	$(AR) rcs $@ $(INNATIVE_OBJS)
 
 $(INNATIVE_OBJDIR)/%.o: innative/%.cpp
 	@mkdir -p $(INNATIVE_OBJDIR)

@@ -68,7 +68,7 @@ namespace innative {
         return r;
       }
 
-      uint64_t DecodeLEB128(IN_ERROR& err, unsigned int maxbits, bool sign);
+      IN_COMPILER_DLLEXPORT uint64_t DecodeLEB128(IN_ERROR& err, unsigned int maxbits, bool sign);
       IN_FORCEINLINE varuint1 ReadVarUInt1(IN_ERROR& err) { return DecodeLEB128(err, 1, false) != 0; }
       IN_FORCEINLINE varuint7 ReadVarUInt7(IN_ERROR& err) { return static_cast<varuint7>(DecodeLEB128(err, 7, false)); }
       IN_FORCEINLINE varuint32 ReadVarUInt32(IN_ERROR& err) { return static_cast<varuint32>(DecodeLEB128(err, 32, false)); }

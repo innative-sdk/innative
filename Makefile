@@ -41,6 +41,25 @@ install: all
 	cp include/innative/*.h $(DESTDIR)$(PREFIX)/include/innative/
 	cp $(LIBDIR)/libinnative.so $(DESTDIR)$(PREFIX)/lib/libinnative.so
 
+dist: all
+	mkdir -p innative-posix-redist-x64/
+	cp bin/innative.a innative-posix-redist-x64/
+	cp bin/innative.so innative-posix-redist-x64/
+	cp bin/innative-env.a innative-posix-redist-x64/
+	cp bin/innative-env-d.a innative-posix-redist-x64/
+	cp bin/innative-cmd innative-posix-redist-x64/
+	tar -czf innative-posix-redist-x64.tar.gz innative-posix-redist-x64/
+	mkdir -p innative-posix-sdk-x64/bin/
+	mkdir -p innative-posix-sdk-x64/include/
+	mkdir -p innative-posix-sdk-x64/scripts/
+	mkdir -p innative-posix-sdk-x64/spec/test/core/
+  mv innative-posix-redist-x64/ innative-posix-sdk-x64/bin/
+	cp bin/innative-test innative-posix-sdk-x64/bin/
+  cp include/ innative-posix-sdk-x64/include/
+  cp scripts/*.wat innative-posix-sdk-x64/scripts/
+  cp scripts/*.wasm innative-posix-sdk-x64/scripts/
+  cp spec/test/core/ innative-posix-sdk-x64/spec/test/core/
+  
 uninstall:
 	$(RM) -r $(DESTDIR)$(PREFIX)/include/innative
 	$(RM) $(DESTDIR)$(PREFIX)/lib/libinnative.so

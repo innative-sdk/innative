@@ -18,8 +18,8 @@ innative-test-clean:
 	$(RM) $(BINDIR)/innative-test
 	$(RM) -r $(INNATIVE_TEST_OBJDIR)
 
-$(BINDIR)/innative-test: $(LIBDIR)/libinnative.so $(LIBDIR)/innative-env_d.a $(INNATIVE_TEST_OBJS) $(INNATIVE_TEST_OBJDIR)/wasm_malloc.o
-	$(CXXLD) $(INNATIVE_TEST_CPPFLAGS) $(INNATIVE_TEST_OBJS) $(INNATIVE_TEST_OBJDIR)/wasm_malloc.o $(LIBDIR)/innative-env_d.a $(INNATIVE_TEST_LDFLAGS) -o $@
+$(BINDIR)/innative-test: $(LIBDIR)/libinnative.so $(LIBDIR)/innative-env-d.a $(INNATIVE_TEST_OBJS) $(INNATIVE_TEST_OBJDIR)/wasm_malloc.o
+	$(CXXLD) $(INNATIVE_TEST_CPPFLAGS) $(INNATIVE_TEST_OBJS) $(INNATIVE_TEST_OBJDIR)/wasm_malloc.o $(LIBDIR)/innative-env-d.a $(INNATIVE_TEST_LDFLAGS) -o $@
 
 $(INNATIVE_TEST_OBJDIR)/%.o: innative-test/%.cpp
 	@mkdir -p $(INNATIVE_TEST_OBJDIR)
