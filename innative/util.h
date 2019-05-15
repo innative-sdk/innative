@@ -19,7 +19,7 @@
 struct __WASM_ALLOCATOR
 {
   __WASM_ALLOCATOR() : mem(0), sz(0), cur(0), commit(0) {}
-  ~__WASM_ALLOCATOR();
+  IN_COMPILER_DLLEXPORT ~__WASM_ALLOCATOR();
 
   std::atomic<void*> mem;
   std::atomic_size_t sz;
@@ -27,7 +27,7 @@ struct __WASM_ALLOCATOR
   std::atomic_size_t commit;
   std::vector<std::pair<void*, size_t>> list;
 
-  void* allocate(size_t n);
+  IN_COMPILER_DLLEXPORT void* allocate(size_t n);
 };
 
 extern "C" int64_t GetRSPValue();
@@ -214,8 +214,7 @@ namespace innative {
     Path GetWorkingDir();
     bool SetWorkingDir(const char* path);
     Path GetAbsolutePath(const char* path);
-    std::string StrFormat(const char* fmt, ...);
-    void GetCPUInfo(uintcpuinfo& info, int flags);
+    IN_COMPILER_DLLEXPORT void GetCPUInfo(uintcpuinfo& info, int flags);
     void* LoadDLL(const char* path);
     void* LoadDLLFunction(void* dll, const char* name);
     void FreeDLL(void* dll);

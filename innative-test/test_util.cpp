@@ -118,7 +118,6 @@ void TestHarness::test_util()
     TEST(ModuleHasSection(m, 1));
   }
 
-  TEST(StrFormat("%i", 3) == "3");
   uintcpuinfo info = { 0 };
   GetCPUInfo(info, 0);
   TEST(info[4] != 0);
