@@ -87,6 +87,9 @@ void usage()
     "  -e <MODULE> : Sets the environment/system module name. Any functions with the module name will have the module name stripped when linking with C functions.\n"
     "  -s [<FILE>] : Serializes all modules to .wat files. <FILE> can specify the output if only one module is present.\n"
     "  -w <[MODULE:]FUNCTION> : whitelists a given C import, does name-mangling if the module is specified.\n"
+#ifdef IN_PLATFORM_WIN32
+    "  -g : Instead of compiling immediately, creates a loader embedded with all the modules, environments, and settings, which compiles the modules on-demand when run."
+#endif
     "  -c : Assumes the input files are actually LLVM IR files and compiles them into a single webassembly module.\n"
     "  -i : Installs this innative SDK to the host operating system.\n"
     "  -u : Uninstalls and deregisters this SDK from the host operating system.\n"
@@ -198,9 +201,11 @@ int main(int argc, char* argv[])
         case 's': // serialize
           serialize = (i + 1 < argc && argv[i + 1][0] != '-') ? argv[++i] : "";
           break;
+#ifdef IN_PLATFORM_WIN32
         case 'g': // generate loader
           generate = true;
           break;
+#endif
         case 'v': // verbose logging
           verbose = true;
           break;
