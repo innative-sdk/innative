@@ -72,6 +72,15 @@ int main(int argc, char *argv[])
       stages = TEST_WASM_CORE;
   }
 
+#ifdef IN_DYNAMIC_LINK
+  if(stages & TEST_WASM_CORE)
+  {
+    stages &= (~TEST_WASM_CORE);
+    std::cout << "Skipping webassembly tests because this EXE is dynamically linked to the runtime DLL!" << std::endl;
+    std::cout << "Signal capture and error recovery only works properly when statically linked.\n" << std::endl;
+  }
+#endif
+
   IRExports exports;
   innative_runtime(&exports);
 
@@ -111,7 +120,7 @@ int main(int argc, char *argv[])
       }
     }
 
-    std::cout << "Running through " << testfiles.size() << " official webassembly spec tests." << std::endl;
+    std::cout << "\nRunning through " << testfiles.size() << " official webassembly spec tests." << std::endl;
 
     for(auto file : testfiles)
     {
