@@ -130,7 +130,7 @@ int main(int argc, char* argv[])
   const char* system = nullptr;
   bool run = false;
   bool generate = false;
-  bool verbose = true;
+  bool verbose = false;
   bool reverse = false;
   int err = ERR_SUCCESS;
 
@@ -255,7 +255,7 @@ int main(int argc, char* argv[])
     return err;
   }
 
-  if(!inputs.size())
+  if(!inputs.size() && !wast.size())
   {
     std::cout << "No input files specified!" << std::endl;
     usage();
@@ -264,7 +264,7 @@ int main(int argc, char* argv[])
 
   if(out.empty()) // If no out is specified, default to name of first input file
   {
-    out = innative::Path(inputs[0]).RemoveExtension().Get();
+    out = innative::Path(!inputs.size() ? wast[0] : inputs[0]).RemoveExtension().Get();
     if(reverse)
       out += ".wasm";
     else if(flags & ENV_LIBRARY)
@@ -493,26 +493,32 @@ int main(int argc, char* argv[])
   (*exports.DestroyEnvironment)(env);
 
   // Automatically run the assembly, but only if there were no wast scripts (which are always executed)
-  if(run && !wast.size())
+  if(!wast.size())
   {
-    void* assembly = (*exports.LoadAssembly)(out.c_str());
-    if(!assembly)
-      return ERR_FATAL_FILE_ERROR;
-    IN_Entrypoint start = (*exports.LoadFunction)(assembly, 0, IN_INIT_FUNCTION);
-    IN_Entrypoint exit = (*exports.LoadFunction)(assembly, 0, IN_EXIT_FUNCTION);
-    if(!start)
+    if(run)
     {
+      void* assembly = (*exports.LoadAssembly)(out.c_str());
+      if(!assembly)
+        return ERR_FATAL_FILE_ERROR;
+      IN_Entrypoint start = (*exports.LoadFunction)(assembly, 0, IN_INIT_FUNCTION);
+      IN_Entrypoint exit = (*exports.LoadFunction)(assembly, 0, IN_EXIT_FUNCTION);
+      if(!start)
+      {
+        (*exports.FreeAssembly)(assembly);
+        return ERR_INVALID_START_FUNCTION;
+      }
+
+      (*start)();
+      if(exit)
+        (*exit)();
+
       (*exports.FreeAssembly)(assembly);
-      return ERR_INVALID_START_FUNCTION;
+      return ERR_SUCCESS;
     }
-
-    (*start)();
-    if(exit)
-      (*exit)();
-
-    (*exports.FreeAssembly)(assembly);
-    return ERR_SUCCESS;
+    else
+      std::cout << "Successfully built " << out << std::endl;
   }
+
 
   return err;
 }
