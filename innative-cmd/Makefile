@@ -3,7 +3,7 @@ INNATIVE_CMD_FILES    := $(notdir $(wildcard $(INNATIVE_CMD_SRC)/*.cpp))
 
 INNATIVE_CMD_OBJDIR   := $(OBJDIR)/innative-cmd
 INNATIVE_CMD_OBJS     := $(foreach rule,$(INNATIVE_CMD_FILES:.cpp=.o),$(INNATIVE_CMD_OBJDIR)/$(rule))
-INNATIVE_CMD_CPPFLAGS := $(CPPFLAGS) -std=c++14 -pthread -msse2 -mcx16 -DLIBICONV_PLUG -Wno-reorder -Wno-class-memaccess
+INNATIVE_CMD_CPPFLAGS := $(CPPFLAGS) -std=c++14 -pthread -msse -msse2 -msse3 -mmmx -m3dnow -mcx16 -DLIBICONV_PLUG -Wno-reorder -Wno-class-memaccess
 INNATIVE_CMD_LIBS     := -linnative -lrt -lpthread
 INNATIVE_CMD_LDFLAGS  := $(LDFLAGS) $(INNATIVE_CMD_LIBS) -Wl,-rpath -Wl,. # try to use rpath to pick up library in binary directory
 
