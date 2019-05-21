@@ -23,6 +23,8 @@
 
 namespace innative {
   namespace code {
+    struct Intrinsic;
+
     struct BlockResult
     {
       llvm::Value* v;
@@ -46,6 +48,7 @@ namespace innative {
       llvm::Function* internal;
       llvm::Function* exported;
       llvm::Function* imported;
+      Intrinsic* intrinsic;
       llvm::AllocaInst* memlocal;
     };
 

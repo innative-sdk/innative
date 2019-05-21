@@ -222,4 +222,5 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned 
     }
     _innative_internal_write_out(buf, j * 2);
   }
+  _innative_internal_write_out("\n", 1);
 }

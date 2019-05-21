@@ -313,7 +313,7 @@ void innative::ValidateMemory(const MemoryDesc& mem, Environment& env, Module* m
     AppendError(env, env.errors, m, ERR_MEMORY_MAXIMUM_TOO_LARGE, "Memory maximum cannot exceed 65536");
 }
 
-void innative::ValidateBlockSignature(varsint7 sig, Environment& env, Module* m)
+void innative::ValidateBlockSignature(const Instruction& ins, varsint7 sig, Environment& env, Module* m)
 {
   char buf[10];
   switch(sig)
@@ -325,15 +325,15 @@ void innative::ValidateBlockSignature(varsint7 sig, Environment& env, Module* m)
   case TE_void:
     break;
   default:
-    AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "%s is not a valid block signature type.", EnumToString(TYPE_ENCODING_MAP, sig, buf, 10));
+    AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "[%u] %s is not a valid block signature type.", ins.line, EnumToString(TYPE_ENCODING_MAP, sig, buf, 10));
   }
 }
 
 namespace innative {
-  varsint7 ValidatePopType(Stack<varsint7>& values, varsint7 type, Environment& env, Module* m)
+  varsint7 ValidatePopType(const Instruction& ins, Stack<varsint7>& values, varsint7 type, Environment& env, Module* m)
   {
     if(values.Size() < 1)
-      AppendError(env, env.errors, m, ERR_EMPTY_VALUE_STACK, "Expected a value on the stack, but stack was empty.");
+      AppendError(env, env.errors, m, ERR_EMPTY_VALUE_STACK, "[%u] Expected a value on the stack, but stack was empty.", ins.line);
     else if(values.Peek() != TE_POLY)
     {
       varsint7 t = values.Pop();
@@ -343,7 +343,7 @@ namespace innative {
           return t;
         char buf[10];
         char buf2[10];
-        AppendError(env, env.errors, m, ERR_INVALID_TYPE, "Expected %s on the stack, but found %s.", EnumToString(TYPE_ENCODING_MAP, type, buf, 10), EnumToString(TYPE_ENCODING_MAP, t, buf2, 10));
+        AppendError(env, env.errors, m, ERR_INVALID_TYPE, "[%u] Expected %s on the stack, but found %s.", ins.line, EnumToString(TYPE_ENCODING_MAP, type, buf, 10), EnumToString(TYPE_ENCODING_MAP, t, buf2, 10));
       }
       return t;
     }
@@ -352,7 +352,7 @@ namespace innative {
     return 0;
   }
 
-  void ValidateBranchSignature(varsint7 sig, Stack<varsint7>& values, Environment& env, Module* m)
+  void ValidateBranchSignature(const Instruction& ins, varsint7 sig, Stack<varsint7>& values, Environment& env, Module* m)
   {
     char buf[10];
     if(sig != TE_void)
@@ -363,29 +363,29 @@ namespace innative {
         //if(values.Size() > 2 || (values.Size() == 2 && values.Peek() != TE_POLY)) // TE_POLY can count as 0
         //  AppendError(env, env.errors, m, ERR_INVALID_TYPE, "block signature expected one value, but value stack had %zu!", values.Size());
         if(values.Peek() != TE_POLY && values.Peek() != sig)
-          AppendError(env, env.errors, m, ERR_INVALID_TYPE, "block signature expected %s, but value stack had %s instead!", EnumToString(TYPE_ENCODING_MAP, sig, buf, 10), EnumToString(TYPE_ENCODING_MAP, values.Peek(), buf2, 10));
+          AppendError(env, env.errors, m, ERR_INVALID_TYPE, "[%u] block signature expected %s, but value stack had %s instead!", ins.line, EnumToString(TYPE_ENCODING_MAP, sig, buf, 10), EnumToString(TYPE_ENCODING_MAP, values.Peek(), buf2, 10));
         if(values.Peek() == TE_POLY) // If this is a polymorphic type, it now HAS to evaluate to this branch's type regardless of which branch is chosen.
           values.Push(sig);
       }
       else
-        AppendError(env, env.errors, m, ERR_EMPTY_VALUE_STACK, "block signature expected %s, but value stack was empty!", EnumToString(TYPE_ENCODING_MAP, sig, buf, 10));
+        AppendError(env, env.errors, m, ERR_EMPTY_VALUE_STACK, "[%u] block signature expected %s, but value stack was empty!", ins.line, EnumToString(TYPE_ENCODING_MAP, sig, buf, 10));
     }
   }
 
-  void ValidateSignature(varsint7 sig, Stack<varsint7> & values, Environment & env, Module * m)
+  void ValidateSignature(const Instruction& ins, varsint7 sig, Stack<varsint7> & values, Environment & env, Module * m)
   {
     if(sig != TE_void)
-      ValidateBranchSignature(sig, values, env, m);
+      ValidateBranchSignature(ins, sig, values, env, m);
     else if(values.Size() > 1 || (values.Size() == 1 && values.Peek() != TE_POLY)) // TE_POLY can count as 0
-      AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK, "block signature was void, but stack wasn't empty!");
+      AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK, "[%u] block signature was void, but stack wasn't empty!", ins.line);
   }
 
-  void ValidateBranch(varuint32 depth, Stack<varsint7> & values, Stack<internal::ControlBlock> & control, Environment & env, Module * m)
+  void ValidateBranch(const Instruction& ins, varuint32 depth, Stack<varsint7> & values, Stack<internal::ControlBlock> & control, Environment & env, Module * m)
   {
     if(depth >= control.Size())
-      AppendError(env, env.errors, m, ERR_INVALID_BRANCH_DEPTH, "Invalid branch depth: %u exceeds %zu", depth, control.Size());
+      AppendError(env, env.errors, m, ERR_INVALID_BRANCH_DEPTH, "[%u] Invalid branch depth: %u exceeds %zu", depth, control.Size(), ins.line);
     else if(control[depth].type != OP_loop) // A branch to a loop always has a signature of TE_void
-      ValidateBranchSignature(control[depth].sig, values, env, m);
+      ValidateBranchSignature(ins, control[depth].sig, values, env, m);
   }
 
   // Pops every single value off of the stack (the function assumes the types were already validated) and then pushes a TE_POLY type.
@@ -398,11 +398,11 @@ namespace innative {
 
   IN_FORCEINLINE varsint7 GetBlockSig(const internal::ControlBlock & block) { return block.type == OP_loop ? TE_void : block.sig; }
 
-  void ValidateBranchTable(varuint32 n_table, varuint32 * table, varuint32 def, Stack<varsint7> & values, Stack<internal::ControlBlock> & control, Environment & env, Module * m)
+  void ValidateBranchTable(const Instruction& ins, varuint32 n_table, varuint32 * table, varuint32 def, Stack<varsint7> & values, Stack<internal::ControlBlock> & control, Environment & env, Module * m)
   {
-    ValidateBranch(def, values, control, env, m);
+    ValidateBranch(ins, def, values, control, env, m);
     for(uint64_t i = 0; i < n_table; ++i)
-      ValidateBranch(table[i], values, control, env, m);
+      ValidateBranch(ins, table[i], values, control, env, m);
 
     // Ensure all block label targets have the exact same signature as the default label
     if(def < control.Size())
@@ -413,79 +413,79 @@ namespace innative {
         char buf[10];
         char buf2[10];
         if(table[i] < control.Size() && GetBlockSig(control[table[i]]) != type)
-          AppendError(env, env.errors, m, ERR_INVALID_TYPE, "Branch table target has type signature %s, but default branch has %s", EnumToString(TYPE_ENCODING_MAP, control[table[i]].sig, buf, 10), EnumToString(TYPE_ENCODING_MAP, control[def].sig, buf2, 10));
+          AppendError(env, env.errors, m, ERR_INVALID_TYPE, "[%u] Branch table target has type signature %s, but default branch has %s", ins.line, EnumToString(TYPE_ENCODING_MAP, control[table[i]].sig, buf, 10), EnumToString(TYPE_ENCODING_MAP, control[def].sig, buf2, 10));
       }
     }
   }
 
   template<typename T, WASM_TYPE_ENCODING PUSH>
-  void ValidateLoad(varuint32 align, Stack<varsint7> & values, Environment & env, Module * m)
+  void ValidateLoad(const Instruction& ins, varuint32 align, Stack<varsint7> & values, Environment & env, Module * m)
   {
     if(!ModuleMemory(*m, 0))
-      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
+      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
     if((1ULL << align) > sizeof(T))
-      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT, "Alignment of %u exceeds number of accessed bytes %i", (1 << align), sizeof(T));
-    ValidatePopType(values, TE_i32, env, m);
+      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT, "[%u] Alignment of %u exceeds number of accessed bytes %i", ins.line, (1 << align), sizeof(T));
+    ValidatePopType(ins, values, TE_i32, env, m);
     values.Push(PUSH);
   }
 
   template<typename T, WASM_TYPE_ENCODING POP>
-  void ValidateStore(varuint32 align, Stack<varsint7> & values, Environment & env, Module * m)
+  void ValidateStore(const Instruction& ins, varuint32 align, Stack<varsint7> & values, Environment & env, Module * m)
   {
     if(!ModuleMemory(*m, 0))
-      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
+      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
     if((1ULL << align) > sizeof(T))
-      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT, "Alignment of %u exceeds number of accessed bytes %i", (1 << align), sizeof(T));
-    ValidatePopType(values, POP, env, m);
-    ValidatePopType(values, TE_i32, env, m);
+      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT, "[%u] Alignment of %u exceeds number of accessed bytes %i", ins.line, (1 << align), sizeof(T));
+    ValidatePopType(ins, values, POP, env, m);
+    ValidatePopType(ins, values, TE_i32, env, m);
   }
 
   template<WASM_TYPE_ENCODING ARG1, WASM_TYPE_ENCODING RESULT>
-  void ValidateUnaryOp(Stack<varsint7> & values, Environment & env, Module * m)
+  void ValidateUnaryOp(const Instruction& ins, Stack<varsint7> & values, Environment & env, Module * m)
   {
-    ValidatePopType(values, ARG1, env, m);
+    ValidatePopType(ins, values, ARG1, env, m);
     values.Push(RESULT);
   }
 
   template<WASM_TYPE_ENCODING ARG1, WASM_TYPE_ENCODING ARG2, WASM_TYPE_ENCODING RESULT>
-  void ValidateBinaryOp(Stack<varsint7> & values, Environment & env, Module * m)
+  void ValidateBinaryOp(const Instruction& ins, Stack<varsint7> & values, Environment & env, Module * m)
   {
-    ValidatePopType(values, ARG2, env, m);
-    ValidatePopType(values, ARG1, env, m);
+    ValidatePopType(ins, values, ARG2, env, m);
+    ValidatePopType(ins, values, ARG1, env, m);
     values.Push(RESULT);
   }
 
-  void ValidateFunctionSig(Stack<varsint7> & values, FunctionType & sig, Environment & env, Module * m)
+  void ValidateFunctionSig(const Instruction& ins, Stack<varsint7> & values, FunctionType & sig, Environment & env, Module * m)
   {
     for(uint64_t i = sig.n_params; i-- > 0;) // Pop in reverse order
-      ValidatePopType(values, sig.params[i], env, m);
+      ValidatePopType(ins, values, sig.params[i], env, m);
 
     if(sig.n_returns > 1)
-      AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_SIG, "Cannot return more than one value yet, tried to return %i.", sig.n_returns);
+      AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_SIG, "[%u] Cannot return more than one value yet, tried to return %i.", ins.line, sig.n_returns);
 
     for(uint64_t i = 0; i < sig.n_returns; ++i)
       values.Push(sig.returns[i]);
   }
 
-  void ValidateIndirectCall(Stack<varsint7> & values, varuint32 sig, Environment & env, Module * m)
+  void ValidateIndirectCall(const Instruction& ins, Stack<varsint7> & values, varuint32 sig, Environment & env, Module * m)
   {
     if(!ModuleTable(*m, 0))
-      AppendError(env, env.errors, m, ERR_INVALID_TABLE_INDEX, "0 is not a valid table index because there are 0 tables.");
+      AppendError(env, env.errors, m, ERR_INVALID_TABLE_INDEX, "[%u] 0 is not a valid table index because there are 0 tables.", ins.line);
 
-    ValidatePopType(values, TE_i32, env, m); // Pop callee
+    ValidatePopType(ins, values, TE_i32, env, m); // Pop callee
     if(sig < m->type.n_functions)
-      ValidateFunctionSig(values, m->type.functions[sig], env, m);
+      ValidateFunctionSig(ins, values, m->type.functions[sig], env, m);
     else
-      AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "signature index was %u, which is an invalid function signature index.", sig);
+      AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "[%u] signature index was %u, which is an invalid function signature index.", ins.line, sig);
   }
 
-  void ValidateCall(Stack<varsint7> & values, varuint32 callee, Environment & env, Module * m)
+  void ValidateCall(const Instruction& ins, Stack<varsint7> & values, varuint32 callee, Environment & env, Module * m)
   {
     FunctionType* sig = ModuleFunction(*m, callee);
     if(sig)
-      ValidateFunctionSig(values, *sig, env, m);
+      ValidateFunctionSig(ins, values, *sig, env, m);
     else
-      AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "callee was %u, which is an invalid function index.", callee);
+      AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "[%u] callee was %u, which is an invalid function index.", ins.line, callee);
   }
 
   void ValidateInstruction(const Instruction & ins, Stack<varsint7> & values, Stack<internal::ControlBlock> & control, varuint32 n_locals, varsint7 * locals, Environment & env, Module * m)
@@ -497,59 +497,59 @@ namespace innative {
     case OP_nop:
       break;
     case OP_if:
-      ValidatePopType(values, TE_i32, env, m);
+      ValidatePopType(ins, values, TE_i32, env, m);
     case OP_block:
     case OP_loop:
-      ValidateBlockSignature(ins.immediates[0]._varsint7, env, m);
+      ValidateBlockSignature(ins, ins.immediates[0]._varsint7, env, m);
       break;
     case OP_else:
     case OP_end:
       break;
     case OP_br:
-      ValidateBranch(ins.immediates[0]._varuint32, values, control, env, m);
+      ValidateBranch(ins, ins.immediates[0]._varuint32, values, control, env, m);
       PolymorphStack(values);
       break;
     case OP_br_if:
-      ValidatePopType(values, TE_i32, env, m);
-      ValidateBranch(ins.immediates[0]._varuint32, values, control, env, m);
+      ValidatePopType(ins, values, TE_i32, env, m);
+      ValidateBranch(ins, ins.immediates[0]._varuint32, values, control, env, m);
       break;
     case OP_br_table:
-      ValidatePopType(values, TE_i32, env, m);
-      ValidateBranchTable(ins.immediates[0].n_table, ins.immediates[0].table, ins.immediates[1]._varuint32, values, control, env, m);
+      ValidatePopType(ins, values, TE_i32, env, m);
+      ValidateBranchTable(ins, ins.immediates[0].n_table, ins.immediates[0].table, ins.immediates[1]._varuint32, values, control, env, m);
       PolymorphStack(values);
       break;
     case OP_return:
     {
       size_t cache = control.Limit();
       control.SetLimit(0); // A return statement is an unconditional branch to the end of the function, so we have to validate that branch
-      ValidateBranch(control.Size() - 1, values, control, env, m);
+      ValidateBranch(ins, control.Size() - 1, values, control, env, m);
       control.SetLimit(cache);
 
       if(control.Size() > 0)
-        ValidateBranchSignature(control[0].sig, values, env, m);
+        ValidateBranchSignature(ins, control[0].sig, values, env, m);
       else
-        AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Empty control stack at return statement.");
+        AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "[%u] Empty control stack at return statement.", ins.line);
       PolymorphStack(values);
       break;
     }
 
     // Call operators
     case OP_call:
-      ValidateCall(values, ins.immediates[0]._varuint32, env, m);
+      ValidateCall(ins, values, ins.immediates[0]._varuint32, env, m);
       break;
     case OP_call_indirect:
-      ValidateIndirectCall(values, ins.immediates[0]._varuint32, env, m);
+      ValidateIndirectCall(ins, values, ins.immediates[0]._varuint32, env, m);
       break;
 
       // Parametric operators
     case OP_drop:
-      ValidatePopType(values, 0, env, m);
+      ValidatePopType(ins, values, 0, env, m);
       break;
     case OP_select:
     {
-      ValidatePopType(values, TE_i32, env, m);
-      varsint7 type = ValidatePopType(values, 0, env, m); // Pop the first value and get it's type
-      ValidatePopType(values, type, env, m); // Verify the second value has the same type
+      ValidatePopType(ins, values, TE_i32, env, m);
+      varsint7 type = ValidatePopType(ins, values, 0, env, m); // Pop the first value and get it's type
+      ValidatePopType(ins, values, type, env, m); // Verify the second value has the same type
       values.Push(type); // Push the type
     }
     break;
@@ -557,28 +557,28 @@ namespace innative {
     // Variable access
     case OP_local_get:
       if(ins.immediates[0]._varuint32 >= n_locals)
-        AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for get_local.");
+        AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "[%u] Invalid local index for get_local.", ins.line);
       else
         values.Push(locals[ins.immediates[0]._varuint32]);
       break;
     case OP_local_set:
       if(ins.immediates[0]._varuint32 >= n_locals)
       {
-        AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
-        ValidatePopType(values, 0, env, m);
+        AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "[%u] Invalid local index for set_local.", ins.line);
+        ValidatePopType(ins, values, 0, env, m);
       }
       else
-        ValidatePopType(values, locals[ins.immediates[0]._varuint32], env, m);
+        ValidatePopType(ins, values, locals[ins.immediates[0]._varuint32], env, m);
       break;
     case OP_local_tee:
       if(ins.immediates[0]._varuint32 >= n_locals)
       {
-        AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid local index for set_local.");
-        ValidatePopType(values, 0, env, m);
+        AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "[%u] Invalid local index for set_local.", ins.line);
+        ValidatePopType(ins, values, 0, env, m);
       }
       else
       {
-        ValidatePopType(values, locals[ins.immediates[0]._varuint32], env, m);
+        ValidatePopType(ins, values, locals[ins.immediates[0]._varuint32], env, m);
         values.Push(locals[ins.immediates[0]._varuint32]);
       }
       break;
@@ -586,7 +586,7 @@ namespace innative {
     {
       GlobalDesc* desc = ModuleGlobal(*m, ins.immediates[0]._varuint32);
       if(!desc)
-        AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index for get_global.");
+        AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "[%u] Invalid global index for get_global.", ins.line);
       else
         values.Push(desc->type);
     }
@@ -596,56 +596,56 @@ namespace innative {
       GlobalDesc* desc = ModuleGlobal(*m, ins.immediates[0]._varuint32);
       if(!desc)
       {
-        AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index for set_global.");
-        ValidatePopType(values, 0, env, m);
+        AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "[%u] Invalid global index for set_global.", ins.line);
+        ValidatePopType(ins, values, 0, env, m);
       }
       else if(!desc->mutability)
       {
-        AppendError(env, env.errors, m, ERR_IMMUTABLE_GLOBAL, "Cannot call set_global on an immutable global.");
-        ValidatePopType(values, 0, env, m);
+        AppendError(env, env.errors, m, ERR_IMMUTABLE_GLOBAL, "[%u] Cannot call set_global on an immutable global.", ins.line);
+        ValidatePopType(ins, values, 0, env, m);
       }
       else
-        ValidatePopType(values, desc->type, env, m);
+        ValidatePopType(ins, values, desc->type, env, m);
     }
     break;
 
     // Memory-related operators
-    case OP_i32_load: ValidateLoad<int32_t, TE_i32>(ins.immediates[0]._varuint32, values, env, m); break;
-    case OP_i64_load: ValidateLoad<int64_t, TE_i64>(ins.immediates[0]._varuint32, values, env, m); break;
-    case OP_f32_load: ValidateLoad<float, TE_f32>(ins.immediates[0]._varuint32, values, env, m); break;
-    case OP_f64_load: ValidateLoad<double, TE_f64>(ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i32_load: ValidateLoad<int32_t, TE_i32>(ins, ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i64_load: ValidateLoad<int64_t, TE_i64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_f32_load: ValidateLoad<float, TE_f32>(ins, ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_f64_load: ValidateLoad<double, TE_f64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
     case OP_i32_load8_s:
-    case OP_i32_load8_u: ValidateLoad<int8_t, TE_i32>(ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i32_load8_u: ValidateLoad<int8_t, TE_i32>(ins, ins.immediates[0]._varuint32, values, env, m); break;
     case OP_i32_load16_s:
-    case OP_i32_load16_u: ValidateLoad<int16_t, TE_i32>(ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i32_load16_u: ValidateLoad<int16_t, TE_i32>(ins, ins.immediates[0]._varuint32, values, env, m); break;
     case OP_i64_load8_s:
-    case OP_i64_load8_u: ValidateLoad<int8_t, TE_i64>(ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i64_load8_u: ValidateLoad<int8_t, TE_i64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
     case OP_i64_load16_s:
-    case OP_i64_load16_u: ValidateLoad<int16_t, TE_i64>(ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i64_load16_u: ValidateLoad<int16_t, TE_i64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
     case OP_i64_load32_s:
-    case OP_i64_load32_u: ValidateLoad<int32_t, TE_i64>(ins.immediates[0]._varuint32, values, env, m); break;
-    case OP_i32_store: ValidateStore<int32_t, TE_i32>(ins.immediates[0]._varuint32, values, env, m); break;
-    case OP_i64_store: ValidateStore<int64_t, TE_i64>(ins.immediates[0]._varuint32, values, env, m); break;
-    case OP_f32_store: ValidateStore<float, TE_f32>(ins.immediates[0]._varuint32, values, env, m); break;
-    case OP_f64_store: ValidateStore<double, TE_f64>(ins.immediates[0]._varuint32, values, env, m); break;
-    case OP_i32_store8: ValidateStore<int8_t, TE_i32>(ins.immediates[0]._varuint32, values, env, m); break;
-    case OP_i32_store16: ValidateStore<int16_t, TE_i32>(ins.immediates[0]._varuint32, values, env, m); break;
-    case OP_i64_store8: ValidateStore<int8_t, TE_i64>(ins.immediates[0]._varuint32, values, env, m); break;
-    case OP_i64_store16: ValidateStore<int16_t, TE_i64>(ins.immediates[0]._varuint32, values, env, m); break;
-    case OP_i64_store32: ValidateStore<int32_t, TE_i64>(ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i64_load32_u: ValidateLoad<int32_t, TE_i64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i32_store: ValidateStore<int32_t, TE_i32>(ins, ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i64_store: ValidateStore<int64_t, TE_i64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_f32_store: ValidateStore<float, TE_f32>(ins, ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_f64_store: ValidateStore<double, TE_f64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i32_store8: ValidateStore<int8_t, TE_i32>(ins, ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i32_store16: ValidateStore<int16_t, TE_i32>(ins, ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i64_store8: ValidateStore<int8_t, TE_i64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i64_store16: ValidateStore<int16_t, TE_i64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
+    case OP_i64_store32: ValidateStore<int32_t, TE_i64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
     case OP_memory_size:
       if(!ModuleMemory(*m, 0))
-        AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
+        AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
       if(ins.immediates[0]._varuint1 != 0)
-        AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
+        AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
       values.Push(TE_i32);
       break;
     case OP_memory_grow:
       if(!ModuleMemory(*m, 0))
-        AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "No default linear memory in module.");
+        AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
       if(ins.immediates[0]._varuint1 != 0)
-        AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "reserved must be 0.");
-      ValidatePopType(values, TE_i32, env, m);
+        AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
+      ValidatePopType(ins, values, TE_i32, env, m);
       values.Push(TE_i32);
       break;
 
@@ -656,7 +656,7 @@ namespace innative {
     case OP_f64_const: values.Push(TE_f64); break;
 
       // Comparison operators
-    case OP_i32_eqz: ValidateUnaryOp<TE_i32, TE_i32>(values, env, m); break;
+    case OP_i32_eqz: ValidateUnaryOp<TE_i32, TE_i32>(ins, values, env, m); break;
     case OP_i32_eq:
     case OP_i32_ne:
     case OP_i32_lt_s:
@@ -666,8 +666,8 @@ namespace innative {
     case OP_i32_le_s:
     case OP_i32_le_u:
     case OP_i32_ge_s:
-    case OP_i32_ge_u: ValidateBinaryOp<TE_i32, TE_i32, TE_i32>(values, env, m); break;
-    case OP_i64_eqz: ValidateUnaryOp<TE_i64, TE_i32>(values, env, m); break;
+    case OP_i32_ge_u: ValidateBinaryOp<TE_i32, TE_i32, TE_i32>(ins, values, env, m); break;
+    case OP_i64_eqz: ValidateUnaryOp<TE_i64, TE_i32>(ins, values, env, m); break;
     case OP_i64_eq:
     case OP_i64_ne:
     case OP_i64_lt_s:
@@ -677,24 +677,24 @@ namespace innative {
     case OP_i64_le_s:
     case OP_i64_le_u:
     case OP_i64_ge_s:
-    case OP_i64_ge_u: ValidateBinaryOp<TE_i64, TE_i64, TE_i32>(values, env, m); break;
+    case OP_i64_ge_u: ValidateBinaryOp<TE_i64, TE_i64, TE_i32>(ins, values, env, m); break;
     case OP_f32_eq:
     case OP_f32_ne:
     case OP_f32_lt:
     case OP_f32_gt:
     case OP_f32_le:
-    case OP_f32_ge: ValidateBinaryOp<TE_f32, TE_f32, TE_i32>(values, env, m); break;
+    case OP_f32_ge: ValidateBinaryOp<TE_f32, TE_f32, TE_i32>(ins, values, env, m); break;
     case OP_f64_eq:
     case OP_f64_ne:
     case OP_f64_lt:
     case OP_f64_gt:
     case OP_f64_le:
-    case OP_f64_ge: ValidateBinaryOp<TE_f64, TE_f64, TE_i32>(values, env, m); break;
+    case OP_f64_ge: ValidateBinaryOp<TE_f64, TE_f64, TE_i32>(ins, values, env, m); break;
 
       // Numeric operators
     case OP_i32_clz:
     case OP_i32_ctz:
-    case OP_i32_popcnt: ValidateUnaryOp<TE_i32, TE_i32>(values, env, m); break;
+    case OP_i32_popcnt: ValidateUnaryOp<TE_i32, TE_i32>(ins, values, env, m); break;
     case OP_i32_add:
     case OP_i32_sub:
     case OP_i32_mul:
@@ -709,10 +709,10 @@ namespace innative {
     case OP_i32_shr_s:
     case OP_i32_shr_u:
     case OP_i32_rotl:
-    case OP_i32_rotr: ValidateBinaryOp<TE_i32, TE_i32, TE_i32>(values, env, m); break;
+    case OP_i32_rotr: ValidateBinaryOp<TE_i32, TE_i32, TE_i32>(ins, values, env, m); break;
     case OP_i64_clz:
     case OP_i64_ctz:
-    case OP_i64_popcnt: ValidateUnaryOp<TE_i64, TE_i64>(values, env, m); break;
+    case OP_i64_popcnt: ValidateUnaryOp<TE_i64, TE_i64>(ins, values, env, m); break;
     case OP_i64_add:
     case OP_i64_sub:
     case OP_i64_mul:
@@ -727,78 +727,78 @@ namespace innative {
     case OP_i64_shr_s:
     case OP_i64_shr_u:
     case OP_i64_rotl:
-    case OP_i64_rotr: ValidateBinaryOp<TE_i64, TE_i64, TE_i64>(values, env, m); break;
+    case OP_i64_rotr: ValidateBinaryOp<TE_i64, TE_i64, TE_i64>(ins, values, env, m); break;
     case OP_f32_abs:
     case OP_f32_neg:
     case OP_f32_ceil:
     case OP_f32_floor:
     case OP_f32_trunc:
     case OP_f32_nearest:
-    case OP_f32_sqrt: ValidateUnaryOp<TE_f32, TE_f32>(values, env, m); break;
+    case OP_f32_sqrt: ValidateUnaryOp<TE_f32, TE_f32>(ins, values, env, m); break;
     case OP_f32_add:
     case OP_f32_sub:
     case OP_f32_mul:
     case OP_f32_div:
     case OP_f32_min:
     case OP_f32_max:
-    case OP_f32_copysign: ValidateBinaryOp<TE_f32, TE_f32, TE_f32>(values, env, m); break;
+    case OP_f32_copysign: ValidateBinaryOp<TE_f32, TE_f32, TE_f32>(ins, values, env, m); break;
     case OP_f64_abs:
     case OP_f64_neg:
     case OP_f64_ceil:
     case OP_f64_floor:
     case OP_f64_trunc:
     case OP_f64_nearest:
-    case OP_f64_sqrt: ValidateUnaryOp<TE_f64, TE_f64>(values, env, m); break;
+    case OP_f64_sqrt: ValidateUnaryOp<TE_f64, TE_f64>(ins, values, env, m); break;
     case OP_f64_add:
     case OP_f64_sub:
     case OP_f64_mul:
     case OP_f64_div:
     case OP_f64_min:
     case OP_f64_max:
-    case OP_f64_copysign: ValidateBinaryOp<TE_f64, TE_f64, TE_f64>(values, env, m); break;
+    case OP_f64_copysign: ValidateBinaryOp<TE_f64, TE_f64, TE_f64>(ins, values, env, m); break;
 
       // Conversions
-    case OP_i32_wrap_i64: ValidateUnaryOp<TE_i64, TE_i32>(values, env, m); break;
+    case OP_i32_wrap_i64: ValidateUnaryOp<TE_i64, TE_i32>(ins, values, env, m); break;
     case OP_i32_trunc_f32_s:
-    case OP_i32_trunc_f32_u: ValidateUnaryOp<TE_f32, TE_i32>(values, env, m); break;
+    case OP_i32_trunc_f32_u: ValidateUnaryOp<TE_f32, TE_i32>(ins, values, env, m); break;
     case OP_i32_trunc_f64_s:
-    case OP_i32_trunc_f64_u: ValidateUnaryOp<TE_f64, TE_i32>(values, env, m); break;
+    case OP_i32_trunc_f64_u: ValidateUnaryOp<TE_f64, TE_i32>(ins, values, env, m); break;
     case OP_i64_extend_i32_s:
-    case OP_i64_extend_i32_u: ValidateUnaryOp<TE_i32, TE_i64>(values, env, m); break;
+    case OP_i64_extend_i32_u: ValidateUnaryOp<TE_i32, TE_i64>(ins, values, env, m); break;
     case OP_i64_trunc_f32_s:
-    case OP_i64_trunc_f32_u: ValidateUnaryOp<TE_f32, TE_i64>(values, env, m); break;
+    case OP_i64_trunc_f32_u: ValidateUnaryOp<TE_f32, TE_i64>(ins, values, env, m); break;
     case OP_i64_trunc_f64_s:
-    case OP_i64_trunc_f64_u: ValidateUnaryOp<TE_f64, TE_i64>(values, env, m); break;
+    case OP_i64_trunc_f64_u: ValidateUnaryOp<TE_f64, TE_i64>(ins, values, env, m); break;
     case OP_f32_convert_i32_s:
-    case OP_f32_convert_i32_u: ValidateUnaryOp<TE_i32, TE_f32>(values, env, m); break;
+    case OP_f32_convert_i32_u: ValidateUnaryOp<TE_i32, TE_f32>(ins, values, env, m); break;
     case OP_f32_convert_i64_s:
-    case OP_f32_convert_i64_u: ValidateUnaryOp<TE_i64, TE_f32>(values, env, m); break;
-    case OP_f32_demote_f64: ValidateUnaryOp<TE_f64, TE_f32>(values, env, m); break;
+    case OP_f32_convert_i64_u: ValidateUnaryOp<TE_i64, TE_f32>(ins, values, env, m); break;
+    case OP_f32_demote_f64: ValidateUnaryOp<TE_f64, TE_f32>(ins, values, env, m); break;
     case OP_f64_convert_i32_s:
-    case OP_f64_convert_i32_u: ValidateUnaryOp<TE_i32, TE_f64>(values, env, m); break;
+    case OP_f64_convert_i32_u: ValidateUnaryOp<TE_i32, TE_f64>(ins, values, env, m); break;
     case OP_f64_convert_i64_s:
-    case OP_f64_convert_i64_u: ValidateUnaryOp<TE_i64, TE_f64>(values, env, m); break;
-    case OP_f64_promote_f32: ValidateUnaryOp<TE_f32, TE_f64>(values, env, m); break;
+    case OP_f64_convert_i64_u: ValidateUnaryOp<TE_i64, TE_f64>(ins, values, env, m); break;
+    case OP_f64_promote_f32: ValidateUnaryOp<TE_f32, TE_f64>(ins, values, env, m); break;
 
       // Reinterpretations
-    case OP_i32_reinterpret_f32: ValidateUnaryOp<TE_f32, TE_i32>(values, env, m); break;
-    case OP_i64_reinterpret_f64: ValidateUnaryOp<TE_f64, TE_i64>(values, env, m); break;
-    case OP_f32_reinterpret_i32: ValidateUnaryOp<TE_i32, TE_f32>(values, env, m); break;
-    case OP_f64_reinterpret_i64: ValidateUnaryOp<TE_i64, TE_f64>(values, env, m); break;
+    case OP_i32_reinterpret_f32: ValidateUnaryOp<TE_f32, TE_i32>(ins, values, env, m); break;
+    case OP_i64_reinterpret_f64: ValidateUnaryOp<TE_f64, TE_i64>(ins, values, env, m); break;
+    case OP_f32_reinterpret_i32: ValidateUnaryOp<TE_i32, TE_f32>(ins, values, env, m); break;
+    case OP_f64_reinterpret_i64: ValidateUnaryOp<TE_i64, TE_f64>(ins, values, env, m); break;
     default:
-      AppendError(env, env.errors, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "Unknown instruction code %hhu", ins.opcode);
+      AppendError(env, env.errors, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "[%u] Unknown instruction code %hhu", ins.line, ins.opcode);
     }
   }
 
-  void ValidateEndBlock(internal::ControlBlock block, Stack<varsint7>& values, Environment& env, Module* m, bool restore)
+  void ValidateEndBlock(const Instruction& ins, internal::ControlBlock block, Stack<varsint7>& values, Environment& env, Module* m, bool restore)
   {
-    ValidateSignature(block.sig, values, env, m);
+    ValidateSignature(ins, block.sig, values, env, m);
 
     if(block.sig != TE_void && values.Size() > 0)
     {
       values.Pop();
       if(values.Size() > 0 && values.Peek() != TE_POLY)
-        AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK, "block signature wanted one value, but found %i values!", values.Size());
+        AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK, "[%u] block signature wanted one value, but found %i values!", ins.line, values.Size());
     }
 
     // Replace the value stack with the expected signature
@@ -828,15 +828,15 @@ varsint7 innative::ValidateInitializer(const Instruction& ins, Environment& env,
   case OP_f64_const: return TE_f64;
   case OP_global_get:
     if(!ModuleGlobal(*m, ins.immediates[0]._varuint32))
-      AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "Invalid global index for get_global.");
+      AppendError(env, env.errors, m, ERR_INVALID_LOCAL_INDEX, "[%u] Invalid global index for get_global.", ins.line);
     else if(ins.immediates[0]._varuint32 + m->importsection.memories < m->importsection.globals)
       return m->importsection.imports[ins.immediates[0]._varuint32 + m->importsection.memories].global_desc.type;
     else
-      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INITIALIZER, "A get_global initializer must be an import.", ins.opcode);
+      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INITIALIZER, "[%u] A get_global initializer must be an import.", ins.line, ins.opcode);
     return TE_i32;
   }
 
-  AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER, "An initializer must be a get_global or const instruction, not %hhu", ins.opcode);
+  AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER, "[%u] An initializer must be a get_global or const instruction, not %hhu", ins.line, ins.opcode);
   return TE_NONE;
 }
 
@@ -899,7 +899,7 @@ varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env,
     {
       std::pair<Module*, Export*> p = ResolveExport(env, m->importsection.imports[i]);
       if(!p.second || p.second->kind != WASM_KIND_GLOBAL || p.second->index < p.first->importsection.globals)
-        AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global import %u", ins.immediates[0]._varsint32);
+        AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "[%u] Invalid global import %u", ins.line, ins.immediates[0]._varsint32);
       else
         return EvalInitializerI32(p.first->global.globals[p.second->index - p.first->importsection.globals].init, env, p.first);
       break;
@@ -909,7 +909,7 @@ varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env,
       global = &m->global.globals[i];
 
     if(!global)
-      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "Invalid global index %u", ins.immediates[0]._varsint32);
+      AppendError(env, env.errors, m, ERR_INVALID_GLOBAL_INDEX, "[%u] Invalid global index %u", ins.line, ins.immediates[0]._varsint32);
     else
       return EvalInitializerI32(global->init, env, nullptr);
     break;
@@ -917,7 +917,7 @@ varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env,
   case OP_i64_const:
   case OP_f32_const:
   case OP_f64_const:
-    AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER_TYPE, "Expected i32 type but got %s", OPNAMES[ins.opcode]);
+    AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER_TYPE, "[%u] Expected i32 type but got %s", ins.line, OPNAMES[ins.opcode]);
     break;
   default:
     break; // If this isn't even a valid instruction, don't bother emitting an error because it will be redundant.
@@ -1018,7 +1018,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
         char buf[10];
         if(control.Peek().type == OP_if && control.Peek().sig != TE_void)
           AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "If statement without else cannot have a non-void block signature, had %s.", EnumToString(TYPE_ENCODING_MAP, control.Peek().sig, buf, 10));
-        ValidateEndBlock(control.Pop(), values, env, m, true);
+        ValidateEndBlock(cur[i], control.Pop(), values, env, m, true);
       }
       break;
     case OP_else:
@@ -1030,7 +1030,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
         internal::ControlBlock block = control.Pop();
         if(block.type != OP_if)
           AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Expected else instruction to terminate if block, but found %s instead.", EnumToString(TYPE_ENCODING_MAP, block.type, buf, 10));
-        ValidateEndBlock(block, values, env, m, false);
+        ValidateEndBlock(cur[i], block, values, env, m, false);
         control.Push({ values.Limit(), block.sig, OP_else }); // Push a new else block that must be terminated by an end instruction
         values.SetLimit(values.Size() + values.Limit());
       }
@@ -1038,7 +1038,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
   }
 
   for(uint64_t i = 0; i < sig.n_returns; ++i)
-    ValidatePopType(values, sig.returns[i], env, m);
+    ValidatePopType(Instruction{0, 0, body.debug.line, body.debug.column}, values, sig.returns[i], env, m);
 
   if(control.Size() > 0)
     AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Control stack not fully terminated, off by %zu", control.Size());

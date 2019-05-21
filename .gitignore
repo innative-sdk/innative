@@ -13,6 +13,7 @@
 *.dll
 *.lib
 *.exe
+*.pdb
 /bin/
 /bin32/
 /innative/x64/

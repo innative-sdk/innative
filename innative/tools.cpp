@@ -239,8 +239,12 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
         id.resize(symbol.size(), true, *env);
         memcpy(id.get(), symbol.data(), symbol.size());
         kh_put_cimport(env->cimports, id, &r);
+        // On windows, because .lib files map to DLLs, they can have duplicate symbols from the dependent DLLs
+        // that the DLL itself depends on. As a result, we cannot enforce this check until the linker resolves the symbols.
+#ifndef IN_PLATFORM_WIN32
         if(!r)
           return ERR_INVALID_EMBEDDING;
+#endif
       }
     }
   }

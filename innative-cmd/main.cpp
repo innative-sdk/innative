@@ -106,6 +106,18 @@ void printerr(FILE * f, const char* prefix, int err)
     fprintf(f, "%s: %i\n", prefix, err);
 }
 
+void dump_validation_errors(Environment* env)
+{
+  for(ValidationError* error = env->errors; error != nullptr; error = error->next)
+  {
+    const char* errstring = innative_error_string(error->code);
+    if(errstring)
+      fprintf(env->log, "Error %s: %s\n", errstring, error->error);
+    else
+      fprintf(env->log, "Error %i: %s\n", error->code, error->error);
+  }
+}
+
 template<typename F>
 void checkarg(int i, int argc, char* argv[], int& err, F && f)
 {
@@ -421,7 +433,10 @@ int main(int argc, char* argv[])
   if(err < 0)
   {
     if(env->loglevel >= LOG_FATAL)
+    {
       printerr(env->log, "Error loading modules", err);
+      dump_validation_errors(env);
+    }
     return err;
   }
 
@@ -442,7 +457,10 @@ int main(int argc, char* argv[])
   if(err < 0)
   {
     if(env->loglevel >= LOG_FATAL)
+    {
       printerr(env->log, "Error loading environment", err);
+      dump_validation_errors(env);
+    }
     return err;
   }
 
@@ -480,15 +498,7 @@ int main(int argc, char* argv[])
     if(env->loglevel >= LOG_ERROR)
     {
       printerr(env->log, "Compile error", err);
-
-      for(ValidationError* error = env->errors; error != nullptr; error = error->next)
-      {
-        const char* errstring = innative_error_string(err);
-        if(errstring)
-          fprintf(env->log, "Error %s: %s\n", errstring, error->error);
-        else
-          fprintf(env->log, "Error %i: %s\n", error->code, error->error);
-      }
+      dump_validation_errors(env);
     }
 
     return err;
@@ -523,7 +533,6 @@ int main(int argc, char* argv[])
     else
       std::cout << "Successfully built " << out << std::endl;
   }
-
 
   return err;
 }
