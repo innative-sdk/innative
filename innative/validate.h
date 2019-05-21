@@ -16,7 +16,7 @@ namespace innative {
   void ValidateLimits(const ResizableLimits& limits, Environment& env, Module* m);
   void ValidateTable(const TableDesc& table, Environment& env, Module* m);
   void ValidateMemory(const MemoryDesc& mem, Environment& env, Module* m);
-  void ValidateBlockSignature(varsint7 sig, Environment& env, Module* m);
+  void ValidateBlockSignature(const Instruction& ins, varsint7 sig, Environment& env, Module* m);
   varsint7 ValidateInitializer(const Instruction& ins, Environment& env, Module* m);
   void ValidateGlobal(const GlobalDecl& decl, Environment& env, Module* m);
   void ValidateExport(const Export& e, Environment& env, Module* m);

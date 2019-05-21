@@ -1598,12 +1598,22 @@ int innative::ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t 
 
   // If we don't detect "(module", just assume it's an inline module
   if(tokens[0].id != TOKEN_OPEN || tokens[1].id != TOKEN_MODULE)
-    return WatParser::ParseModule(env, m, tokens, name, nametoken);
+    err = WatParser::ParseModule(env, m, tokens, name, nametoken);
+  else
+  {
+    if(tokens.Size() == 0 || tokens.Pop().id != TOKEN_OPEN)
+      err = ERR_WAT_EXPECTED_OPEN;
+    else if(tokens.Size() == 0 || tokens.Pop().id != TOKEN_MODULE)
+      err = ERR_WAT_EXPECTED_MODULE;
+    else if(!(err = WatParser::ParseModule(env, m, tokens, name, nametoken)))
+    {
+      if(tokens.Size() == 0 || tokens.Pop().id != TOKEN_CLOSE)
+        err = ERR_WAT_EXPECTED_CLOSE;
+    }
+  }
 
-  EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-  EXPECTED(tokens, TOKEN_MODULE, ERR_WAT_EXPECTED_MODULE);
-  if(!(err = WatParser::ParseModule(env, m, tokens, name, nametoken)))
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+  if(err < 0)
+    AppendError(env, env.errors, &m, err, "[%s:%zu]", m.name.str(), WatLineNumber((char*)data, tokens.Peek().pos));
   return err;
 }
 

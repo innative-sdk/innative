@@ -764,6 +764,25 @@ IN_ERROR CompileCall(varuint32 index, code::Context& context)
 {
   if(index >= context.functions.size())
     return ERR_INVALID_FUNCTION_INDEX;
+  
+  // Check if this is an intrinsic. If it is, we instead call the intrinsic with the parameters and immediately return the value, if it exists
+  if(context.functions[index].intrinsic != nullptr)
+  {
+    IN_ERROR err;
+    llvmVal** ArgsV = tmalloc<llvmVal*>(context.env, context.functions[index].intrinsic->num);
+    for(unsigned int i = context.functions[index].intrinsic->num; i-- > 0;)
+    {
+      if(err = PopType(context.functions[index].intrinsic->params[i], context, ArgsV[i]))
+        return err;
+    }
+
+    llvmVal* out = nullptr;
+    err = (*context.functions[index].intrinsic->fn)(context, ArgsV, out);
+    if(err >= 0 && out != nullptr)
+      return PushReturn(context, out);
+
+    return err;
+  }
 
   // Because this is a static function call, we can call the imported C function directly with the appropriate calling convention.
   Func* fn = (!context.functions[index].imported) ? (context.functions[index].internal) : context.functions[index].imported;
@@ -1777,14 +1796,14 @@ int GetCallingConvention(Import& imp)
   return llvm::CallingConv::C;
 }
 
-Func* GetIntrinsic(Import& imp, code::Context& context)
+code::Intrinsic* GetIntrinsic(Import& imp, code::Context& context)
 {
   if(IsSystemImport(imp.module_name, context.env.system))
   {
     for(auto& v : code::intrinsics)
     {
       if(!strcmp(v.name, imp.export_name.str()))
-        return v.fn = (*v.gen)(0, context);
+        return &v;
     }
   }
   return nullptr;
@@ -1882,8 +1901,8 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
   for(varuint32 i = 0; i < context.m.importsection.functions; ++i)
   {
     context.functions.emplace_back();
-    context.functions.back().internal = GetIntrinsic(context.m.importsection.imports[i], context);
-    if(context.functions.back().internal == nullptr)
+    context.functions.back().intrinsic = GetIntrinsic(context.m.importsection.imports[i], context);
+    if(context.functions.back().intrinsic == nullptr)
     {
       auto index = context.m.importsection.imports[i].func_desc.type_index;
 
@@ -1905,7 +1924,7 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
         khiter_t iter = code::kh_put_importhash(context.importhash, context.functions.back().internal->getName().data(), &r);
         kh_val(context.importhash, iter) = context.functions.back().internal;
       }
-      context.functions.back().internal->setMetadata(IN_MEMORY_GROW_METADATA, llvm::MDNode::get(context.context, { })); // Assume all external functions change the metadata
+      context.functions.back().internal->setMetadata(IN_MEMORY_GROW_METADATA, llvm::MDNode::get(context.context, { })); // Assume all external functions invalidate the memory cache
 
       auto e = ResolveExport(*env, context.m.importsection.imports[i]);
       if(!e.second)
@@ -2209,16 +2228,6 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
     context.start = context.functions[context.m.start].internal;
   }
 
-  // Generate intrinsic function bodies for this module
-  for(auto& v : code::intrinsics)
-  {
-    if(v.fn)
-    {
-      (*v.gen)(v.fn, context);
-      v.fn = 0;
-    }
-  }
-
   return ERR_SUCCESS;
 }
 
@@ -2291,7 +2300,8 @@ void AddMemLocalCaching(code::Context& ctx)
 
   for(auto fn : ctx.functions)
   {
-    fn.internal->setMetadata(IN_FUNCTION_TRAVERSED, 0); // This cleanup is optional, but keeps the IR clean when inspecting it.
+    if(fn.internal)
+      fn.internal->setMetadata(IN_FUNCTION_TRAVERSED, 0); // This cleanup is optional, but keeps the IR clean when inspecting it.
     if(fn.exported)
       fn.exported->setMetadata(IN_FUNCTION_TRAVERSED, 0);
     if(fn.imported)
