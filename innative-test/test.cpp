@@ -6,10 +6,16 @@
 #include "innative/export.h"
 #include "innative/khash.h"
 #include <iostream>
-#include <filesystem>
 #include <fstream>
 
+#if defined(IN_COMPILER_GCC) && __GNUC__ < 8
+#include <experimental/filesystem>
+using namespace std::experimental::filesystem;
+#else
+#include <filesystem>
 using namespace std::filesystem;
+#endif
+
 
 // This defines the testing environment that we need to inject
 const char testenv[] = "(module $spectest "
@@ -43,6 +49,7 @@ int main(int argc, char *argv[])
   innative_set_work_dir_to_bin(!argc ? 0 : argv[0]);
   int log = LOG_WARNING;
   int stages = 0;
+  std::string temppath = temp_directory_path().u8string();
 
   std::cout << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
   std::cout << std::endl;
@@ -92,7 +99,7 @@ int main(int argc, char *argv[])
 
   if(stages & TEST_BENCHMARK)
   {
-    Benchmarks benchmarks(exports, !argc ? 0 : argv[0], log);
+    Benchmarks benchmarks(exports, !argc ? 0 : argv[0], log, temppath.c_str());
     benchmarks.Run(stdout);
   }
 
@@ -138,7 +145,7 @@ int main(int argc, char *argv[])
 
       int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
       if(err >= 0)
-        err = innative_compile_script(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env, false);
+        err = innative_compile_script(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env, false, temppath.c_str());
 
       if(err < 0)
       {
@@ -148,7 +155,7 @@ int main(int argc, char *argv[])
 
       FPRINTF(env->log, "%s: .", file.generic_u8string().c_str());
       fflush(env->log);
-      err = innative_compile_script((const uint8_t*)file.generic_u8string().data(), 0, env, true);
+      err = innative_compile_script((const uint8_t*)file.generic_u8string().data(), 0, env, true, temppath.c_str());
 
       if(!err && !env->errors)
         fputs("SUCCESS\n", env->log);

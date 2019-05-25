@@ -7,6 +7,7 @@
 #include "innative/innative.h"
 #include <string>
 #include <string.h>
+#include <algorithm>
 
 namespace innative {
   // Represents an operating system path for pre-C++17 compilers
@@ -108,15 +109,16 @@ namespace innative {
     inline Path& operator=(const std::string& copy) { Set(copy); return *this; }
     inline Path& operator=(const Path& copy) { Set(copy); return *this; }
     inline Path& operator=(Path&& mov) { _path = std::move(mov._path); return *this; }
+    inline void AppendString(const char* str)
+    {
+      _path += str;
+      _canonize();
+    }
 
   protected:
     inline void _canonize()
     {
-      for(size_t i = 0; i < _path.size(); ++i)
-      {
-        if(_path[i] == OTHER)
-          _path[i] = SEPERATOR;
-      }
+      std::replace(_path.begin(), _path.end(), OTHER, SEPERATOR);
     }
 
     std::string _path;

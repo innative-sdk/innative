@@ -6,6 +6,7 @@
 #include "parse.h"
 #include "validate.h"
 #include <limits>
+#include <cmath>
 
 using std::string;
 using std::numeric_limits;

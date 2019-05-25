@@ -105,19 +105,19 @@ namespace innative {
 
         FreeDLL(cache);
         std::remove(cachepath.c_str());
-        std::remove((cachepath.RemoveExtension().Get() + ".lib").c_str());
+        std::remove((cachepath.RemoveExtension().Get() + IN_STATIC_EXTENSION).c_str());
         std::remove((cachepath.RemoveExtension().Get() + ".pdb").c_str());
       }
       cache = nullptr;
     }
 
     // longjmp and exceptions don't always play well with destructors, so we isolate this call
-    int IsolateInitCall(Environment & env, void*& cache, Path & cachepath)
+    int IsolateInitCall(Environment& env, void*& cache, const char* out)
     {
       if(SETJMP(jump_location) != 0)
         return ERR_RUNTIME_TRAP;
 
-      cache = LoadDLL(cachepath.c_str());
+      cache = LoadDLL(out);
       if(!cache)
         return ERR_RUNTIME_INIT_ERROR;
 
@@ -133,7 +133,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int CompileWast(Environment & env, const char* out, void*& cache, Path & cachepath)
+    int CompileWast(Environment& env, const char* out, void*& cache, Path& cachepath)
     {
       InvalidateCache(cache, cachepath);
 
@@ -144,20 +144,18 @@ namespace innative {
       if(err = CompileEnvironment(&env, out))
         return err;
 
-      cachepath = GetWorkingDir();
-      cachepath.Append(out);
-
+      cachepath = out;
       signal(SIGILL, WastCrashHandler);
       signal(SIGFPE, WastCrashHandler);
 
-      err = IsolateInitCall(env, cache, cachepath);
+      err = IsolateInitCall(env, cache, out);
 
       signal(SIGILL, SIG_DFL);
       signal(SIGFPE, SIG_DFL);
       return err;
     }
 
-    void SetTempName(Environment & env, Module & m)
+    void SetTempName(Environment& env, Module& m)
     {
       static std::atomic_size_t modcount(1); // We can't use n_modules in case a module is malformed
 
@@ -166,7 +164,7 @@ namespace innative {
       tmemcpy((char*)m.name.get(), m.name.size(), buf.data(), buf.size());
     }
 
-    int ParseWastModule(Environment & env, Queue<WatToken> & tokens, kh_indexname_t * mapping, Module & m, const char* path)
+    int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module& m, const char* path)
     {
       EXPECTED(tokens, TOKEN_MODULE, ERR_WAT_EXPECTED_MODULE);
       int err;
@@ -270,7 +268,7 @@ namespace innative {
       }
     };
 
-    int64_t Homogenize(const Instruction & i)
+    int64_t Homogenize(const Instruction& i)
     {
       switch(i.opcode)
       {
@@ -285,7 +283,7 @@ namespace innative {
     }
 
     template<typename... Args>
-    void GenWastFunctionCall(void* f, WastResult & result, Args... params)
+    void GenWastFunctionCall(void* f, WastResult& result, Args... params)
     {
       int64_t r = reinterpret_cast<int64_t(*)(typename internal::HType<Args>::T...)>(f)(Homogenize(params)...);
       switch(result.type)
@@ -303,7 +301,7 @@ namespace innative {
     }
 
     // SEH exceptions and destructors don't mix, so we isolate all this signal and exception handling in this function.
-    int IsolateFunctionCall(Environment & env, varuint32 n_params, void* f, WastResult & result, std::vector<Instruction> & params)
+    int IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, WastResult& result, std::vector<Instruction>& params)
     {
       if(SETJMP(jump_location) != 0)
       {
@@ -389,7 +387,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int ParseWastAction(Environment & env, Queue<WatToken> & tokens, kh_indexname_t * mapping, Module * &last, void*& cache, Path & cachepath, int& counter, const std::string & path, WastResult & result)
+    int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache, Path& cachepath, int& counter, const std::string& path, WastResult& result)
     {
       int err;
       int cache_err = 0;
@@ -419,10 +417,10 @@ namespace innative {
         khiter_t iter = kh_get_exports(m->exports, func);
         if(!kh_exist2(m->exports, iter))
           return ERR_INVALID_FUNCTION_INDEX;
-        Export & e = m->exportsection.exports[kh_val(m->exports, iter)];
+        Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
 
         // Dig up the exported function signature from the module and assemble a C function pointer from it
-        FunctionType * ftype = (e.kind != WASM_KIND_FUNCTION) ? nullptr : ModuleFunction(*m, e.index);
+        FunctionType* ftype = (e.kind != WASM_KIND_FUNCTION) ? nullptr : ModuleFunction(*m, e.index);
         if(!ftype)
           return ERR_INVALID_FUNCTION_INDEX;
 
@@ -520,8 +518,8 @@ namespace innative {
         khiter_t iter = kh_get_exports(m->exports, global);
         if(!kh_exist2(m->exports, iter))
           return ERR_INVALID_GLOBAL_INDEX;
-        Export & e = m->exportsection.exports[kh_val(m->exports, iter)];
-        GlobalDesc * g = nullptr;
+        Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
+        GlobalDesc* g = nullptr;
         if(e.kind != WASM_KIND_GLOBAL || !(g = ModuleGlobal(*m, e.index)))
           return ERR_INVALID_GLOBAL_INDEX;
 
@@ -593,14 +591,14 @@ namespace innative {
 }
 
 // This parses an entire extended WAT testing script into an environment
-int innative::ParseWast(Environment & env, const uint8_t * data, size_t sz, const char* path, bool always_compile)
+int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const char* path, bool always_compile, const char* output)
 {
   Queue<WatToken> tokens;
   const char* start = (const char*)data;
   TokenizeWAT(tokens, start, (const char*)data + sz);
-  ValidationError * errors = nullptr;
+  ValidationError* errors = nullptr;
   int counter = 0; // Even if we unload wast.dll, visual studio will keep the .pdb open forever, so we have to generate new DLLs for each new test section.
-  std::string targetpath = Path(path).File().RemoveExtension().Get(); // We also have to be sure we don't overlap with any other .wast files, so we name the DLL based on the file path.
+  std::string targetpath = output + Path(path).File().RemoveExtension().Get(); // We also have to be sure we don't overlap with any other .wast files, so we name the DLL based on the file path.
   env.flags |= ENV_NO_INIT; // We can't allow the DLL to call _DllInit because we can't catch exceptions from it, so we manually call it instead.
 
   int err = CheckWatTokens(env, env.errors, tokens, start);
@@ -610,10 +608,10 @@ int innative::ParseWast(Environment & env, const uint8_t * data, size_t sz, cons
   if(env.errors)
     return ERR_WAT_INVALID_TOKEN;
 
-  kh_indexname_t * mapping = kh_init_indexname(); // This is a special mapping for all modules using the module name itself, not just registered ones.
+  kh_indexname_t* mapping = kh_init_indexname(); // This is a special mapping for all modules using the module name itself, not just registered ones.
   DeferLambda<std::function<void()>> defer([&]() { kh_destroy_indexname(mapping); });
 
-  Module * last = nullptr; // For anything not providing a module name, this was the most recently defined module.
+  Module* last = nullptr; // For anything not providing a module name, this was the most recently defined module.
   void* cache = nullptr;
   Path cachepath;
 

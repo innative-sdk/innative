@@ -416,7 +416,8 @@ typedef struct __WASM_ENVIRONMENT
   uint64_t features; // WASM_FEATURE_FLAGS
   uint64_t optimize; // WASM_OPTIMIZE_FLAGS
   unsigned int maxthreads; // Max number of threads for any multithreaded action. If 0, there is no limit.
-  const char* sdkpath; // Path to look for SDK components, which usually aren't in the working directory
+  const char* libpath; // Path to look for default environment libraries
+  const char* objpath; // Path to store intermediate results. If NULL, intermediate results are stored in the output folder
   const char* linker; // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
   const char* system; // prefix for the "system" module, which simply attempts to link the function name as a C function. Defaults to a blank string.
   struct __WASM_ALLOCATOR* alloc; // Stores a pointer to the internal allocator

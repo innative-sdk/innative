@@ -301,6 +301,12 @@ namespace innative {
       return chdir(path) != 0;
 #endif
     }
+    const char* AllocString(Environment& env, const char* s, size_t n)
+    {
+      char* t = tmalloc<char>(env, n + 1);
+      tmemcpy<char>(t, n + 1, s, n + 1);
+      return t;
+    }
 
     void GetCPUInfo(uintcpuinfo& info, int flags)
     {

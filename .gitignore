@@ -14,6 +14,7 @@
 *.lib
 *.exe
 *.pdb
+*.zip
 /bin/
 /bin32/
 /innative/x64/
@@ -28,4 +29,8 @@
 /innative-test/Win32/
 /innative-loader/Win32/
 /innative-stub/Win32/
+/innative-setup/obj/
+/innative-setup/IncludeFileList.wxs
+/innative-setup/ScriptFileList.wxs
+/innative-setup/CoreFileList.wxs
 /.vs/

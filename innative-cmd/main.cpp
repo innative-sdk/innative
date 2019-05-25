@@ -68,7 +68,7 @@ static const std::unordered_map<std::string, unsigned int> optimize_map = {
 
 void usage()
 {
-  std::cout << "Usage: innative-cmd [-r] [-c] [-i] [-u] [-v] [-f FLAG...] [-l FILE] [-L FILE] [-o FILE] [-a FILE] [-d PATH] [-s [FILE]] [-w [MODULE:]FUNCTION] FILE...\n"
+  std::cout << "Usage: innative-cmd [-r] [-c] [-i [lite]] [-u] [-v] [-f FLAG...] [-l FILE] [-L FILE] [-o FILE] [-a FILE] [-d PATH] [-j PATH] [-s [FILE]] [-w [MODULE:]FUNCTION] FILE...\n"
     "  -r : Run the compiled result immediately and display output. Requires a start function.\n"
     "  -f <FLAG>: Set a supported flag to true. Flags:\n         ";
 
@@ -84,6 +84,7 @@ void usage()
     "  -o <FILE> : Sets the output path for the resulting executable or library.\n"
     "  -a <FILE> : Specifies an alternative linker to use instead of LLD.\n"
     "  -d <PATH> : Sets the directory that contains the SDK library and data files.\n"
+    "  -j <PATH> : Sets the directory for temporary object files and intermediate compilation results.\n"
     "  -e <MODULE> : Sets the environment/system module name. Any functions with the module name will have the module name stripped when linking with C functions.\n"
     "  -s [<FILE>] : Serializes all modules to .wat files. <FILE> can specify the output if only one module is present.\n"
     "  -w <[MODULE:]FUNCTION> : whitelists a given C import, does name-mangling if the module is specified.\n"
@@ -91,7 +92,7 @@ void usage()
     "  -g : Instead of compiling immediately, creates a loader embedded with all the modules, environments, and settings, which compiles the modules on-demand when run."
 #endif
     "  -c : Assumes the input files are actually LLVM IR files and compiles them into a single webassembly module.\n"
-    "  -i : Installs this innative SDK to the host operating system.\n"
+    "  -i [lite]: Installs this SDK to the host operating system. On Windows, also updates file associations unless 'lite' is specified.\n"
     "  -u : Uninstalls and deregisters this SDK from the host operating system.\n"
     "  -v : Turns on verbose logging."
     << std::endl;
@@ -137,9 +138,10 @@ int main(int argc, char* argv[])
   std::vector<const char*> whitelist;
   unsigned int flags = ENV_ENABLE_WAT; // Always enable WAT
   unsigned int optimize = 0;
-  std::string out;
+  innative::Path out;
   std::vector<const char*> wast; // WAST files will be executed in the order they are specified, after all other modules are injected into the environment
-  const char* sdkpath = nullptr;
+  const char* libpath = nullptr;
+  const char* objpath = nullptr;
   const char* linker = nullptr;
   const char* serialize = nullptr;
   const char* system = nullptr;
@@ -230,12 +232,20 @@ int main(int argc, char* argv[])
         case 'a': // alternative linker
           checkarg(++i, argc, argv, err, [&]() { linker = argv[i]; });
           break;
-        case 'd': // Specify EXE directory, or any directory containing SDK libraries.
-          checkarg(++i, argc, argv, err, [&]() { sdkpath = argv[i]; });
+        case 'd': // Specify library directory
+          checkarg(++i, argc, argv, err, [&]() { libpath = argv[i]; });
+          break;
+        case 'j': // Specify intermediate directory
+          checkarg(++i, argc, argv, err, [&]() { objpath = argv[i]; });
           break;
         case 'i': // install
           std::cout << "Installing inNative Runtime..." << std::endl;
-          err = innative_install(argv[0], true);
+		  {
+			  bool lite = (i + 1 < argc) && !STRICMP(argv[i + 1], "lite");
+			  err = innative_install(argv[0], !lite);
+			  if(lite) // Only consume this argument if it was actually processed
+				  ++i;
+		  }
           if(err < 0)
             std::cout << "Installation failed! " << err << std::endl;
           else
@@ -279,19 +289,20 @@ int main(int argc, char* argv[])
     return ERR_NO_INPUT_FILES;
   }
 
-  if(out.empty()) // If no out is specified, default to name of first input file
+  if(out.Get().empty()) // If no out is specified, default to name of first input file
   {
-    out = innative::Path(!inputs.size() ? wast[0] : inputs[0]).RemoveExtension().Get();
+    out = !inputs.size() ? wast[0] : inputs[0];
+    out = out.RemoveExtension();
     if(reverse)
-      out += ".wasm";
+      out.AppendString(".wasm");
     else if(flags & ENV_LIBRARY)
-      out += IN_LIBRARY_EXTENSION;
+      out.AppendString(IN_LIBRARY_EXTENSION);
     else
-      out += IN_EXE_EXTENSION;
+      out.AppendString(IN_EXE_EXTENSION);
   }
 
   if(reverse) // If we're compiling LLVM IR instead of webassembly, we divert to another code path
-    return innative_compile_llvm(inputs.data(), inputs.size(), flags, out.c_str(), stdout, sdkpath, (!argc ? 0 : argv[0]));
+    return innative_compile_llvm(inputs.data(), inputs.size(), flags, out.c_str(), stdout, libpath, (!argc ? 0 : argv[0]));
 
   IRExports exports = { 0 };
   if(generate) // If we are generating a loader, we replace all of the normal functions to reroute the resources into the EXE file
@@ -338,7 +349,7 @@ int main(int argc, char* argv[])
         FOPEN(f, path.c_str(), "rb");
         if(!f)
         {
-          path = innative::Path(!env->sdkpath ? GetProgramPath().c_str() : env->sdkpath) + path;
+          path = innative::Path(!env->libpath ? GetProgramPath().c_str() : env->libpath) + path;
         }
         else
           fclose(f);
@@ -405,8 +416,10 @@ int main(int argc, char* argv[])
 
   if(verbose)
     env->loglevel = LOG_NOTICE;
-  if(sdkpath)
-    env->sdkpath = sdkpath;
+  if(libpath)
+    env->libpath = libpath;
+  if(objpath)
+    env->objpath = objpath;
   if(linker)
     env->linker = linker;
   if(system)
@@ -488,7 +501,7 @@ int main(int argc, char* argv[])
   if(wast.size() > 0)
   {
     for(size_t i = 0; i < wast.size() && !err; ++i)
-      err = innative_compile_script((const uint8_t*)wast[i], 0, env, true);
+      err = innative_compile_script((const uint8_t*)wast[i], 0, env, true, out.BaseDir().c_str());
   }
   else // Attempt to compile. If an error happens, output it and any validation errors to stderr
     err = (*exports.Compile)(env, out.c_str());
@@ -531,7 +544,7 @@ int main(int argc, char* argv[])
       return ERR_SUCCESS;
     }
     else
-      std::cout << "Successfully built " << out << std::endl;
+      std::cout << "Successfully built " << out.Get() << std::endl;
   }
 
   return err;

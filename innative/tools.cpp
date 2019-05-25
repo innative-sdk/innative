@@ -38,10 +38,8 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
     env->linker = 0;
     env->log = stdout;
     env->loglevel = LOG_WARNING;
-    auto sdkpath = GetProgramPath(arg0).BaseDir().Get();
-    char* tmp = tmalloc<char>(*env, sdkpath.size() + 1);
-    tmemcpy<char>(tmp, sdkpath.size() + 1, sdkpath.c_str(), sdkpath.size() + 1);
-    env->sdkpath = tmp;
+    env->libpath = utility::AllocString(*env, GetProgramPath(arg0).BaseDir().Get());
+    env->objpath = 0;
     env->system = "";
     env->wasthook = 0;
   }
@@ -53,7 +51,7 @@ void innative::ClearEnvironmentCache(Environment* env, Module* m)
   assert(env != nullptr);
 
   if(m)
-    DeleteCache(*env, *m, false);
+    DeleteCache(*env, *m);
   else
     DeleteContext(*env, false); // We can't actually shutdown LLVM here because that permanently shuts it down and there is no way to restore it.
 }
@@ -183,7 +181,7 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
   {
     for(Embedding* embed = env->embeddings; embed != nullptr; embed = embed->next)
     {
-      Path path(env->sdkpath);
+      Path path(env->libpath);
       std::string tmp;
       const char* src = (const char*)embed->data;
 

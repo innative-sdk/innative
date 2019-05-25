@@ -129,7 +129,7 @@ int innative_build_loader(struct _IN_CHUNK* chunks, const char* out, bool dynami
   return -1;
 }
 
-int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bool always_compile)
+int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bool always_compile, const char* output)
 {
   int err = ERR_SUCCESS;
   char buf[40];
@@ -167,7 +167,7 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bo
     return err;
   }
 
-  err = ParseWast(*env, data, sz, path, always_compile);
+  err = ParseWast(*env, data, sz, path, always_compile, output);
 
   if(env->loglevel >= LOG_ERROR && err < 0)
   {
