@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="en-us" xmlns="http://schemas.microsoft.com/wix/2006/localization">
+  <String Id="WelcomeDlgDescription" Overridable="yes">Welcome to the inNative SDK installer. This will install the inNative SDK and run WebAssembly files with the inNative command line tool.</String>
+</WixLocalization>

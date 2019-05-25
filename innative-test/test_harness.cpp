@@ -38,9 +38,7 @@ size_t TestHarness::Run(FILE* out)
   }
 
   // Test compiling EXE
-  // Test compiling DLL with no entry point, ensure init function is called
   // Test compiling DLL with entry point that gets called in the init function
-  // Test compiling DLL with entry point that doesn't get called in init function
 
   fprintf(out, "\n");
   return failures;

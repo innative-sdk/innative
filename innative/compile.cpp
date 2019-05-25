@@ -2462,30 +2462,44 @@ int CallLinker(const Environment* env, const vector<const char*>& linkargs)
   return err;
 }
 
-std::string GetLinkerObjectPath(Module& m)
+Path GetLinkerObjectPath(const Environment& env, Module& m)
 {
-  return std::string(m.name.str(), m.name.size()) + ".o";
+  Path objpath(!env.objpath ? "" : env.objpath);
+
+  // The default module name must be an entire path to gaurantee uniqueness, but we need to write it in the objpath directory
+  std::string file(m.name.str()); 
+  std::replace(file.begin(), file.end(), '\\', '_');
+  std::replace(file.begin(), file.end(), '/', '_');
+  std::replace(file.begin(), file.end(), '.', '_');
+
+  objpath += file;
+  objpath.AppendString(".o");
+  return objpath;
 }
 
-void GenerateLinkerObjects(const Environment* env, vector<string>& cache)
+IN_ERROR GenerateLinkerObjects(const Environment& env, vector<string>& cache)
 {
-  for(size_t i = 0; i < env->n_modules; ++i)
+  for(size_t i = 0; i < env.n_modules; ++i)
   {
-    assert(env->modules[i].cache != 0);
-    assert(env->modules[i].name.get() != nullptr);
-    cache.emplace_back(GetLinkerObjectPath(env->modules[i]));
+    assert(env.modules[i].cache != 0);
+    assert(env.modules[i].name.get() != nullptr);
+    cache.emplace_back(GetLinkerObjectPath(env, env.modules[i]).Get());
 
     FILE* f;
     FOPEN(f, cache.back().c_str(), "rb");
     if(f)
       fclose(f);
     else
-      OutputObjectFile(*env->modules[i].cache, cache.back().c_str());
+    {
+      IN_ERROR err = OutputObjectFile(*env.modules[i].cache, cache.back().c_str());
+      if(err < 0)
+        return err;
+    }
 
 #ifdef IN_PLATFORM_POSIX
     if(i == 0)
     { // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
-      if(!(env->flags&ENV_LIBRARY)) // If this isn't a shared library, we must specify an entry point instead of an init function
+      if(!(env.flags&ENV_LIBRARY)) // If this isn't a shared library, we must specify an entry point instead of an init function
         cache.emplace_back("--entry=" IN_INIT_FUNCTION);
       else if(!(env->flags&ENV_NO_INIT)) // Otherwise only specify entry functions if we actually want them
       {
@@ -2495,12 +2509,14 @@ void GenerateLinkerObjects(const Environment* env, vector<string>& cache)
     }
 #endif
   }
+
+  return ERR_SUCCESS;
 }
 
 namespace innative {
-  void DeleteCache(const Environment& env, Module& m, bool relative)
+  void DeleteCache(const Environment& env, Module& m)
   {
-    std::remove(((relative ? "" : env.sdkpath) + GetLinkerObjectPath(m)).c_str()); // Always remove the file if it exists
+    std::remove(GetLinkerObjectPath(env, m).c_str()); // Always remove the file if it exists
     if(m.cache != nullptr)
     {
       auto context = static_cast<code::Context*>(m.cache);
@@ -2515,7 +2531,7 @@ namespace innative {
   {
     for(varuint32 i = 0; i < env.n_modules; ++i)
     {
-      DeleteCache(env, env.modules[i], false);
+      DeleteCache(env, env.modules[i]);
     }
 
     delete env.context;
@@ -2525,17 +2541,20 @@ namespace innative {
       llvm::llvm_shutdown();
   }
 
-  IN_ERROR CompileEnvironment(const Environment* env, const char* filepath)
+  IN_ERROR CompileEnvironment(const Environment* env, const char* outfile)
   {
+    if(!outfile || !outfile[0])
+      return ERR_FATAL_NO_OUTPUT_FILE;
+
     // Construct the LLVM environment and current working directories
     if(!env->context)
       const_cast<Environment*>(env)->context = new llvm::LLVMContext();
-    Path file(filepath);
+    Path file(outfile);
     Path workdir = GetWorkingDir();
-    Path programpath(env->sdkpath);
-
-    SetWorkingDir(programpath.c_str());
-    utility::DeferLambda<std::function<void()>> defer([&]() { SetWorkingDir(workdir.c_str()); });
+    Path libpath(env->libpath);
+    if(!env->objpath)
+      const_cast<Environment*>(env)->objpath = utility::AllocString(*const_cast<Environment*>(env), file.BaseDir().Get());
+    Path objpath(env->objpath);
 
     if(!file.IsAbsolute())
       file = workdir + file;
@@ -2610,7 +2629,7 @@ namespace innative {
     {
       if(!i || !env->modules[i].cache) // Always recompile the 0th module because it stores the main entry point.
       {
-        DeleteCache(*env, env->modules[i], true);
+        DeleteCache(*env, env->modules[i]);
         env->modules[i].cache = new code::Context{ *env, env->modules[i], *env->context, 0, builder, machine, code::kh_init_importhash() };
         if((err = CompileModule(env, *env->modules[i].cache)) < 0)
           return err;
@@ -2809,7 +2828,7 @@ namespace innative {
       if(env->flags&ENV_DEBUG)
         linkargs.push_back("/DEBUG");
 
-      vector<string> cache = { string("/OUT:") + file.Get(), "/LIBPATH:" + programpath.Get(), "/LIBPATH:" + workdir.Get() };
+      vector<string> cache = { string("/OUT:") + file.Get(), "/LIBPATH:" + libpath.Get(), "/LIBPATH:" + workdir.Get() };
 #elif defined(IN_PLATFORM_POSIX)
       vector<const char*> linkargs = { "lld" };
 
@@ -2818,7 +2837,7 @@ namespace innative {
       if(!(env->flags&ENV_DEBUG))
         linkargs.push_back("--strip-debug");
 
-      vector<string> cache = { string("--output=") + file.Get(), "-L" + programpath.Get(), "-L" + workdir.Get() };
+      vector<string> cache = { string("--output=") + file.Get(), "-L" + libpath.Get(), "-L" + workdir.Get() };
 #else 
 #error unknown platform
 #endif
@@ -2832,7 +2851,9 @@ namespace innative {
       );
 
       // Generate object code
-      GenerateLinkerObjects(env, cache);
+      err = GenerateLinkerObjects(*env, cache);
+      if(err < 0)
+        return err;
 
       // Write all in-memory environments to cache files
       for(Embedding* cur = env->embeddings; cur != nullptr; cur = cur->next)
@@ -2840,7 +2861,7 @@ namespace innative {
         if(cur->size > 0) // If the size is greater than 0, this is an in-memory embedding
         {
           union { Embedding* p; size_t z; } u = { cur };
-          cache.emplace_back(IN_STATIC_FLAG + std::to_string(u.z) + IN_ENV_EXTENSION + IN_STATIC_EXTENSION);
+          cache.emplace_back((objpath + std::to_string(u.z) + IN_ENV_EXTENSION + IN_STATIC_EXTENSION).Get());
           FILE* f;
           FOPEN(f, cache.back().c_str(), "wb");
           if(!f)

@@ -47,6 +47,7 @@ enum IN_ERROR
   ERR_FATAL_TOO_MANY_LOCALS,
   ERR_FATAL_OUT_OF_MEMORY,
   ERR_FATAL_RESOURCE_ERROR,
+  ERR_FATAL_NO_OUTPUT_FILE,
 
   // Validation errors that prevent compiling the module
   ERR_VALIDATION_ERROR = -0xFFF,

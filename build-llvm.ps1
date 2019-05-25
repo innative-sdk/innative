@@ -22,7 +22,7 @@ Function Find-MsBuild()
 $msbuild = Find-MsBuild
 
 # Update all submodules
-#git submodule update --init --recursive
+git submodule update --init --recursive
 
 # make directories
 if(!(Test-Path -path "./bin/llvm"))

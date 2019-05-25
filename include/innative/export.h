@@ -8,13 +8,13 @@
 
 #ifdef IN_PLATFORM_WIN32
 #define IN_STATIC_EXTENSION ".lib"
-#define IN_STATIC_FLAG ""
+#define IN_LIBRARY_FLAG ""
 #define IN_LIBRARY_EXTENSION ".dll"
 #define IN_EXE_EXTENSION ".exe"
 #define IN_WIN32_REGPATH L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\innative-cmd.exe"
 #else
 #define IN_STATIC_EXTENSION ".a"
-#define IN_STATIC_FLAG "-l"
+#define IN_LIBRARY_FLAG "-l"
 #define IN_LIBRARY_EXTENSION ".so"
 #define IN_EXE_EXTENSION ""
 #endif
@@ -147,7 +147,7 @@ extern "C" {
   };
 
   // Tooling functions that exist for command line utilities that always statically link to the runtime
-  IN_COMPILER_DLLEXPORT extern int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bool always_compile);
+  IN_COMPILER_DLLEXPORT extern int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bool always_compile, const char* output);
   IN_COMPILER_DLLEXPORT extern int innative_compile_file(const char* file, const char* out, uint64_t flags, uint64_t optimize, uint64_t features, bool dynamic, const struct _IN_WHITELIST* whitelist, unsigned int n_whitelist, const char* arg0);
   IN_COMPILER_DLLEXPORT extern int innative_serialize_module(Environment* env, size_t m, const char* out);
   IN_COMPILER_DLLEXPORT extern int innative_build_loader(struct _IN_CHUNK* chunks, const char* out, bool dynamic);

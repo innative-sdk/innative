@@ -221,6 +221,9 @@ namespace innative {
     int Install(const char* arg0, bool full);
     int Uninstall();
     bool RestoreStackGuard(void* lpPage);
+    const char* AllocString(Environment& env, const char* s, size_t n);
+    IN_FORCEINLINE const char* AllocString(Environment& env, const char* s) { return AllocString(env, s, strlen(s)); }
+    IN_FORCEINLINE const char* AllocString(Environment& env, const std::string& s) { return AllocString(env, s.data(), s.size()); }
 
     // Creates a C-compatible mangled name with an optional index
     inline std::string CanonicalName(StringRef prefix, StringRef name, int index = -1)

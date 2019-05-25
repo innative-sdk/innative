@@ -58,7 +58,8 @@ namespace innative {
 
       if(ERROR_SUCCESS == ::RegOpenKeyExW(hive, key, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, &hTempKey))
       {
-        if(::RegDeleteValueW(hTempKey, value) == ERROR_SUCCESS)
+        LSTATUS status = ::RegDeleteValueW(hTempKey, value);
+        if(status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND)
           ret = true;
       }
 
@@ -128,7 +129,7 @@ namespace innative {
       if(!Win32SetKey(HKEY_CURRENT_USER, IN_WIN32_CLASSPATH, L"UseExecutableForTaskbarGroupIcon", L""))
         return false;
 
-      auto cmdline = L'"' + std::wstring(exe.get()) + L"\" \"%1\" -r -fo3";
+      auto cmdline = L'"' + std::wstring(exe.get()) + L"\" \"%1\" -r -f o3";
       if(!Win32SetKey(HKEY_CURRENT_USER, IN_WIN32_CLASSPATH L"\\shell\\open\\command", nullptr, cmdline.c_str()))
         return false;
 
@@ -160,6 +161,11 @@ namespace innative {
 
       return true;
     }
+
+    bool DeleteRegKey(const wchar_t* s) {
+      LSTATUS status = RegDeleteKeyW(HKEY_CURRENT_USER, s);
+      return status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND;
+    };
 
 #elif defined(IN_PLATFORM_POSIX)
 #define POSIX_VERSION_STR "." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
@@ -355,9 +361,9 @@ namespace innative {
 #ifdef IN_PLATFORM_WIN32
       // Remove this version from the registry by deleting all version levels. Only the levels that have no more subkeys will actually be deleted.
       uint64_t oldversion = GetLatestVersion();
-      bool r = RegDeleteKeyW(HKEY_CURRENT_USER, IN_WIN32_REGPATH L"\\" IN_VERSION_PATH) == ERROR_SUCCESS;
-      RegDeleteKeyW(HKEY_CURRENT_USER, IN_WIN32_REGPATH L"\\" MAKEWSTRING(INNATIVE_VERSION_MAJOR) L"\\" MAKEWSTRING(INNATIVE_VERSION_MINOR));
-      RegDeleteKeyW(HKEY_CURRENT_USER, IN_WIN32_REGPATH L"\\" MAKEWSTRING(INNATIVE_VERSION_MAJOR));
+      bool r = DeleteRegKey(IN_WIN32_REGPATH L"\\" IN_VERSION_PATH);
+      DeleteRegKey(IN_WIN32_REGPATH L"\\" MAKEWSTRING(INNATIVE_VERSION_MAJOR) L"\\" MAKEWSTRING(INNATIVE_VERSION_MINOR));
+      DeleteRegKey(IN_WIN32_REGPATH L"\\" MAKEWSTRING(INNATIVE_VERSION_MAJOR));
 
       HKEY hKey = 0;
       bool full = RegOpenKeyExW(HKEY_CURRENT_USER, IN_WIN32_CLASSPATH, 0, KEY_READ, &hKey) == ERROR_SUCCESS;
@@ -367,23 +373,23 @@ namespace innative {
       uint64_t newversion = GetLatestVersion();
       if(!newversion) // That was the last version, so wipe all registry keys
       {
-        r &= Win32DeleteKeyValue(HKEY_CURRENT_USER, L"Environment", L"INNATIVE_PATH") == ERROR_SUCCESS;
-        r &= RegDeleteKeyW(HKEY_CURRENT_USER, IN_WIN32_REGPATH) == ERROR_SUCCESS; // This should work because we should have no more version subkeys
+        r &= Win32DeleteKeyValue(HKEY_CURRENT_USER, L"Environment", L"INNATIVE_PATH");
+        r &= DeleteRegKey(IN_WIN32_REGPATH); // This should work because we should have no more version subkeys
         if(full)
         {
-          r &= RegDeleteKeyW(HKEY_CURRENT_USER, IN_WIN32_CLASSPATH L"\\shell\\open\\command") == ERROR_SUCCESS;
-          r &= RegDeleteKeyW(HKEY_CURRENT_USER, IN_WIN32_CLASSPATH L"\\shell\\open") == ERROR_SUCCESS;
-          r &= RegDeleteKeyW(HKEY_CURRENT_USER, IN_WIN32_CLASSPATH L"\\shell") == ERROR_SUCCESS;
-          r &= RegDeleteKeyW(HKEY_CURRENT_USER, IN_WIN32_CLASSPATH L"\\SupportedTypes") == ERROR_SUCCESS;
-          r &= RegDeleteKeyW(HKEY_CURRENT_USER, IN_WIN32_CLASSPATH) == ERROR_SUCCESS;
+          r &= DeleteRegKey(IN_WIN32_CLASSPATH L"\\shell\\open\\command");
+          r &= DeleteRegKey(IN_WIN32_CLASSPATH L"\\shell\\open");
+          r &= DeleteRegKey(IN_WIN32_CLASSPATH L"\\shell");
+          r &= DeleteRegKey(IN_WIN32_CLASSPATH L"\\SupportedTypes");
+          r &= DeleteRegKey(IN_WIN32_CLASSPATH);
 
           auto deregtype = [](bool& r, const wchar_t* progid, const wchar_t* ext) {
             auto id = std::wstring(progid) + ext + L"." + MAKEWSTRING(INNATIVE_VERSION_MAJOR);
 
-            r &= RegDeleteKeyW(HKEY_CURRENT_USER, (IN_WIN32_APPS + id + L"\\shell\\open\\command").c_str()) == ERROR_SUCCESS;
-            r &= RegDeleteKeyW(HKEY_CURRENT_USER, (IN_WIN32_APPS + id + L"\\shell\\open").c_str()) == ERROR_SUCCESS;
-            r &= RegDeleteKeyW(HKEY_CURRENT_USER, (IN_WIN32_APPS + id + L"\\shell").c_str()) == ERROR_SUCCESS;
-            r &= RegDeleteKeyW(HKEY_CURRENT_USER, (IN_WIN32_APPS + id).c_str()) == ERROR_SUCCESS;
+            r &= DeleteRegKey((IN_WIN32_APPS + id + L"\\shell\\open\\command").c_str());
+            r &= DeleteRegKey((IN_WIN32_APPS + id + L"\\shell\\open").c_str());
+            r &= DeleteRegKey((IN_WIN32_APPS + id + L"\\shell").c_str());
+            r &= DeleteRegKey((IN_WIN32_APPS + id).c_str());
             r &= Win32DeleteKeyValue(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\") + ext + L"\\OpenWithProgids").c_str(), id.c_str());
           };
 

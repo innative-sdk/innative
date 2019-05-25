@@ -30,7 +30,7 @@ class Benchmarks
   };
 
 public:
-  Benchmarks(const IRExports& exports, const char* arg0, int loglevel);
+  Benchmarks(const IRExports& exports, const char* arg0, int loglevel, const char* folder);
   ~Benchmarks();
   void Run(FILE* out);
   static int64_t fac(int64_t n);
@@ -96,6 +96,7 @@ protected:
   const char* _arg0;
   int _loglevel;
   std::vector<std::string> _garbage;
+  std::string _folder;
 };
 
 #endif
