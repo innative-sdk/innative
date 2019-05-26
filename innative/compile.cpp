@@ -2501,7 +2501,7 @@ IN_ERROR GenerateLinkerObjects(const Environment& env, vector<string>& cache)
     { // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
       if(!(env.flags&ENV_LIBRARY)) // If this isn't a shared library, we must specify an entry point instead of an init function
         cache.emplace_back("--entry=" IN_INIT_FUNCTION);
-      else if(!(env->flags&ENV_NO_INIT)) // Otherwise only specify entry functions if we actually want them
+      else if(!(env.flags&ENV_NO_INIT)) // Otherwise only specify entry functions if we actually want them
       {
         cache.emplace_back("-init=" IN_INIT_FUNCTION);
         cache.emplace_back("-fini=" IN_EXIT_FUNCTION);

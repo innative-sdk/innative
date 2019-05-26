@@ -64,6 +64,6 @@ Copy-Item "spec\test\core\*.wast" -Destination "innative-windows-sdk-x86\spec\te
 Compress-Archive -Force -Path "innative-windows-sdk-x86" -CompressionLevel Optimal -DestinationPath "innative-windows-sdk-x86.zip"
 Remove-Item 'innative-windows-sdk-x86' -Recurse
 
-Compress-Archive -Force -Path "bin\innative.dll","bin\innative-d.dll","bin\innative-s.lib","bin\innative-s-d.lib","bin\innative-env.lib","bin\innative-env-d.lib","bin\innative-cmd.exe","bin\innative-cmd-d.exe" -CompressionLevel Optimal -DestinationPath "innative-windows-redist-x64.zip"
+Compress-Archive -Force -Path "bin\innative.dll","bin\innative-d.dll","bin\innative-s.lib","bin\innative-s-d.lib","bin\innative-env.lib","bin\innative-env-d.lib","bin\innative-cmd.exe","bin\innative-cmd-d.exe" -CompressionLevel Optimal -DestinationPath "innative-windows-runtime-x64.zip"
 
-Compress-Archive -Force -Path "bin32\innative.dll","bin32\innative-d.dll","bin32\innative-s.lib","bin32\innative-s-d.lib","bin32\innative-env.lib","bin32\innative-env-d.lib","bin32\innative-cmd.exe","bin32\innative-cmd-d.exe" -CompressionLevel Optimal -DestinationPath "innative-windows-redist-x86.zip"
+Compress-Archive -Force -Path "bin32\innative.dll","bin32\innative-d.dll","bin32\innative-s.lib","bin32\innative-s-d.lib","bin32\innative-env.lib","bin32\innative-env-d.lib","bin32\innative-cmd.exe","bin32\innative-cmd-d.exe" -CompressionLevel Optimal -DestinationPath "innative-windows-runtime-x86.zip"

@@ -177,7 +177,7 @@ namespace innative {
       std::ofstream dest(to, std::ios::binary | std::ios::out | std::ios::trunc);
       if(!dest.is_open())
       {
-        printf("Could not open %s, did you try using sudo?", to);
+        printf("Could not open %s, did you try using sudo?\n", to);
         return -17;
       }
 
@@ -347,7 +347,7 @@ namespace innative {
         return err - 256;
       if((err = InstallFile(arg0, "innative-env.a", "/usr/lib/")) < 0)
         return err - 512;
-      if((err = InstallFile(arg0, "innative-env_d.a", "/usr/lib/")) < 0)
+      if((err = InstallFile(arg0, "innative-env-d.a", "/usr/lib/")) < 0)
         return err - 768;
       if((err = InstallFile(arg0, "innative-cmd", "/usr/bin/")) < 0)
         return err - 1024;
@@ -408,7 +408,7 @@ namespace innative {
         return -1;
       if(unlink("/usr/lib/innative-env.a" POSIX_VERSION_STR) != 0)
         return -2;
-      if(unlink("/usr/lib/innative-env_d.a" POSIX_VERSION_STR) != 0)
+      if(unlink("/usr/lib/innative-env-d.a" POSIX_VERSION_STR) != 0)
         return -3;
       if(unlink("/usr/bin/innative-cmd" POSIX_VERSION_STR) != 0)
         return -4;
@@ -419,7 +419,7 @@ namespace innative {
         return err - 256;
       if((err = UpdateSymlinks("innative-env.a", "/usr/lib/")) < 0)
         return err - 512;
-      if((err = UpdateSymlinks("innative-env_d.a", "/usr/lib/")) < 0)
+      if((err = UpdateSymlinks("innative-env-d.a", "/usr/lib/")) < 0)
         return err - 768;
       if((err = UpdateSymlinks("innative-cmd", "/usr/bin/")) < 0)
         return err - 1024;

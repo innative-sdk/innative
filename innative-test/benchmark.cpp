@@ -44,7 +44,7 @@ void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
     return 0;
 
   (*_exports.FinalizeEnvironment)(env);
-  std::string base = _folder + innative::Path(wasm).File().RemoveExtension().Get() + std::to_string(counter);
+  std::string base = (_folder + innative::Path(wasm).File().RemoveExtension()).Get() + std::to_string(counter);
   std::string out = base + IN_LIBRARY_EXTENSION;
 
   err = (*_exports.Compile)(env, out.c_str());

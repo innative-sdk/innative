@@ -24,7 +24,7 @@ DESTDIR ?=
 ifeq ($(MAKECMDGOALS), debug)
 CPPFLAGS += -DDEBUG -g
 else
-CPPFLAGS += -march=native -O3
+CPPFLAGS += -DNDEBUG -march=native -O3
 endif
 
 debug: innative-env innative innative-cmd innative-test
@@ -42,19 +42,19 @@ install: all
 	cp $(LIBDIR)/libinnative.so $(DESTDIR)$(PREFIX)/lib/libinnative.so
 
 dist: all
-	mkdir -p innative-posix-redist-x64/
-	cp bin/innative.a innative-posix-redist-x64/
-	cp bin/libinnative.so innative-posix-redist-x64/
-	cp bin/innative-env.a innative-posix-redist-x64/
-	cp bin/innative-env-d.a innative-posix-redist-x64/
-	cp bin/innative-cmd innative-posix-redist-x64/
-	tar -czf innative-posix-redist-x64.tar.gz innative-posix-redist-x64/
+	mkdir -p innative-posix-runtime-x64/
+	cp bin/innative.a innative-posix-runtime-x64/
+	cp bin/libinnative.so innative-posix-runtime-x64/
+	cp bin/innative-env.a innative-posix-runtime-x64/
+	cp bin/innative-env-d.a innative-posix-runtime-x64/
+	cp bin/innative-cmd innative-posix-runtime-x64/
+	tar -czf innative-posix-runtime-x64.tar.gz innative-posix-runtime-x64/
 	mkdir -p innative-posix-sdk-x64/bin/
 	mkdir -p innative-posix-sdk-x64/include/innative/
 	mkdir -p innative-posix-sdk-x64/scripts/
 	mkdir -p innative-posix-sdk-x64/spec/test/core/
-	mv innative-posix-redist-x64/* innative-posix-sdk-x64/bin/
-	rm -r innative-posix-redist-x64/
+	mv innative-posix-runtime-x64/* innative-posix-sdk-x64/bin/
+	rm -r innative-posix-runtime-x64/
 	cp bin/innative-test innative-posix-sdk-x64/bin/
 	cp include/innative/*.h innative-posix-sdk-x64/include/innative/
 	cp scripts/*.wat innative-posix-sdk-x64/scripts/

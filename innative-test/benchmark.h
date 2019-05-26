@@ -5,6 +5,7 @@
 #define __BENCHMARK_H__IN__
 
 #include "innative/export.h"
+#include "innative/path.h"
 #include <utility>
 #include <stdint.h>
 #include <stdio.h>
@@ -96,7 +97,7 @@ protected:
   const char* _arg0;
   int _loglevel;
   std::vector<std::string> _garbage;
-  std::string _folder;
+  innative::Path _folder;
 };
 
 #endif
