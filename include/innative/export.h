@@ -148,7 +148,7 @@ extern "C" {
   /// \param env The environment that contains the module that will be serialized.
   /// \param m The index of the in the given environment that will be serialized.
   /// \param out The path to the output file that will contain the serialized result.
-  IN_COMPILER_DLLEXPORT extern int innative_serialize_module(const Environment* env, size_t m, const char* out);
+  IN_COMPILER_DLLEXPORT extern int innative_serialize_module(Environment* env, size_t m, const char* out);
 
   /// Convenience function that sets the working directory to the executable's root directory.
   /// \param arg0 the first argument sent to the program. Used to determine binary location on POSIX systems.
