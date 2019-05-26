@@ -24,12 +24,11 @@
 using namespace innative;
 
 // Compiles LLVM IR to webassembly
-int innative_compile_llvm(const char** files, size_t n, int flags, const char* out, FILE* log, const char* sdkpath, const char* arg0)
+int innative_compile_llvm(const char** files, size_t n, int flags, const char* out, FILE* log)
 {
   // Construct the LLVM environment and current working directories
   llvm::LLVMContext llvm_context;
   Path workdir = utility::GetWorkingDir();
-  Path sdkdir(!sdkpath ? utility::GetProgramPath(arg0).BaseDir().c_str() : sdkpath);
 
   bool has_start = false;
   IN_ERROR err = ERR_SUCCESS;

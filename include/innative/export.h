@@ -60,12 +60,13 @@ extern "C" {
     /// \param arg0 the first argument sent to the program. Used to determine binary location on POSIX systems.
     Environment* (*CreateEnvironment)(unsigned int modules, unsigned int maxthreads, const char* arg0);
 
-    /// Adds a module to an environment
+    /// Adds a module to an environment. This could happen asyncronously if multithreading is enabled, in which case
+    // 'err' won't be valid until FinalizeEnvironment() is called to resolve all pending module loads.
     /// \param env The environment to modify.
     /// \param data Either a pointer to the module in memory, or a UTF8 encoded null-terminated string pointing to a file that contains the module.
     /// \param size The length of the memory that the data pointer points to, or zero if the data pointer is actually a UTF8 encoded null terminated string.
     /// \param name A name to use for the module. If the module data does not contain a name, this will be used.
-    /// \param err A pointer to an integer that recieves an error code should the function fail.
+    /// \param err A pointer to an integer that recieves an error code should the function fail. Not valid until FinalizeEnvironment() is called.
     void(*AddModule)(Environment* env, const void* data, uint64_t size, const char* name, int* err); // If size is 0, data points to a null terminated UTF8 file path
 
     /// Adds a whitelist entry to the environment. This will only be used if the whitelist is enabled via the flags.
@@ -127,36 +128,55 @@ extern "C" {
     void(*DestroyEnvironment)(Environment* env);
   } IRExports;
 
-  // Statically linked function that loads the runtime stub, which then loads the actual runtime functions into exports.
+  /// Statically linked function that loads the runtime stub, which then loads the actual runtime functions into exports.
+  /// \param exports Pointer to an existing IRExports structure that will be filled with function pointers.
   IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports);
 
-  // Command Line Tool exports
-  struct _IN_CHUNK
-  {
-    void* data;
-    uint64_t size; // If size is 0, data points to a null terminated UTF8 file path
-    const char* name; // If NULL, this is treated as an embedding
-    int tag; // Only used for embedding types
-  };
+  // --- Tooling functions that exist for command line utilities that always statically link to the runtime ---
 
-  // A struct representing a whitelist pair for use in command line tool functions.
-  struct _IN_WHITELIST
-  {
-    const char* module_name;
-    const char* export_name;
-  };
-
-  // Tooling functions that exist for command line utilities that always statically link to the runtime
+  /// Compiles and executes a .wast script using the given environment. This execution will modify the environment and add all
+  /// modules referenced in the script according to the registration rules.
+  /// \param data Either a pointer to the script in memory, or a UTF8 encoded null-terminated string pointing to a file that contains the script.
+  /// \param sz The length of the memory that the data pointer points to, or zero if the data pointer is actually a UTF8 encoded null terminated string.
+  /// \param env The environment to execute the script with. This environment can potentially be modified by the script being executed.
+  /// \param always_compile By default, this function only performs a compilation when necessary to call a function. If this is set to true,
+  ///        all modules are compiled even if no function inside them is called.
+  /// \param output Sets the output directory where compilation results should be stored. Intermediate results will still be in env->objpath
   IN_COMPILER_DLLEXPORT extern int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bool always_compile, const char* output);
-  IN_COMPILER_DLLEXPORT extern int innative_compile_file(const char* file, const char* out, uint64_t flags, uint64_t optimize, uint64_t features, bool dynamic, const struct _IN_WHITELIST* whitelist, unsigned int n_whitelist, const char* arg0);
-  IN_COMPILER_DLLEXPORT extern int innative_serialize_module(Environment* env, size_t m, const char* out);
-  IN_COMPILER_DLLEXPORT extern int innative_build_loader(struct _IN_CHUNK* chunks, const char* out, bool dynamic);
+  
+  /// Serializes the 'm'th module in the given environment into the provided output file.
+  /// \param env The environment that contains the module that will be serialized.
+  /// \param m The index of the in the given environment that will be serialized.
+  /// \param out The path to the output file that will contain the serialized result.
+  IN_COMPILER_DLLEXPORT extern int innative_serialize_module(const Environment* env, size_t m, const char* out);
+
+  /// Convenience function that sets the working directory to the executable's root directory.
+  /// \param arg0 the first argument sent to the program. Used to determine binary location on POSIX systems.
   IN_COMPILER_DLLEXPORT extern void innative_set_work_dir_to_bin(const char* arg0);
-  IN_COMPILER_DLLEXPORT extern int innative_install(const char* arg0, bool full); // full install requires elevation on windows
+
+  /// Installs this runtime, usually only called by innative-cmd, which makes assumptions about file locations.
+  /// \param arg0 the first argument sent to the program. Used to determine binary location on POSIX systems.
+  /// \param full On windows, performs a "full" installation, which associates the runtime with .wat/.wast/.wasm files.
+  IN_COMPILER_DLLEXPORT extern int innative_install(const char* arg0, bool full);
+
+  /// Uninstalls whatever runtime version this is from the operating system.
   IN_COMPILER_DLLEXPORT extern int innative_uninstall();
+
+  /// Returns the string representation of a TYPE_ENCODING enumeration, or NULL if the lookup fails. Useful for debuggers.
+  /// \param type_encoding The TYPE_ENCODING value to get the string representation of.
   IN_COMPILER_DLLEXPORT extern const char* innative_type_encoding_string(int type_encoding);
+
+  /// Returns the string representation of an IN_ERROR enumeration, or NULL if the lookup fails. Useful for debuggers.
+  /// \param error_code The IN_ERROR code to get the string representation of.
   IN_COMPILER_DLLEXPORT extern const char* innative_error_string(int error_code);
-  IN_COMPILER_DLLEXPORT extern int innative_compile_llvm(const char** files, size_t n, int flags, const char* out, FILE* log, const char* sdkpath, const char* arg0);
+  
+  /// Performs a reverse compilation of LLVM IR into WebAssembly using the built-in LLVM version in this runtime.
+  /// \param files An array of UTF8 file paths to compile.
+  /// \param n The length of the 'files' array.
+  /// \param flags Environment flags to compile with. This is mostly used to set the ENV_LIBRARY flag in case this should be a shared library.
+  /// \param out The output file that will store the compilation result.
+  /// \param log A C FILE* stream that should be used for logging errors or warnings.
+  IN_COMPILER_DLLEXPORT extern int innative_compile_llvm(const char** files, size_t n, int flags, const char* out, FILE* log);
 
 #ifdef  __cplusplus
 }
