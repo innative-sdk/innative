@@ -247,7 +247,7 @@ int main(int argc, char* argv[])
 				  ++i;
 		  }
           if(err < 0)
-            std::cout << "Installation failed! " << err << std::endl;
+            std::cout << "Installation failed! [" << err << "]" << std::endl;
           else
             std::cout << "Installation succeeded!" << std::endl;
           return err;
@@ -255,7 +255,7 @@ int main(int argc, char* argv[])
           std::cout << "Uninstalling inNative Runtime..." << std::endl;
           err = innative_uninstall();
           if(err < 0)
-            std::cout << "Failed to uninstall runtime!" << err << std::endl;
+            std::cout << "Failed to uninstall runtime! [" << err << "]" << std::endl;
           else
             std::cout << "Successfully uninstalled runtime!" << std::endl;
           return err;
@@ -482,7 +482,7 @@ int main(int argc, char* argv[])
     if(serialize[0]) // If a name was specified, verify only one module exists
     {
       if(env->n_modules != 1)
-        fprintf(stderr, "If you have more than one module, you cannot specify an output file for serialization. Use [-s] by itself, instead.");
+        fprintf(stderr, "If you have more than one module, you cannot specify an output file for serialization. Use [-s] by itself, instead.\n");
     }
 
     for(size_t i = 0; i < env->n_modules; ++i)
