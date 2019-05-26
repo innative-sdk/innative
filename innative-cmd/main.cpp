@@ -302,7 +302,7 @@ int main(int argc, char* argv[])
   }
 
   if(reverse) // If we're compiling LLVM IR instead of webassembly, we divert to another code path
-    return innative_compile_llvm(inputs.data(), inputs.size(), flags, out.c_str(), stdout, libpath, (!argc ? 0 : argv[0]));
+    return innative_compile_llvm(inputs.data(), inputs.size(), flags, out.c_str(), stdout);
 
   IRExports exports = { 0 };
   if(generate) // If we are generating a loader, we replace all of the normal functions to reroute the resources into the EXE file
