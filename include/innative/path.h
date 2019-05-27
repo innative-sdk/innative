@@ -35,7 +35,7 @@ namespace innative {
       const char* start = _path.c_str();
       const char* pos = strchr(start, SEPERATOR);
 #ifdef IN_PLATFORM_WIN32
-      return pos != nullptr && pos == start + 2 && pos[-1] == ':';
+      return (start[0] == SEPERATOR && start[1] == SEPERATOR) || (pos != nullptr && pos == start + 2 && pos[-1] == ':');
 #elif defined(IN_PLATFORM_POSIX)
       return pos != nullptr && pos == start;
 #endif

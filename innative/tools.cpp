@@ -82,6 +82,12 @@ void innative::DestroyEnvironment(Environment* env)
 void innative::LoadModule(Environment* env, size_t index, const void* data, uint64_t size, const char* name, const char* path, int* err)
 {
   Stream s = { (uint8_t*)data, size, 0 };
+  std::string fallback;
+  if(!name)
+  {
+    fallback = "m" + std::to_string(index);
+    name = fallback.data();
+  }
 
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
   {
@@ -301,8 +307,12 @@ IRGlobal* innative::LoadGlobal(void* assembly, const char* module_name, const ch
 
 void* innative::LoadAssembly(const char* file)
 {
-  Path path(file != nullptr ? Path(file) : GetProgramPath(0) + IN_EXTENSION);
-  return LoadDLL(path.c_str());
+  if(!file)
+    return 0;
+
+  Path path(file);
+  
+  return path.IsAbsolute() ? LoadDLL(path.c_str()) : LoadDLL((GetWorkingDir() + path).c_str());
 }
 
 void innative::FreeAssembly(void* assembly)

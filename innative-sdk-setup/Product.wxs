@@ -37,7 +37,7 @@
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="$(var.ProgramFilesFolder)">
         <Directory Id="INNATIVEFOLDER" Name="inNative">
-          <Directory Id="INSTALLFOLDER" Name="SDK">
+          <Directory Id="INSTALLFOLDER" Name="SDK v$(var.Version)">
             <Directory Id="BINFOLDER" Name="bin" />
             <Directory Id="PARENTINCLUDEFOLDER" Name="include">
               <Directory Id="INCLUDEFOLDER" Name="innative" />
@@ -75,6 +75,10 @@
         <File Id="innative.s.d.pdb" Name="innative-s-d.pdb" Source="$(var.innative.TargetDir)innative-s-d.pdb"/>
         <File Id="innative.s.lib" Name="innative-s.lib" Source="$(var.innative.TargetDir)innative-s.lib"/>
         <File Id="innative.s.pdb" Name="innative-s.pdb" Source="$(var.innative.TargetDir)innative-s.pdb"/>
+        <File Id="innative.stub.d.lib" Name="innative-stub-d.lib" Source="$(var.innative.TargetDir)innative-stub-d.lib"/>
+        <File Id="innative.stub.d.pdb" Name="innative-stub-d.pdb" Source="$(var.innative.TargetDir)innative-stub-d.pdb"/>
+        <File Id="innative.stub.lib" Name="innative-stub.lib" Source="$(var.innative.TargetDir)innative-stub.lib"/>
+        <File Id="innative.stub.pdb" Name="innative-stub.pdb" Source="$(var.innative.TargetDir)innative-stub.pdb"/>
         <File Id="innative.dll" Name="innative.dll" Source="$(var.innative.TargetDir)innative.dll"/>
         <File Id="innative.exp" Name="innative.exp" Source="$(var.innative.TargetDir)innative.exp"/>
         <File Id="innative.lib" Name="innative.lib" Source="$(var.innative.TargetDir)innative.lib"/>

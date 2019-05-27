@@ -27,10 +27,10 @@ else
 CPPFLAGS += -DNDEBUG -march=native -O3
 endif
 
-debug: innative-env innative innative-cmd innative-test
-all: innative-env innative innative-cmd innative-test
+debug: innative-env innative innative-cmd innative-test innative-stub
+all: innative-env innative innative-cmd innative-test innative-stub
 
-clean: innative-env-clean innative-clean innative-cmd-clean innative-test-clean
+clean: innative-env-clean innative-clean innative-cmd-clean innative-test-clean innative-stub-clean
 	#$(RM) -r $(LIBDIR)
 	#$(RM) -r $(BINDIR)
 	$(RM) -r $(OBJDIR)
@@ -56,10 +56,11 @@ dist: all
 	mv innative-posix-runtime-x64/* innative-posix-sdk-x64/bin/
 	rm -r innative-posix-runtime-x64/
 	cp bin/innative-test innative-posix-sdk-x64/bin/
+	cp bin/innative-stub.a innative-posix-sdk-x64/bin/
 	cp include/innative/*.h innative-posix-sdk-x64/include/innative/
 	cp scripts/*.wat innative-posix-sdk-x64/scripts/
 	cp scripts/*.wasm innative-posix-sdk-x64/scripts/
-	cp spec/test/core/* innative-posix-sdk-x64/spec/test/core/
+	cp spec/test/core/*.wast innative-posix-sdk-x64/spec/test/core/
 	tar -czf innative-posix-sdk-x64.tar.gz innative-posix-sdk-x64/
 	rm -r innative-posix-sdk-x64/
 
@@ -78,3 +79,4 @@ include innative-env/Makefile
 include innative/Makefile
 include innative-cmd/Makefile
 include innative-test/Makefile
+include innative-stub/Makefile

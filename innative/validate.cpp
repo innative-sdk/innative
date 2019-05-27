@@ -1097,6 +1097,13 @@ void innative::ValidateImportOrder(Module& m)
 
 void innative::ValidateModule(Environment& env, Module& m)
 {
+  if(m.magic_cookie != WASM_MAGIC_COOKIE)
+    AppendError(env, env.errors, &m, ERR_PARSE_INVALID_MAGIC_COOKIE, "Module magic cookie is corrupted.");
+  if(m.version != WASM_MAGIC_VERSION)
+    AppendError(env, env.errors, &m, ERR_PARSE_INVALID_VERSION, "Module has an unrecognized WebAssembly version.");
+  if(!m.name.size())
+    AppendError(env, env.errors, &m, ERR_PARSE_INVALID_NAME, "Module has no name!");
+
   ValidateImportOrder(m);
 
   //{

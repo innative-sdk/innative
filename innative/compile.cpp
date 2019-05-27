@@ -2516,7 +2516,10 @@ IN_ERROR GenerateLinkerObjects(const Environment& env, vector<string>& cache)
 namespace innative {
   void DeleteCache(const Environment& env, Module& m)
   {
-    std::remove(GetLinkerObjectPath(env, m).c_str()); // Always remove the file if it exists
+    // Certain error conditions can result in us clearing the cache of an invalid module.
+    if(m.name.size() > 0) // Prevent an error from happening if the name is invalid.
+      std::remove(GetLinkerObjectPath(env, m).c_str()); // Always remove the file if it exists
+
     if(m.cache != nullptr)
     {
       auto context = static_cast<code::Context*>(m.cache);

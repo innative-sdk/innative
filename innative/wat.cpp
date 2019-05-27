@@ -1394,7 +1394,7 @@ void innative::WatSkipSection(Queue<WatToken>& tokens, int count)
 int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens, StringRef name, WatToken& internalname)
 {
   int err;
-  m = { 0 };
+  m = { WASM_MAGIC_COOKIE, WASM_MAGIC_VERSION, 0 };
   if(name.s && (err = ParseName(env, m.name, WatToken{ TOKEN_NAME, (const char*)name.s, 0, 0, (int64_t)name.len })))
     return err;
 
