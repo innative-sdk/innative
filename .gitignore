@@ -29,8 +29,9 @@
 /innative-test/Win32/
 /innative-loader/Win32/
 /innative-stub/Win32/
-/innative-setup/obj/
-/innative-setup/IncludeFileList.wxs
-/innative-setup/ScriptFileList.wxs
-/innative-setup/CoreFileList.wxs
+/innative-runtime-setup/obj/
+/innative-sdk-setup/obj/
+/innative-sdk-setup/IncludeFileList.wxs
+/innative-sdk-setup/ScriptFileList.wxs
+/innative-sdk-setup/CoreFileList.wxs
 /.vs/

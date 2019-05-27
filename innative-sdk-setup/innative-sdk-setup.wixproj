@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" InitialTargets="EnsureWixToolsetInstalled" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
+    <ProductVersion>3.10</ProductVersion>
+    <ProjectGuid>3f0d37f9-9902-4766-9d2c-0f4bc94ce86a</ProjectGuid>
+    <SchemaVersion>2.0</SchemaVersion>
+    <OutputName>innative-windows-sdk</OutputName>
+    <OutputType>Package</OutputType>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
+    <OutputName>innative-windows-sdk-x86-d</OutputName>
+    <OutputPath>$(SolutionDir)bin32\</OutputPath>
+    <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
+    <OutputName>innative-windows-sdk-x86</OutputName>
+    <OutputPath>$(SolutionDir)bin32\</OutputPath>
+    <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
+    <OutputName>innative-windows-sdk-x64-d</OutputName>
+    <OutputPath>$(SolutionDir)bin\</OutputPath>
+    <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
+    <OutputName>innative-windows-sdk-x64</OutputName>
+    <OutputPath>$(SolutionDir)bin\</OutputPath>
+    <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
+  </PropertyGroup>
+  <PropertyGroup>
+    <DefineConstants>HarvestIncludePath=..\include\innative;HarvestScriptPath=..\scripts;HarvestCorePath=..\spec\test\core</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Product.wxs" />
+    <Compile Include="IncludeFileList.wxs" />
+    <Compile Include="ScriptFileList.wxs" />
+    <Compile Include="CoreFileList.wxs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\innative\innative.vcxproj">
+      <Name>innative</Name>
+      <Project>{8b15928a-757d-4280-b90f-4d4e90d37f60}</Project>
+      <Private>True</Private>
+      <DoNotHarvest>True</DoNotHarvest>
+      <RefProjectOutputGroups>Binaries;Content;Satellites</RefProjectOutputGroups>
+      <RefTargetDir>INSTALLFOLDER</RefTargetDir>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <WixExtension Include="WixUIExtension">
+      <HintPath>$(WixExtDir)\WixUIExtension.dll</HintPath>
+      <Name>WixUIExtension</Name>
+    </WixExtension>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="en-us.wxl" />
+  </ItemGroup>
+  <Import Project="$(WixTargetsPath)" Condition=" '$(WixTargetsPath)' != '' " />
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets" Condition=" '$(WixTargetsPath)' == '' AND Exists('$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets') " />
+  <Target Name="EnsureWixToolsetInstalled" Condition=" '$(WixTargetsImported)' != 'true' ">
+    <Error Text="The WiX Toolset v3.11 (or newer) build tools must be installed to build this project. To download the WiX Toolset, see http://wixtoolset.org/releases/" />
+  </Target>
+  <Target Name="AfterResolveReferences">
+    <HeatDirectory Directory="..\include\innative" PreprocessorVariable="var.HarvestIncludePath" OutputFile="IncludeFileList.wxs" ComponentGroupName="inNativeIncludeGroup" DirectoryRefId="INCLUDEFOLDER" AutogenerateGuids="true" ToolPath="$(WixToolPath)" SuppressFragments="true" SuppressRegistry="true" SuppressRootDirectory="true" Transforms="harvest-h-files.xslt" />
+    <HeatDirectory Directory="..\scripts" PreprocessorVariable="var.HarvestScriptPath" OutputFile="ScriptFileList.wxs" ComponentGroupName="inNativeScriptGroup" DirectoryRefId="SCRIPTFOLDER" AutogenerateGuids="true" ToolPath="$(WixToolPath)" SuppressFragments="true" SuppressRegistry="true" SuppressRootDirectory="true" Transforms="harvest-wasm-files.xslt" />
+    <HeatDirectory Directory="..\spec\test\core" PreprocessorVariable="var.HarvestCorePath" OutputFile="CoreFileList.wxs" ComponentGroupName="inNativeCoreGroup" DirectoryRefId="COREFOLDER" AutogenerateGuids="true" ToolPath="$(WixToolPath)" SuppressFragments="true" SuppressRegistry="true" SuppressRootDirectory="true" Transforms="harvest-wasm-files.xslt" />
+  </Target>
+</Project>

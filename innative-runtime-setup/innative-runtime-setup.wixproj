@@ -4,37 +4,33 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
     <ProductVersion>3.10</ProductVersion>
-    <ProjectGuid>3f0d37f9-9902-4766-9d2c-0f4bc94ce86a</ProjectGuid>
+    <ProjectGuid>1d10e371-391d-4147-8dec-28250adb318a</ProjectGuid>
     <SchemaVersion>2.0</SchemaVersion>
-    <OutputName>innative-setup</OutputName>
+    <OutputName>innative-windows-runtime</OutputName>
     <OutputType>Package</OutputType>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
-    <OutputName>innative-setup-d</OutputName>
+    <OutputName>innative-windows-runtime-x86-d</OutputName>
     <OutputPath>$(SolutionDir)bin32\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
+    <OutputName>innative-windows-runtime-x86</OutputName>
     <OutputPath>$(SolutionDir)bin32\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
-    <OutputName>innative-setup-d</OutputName>
+    <OutputName>innative-windows-runtime-x64-d</OutputName>
     <OutputPath>$(SolutionDir)bin\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
+    <OutputName>innative-windows-runtime-x64</OutputName>
     <OutputPath>$(SolutionDir)bin\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
-  <PropertyGroup>
-    <DefineConstants>HarvestIncludePath=..\include\innative;HarvestScriptPath=..\scripts;HarvestCorePath=..\spec\test\core</DefineConstants>
-  </PropertyGroup>
   <ItemGroup>
     <Compile Include="Product.wxs" />
-    <Compile Include="IncludeFileList.wxs" />
-    <Compile Include="ScriptFileList.wxs" />
-    <Compile Include="CoreFileList.wxs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\innative\innative.vcxproj">
@@ -59,10 +55,5 @@
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets" Condition=" '$(WixTargetsPath)' == '' AND Exists('$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets') " />
   <Target Name="EnsureWixToolsetInstalled" Condition=" '$(WixTargetsImported)' != 'true' ">
     <Error Text="The WiX Toolset v3.11 (or newer) build tools must be installed to build this project. To download the WiX Toolset, see http://wixtoolset.org/releases/" />
-  </Target>
-  <Target Name="AfterResolveReferences">
-    <HeatDirectory Directory="..\include\innative" PreprocessorVariable="var.HarvestIncludePath" OutputFile="IncludeFileList.wxs" ComponentGroupName="inNativeIncludeGroup" DirectoryRefId="INCLUDEFOLDER" AutogenerateGuids="true" ToolPath="$(WixToolPath)" SuppressFragments="true" SuppressRegistry="true" SuppressRootDirectory="true" Transforms="harvest-h-files.xslt" />
-    <HeatDirectory Directory="..\scripts" PreprocessorVariable="var.HarvestScriptPath" OutputFile="ScriptFileList.wxs" ComponentGroupName="inNativeScriptGroup" DirectoryRefId="SCRIPTFOLDER" AutogenerateGuids="true" ToolPath="$(WixToolPath)" SuppressFragments="true" SuppressRegistry="true" SuppressRootDirectory="true" Transforms="harvest-wasm-files.xslt" />
-    <HeatDirectory Directory="..\spec\test\core" PreprocessorVariable="var.HarvestCorePath" OutputFile="CoreFileList.wxs" ComponentGroupName="inNativeCoreGroup" DirectoryRefId="COREFOLDER" AutogenerateGuids="true" ToolPath="$(WixToolPath)" SuppressFragments="true" SuppressRegistry="true" SuppressRootDirectory="true" Transforms="harvest-wasm-files.xslt" />
   </Target>
 </Project>

@@ -15,7 +15,7 @@ Precompiled binaries for common platforms are provided in [releases](https://git
 ### Command Line Utility
 The inNative SDK comes with a command line utility with many useful features for webassembly developers.
 
-    Usage: innative-cmd [-r] [-c] [-i] [-u] [-v] [-f FLAG...] [-l FILE] [-L FILE] [-o FILE] [-a FILE] [-d PATH] [-s [FILE]] [-w [MODULE:]FUNCTION] FILE...
+    Usage: innative-cmd [-r] [-c] [-i [lite]] [-u] [-v] [-f FLAG...] [-l FILE] [-L FILE] [-o FILE] [-a FILE] [-d PATH] [-j PATH] [-s [FILE]] [-w [MODULE:]FUNCTION] FILE...
       -r : Run the compiled result immediately and display output. Requires a start function.
       -f <FLAG>: Set a supported flag to true. Flags:
              sandbox, homogenize, llvm, strict, whitelist, multithreaded, library, noinit, debug, check_stack_overflow, check_float_trunc, check_memory_access, check_indirect_call, check_int_division, disable_tail_call
@@ -25,11 +25,12 @@ The inNative SDK comes with a command line utility with many useful features for
       -o <FILE> : Sets the output path for the resulting executable or library.
       -a <FILE> : Specifies an alternative linker to use instead of LLD.
       -d <PATH> : Sets the directory that contains the SDK library and data files.
+      -j <PATH> : Sets the directory for temporary object files and intermediate compilation results.
       -e <MODULE> : Sets the environment/system module name. Any functions with the module name will have the module name stripped when linking with C functions.
       -s [<FILE>] : Serializes all modules to .wat files. <FILE> can specify the output if only one module is present.
       -w <[MODULE:]FUNCTION> : whitelists a given C import, does name-mangling if the module is specified.
-      -c : Assumes the input files are actually LLVM IR files and compiles them into a single webassembly module.
-      -i : Installs this innative SDK to the host operating system.
+      -g : Instead of compiling immediately, creates a loader embedded with all the modules, environments, and settings, which compiles the modules on-demand when run.  -c : Assumes the input files are actually LLVM IR files and compiles them into a single webassembly module.
+      -i [lite]: Installs this SDK to the host operating system. On Windows, also updates file associations unless 'lite' is specified.
       -u : Uninstalls and deregisters this SDK from the host operating system.
       -v : Turns on verbose logging.
 
@@ -43,7 +44,7 @@ LLVM uses CMake to build, but CMake currently has issues with the nested LLD pro
 All build steps start with `git submodule update --init --recursive`. This is **mandatory** because of nested git submodules that the project relies on. If you get errors, be sure to double check that you have acquired `llvm`, `llvm/tools/lld`, `spec`, and `spec/document/core/util/katex`.
 
 ### Windows
-Regardless of whether you are using Visual Studio 2017 or 2019, **make sure you have the v141_xp toolkit installed**, first. Run `build-llvm.ps1` if you have Visual Studio 2019, or run `build-llvm.ps1 2017` if you have Visual Studio 2017, and wait for it to complete. If the script was successful, open `innative.sln` in Visual Studio and build the project, or run `msbuild innative.sln`. **Visual Studio 2019 broke MSBuild outside the developer prompt, so you'll have to open the .sln file and manually compile Debug and MinSizeRel yourself, or run `build-llvm.ps1` inside a developer prompt.**
+Regardless of whether you are using Visual Studio 2017 or 2019, **make sure you have the v141_xp toolkit installed**, first. Run `build-llvm.ps1` if you have Visual Studio 2019, or run `build-llvm.ps1 2017` if you have Visual Studio 2017, and wait for it to complete. If the script was successful, open `innative.sln` in Visual Studio and build the project, or run `msbuild innative.sln`. **Visual Studio 2019 broke MSBuild outside the developer prompt, so you'll have to open the .sln file and manually compile Debug and MinSizeRel yourself.**
  
 The script downloads a portable cmake and python3 into the `bin` directory. If you would rather run the commands yourself, have existing installations of cmake/python, or want to modify the LLVM compilation flags, you can run the commands for your version of Visual Studio yourself:
 
@@ -88,9 +89,9 @@ A prebuilt version of this image is [available here](https://cloud.docker.com/u/
     
 ## Targeting inNative
  
-No compiler fully supports inNative, because current WebAssembly compilers target *web embeddings* and make assumptions about which functions are available. For now, try building webassembly modules that have no dependencies, as these can always be run on any webassembly implementation. True C interop is provided via two special compiler functions, `_innative_to_c` and `_innative_from_c`. These can be used to acquire C pointers to WebAssembly memory to pass to other functions, and to convert C pointers into a form that can be manipulated by WebAssembly. **However**, it is not possible to safely manipulate outside memory pointers, so `_innative_` pointers can only be accessed when not in strict mode.
+No compiler fully supports inNative, because current WebAssembly compilers target *web embeddings* and make assumptions about which functions are available. For now, try building webassembly modules that have no dependencies, as these can always be run on any webassembly implementation. True C interop is provided via two special compiler functions, `_innative_to_c` and `_innative_from_c`. These can be used to acquire C pointers to WebAssembly memory to pass to other functions, and to convert C pointers into a form that can be manipulated by WebAssembly. **However**, it is not possible to safely manipulate outside memory pointers, so `_innative_` pointers can only be accessed when not in strict mode. inNative also provides a [custom `cref` extension](https://github.com/innative-sdk/innative/wiki/inNative-cref-Extension) that automatically converts WebAssembly indexes into C pointers for external C functions.
  
-The host-object proposal will make it easier to target native C environments, and hopefully compilers will make it easier to target non-web embeddings of WebAssembly.
+The [WebIDL bindings proposal](https://github.com/WebAssembly/webidl-bindings) will make it easier to target native C environments, and hopefully compilers will make it easier to target non-web embeddings of WebAssembly.
  
 ## Embedding inNative
  
@@ -99,24 +100,29 @@ inNative is compiled as either a dynamic or static library, and can be integrate
     // Create the environment, setting the dynamic library flag
     IRExports exports;
     innative_runtime(&exports);
-    Environment* env = (*exports.CreateEnvironment)(1, 0, argv[0]);
-    env->flags |= ENV_DLL; // Add ENV_NO_INIT if you want to manually initialize and cleanup the DLL.
+    Environment* env = (*exports.CreateEnvironment)(1, 0, (!argc ? 0 : argv[0]));
+    env->flags |= ENV_LIBRARY; // Add ENV_NO_INIT if you want to manually initialize and cleanup the DLL.
 
     // Add the script you want to compile
     int err;
     (*exports.AddModule)(env, "your_script.wasm", 0, "your_script", &err);
 
     // Add the default static library and any additional libraries you want to expose to the script
-    int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
- 
+    err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
+
+    err = (*exports.FinalizeEnvironment)(env);
+    
     // Compile and dynamically load the result
     err = (*exports.Compile)(env, "your_script.out");
-    void* assembly = (*exports.LoadAssembly)(flags, "your_script.out");
+    void* assembly = (*exports.LoadAssembly)("your_script.out");
 
-    // Destroy environment
+    // Destroy environment (no longer needed after compilation is completed)
     (*exports.DestroyEnvironment)(env);
 
     // Load functions and execute
     void (*update_entity)(int) = (void (*)(int))(*exports.LoadFunction)(assembly, "your_module", "update_entity");
 
-    (*update_entity)(0); 
+    (*update_entity)(0);
+    
+    // Free assembly once finished
+    (*exports.FreeAssembly)(assembly);

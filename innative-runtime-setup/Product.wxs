@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <?if $(var.Platform)="x86" ?>
+  <?define ProgramFilesFolder="ProgramFilesFolder" ?>
+  <?define Win64="no" ?>
+  <?elseif $(var.Platform)="x64" ?>
+  <?define ProgramFilesFolder="ProgramFiles64Folder" ?>
+  <?define Win64="yes" ?>
+  <?else ?>
+  <?error Unknown value for Platform variable ?>
+  <?endif ?>
+
+  <?define Version="0.1.0" ?>
+  <Product 
+    Id="6A27F179-BADF-4580-821D-2892F229F335"
+    Name="inNative Runtime v$(var.Version)" 
+    Language="1033" 
+    Version="$(var.Version).0"
+    Manufacturer="Black Sphere Studios" 
+    UpgradeCode="aac979e9-ba48-44c0-aea8-40fef1176d57">
+    
+    <Package 
+      Description='inNative Runtime Installer $(var.Platform)'
+      Comments="Performs a full installation of the inNative Runtime"
+      Manufacturer="Black Sphere Studios" 
+      InstallerVersion="300"
+      Compressed="yes"
+      InstallScope="perMachine"
+      InstallPrivileges="elevated"
+      Platform="$(var.Platform)"/>
+    
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high"/>
+    <WixVariable Id="WixUILicenseRtf" Value="../innative-sdk-setup/LICENSE.rtf" />
+    <WixVariable Id="WixUIBannerBmp" Value="../innative-sdk-setup/innative-banner.png" />
+    <WixVariable Id="WixUIDialogBmp" Value="../innative-sdk-setup/innative-panel.png" />
+    
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="$(var.ProgramFilesFolder)">
+        <Directory Id="INNATIVEFOLDER" Name="inNative">
+          <Directory Id="INSTALLFOLDER" Name="Runtime v$(var.Version)"/>
+        </Directory>
+      </Directory>
+    </Directory>
+    
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <UIRef Id="WixUI_InstallDir" />
+
+    <ComponentGroup Id="inNativeBinGroup" Directory="INSTALLFOLDER">
+      <Component Id="inNativeBin" Guid="48f2f751-ecf6-4f3e-8cb3-848df261404e">
+        <File Id="innative.cmd.exe" Name="innative-cmd.exe" Source="$(var.innative.TargetDir)innative-cmd.exe" KeyPath="yes" Checksum="yes"/>
+        <File Id="innative.cmd.d.exe" Name="innative-cmd-d.exe" Source="$(var.innative.TargetDir)innative-cmd-d.exe" Checksum="yes"/>
+        <File Id="innative.d.dll" Name="innative-d.dll" Source="$(var.innative.TargetDir)innative-d.dll"/>
+        <File Id="innative.env.d.lib" Name="innative-env-d.lib" Source="$(var.innative.TargetDir)innative-env-d.lib"/>
+        <File Id="innative.env.lib" Name="innative-env.lib" Source="$(var.innative.TargetDir)innative-env.lib"/>
+        <File Id="innative.s.d.lib" Name="innative-s-d.lib" Source="$(var.innative.TargetDir)innative-s-d.lib"/>
+        <File Id="innative.s.lib" Name="innative-s.lib" Source="$(var.innative.TargetDir)innative-s.lib"/>
+        <File Id="innative.dll" Name="innative.dll" Source="$(var.innative.TargetDir)innative.dll"/>
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="inNativeRuntime" Title="inNative Runtime" Level="1">
+      <ComponentGroupRef Id="inNativeBinGroup" />
+    </Feature>
+    
+    <CustomAction Id="Installer" Execute="deferred" Impersonate="yes" Return="check" FileKey="innative.cmd.exe" ExeCommand="-i" SuppressModularization="yes" />
+    <CustomAction Id="Uninstaller" Execute="deferred" Impersonate="yes" Return="check" FileKey="innative.cmd.exe" ExeCommand="-u" SuppressModularization="yes" />
+
+    <InstallExecuteSequence>
+      <Custom Action="Installer" After="InstallFiles" Overridable="yes">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="Uninstaller" Before="RemoveFiles" Overridable="yes">REMOVE~="ALL"</Custom>
+    </InstallExecuteSequence>
+  </Product>
+
+  <!-- For unknown reasons, these custom actions must be in this exact order, in their own fragment, or they won't be sequenced properly -->
+</Wix>

@@ -72,7 +72,11 @@ bool EnumKeyValue(HKEY hive, const wchar_t* key, uint16_t* version)
   RegCloseKey(hKey);
   return true;
 }
+#elif defined(IN_PLATFORM_POSIX)
+#define MAKESTRING2(x) #x
+#define MAKESTRING(x) MAKESTRING2(x)
 
+#include <dlfcn.h>
 #endif
 
 // This is a stub loader for the runtime. It looks for an existing installation
@@ -123,7 +127,7 @@ IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
   if(runtime)
   {
     HMODULE dll = LoadLibraryW(runtime);
-    if(dll != 0)
+    if(dll != NULL)
     {
       void (*hook)(IRExports*) = (void(*)(IRExports*))GetProcAddress((HMODULE)dll, "innative_runtime");
       if(hook)
@@ -139,13 +143,13 @@ IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
   // Try each symlink level sequentially
   void* lib = dlopen("libinnative.so." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION), RTLD_NOW);
   if(!lib)
-    void* lib = dlopen("libinnative.so." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR), RTLD_NOW);
+    lib = dlopen("libinnative.so." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR), RTLD_NOW);
   if(!lib)
-    void* lib = dlopen("libinnative.so." MAKESTRING(INNATIVE_VERSION_MAJOR), RTLD_NOW);
+    lib = dlopen("libinnative.so." MAKESTRING(INNATIVE_VERSION_MAJOR), RTLD_NOW);
   if(!lib)
-    void* lib = dlopen("libinnative.so", RTLD_NOW);
+    lib = dlopen("libinnative.so", RTLD_NOW);
 
-  if(lib)
+  if(lib != NULL)
   {
     void(*hook)(IRExports*) = (void(*)(IRExports*))dlsym(lib, "innative_runtime");
     if(hook)
