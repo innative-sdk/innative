@@ -21,7 +21,8 @@ RUN mkdir /innative/
 COPY --from=builder /bin/innative-cmd /innative/innative-cmd
 COPY --from=builder /bin/innative-test /usr/bin/innative-test
 COPY --from=builder /bin/innative-env.a /innative/innative-env.a
-COPY --from=builder /bin/innative-env_d.a /innative/innative-env_d.a
+COPY --from=builder /bin/innative-env-d.a /innative/innative-env-d.a
+COPY --from=builder /bin/innative-stub.a /usr/lib/innative-stub.a
 COPY --from=builder /bin/libinnative.so /innative/libinnative.so
 RUN cd innative;./innative-cmd -i
 RUN rm -rf /innative/
