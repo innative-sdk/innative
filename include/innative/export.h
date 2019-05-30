@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __EXPORT_H__IN__
-#define __EXPORT_H__IN__
+#ifndef IN__EXPORT_H
+#define IN__EXPORT_H
 
 #include "innative/schema.h"
 
@@ -42,7 +42,7 @@ extern "C" {
   };
 
   // Allows C code to access a webassembly global, provided it knows the correct type.
-  typedef union __IN_GLOBAL_TYPE
+  typedef union IN__GLOBAL_TYPE
   {
     uint32_t i32;
     uint64_t i64;
@@ -52,7 +52,7 @@ extern "C" {
   } IRGlobal;
 
   // Contains pointers to the actual runtime functions
-  typedef struct __IN_EXPORTS
+  typedef struct IN__EXPORTS
   {
     /// Creates an environment with default settings, which must be destroyed using DestroyEnvironment
     /// \param modules The number of modules that are expected to be added to the environment - can just be an estimate.

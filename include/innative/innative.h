@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#ifndef __INNATIVE_H__IN__
-#define __INNATIVE_H__IN__
+#ifndef IN__INNATIVE_H
+#define IN__INNATIVE_H
 
 #define INNATIVE_VERSION_MAJOR 0
 #define INNATIVE_VERSION_MINOR 1

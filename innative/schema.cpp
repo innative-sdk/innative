@@ -4,14 +4,14 @@
 #include "innative/schema.h"
 #include "util.h"
 
-bool __WASM_BYTE_ARRAY::operator==(const __WASM_BYTE_ARRAY& r) const
+bool IN_WASM_BYTE_ARRAY::operator==(const IN_WASM_BYTE_ARRAY& r) const
 {
   if(r.n_bytes != n_bytes)
     return false;
   return !memcmp(bytes, r.bytes, n_bytes);
 }
 
-void __WASM_BYTE_ARRAY::resize(varuint32 sz, bool terminator, const Environment& env)
+void IN_WASM_BYTE_ARRAY::resize(varuint32 sz, bool terminator, const Environment& env)
 {
   n_bytes = sz;
   if(sz > 0)
@@ -24,7 +24,7 @@ void __WASM_BYTE_ARRAY::resize(varuint32 sz, bool terminator, const Environment&
     bytes = terminator ? (uint8_t*)"" : nullptr;
 }
 
-void __WASM_BYTE_ARRAY::discard(varuint32 sz, bool terminator)
+void IN_WASM_BYTE_ARRAY::discard(varuint32 sz, bool terminator)
 {
   n_bytes = sz;
   if(n_bytes > 0 && terminator)

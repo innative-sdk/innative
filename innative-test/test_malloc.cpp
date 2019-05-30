@@ -39,6 +39,7 @@ extern "C" {
 
 void TestHarness::test_malloc()
 {
+  assert(wasm_buf != nullptr);
   // Page-align our fake memory allocation so the webassembly math works correctly
   memset(wasm_buf, 0xCC, WASM_PAGE * (MAX_PAGES + 1));
   (char*&)wasm_buf += WASM_PAGE - ((size_t)wasm_buf % WASM_PAGE);

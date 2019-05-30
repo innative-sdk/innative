@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __CONSTANTS_H__IN__
-#define __CONSTANTS_H__IN__
+#ifndef IN__CONSTANTS_H
+#define IN__CONSTANTS_H
 
 #include "innative/innative.h"
 #include "innative/khash.h"

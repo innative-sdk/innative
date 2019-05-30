@@ -49,12 +49,12 @@ namespace innative {
     static const kh_tokens_t* tokenhash = GenTokenHash(tokenlist, { { "anyfunc", TOKEN_FUNCREF } });
 
     template<int LEN>
-    inline const char* __getTokenString(WatTokenID token, const char* (&list)[LEN])
+    inline const char* IN_getTokenString(WatTokenID token, const char* (&list)[LEN])
     {
       return token < LEN ? list[token] : 0;
     }
 
-    const char* GetTokenString(WatTokenID token) { return __getTokenString(token - 1, tokenlist); }
+    const char* GetTokenString(WatTokenID token) { return IN_getTokenString(token - 1, tokenlist); }
 
     const char* CheckTokenINF(const char* s, const char* end, std::string* target)
     {

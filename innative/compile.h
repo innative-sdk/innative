@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __COMPILE_H__IN__
-#define __COMPILE_H__IN__
+#ifndef IN__COMPILE_H
+#define IN__COMPILE_H
 
 #include "innative/schema.h"
 #include <vector>

@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __SCHEMA_H__IN__
-#define __SCHEMA_H__IN__
+#ifndef IN__SCHEMA_H
+#define IN__SCHEMA_H
 
 #include "innative/innative.h"
 #include "innative/khash.h"
@@ -86,23 +86,23 @@ enum WASM_KIND
   WASM_KIND_GLOBAL   = 3
 };
 
-struct __WASM_ENVIRONMENT;
+struct IN_WASM_ENVIRONMENT;
 
 // Represents a binary webassembly byte array structure
-typedef struct __WASM_BYTE_ARRAY
+typedef struct IN_WASM_BYTE_ARRAY
 {
 #ifdef  __cplusplus
-  __WASM_BYTE_ARRAY() : bytes(nullptr), n_bytes(0) {}
-  __WASM_BYTE_ARRAY(uint8_t* b, varuint32 n) : bytes(b), n_bytes(n) {}
+  IN_WASM_BYTE_ARRAY() : bytes(nullptr), n_bytes(0) {}
+  IN_WASM_BYTE_ARRAY(uint8_t* b, varuint32 n) : bytes(b), n_bytes(n) {}
   inline uint8_t* get() { return bytes; }
   inline const uint8_t* get() const { return bytes; }
   inline const char* str() const { return (char*)bytes; }
   inline varuint32 size() const { return n_bytes; }
-  void resize(varuint32 sz, bool terminator, const struct __WASM_ENVIRONMENT& env);
+  void resize(varuint32 sz, bool terminator, const struct IN_WASM_ENVIRONMENT& env);
   void discard(varuint32 sz, bool terminator);
 
-  bool operator==(const __WASM_BYTE_ARRAY& r) const;
-  inline bool operator!=(const __WASM_BYTE_ARRAY& r) const { return !operator==(r); }
+  bool operator==(const IN_WASM_BYTE_ARRAY& r) const;
+  inline bool operator!=(const IN_WASM_BYTE_ARRAY& r) const { return !operator==(r); }
   inline const uint8_t& operator[](varuint32 i) const { assert(i < n_bytes); return bytes[i]; }
   inline uint8_t& operator[](varuint32 i) { assert(i < n_bytes); return bytes[i]; }
 
@@ -119,7 +119,7 @@ KHASH_DECLARE(cimport, Identifier, char);
 KHASH_DECLARE(modules, Identifier, size_t);
 
 // A custom debug info structure used to map webassembly debug information.
-typedef struct __WASM_DEBUGINFO
+typedef struct IN_WASM_DEBUGINFO
 {
   unsigned int line;
   unsigned int column;
@@ -127,7 +127,7 @@ typedef struct __WASM_DEBUGINFO
 } DebugInfo;
 
 // A union representing all possible immediate values of a webassembly instruction.
-typedef union __WASM_IMMEDIATE
+typedef union IN_WASM_IMMEDIATE
 {
   uint32 _uint32;
   varuint1 _varuint1;
@@ -144,7 +144,7 @@ typedef union __WASM_IMMEDIATE
 } Immediate;
 
 // Encodes a single webassembly instruction and it's associated immediate values, plus it's location in the source.
-typedef struct __WASM_INSTRUCTION
+typedef struct IN_WASM_INSTRUCTION
 {
   uint8_t opcode;
   Immediate immediates[MAX_IMMEDIATES];
@@ -153,7 +153,7 @@ typedef struct __WASM_INSTRUCTION
 } Instruction;
 
 // A webassembly function type signature, encoding the form, parameters, and return values.
-typedef struct __WASM_FUNCTION_TYPE
+typedef struct IN_WASM_FUNCTION_TYPE
 {
   varsint7 form;
   varsint7* params;
@@ -163,7 +163,7 @@ typedef struct __WASM_FUNCTION_TYPE
 } FunctionType;
 
 // The underlying resizable limits structure used by linear memories and tables.
-typedef struct __WASM_RESIZABLE_LIMITS
+typedef struct IN_WASM_RESIZABLE_LIMITS
 {
   varuint32 flags; // WASM_LIMIT_FLAGS
   varuint32 minimum;
@@ -171,14 +171,14 @@ typedef struct __WASM_RESIZABLE_LIMITS
 } ResizableLimits;
 
 // A single linear memory declaration.
-typedef struct __WASM_MEMORY_DESC
+typedef struct IN_WASM_MEMORY_DESC
 {
   ResizableLimits limits;
   DebugInfo debug;
 } MemoryDesc;
 
 // A single table declaration.
-typedef struct __WASM_TABLE_DESC
+typedef struct IN_WASM_TABLE_DESC
 {
   varsint7 element_type;
   ResizableLimits resizable;
@@ -186,7 +186,7 @@ typedef struct __WASM_TABLE_DESC
 } TableDesc;
 
 // A single global description.
-typedef struct __WASM_GLOBAL_DESC
+typedef struct IN_WASM_GLOBAL_DESC
 {
   varsint7 type;
   varuint1 mutability;
@@ -194,14 +194,14 @@ typedef struct __WASM_GLOBAL_DESC
 } GlobalDesc;
 
 // A single global declaration, which is a description plus an initialization instruction.
-typedef struct __WASM_GLOBAL_DECL
+typedef struct IN_WASM_GLOBAL_DECL
 {
   GlobalDesc desc;
   Instruction init;
 } GlobalDecl;
 
 // A single function description, which encodes both a type index telling us the function type signature, and the debug information associated with it.
-typedef struct __WASM_FUNCTION_DESC
+typedef struct IN_WASM_FUNCTION_DESC
 {
   varuint32 type_index;
   DebugInfo debug;
@@ -209,7 +209,7 @@ typedef struct __WASM_FUNCTION_DESC
 } FunctionDesc;
 
 // Represents a single webassembly import definition
-typedef struct __WASM_IMPORT
+typedef struct IN_WASM_IMPORT
 {
   Identifier module_name;
   Identifier export_name;
@@ -224,7 +224,7 @@ typedef struct __WASM_IMPORT
 } Import;
 
 // Represents a single webassembly export definition
-typedef struct __WASM_EXPORT
+typedef struct IN_WASM_EXPORT
 {
   Identifier name;
   varuint7 kind; // WASM_KIND
@@ -232,7 +232,7 @@ typedef struct __WASM_EXPORT
 } Export;
 
 // Encodes initialization data for a table
-typedef struct __WASM_TABLE_INIT
+typedef struct IN_WASM_TABLE_INIT
 {
   varuint32 index;
   Instruction offset;
@@ -241,7 +241,7 @@ typedef struct __WASM_TABLE_INIT
 } TableInit;
 
 // Defines the locals, instructions, and debug information for a webassembly function body
-typedef struct __WASM_FUNCTION_BODY
+typedef struct IN_WASM_FUNCTION_BODY
 {
   varuint32 body_size;
   varuint32 n_locals;
@@ -254,7 +254,7 @@ typedef struct __WASM_FUNCTION_BODY
 } FunctionBody;
 
 // Encodes initialization data for a data section
-typedef struct __WASM_DATA_INIT
+typedef struct IN_WASM_DATA_INIT
 {
   varuint32 index;
   Instruction offset;
@@ -262,7 +262,7 @@ typedef struct __WASM_DATA_INIT
 } DataInit;
 
 // Represents any custom section defined in the module
-typedef struct __WASM_CUSTOM_SECTION
+typedef struct IN_WASM_CUSTOM_SECTION
 {
   varuint7 opcode;
   varuint32 payload;
@@ -276,18 +276,18 @@ namespace innative {
     struct Context;
   }
 }
-typedef innative::code::Context __IN_CONTEXT;
+typedef innative::code::Context IN_CODE_CONTEXT;
 namespace llvm {
   class LLVMContext;
 }
-typedef llvm::LLVMContext __LLVM_CONTEXT;
+typedef llvm::LLVMContext LLVM_LLVM_CONTEXT;
 #else
-typedef void __IN_CONTEXT;
-typedef void __LLVM_CONTEXT;
+typedef void IN_CODE_CONTEXT;
+typedef void LLVM_LLVM_CONTEXT;
 #endif
 
 // Represents a single webassembly module
-typedef struct __WASM_MODULE
+typedef struct IN_WASM_MODULE
 {
   uint32 magic_cookie;
   uint32 version;
@@ -368,25 +368,25 @@ typedef struct __WASM_MODULE
 
   struct kh_exports_s* exports;
   const char* path; // For debugging purposes, store path to source .wat file, if it exists.
-  __IN_CONTEXT* cache; // If non-zero, points to a cached compilation of this module
+  IN_CODE_CONTEXT* cache; // If non-zero, points to a cached compilation of this module
 } Module;
 
 // Represents a single validation error node in a singly-linked list.
-typedef struct __WASM_VALIDATION_ERROR
+typedef struct IN_WASM_VALIDATION_ERROR
 {
   int code;
   char* error;
   ptrdiff_t m;
-  struct __WASM_VALIDATION_ERROR* next;
+  struct IN_WASM_VALIDATION_ERROR* next;
 } ValidationError;
 
 // Encodes a single webassembly embedding used by the environment in the linking process.
-typedef struct __WASM_EMBEDDING
+typedef struct IN_WASM_EMBEDDING
 {
   const void* data;
   uint64_t size; // If size is 0, data points to a null terminated UTF8 file path
   int tag; // defines the type of embedding data included, determined by the runtime. 0 is always a static library file for the current platform.
-  struct __WASM_EMBEDDING* next;
+  struct IN_WASM_EMBEDDING* next;
 } Embedding;
 
 enum WASM_LOG_LEVEL
@@ -401,10 +401,10 @@ enum WASM_LOG_LEVEL
 
 KHASH_DECLARE(modulepair, kh_cstr_t, FunctionType);
 
-struct __WASM_ALLOCATOR;
+struct IN_WASM_ALLOCATOR;
 
 // Represents a collection of webassembly modules and configuration options that will be compiled into a single binary
-typedef struct __WASM_ENVIRONMENT
+typedef struct IN_WASM_ENVIRONMENT
 {
   size_t n_modules; // number of completely loaded modules (for multithreading)
   size_t size; // Size of loaded or loading modules
@@ -420,7 +420,7 @@ typedef struct __WASM_ENVIRONMENT
   const char* objpath; // Path to store intermediate results. If NULL, intermediate results are stored in the output folder
   const char* linker; // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
   const char* system; // prefix for the "system" module, which simply attempts to link the function name as a C function. Defaults to a blank string.
-  struct __WASM_ALLOCATOR* alloc; // Stores a pointer to the internal allocator
+  struct IN_WASM_ALLOCATOR* alloc; // Stores a pointer to the internal allocator
   int loglevel; // WASM_LOG_LEVEL
   FILE* log; // Output stream for log messages
   void(*wasthook)(void*); // Optional hook for WAST debugging cases
@@ -428,7 +428,7 @@ typedef struct __WASM_ENVIRONMENT
   struct kh_modules_s* modulemap;
   struct kh_modulepair_s* whitelist;
   struct kh_cimport_s* cimports;
-  __LLVM_CONTEXT* context;
+  LLVM_LLVM_CONTEXT* context;
 } Environment;
 
 #ifdef  __cplusplus

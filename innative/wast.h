@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __WAST_H__IN__
-#define __WAST_H__IN__
+#ifndef IN__WAST_H
+#define IN__WAST_H
 
 #include "wat.h"
 

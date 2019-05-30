@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __WAT_H__IN__
-#define __WAT_H__IN__
+#ifndef IN__WAT_H
+#define IN__WAT_H
 
 #include "lexer.h"
 #include "stack.h"
