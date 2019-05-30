@@ -492,11 +492,15 @@ BB* BindLabel(BB* block, code::Context& context)
   return block;
 }
 
-void PushResult(code::BlockResult** root, llvmVal* result, BB* block, const Environment& env)
+IN_ERROR PushResult(code::BlockResult** root, llvmVal* result, BB* block, const Environment& env)
 {
   code::BlockResult* next = *root;
   *root = tmalloc<code::BlockResult>(env, 1);
+  if(!*root)
+    return ERR_FATAL_OUT_OF_MEMORY;
+
   new(*root) code::BlockResult{ result, block, next };
+  return ERR_SUCCESS;
 }
 
 // Adds current value stack to target branch according to that branch's signature.
@@ -508,7 +512,7 @@ IN_ERROR AddBranch(code::Block& target, code::Context& context)
     llvmVal* value;
     err = PopType(target.sig, context, value, true);
     if(!err)
-      PushResult(&target.results, value, context.builder.GetInsertBlock(), context.env); // Push result
+      err = PushResult(&target.results, value, context.builder.GetInsertBlock(), context.env); // Push result
   }
   return err;
 }
@@ -602,7 +606,8 @@ IN_ERROR CompileElseBlock(code::Context& context)
     llvmVal* value;
     if(err = PopType(context.control.Peek().sig, context, value))
       return err;
-    PushResult(&context.control.Peek().results, value, context.builder.GetInsertBlock(), context.env); // Push result
+    if(err = PushResult(&context.control.Peek().results, value, context.builder.GetInsertBlock(), context.env)) // Push result
+      return err;
   }
 
   // Reset value stack, but ensure that we preserve a polymorphic value if we had pushed one before
@@ -769,8 +774,12 @@ IN_ERROR CompileCall(varuint32 index, code::Context& context)
   if(context.functions[index].intrinsic != nullptr)
   {
     IN_ERROR err;
-    llvmVal** ArgsV = tmalloc<llvmVal*>(context.env, context.functions[index].intrinsic->num);
-    for(unsigned int i = context.functions[index].intrinsic->num; i-- > 0;)
+    int num = context.functions[index].intrinsic->num;
+    llvmVal** ArgsV = tmalloc<llvmVal*>(context.env, num);
+    if(num > 0 && !ArgsV)
+      return ERR_FATAL_OUT_OF_MEMORY;
+
+    for(unsigned int i = num; i-- > 0;)
     {
       if(err = PopType(context.functions[index].intrinsic->params[i], context, ArgsV[i]))
         return err;
@@ -791,6 +800,9 @@ IN_ERROR CompileCall(varuint32 index, code::Context& context)
   // Pop arguments in reverse order
   IN_ERROR err;
   llvmVal** ArgsV = tmalloc<llvmVal*>(context.env, num);
+  if(num > 0 && !ArgsV)
+    return ERR_FATAL_OUT_OF_MEMORY;
+
   for(unsigned int i = num; i-- > 0;)
   {
     if(err = PopType(GetTypeEncoding(fn->getFunctionType()->getParamType(i)), context, ArgsV[i]))
@@ -849,6 +861,9 @@ IN_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
 
   // Pop arguments in reverse order
   llvmVal** ArgsV = tmalloc<llvmVal*>(context.env, ftype.n_params);
+  if(ftype.n_params > 0 && !ArgsV)
+    return ERR_FATAL_OUT_OF_MEMORY;
+
   for(unsigned int i = ftype.n_params; i-- > 0;)
   {
     if(err = PopType(ftype.params[i], context, ArgsV[i]))
@@ -2556,7 +2571,13 @@ namespace innative {
     Path workdir = GetWorkingDir();
     Path libpath(env->libpath);
     if(!env->objpath)
+    {
       const_cast<Environment*>(env)->objpath = utility::AllocString(*const_cast<Environment*>(env), file.BaseDir().Get());
+
+      if(!env->objpath)
+        return ERR_FATAL_OUT_OF_MEMORY;
+    }
+
     Path objpath(env->objpath);
 
     if(!file.IsAbsolute())

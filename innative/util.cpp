@@ -312,6 +312,9 @@ namespace innative {
     const char* AllocString(Environment& env, const char* s, size_t n)
     {
       char* t = tmalloc<char>(env, n + 1);
+      if(!t)
+        return nullptr;
+
       tmemcpy<char>(t, n + 1, s, n + 1);
       return t;
     }

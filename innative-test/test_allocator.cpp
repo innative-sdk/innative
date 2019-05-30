@@ -11,9 +11,9 @@ using namespace utility;
 
 void TestHarness::test_allocator()
 {
-  const int TRIALS = 5;
-  const int MAXALLOC = 150;
-  const int MAXSIZE = 500000;
+  const size_t TRIALS = 5;
+  const size_t MAXALLOC = 150;
+  const size_t MAXSIZE = 500000;
   int NUM = std::thread::hardware_concurrency();
   std::atomic_bool start;
 
@@ -30,7 +30,7 @@ void TestHarness::test_allocator()
       size_t total = 0;
       while(total < MAXSIZE)
       {
-        size_t sz = 1 + (int)((float(rand()) / RAND_MAX) * MAXALLOC);
+        size_t sz = 1 + (size_t)((float(rand()) / RAND_MAX) * MAXALLOC);
         total += sz;
         maps[id].push_back({ alloc.allocate(sz), sz });
       }
@@ -56,7 +56,7 @@ void TestHarness::test_allocator()
     std::sort(merge.begin(), merge.end(), [](const std::pair<void*, size_t>& a, const std::pair<void*, size_t>& b) { return a.first < b.first; });
     bool pass = true;
 
-    for(int i = 1; i < merge.size(); ++i)
+    for(size_t i = 1; i < merge.size(); ++i)
       pass = pass && ((((char*)merge[i - 1].first) + merge[i - 1].second) <= merge[i].first);
 
     TEST(pass);

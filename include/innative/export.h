@@ -73,7 +73,7 @@ extern "C" {
     /// \param env The environment to modify.
     /// \param module_name The name of a module, in case the C function is actually a name-mangled webassembly function. This parameter should be null for standard C functions.
     /// \param export_name The name of the function to add to the whitelist. Must be a valid UTF8 webassembly function name.
-    void(*AddWhitelist)(Environment* env, const char* module_name, const char* export_name);
+    enum IN_ERROR(*AddWhitelist)(Environment* env, const char* module_name, const char* export_name);
 
     /// Adds an embedding to the environment. This is usually a static or shared C library that exposes C functions that the webassembly modules can call.
     /// \param env The environment to modify.

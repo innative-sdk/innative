@@ -16,7 +16,7 @@ namespace innative {
   void DestroyEnvironment(struct IN_WASM_ENVIRONMENT* env);
   void LoadModule(struct IN_WASM_ENVIRONMENT* env, size_t index, const void* data, uint64_t size, const char* name, const char* path, int* err);
   void AddModule(struct IN_WASM_ENVIRONMENT* env, const void* data, uint64_t size, const char* name, int* err);
-  void AddWhitelist(struct IN_WASM_ENVIRONMENT* env, const char* module_name, const char* export_name);
+  enum IN_ERROR AddWhitelist(struct IN_WASM_ENVIRONMENT* env, const char* module_name, const char* export_name);
   enum IN_ERROR AddEmbedding(struct IN_WASM_ENVIRONMENT* env, int tag, const void* data, uint64_t size);
   enum IN_ERROR FinalizeEnvironment(struct IN_WASM_ENVIRONMENT* env);
   enum IN_ERROR Compile(struct IN_WASM_ENVIRONMENT* env, const char* file);

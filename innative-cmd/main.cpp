@@ -334,9 +334,13 @@ int main(int argc, char* argv[])
         if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_MODULE, name, 0, (void*)data, size))
           *err = ERR_FATAL_RESOURCE_ERROR;
     };
-    exports.AddWhitelist = [](Environment* env, const char* module_name, const char* export_name) {
+    exports.AddWhitelist = [](Environment* env, const char* module_name, const char* export_name)->enum IN_ERROR {
       if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_WHITELIST, module_name, 0, (void*)export_name, strlen(export_name) + 1))
+      {
         std::cout << "Failed to add whitelist entry: " << (!module_name ? "" : module_name) << "|" << export_name << std::endl;
+        return ERR_FATAL_FILE_ERROR;
+      }
+      return ERR_SUCCESS;
     };
     exports.AddEmbedding = [](Environment* env, int tag, const void* data, uint64_t size)->enum IN_ERROR {
       char buf[20];

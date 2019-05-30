@@ -494,6 +494,9 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, const Environme
       f.n_locals += locals[i].count;
     }
     f.locals = tmalloc<varsint7>(env, f.n_locals);
+    if(f.n_locals > 0 && !f.locals)
+      return ERR_FATAL_OUT_OF_MEMORY;
+
     f.n_locals = 0;
     for(uint64_t i = 0; i < n_locals; ++i)
       for(uint64_t j = 0; j < locals[i].count; ++j)
@@ -501,7 +504,7 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, const Environme
   }
 
   f.body = 0;
-  if(err >= 0 && f.body_size)
+  if(err >= 0 && f.body_size > 0)
   {
     f.body = tmalloc<Instruction>(env, f.body_size); // Overallocate maximum number of possible instructions we might have
     if(!f.body)
