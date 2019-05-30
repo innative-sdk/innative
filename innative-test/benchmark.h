@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __BENCHMARK_H__IN__
-#define __BENCHMARK_H__IN__
+#ifndef IN__BENCHMARK_H
+#define IN__BENCHMARK_H
 
 #include "innative/export.h"
 #include "innative/path.h"

@@ -24,7 +24,7 @@
 
 using std::string;
 
-void* __WASM_ALLOCATOR::allocate(size_t n)
+void* IN_WASM_ALLOCATOR::allocate(size_t n)
 {
   size_t index = cur.fetch_add(n, std::memory_order_acq_rel);
   size_t end = index + n;
@@ -38,18 +38,26 @@ void* __WASM_ALLOCATOR::allocate(size_t n)
 
       size_t len = std::max<size_t>(end, 4096) * 2;
       void* prev = malloc(len);
-      list.push_back({ prev, len }); // Add real pointer and size to our destructor list
-      mem.exchange((char*)prev - index, std::memory_order_release); // backtrack to trick the current index into pointing to the right address
+      if(prev != nullptr)
+      {
+        list.push_back({ prev, len }); // Add real pointer and size to our destructor list
+        mem.exchange((char*)prev - index, std::memory_order_release); // backtrack to trick the current index into pointing to the right address
+      }
+      else // If malloc failed, set the memory pointer to NULL, but increase sz anyway to unblock other threads
+        mem.exchange(nullptr, std::memory_order_release);
+
       sz.exchange(len + index, std::memory_order_release); // Actual "end" is our previous allocation endpoint (not the memory endpoint) plus current size
     }
   }
 
   void* m = mem.load(std::memory_order_acquire);
+  if(!m) // mem can be NULL if we ran out of memory
+    return nullptr;
   commit.fetch_add(n, std::memory_order_acq_rel);
   return (char*)m + index;
 }
 
-__WASM_ALLOCATOR::~__WASM_ALLOCATOR()
+IN_WASM_ALLOCATOR::~IN_WASM_ALLOCATOR()
 {
   mem.exchange(nullptr, std::memory_order_release);
   sz.exchange(0, std::memory_order_release);

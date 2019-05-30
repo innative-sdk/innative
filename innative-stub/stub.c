@@ -36,6 +36,9 @@ wchar_t* GetRuntimeVersion(wchar_t* buf, size_t sz, uint16_t major, uint16_t min
   DWORD len;
   RegQueryValueExW(hKey, L"runtime", 0, 0, 0, &len);
   LPBYTE runtime = malloc(sizeof(wchar_t)*((len + 1) / 2));
+  if(!runtime)
+    return 0;
+
   if(RegQueryValueExW(hKey, L"runtime", 0, 0, runtime, &len) != ERROR_SUCCESS)
   {
     free(runtime);

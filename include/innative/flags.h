@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __FLAGS_H__IN__
-#define __FLAGS_H__IN__
+#ifndef IN__FLAGS_H
+#define IN__FLAGS_H
 
 #ifdef  __cplusplus
 extern "C" {

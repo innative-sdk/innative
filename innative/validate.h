@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __VALIDATE_H__IN__
-#define __VALIDATE_H__IN__
+#ifndef IN__VALIDATE_H
+#define IN__VALIDATE_H
 
 #include "innative/schema.h"
 

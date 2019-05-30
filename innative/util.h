@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __UTIL_H__IN__
-#define __UTIL_H__IN__
+#ifndef IN__UTIL_H
+#define IN__UTIL_H
 
 #include "innative/schema.h"
 #include "innative/path.h"
@@ -16,10 +16,10 @@
 #include <atomic>
 #include <vector>
 
-struct __WASM_ALLOCATOR
+struct IN_WASM_ALLOCATOR
 {
-  __WASM_ALLOCATOR() : mem(0), sz(0), cur(0), commit(0) {}
-  IN_COMPILER_DLLEXPORT ~__WASM_ALLOCATOR();
+  IN_WASM_ALLOCATOR() : mem(0), sz(0), cur(0), commit(0) {}
+  IN_COMPILER_DLLEXPORT ~IN_WASM_ALLOCATOR();
 
   std::atomic<void*> mem;
   std::atomic_size_t sz;

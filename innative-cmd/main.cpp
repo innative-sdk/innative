@@ -400,7 +400,7 @@ int main(int argc, char* argv[])
 
 #ifdef IN_PLATFORM_WIN32
   if(generate)
-    env->alloc = (__WASM_ALLOCATOR*)BeginUpdateResourceA(out.c_str(), TRUE);
+    env->alloc = (IN_WASM_ALLOCATOR*)BeginUpdateResourceA(out.c_str(), TRUE);
   if(!env->alloc)
   {
     std::cout << "Failed to begin resource update!" << std::endl;

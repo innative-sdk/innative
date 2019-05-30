@@ -24,7 +24,7 @@ DESTDIR ?=
 ifeq ($(MAKECMDGOALS), debug)
 CPPFLAGS += -DDEBUG -g
 else
-CPPFLAGS += -DNDEBUG -march=native -O3
+CPPFLAGS += -DNDEBUG -O3
 endif
 
 debug: innative-env innative innative-cmd innative-test innative-stub

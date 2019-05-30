@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __LEXER_H__IN__
-#define __LEXER_H__IN__
+#ifndef IN__LEXER_H
+#define IN__LEXER_H
 
 #include "innative/schema.h"
 #include "util.h"

@@ -22,7 +22,7 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
     env->whitelist = kh_init_modulepair();
     env->cimports = kh_init_cimport();
     env->modules = trealloc<Module>(0, modules);
-    env->alloc = new __WASM_ALLOCATOR();
+    env->alloc = new IN_WASM_ALLOCATOR();
 
     if(!env->modules)
     {

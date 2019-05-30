@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __LLVM_H__IN__
-#define __LLVM_H__IN__
+#ifndef IN__LLVM_H
+#define IN__LLVM_H
 
 #include "innative/schema.h"
 #include "stack.h"

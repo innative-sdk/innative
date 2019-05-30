@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __STREAM_H__IN__
-#define __STREAM_H__IN__
+#ifndef IN__STREAM_H
+#define IN__STREAM_H
 
 #include "innative/schema.h"
 #include <inttypes.h>

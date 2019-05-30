@@ -1,8 +1,8 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef __ERRORS_H__IN__
-#define __ERRORS_H__IN__
+#ifndef IN__ERRORS_H
+#define IN__ERRORS_H
 
 #ifdef  __cplusplus
 extern "C" {
