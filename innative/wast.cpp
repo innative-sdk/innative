@@ -155,13 +155,17 @@ namespace innative {
       return err;
     }
 
-    void SetTempName(Environment& env, Module& m)
+    int SetTempName(Environment& env, Module& m)
     {
       static std::atomic_size_t modcount(1); // We can't use n_modules in case a module is malformed
 
       auto buf = std::string(IN_TEMP_PREFIX) + std::to_string(modcount.fetch_add(1, std::memory_order::memory_order_relaxed));
       m.name.resize(buf.size(), true, env);
+      if(!m.name.get())
+        return ERR_FATAL_OUT_OF_MEMORY;
+
       tmemcpy((char*)m.name.get(), m.name.size(), buf.data(), buf.size());
+      return ERR_SUCCESS;
     }
 
     int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module& m, const char* path)
@@ -227,7 +231,7 @@ namespace innative {
         kh_val(mapping, iter) = (varuint32)env.n_modules - 1;
       }
       else // If the module has no name, we must assign a temporary one
-        SetTempName(env, m);
+        return SetTempName(env, m);
       return ERR_SUCCESS;
     }
 
@@ -625,6 +629,8 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       InvalidateCache(cache, cachepath);
 
       env.modules = trealloc<Module>(env.modules, ++env.n_modules);
+      if(!env.modules)
+        return ERR_FATAL_OUT_OF_MEMORY;
       last = &env.modules[env.n_modules - 1];
 
       if(err = ParseWastModule(env, tokens, mapping, *last, path))
@@ -688,6 +694,8 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
         env.modules = trealloc<Module>(env.modules, ++env.n_modules); // We temporarily add this module to the environment, but don't set the "last" module to it
+        if(!env.modules)
+          return ERR_FATAL_OUT_OF_MEMORY;
         if(err = ParseWastModule(env, tokens, mapping, env.modules[env.n_modules - 1], path))
           return err;
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
@@ -872,6 +880,8 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       // If we get an unexpected token, try to parse it as an inline module
       WatToken t = WatToken{ TOKEN_NONE };
       env.modules = trealloc<Module>(env.modules, ++env.n_modules);
+      if(!env.modules)
+        return ERR_FATAL_OUT_OF_MEMORY;
       auto name = IN_TEMP_PREFIX + std::to_string(env.n_modules);
 
       last = &env.modules[env.n_modules - 1];

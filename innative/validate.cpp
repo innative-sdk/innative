@@ -989,6 +989,9 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
   varsint7* locals = tmalloc<varsint7>(env, n_local);
   if(locals)
     tmemcpy<varsint7>(locals, n_local, sig.params, sig.n_params);
+  else if(n_local > 0)
+    abort(); // Out of memory, abort execution
+
   n_local = sig.n_params;
   for(uint64_t i = 0; i < body.n_locals; ++i)
     locals[n_local++] = body.locals[i];

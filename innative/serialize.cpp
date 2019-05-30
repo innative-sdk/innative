@@ -32,6 +32,8 @@ void innative::wat::PushNewNameToken(const Environment& env, Queue<WatToken>& to
   va_end(args);
 
   char* s = tmalloc<char>(env, len + 1);
+  if(!s) // Out of memory, abort
+    abort();
   va_start(args, format);
   vsnprintf(s, len + 1, format, args);
   va_end(args);

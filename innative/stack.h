@@ -7,6 +7,7 @@
 #include <malloc.h>
 #include <assert.h>
 #include <memory.h>
+#include <stdlib.h>
 
 namespace innative {
   // Implements a simple stack that can temporarily restrict how far it can be shrunk
@@ -25,6 +26,8 @@ namespace innative {
       if(_capacity < capacity)
       {
         _array = reinterpret_cast<T*>(realloc(_array, capacity * sizeof(T)));
+        if(!_array) // Out of memory, abort
+          abort();
         _capacity = capacity;
       }
     }

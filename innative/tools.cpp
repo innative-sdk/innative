@@ -39,6 +39,9 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
     env->log = stdout;
     env->loglevel = LOG_WARNING;
     env->libpath = utility::AllocString(*env, GetProgramPath(arg0).BaseDir().Get());
+    if(!env->libpath) // Out of memory
+      return nullptr;
+
     env->objpath = 0;
     env->system = "";
     env->wasthook = 0;
@@ -152,17 +155,21 @@ void innative::AddModule(Environment* env, const void* data, uint64_t size, cons
     LoadModule(env, index, data, size, name, path, err);
 }
 
-void innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name)
+enum IN_ERROR innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name)
 {
   if(!module_name || !export_name)
-    return;
+    return ERR_PARSE_INVALID_NAME;
 
-  auto whitelist = tmalloc<char>(*env, CanonWhitelist(module_name, export_name, nullptr));
+  char* whitelist = tmalloc<char>(*env, CanonWhitelist(module_name, export_name, nullptr));
+  if(!whitelist)
+    return ERR_FATAL_OUT_OF_MEMORY;
+
   CanonWhitelist(module_name, export_name, whitelist);
 
   int r;
   auto iter = kh_put_modulepair(env->whitelist, whitelist, &r);
   //kh_val(env->whitelist, iter) = !ftype ? FunctionType{ TE_NONE, 0, 0, 0, 0 } : *ftype;
+  return ERR_SUCCESS;
 }
 
 enum IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, uint64_t size)
@@ -171,6 +178,9 @@ enum IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data
     return ERR_FATAL_NULL_POINTER;
 
   Embedding* embed = tmalloc<Embedding>(*env, 1);
+  if(!embed)
+    return ERR_FATAL_OUT_OF_MEMORY;
+
   embed->tag = tag;
   embed->data = data;
   embed->size = size;
@@ -218,6 +228,8 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
         {
           path = Path("/usr/lib/") + (const char*)embed->data;
           char* tmp = tmalloc<char>(*env, path.Get().size() + 1);
+          if(!tmp)
+            return ERR_FATAL_OUT_OF_MEMORY;
           tmemcpy<char>(tmp, path.Get().size() + 1, path.c_str(), path.Get().size() + 1);
           embed->data = tmp;
         }
@@ -241,6 +253,9 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
       {
         Identifier id;
         id.resize(symbol.size(), true, *env);
+        if(!id.get())
+          return ERR_FATAL_OUT_OF_MEMORY;
+
         memcpy(id.get(), symbol.data(), symbol.size());
         kh_put_cimport(env->cimports, id, &r);
         // On windows, because .lib files map to DLLs, they can have duplicate symbols from the dependent DLLs

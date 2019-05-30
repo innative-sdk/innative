@@ -102,7 +102,7 @@ void TestHarness::test_malloc()
       }
 
       bool valid = true;
-      for(int j = 0; j < len; ++j)
+      for(size_t j = 0; j < len; ++j)
         valid = valid && ((char*)p)[j] == 0;
       TEST(valid);
 
@@ -117,7 +117,7 @@ void TestHarness::test_malloc()
       size_t len = (*index).second;
 
       bool valid = true;
-      for(int j = 0; j < len; ++j)
+      for(size_t j = 0; j < len; ++j)
         valid = valid && ((uint8_t*)p)[j] == 0xF0;
       TEST(valid);
 
