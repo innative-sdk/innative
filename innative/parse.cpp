@@ -311,7 +311,7 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
     ins.immediates[0]._varuint32 = s.ReadVarUInt32(err);
 
     if(err >= 0)
-      ins.immediates[1]._varuptr = s.ReadVarUInt64(err);
+      ins.immediates[1]._varuptr = s.ReadVarUInt32(err); // Currently 32-bit because all memories are 32-bit
 
     break;
   case OP_unreachable:

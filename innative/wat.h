@@ -52,16 +52,16 @@ namespace innative {
     int ParseElemData(Queue<WatToken>& tokens, varuint32& index, Instruction& op, wat::kh_indexname_t* hash);
     int ParseElem(TableInit& e, Queue<WatToken>& tokens);
     int ParseData(Queue<WatToken>& tokens);
+    int AppendImport(Module& m, const Import& i, varuint32* index);
+    int InlineImportExport(const Environment& env, Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out);
 
     static int ParseBlockType(Queue<WatToken>& tokens, varsint7& out);
     static int ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens, utility::StringRef name, WatToken& internalname);
     static int ParseName(const Environment& env, ByteArray& name, const WatToken& t);
-    static int AppendImport(Module& m, const Import& i, varuint32* index);
     static int AddWatValType(const Environment& env, WatTokenID id, varsint7*& a, varuint32& n);
     static int WatString(const Environment& env, ByteArray& str, utility::StringRef t);
     static void WriteUTF32(uint32_t ch, ByteArray& str, varuint32& index);
     static varsint7 WatValType(WatTokenID id);
-    static int InlineImportExport(const Environment& env, Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out);
     static int ParseLocalAppend(const Environment& env, FunctionBody& body, Queue<WatToken>& tokens);
     static int AddName(wat::kh_indexname_t* h, WatToken t, varuint32 index);
 
@@ -78,7 +78,7 @@ namespace innative {
     }
 
     template<class T>
-    inline static int AppendArray(const Environment& env, T item, T*& a, varuint32& n)
+    inline static int ReallocArray(const Environment& env, T*& a, varuint32& n)
     {
       // We only allocate power of two chunks from our greedy allocator
       varuint32 i = utility::NextPow2(n++);
@@ -87,9 +87,19 @@ namespace innative {
         T* old = a;
         if(!(a = utility::tmalloc<T>(env, n * 2)))
           return ERR_FATAL_OUT_OF_MEMORY;
-        utility::tmemcpy<T>(a, n * 2, old, n - 1); // Don't free old because it was from a greedy allocator.
+        if(old != nullptr)
+          utility::tmemcpy<T>(a, n * 2, old, n - 1); // Don't free old because it was from a greedy allocator.
       }
 
+      return ERR_SUCCESS;
+    }
+
+    template<class T>
+    inline static int AppendArray(const Environment& env, T item, T*& a, varuint32& n)
+    {
+      int err;
+      if((err = ReallocArray(env, a, n)) != ERR_SUCCESS)
+        return err;
       a[n - 1] = item;
       return ERR_SUCCESS;
     }

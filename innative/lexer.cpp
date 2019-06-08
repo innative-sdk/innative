@@ -105,10 +105,15 @@ namespace innative {
       }
       s += i;
 
-      while(s < end && isxdigit(*s)) ++s;
-
       if(target)
         target->assign(begin + 3 + i, s - begin - 3 - i);
+
+      while(s < end && (*s == '_' || isxdigit(*s)))
+      {
+        if(target && *s != '_')
+          target->append(1, *s);
+        ++s;
+      }
 
       return s;
     }
@@ -155,12 +160,12 @@ namespace innative {
           if(strncasecmp(p, "inf", 3) != 0)
             return ERR_WAT_OUT_OF_RANGE;
         }
-        if(std::is_same<float, T>::value && fabs(out) <= 1.1754942e-38f) // glibc incorrectly considers subnormal numbers as underflow and sets ERANGE in this case
-          errno = 0;
-        if(std::is_same<double, T>::value && fabs(out) <= 2.2250738585072012e-308)
-          errno = 0;
       }
 #endif
+      if(std::is_same<float, T>::value && fabs(out) <= 1.1754942e-38f) // WebAssembly never considers an underflow to be a range error, it rounds to zero
+        errno = 0;
+      if(std::is_same<double, T>::value && fabs(out) <= 2.2250738585072012e-308)
+        errno = 0;
       if(errno == ERANGE)
         return ERR_WAT_OUT_OF_RANGE;
       // assert(!(errno != 0 || (end - numbuf.c_str()) != length));
@@ -174,7 +179,10 @@ namespace innative {
       numbuf.assign("400000"); // Hex for the first bit in the mantissa
       if(CheckTokenNAN(token.pos, token.pos + token.len, &numbuf))
       {
-        union { uint32_t i; float f; } u = { 0x7F800000U | strtoul(numbuf.c_str(), &last, 16) };
+        auto mantissa = strtoul(numbuf.c_str(), &last, 16);
+        if(mantissa < 0x1 || mantissa > 0x7fffff)
+          return ERR_WAT_OUT_OF_RANGE;
+        union { uint32_t i; float f; } u = { 0x7F800000U | mantissa };
         if(token.pos[0] == '-')
           u.i |= 0x80000000U;
 
@@ -197,7 +205,10 @@ namespace innative {
       numbuf.assign("8000000000000"); // Hex for the first bit in the mantissa
       if(CheckTokenNAN(token.pos, token.pos + token.len, &numbuf))
       {
-        union { uint64_t i; double f; } u = { 0x7FF0000000000000ULL | strtoull(numbuf.c_str(), &last, 16) };
+        auto mantissa = strtoull(numbuf.c_str(), &last, 16);
+        if(mantissa < 0x1 || mantissa > 0xfffffffffffff)
+          return ERR_WAT_OUT_OF_RANGE;
+        union { uint64_t i; double f; } u = { 0x7FF0000000000000ULL | mantissa };
         if(token.pos[0] == '-')
           u.i |= 0x8000000000000000ULL;
 

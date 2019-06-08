@@ -40,7 +40,10 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
     env->loglevel = LOG_WARNING;
     env->libpath = utility::AllocString(*env, GetProgramPath(arg0).BaseDir().Get());
     if(!env->libpath) // Out of memory
+    {
+      free(env);
       return nullptr;
+    }
 
     env->objpath = 0;
     env->system = "";
@@ -65,12 +68,9 @@ void innative::DestroyEnvironment(Environment* env)
     return;
 
   ClearEnvironmentCache(env, 0);
-
   for(varuint32 i = 0; i < env->n_modules; ++i)
   {
     kh_destroy_exports(env->modules[i].exports);
-    if(env->modules[i].importsection.imports)
-      free(env->modules[i].importsection.imports);
     assert(!env->modules[i].cache);
   }
 
