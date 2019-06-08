@@ -293,7 +293,7 @@ int WatParser::AppendImport(Module& m, const Import& i, varuint32* index)
     return ERR_WAT_INVALID_IMPORT_ORDER; // If we're trying to insert an import after declaring a table/func/global/memory, fail.
 
   *index = 0;
-  if(!(m.importsection.imports = trealloc<Import>(m.importsection.imports, ++m.importsection.n_import)))
+  if(ReallocArray(env, m.importsection.imports, m.importsection.n_import) != ERR_SUCCESS)
     return ERR_FATAL_OUT_OF_MEMORY;
 
   // Find the correct index to insert into

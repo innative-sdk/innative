@@ -69,6 +69,8 @@ IN_COMPILER_DLLEXPORT extern IN_COMPILER_NAKED void* _innative_syscall(size_t sy
 #else
     "movcc pc, lr\n\t"
 #endif
+    );
+}
 #else
 #error unsupported architecture!
 #endif
