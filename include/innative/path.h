@@ -15,11 +15,11 @@ namespace innative {
   {
   public:
 #ifdef IN_PLATFORM_WIN32
-    static const char SEPERATOR = '\\';
-    static const char OTHER = '/';
+    enum : char { SEPERATOR = '\\' };
+    enum : char { OTHER = '/' };
 #elif defined(IN_PLATFORM_POSIX)
-    static const char SEPERATOR = '/';
-    static const char OTHER = '\\';
+    enum : char { SEPERATOR = '/' };
+    enum : char { OTHER = '\\' };
 #else
 #error "unknown platform"
 #endif
@@ -118,7 +118,9 @@ namespace innative {
   protected:
     inline void _canonize()
     {
-      std::replace(_path.begin(), _path.end(), OTHER, SEPERATOR);
+      char other = OTHER; // std::replace takes the address of it's operators, which breaks on any constant that doesn't necessarily exist.
+      char seperator = SEPERATOR;
+      std::replace(_path.begin(), _path.end(), other, seperator);
     }
 
     std::string _path;

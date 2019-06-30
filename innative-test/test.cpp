@@ -93,7 +93,7 @@ int main(int argc, char *argv[])
 
   if(stages & TEST_INTERNAL)
   {
-    TestHarness harness(stderr);
+    TestHarness harness(exports, !argc ? 0 : argv[0], log, stderr, temppath.c_str());
     harness.Run(stdout);
   }
 

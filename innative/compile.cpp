@@ -1950,7 +1950,7 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
         //if(context.dbuilder)
         //  FunctionDebugInfo(context.functions.back().imported, context, false, context.m.importsection.imports[i].func_desc.debug.line);
 
-        auto name = (context.m.importsection.imports[i].func_desc.debug.name.get()) ?
+        auto name = !(context.m.importsection.imports[i].func_desc.debug.name.get()) ?
           "|" + context.functions.back().imported->getName() + "#internal" :
           context.m.importsection.imports[i].func_desc.debug.name.str() + ("#" + std::to_string(i));
 
