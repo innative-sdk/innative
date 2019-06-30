@@ -9,11 +9,14 @@
 #include <stdio.h>
 #include <vector>
 #include <string.h>
+#include "innative/path.h"
+#include "innative/export.h"
 
 class TestHarness
 {
 public:
-  TestHarness(FILE* out);
+  TestHarness(const IRExports& exports, const char* arg0, int loglevel, FILE* out, const char* folder);
+  ~TestHarness();
   size_t Run(FILE* out);
   void test_allocator();
   void test_environment();
@@ -24,6 +27,7 @@ public:
   void test_util();
   void test_parallel_parsing();
   void test_malloc();
+  int CompileWASM(const char* file);
 
   inline std::pair<uint32_t, uint32_t> Results() { auto r = _testdata; _testdata = { 0,0 }; return r; }
 
@@ -46,6 +50,11 @@ protected:
 
   std::pair<uint32_t, uint32_t> _testdata;
   FILE* _target;
+  const IRExports& _exports;
+  const char* _arg0;
+  int _loglevel;
+  std::vector<std::string> _garbage;
+  innative::Path _folder;
 };
 
 #define TEST(x) DoTest(x, ""#x, __FILE__, __LINE__)

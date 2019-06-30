@@ -226,3 +226,9 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned 
   }
   _innative_internal_write_out("\n", 1);
 }
+
+// This function exists only to test the _WASM_ C export code path
+IN_COMPILER_DLLEXPORT extern void _innative_internal_WASM_print(int32_t a)
+{
+  _innative_internal_env_print(a);
+}

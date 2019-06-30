@@ -137,7 +137,7 @@ int main(int argc, char* argv[])
   std::vector<std::pair<const char*, int>> embeddings;
   std::vector<const char*> whitelist;
   unsigned int flags = ENV_ENABLE_WAT; // Always enable WAT
-  unsigned int optimize = 0;
+  unsigned int optimize = ENV_OPTIMIZE_O3; // Default to O3
   innative::Path out;
   std::vector<const char*> wast; // WAST files will be executed in the order they are specified, after all other modules are injected into the environment
   const char* libpath = nullptr;
@@ -192,6 +192,8 @@ int main(int argc, char* argv[])
                 std::cout << "Unknown flag: " << argv[i] << std::endl;
                 err = ERR_UNKNOWN_FLAG;
               }
+              else if(flag->second == ENV_OPTIMIZE_O0 || (flag->second & ENV_OPTIMIZE_OMASK))
+                optimize = (optimize & ~ENV_OPTIMIZE_OMASK) | flag->second;
               else
                 optimize |= flag->second;
             }
@@ -454,6 +456,8 @@ int main(int argc, char* argv[])
       printerr(env->log, "Error loading modules", err);
       dump_validation_errors(env);
     }
+
+    (*exports.DestroyEnvironment)(env);
     return err;
   }
 
@@ -464,6 +468,7 @@ int main(int argc, char* argv[])
     if((*exports.AddEmbedding)(env, embeddings[i].second, embeddings[i].first, 0) == ERR_FATAL_FILE_ERROR)
     {
       fprintf(env->log, "Error loading file: %s\n", embeddings[i].first);
+      (*exports.DestroyEnvironment)(env);
       return ERR_FATAL_FILE_ERROR;
     }
 
@@ -478,6 +483,8 @@ int main(int argc, char* argv[])
       printerr(env->log, "Error loading environment", err);
       dump_validation_errors(env);
     }
+
+    (*exports.DestroyEnvironment)(env);
     return err;
   }
 
@@ -500,7 +507,7 @@ int main(int argc, char* argv[])
       innative_serialize_module(env, i, target.c_str());
     }
   }
-
+  
   // Check if this is a .wast file, which must be handled differently because it's an entire environment
   if(wast.size() > 0)
   {
@@ -518,6 +525,7 @@ int main(int argc, char* argv[])
       dump_validation_errors(env);
     }
 
+    (*exports.DestroyEnvironment)(env);
     return err;
   }
 

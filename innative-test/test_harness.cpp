@@ -2,9 +2,15 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "test.h"
+#include <stdio.h>
 
-TestHarness::TestHarness(FILE* out) : _target(out), _testdata(0, 0) {}
-
+TestHarness::TestHarness(const IRExports& exports, const char* arg0, int loglevel, FILE* out, const char* folder) : _exports(exports), _arg0(arg0), _loglevel(loglevel), _target(out), _folder(folder), _testdata(0, 0){}
+TestHarness::~TestHarness()
+{
+  // Clean up all the files we just produced
+  for(auto f : _garbage)
+    std::remove(f.c_str());
+}
 size_t TestHarness::Run(FILE* out)
 {
   std::pair<const char*, void(TestHarness::*)()> tests[] = {
@@ -37,9 +43,56 @@ size_t TestHarness::Run(FILE* out)
     fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], tests[i].first, COLUMNS[1], buf, COLUMNS[2], (results.first == results.second) ? "PASS" : "FAIL");
   }
 
+  {
+    TEST(CompileWASM("../scripts/test-h.wat") == ERR_SUCCESS);
+
+    char buf[COLUMNS[1] + 1] = { 0 };
+    auto results = Results();
+    snprintf(buf, COLUMNS[1] + 1, "%u/%u", results.first, results.second);
+    fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], "aux tests", COLUMNS[1], buf, COLUMNS[2], (results.first == results.second) ? "PASS" : "FAIL");
+  }
+
   // Test compiling EXE
   // Test compiling DLL with entry point that gets called in the init function
 
   fprintf(out, "\n");
   return failures;
+}
+
+int TestHarness::CompileWASM(const char* file)
+{
+  Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);
+  env->flags = ENV_ENABLE_WAT | ENV_LIBRARY;
+  env->optimize = ENV_OPTIMIZE_O3;
+  env->features = ENV_FEATURE_ALL;
+  env->log = stdout;
+  env->loglevel = _loglevel;
+
+  int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
+  if(err < 0)
+    return err;
+
+  (*_exports.AddModule)(env, file, 0, file, &err);
+  if(err < 0)
+    return err;
+
+  (*_exports.FinalizeEnvironment)(env);
+  std::string base = (_folder + innative::Path(file).File().RemoveExtension()).Get();
+  std::string out = base + IN_LIBRARY_EXTENSION;
+
+  err = (*_exports.Compile)(env, out.c_str());
+  if(err < 0)
+    return err;
+
+  _garbage.push_back(out);
+#ifdef IN_PLATFORM_WIN32
+  _garbage.push_back(base + ".lib");
+#endif
+  (*_exports.DestroyEnvironment)(env);
+  void* m = (*_exports.LoadAssembly)(out.c_str());
+  if(!m)
+    return ERR_FATAL_INVALID_MODULE;
+  (*_exports.FreeAssembly)(m);
+
+  return ERR_SUCCESS;
 }
