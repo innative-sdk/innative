@@ -89,12 +89,14 @@ void usage()
     "  -s [<FILE>] : Serializes all modules to .wat files. <FILE> can specify the output if only one module is present.\n"
     "  -w <[MODULE:]FUNCTION> : whitelists a given C import, does name-mangling if the module is specified.\n"
 #ifdef IN_PLATFORM_WIN32
-    "  -g : Instead of compiling immediately, creates a loader embedded with all the modules, environments, and settings, which compiles the modules on-demand when run."
+    "  -g : Instead of compiling immediately, creates a loader embedded with all the modules, environments, and settings, which compiles the modules on-demand when run.\n"
 #endif
     "  -c : Assumes the input files are actually LLVM IR files and compiles them into a single webassembly module.\n"
     "  -i [lite]: Installs this SDK to the host operating system. On Windows, also updates file associations unless 'lite' is specified.\n"
     "  -u : Uninstalls and deregisters this SDK from the host operating system.\n"
-    "  -v : Turns on verbose logging."
+    "  -v : Turns on verbose logging.\n"
+    "\n"
+    "  Example usage: innative-cmd -r your-module.wasm"
     << std::endl;
 }
 
@@ -539,11 +541,15 @@ int main(int argc, char* argv[])
     {
       void* assembly = (*exports.LoadAssembly)(out.c_str());
       if(!assembly)
+      {
+        fprintf(env->log, "Generated file cannot be found! Does innative-cmd have permissions for this directory?\n");
         return ERR_FATAL_FILE_ERROR;
+      }
       IN_Entrypoint start = (*exports.LoadFunction)(assembly, 0, IN_INIT_FUNCTION);
       IN_Entrypoint exit = (*exports.LoadFunction)(assembly, 0, IN_EXIT_FUNCTION);
       if(!start)
       {
+        fprintf(env->log, "Start function is invalid or cannot be found!\n");
         (*exports.FreeAssembly)(assembly);
         return ERR_INVALID_START_FUNCTION;
       }

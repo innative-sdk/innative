@@ -157,7 +157,7 @@ void innative::AddModule(Environment* env, const void* data, uint64_t size, cons
 
 enum IN_ERROR innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name)
 {
-  if(!module_name || !export_name)
+  if(!export_name)
     return ERR_PARSE_INVALID_NAME;
 
   char* whitelist = tmalloc<char>(*env, CanonWhitelist(module_name, export_name, nullptr));

@@ -68,14 +68,14 @@ namespace innative {
     {
       Path r;
       size_t pos = _path.find_last_of('.');
-      r._path = (pos != std::string::npos) ? _path.substr(0, pos) : _path;
+      r._path = (pos != std::string::npos && pos != 0 && _path[pos - 1] != SEPERATOR) ? _path.substr(0, pos) : _path;
       return r;
     }
 
     inline std::string Extension() const
     {
       size_t pos = _path.find_last_of('.');
-      return (pos != std::string::npos) ? _path.substr(pos + 1) : std::string();
+      return (pos != std::string::npos && pos != 0 && _path[pos - 1] != SEPERATOR) ? _path.substr(pos + 1) : std::string();
     }
 
     // Either removes the file, if there is one, or the last directory in the path

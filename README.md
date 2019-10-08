@@ -29,14 +29,18 @@ The inNative SDK comes with a command line utility with many useful features for
       -e <MODULE> : Sets the environment/system module name. Any functions with the module name will have the module name stripped when linking with C functions.
       -s [<FILE>] : Serializes all modules to .wat files. <FILE> can specify the output if only one module is present.
       -w <[MODULE:]FUNCTION> : whitelists a given C import, does name-mangling if the module is specified.
-      -g : Instead of compiling immediately, creates a loader embedded with all the modules, environments, and settings, which compiles the modules on-demand when run.  -c : Assumes the input files are actually LLVM IR files and compiles them into a single webassembly module.
+      -g : Instead of compiling immediately, creates a loader embedded with all the modules, environments, and settings, which compiles the modules on-demand when run.
+      -c : Assumes the input files are actually LLVM IR files and compiles them into a single webassembly module.
       -i [lite]: Installs this SDK to the host operating system. On Windows, also updates file associations unless 'lite' is specified.
       -u : Uninstalls and deregisters this SDK from the host operating system.
       -v : Turns on verbose logging.
 
 Example usage:
 
-    innative-cmd yourfile.wasm -f debug o3 -r
+    innative-cmd your-module.wasm
+    innative-cmd -r your-module.wasm
+    innative-cmd yourfile.wat -f debug o3 -r
+    innative-cmd your-library.wasm -f library
     
 ## Building
 LLVM uses CMake to build, but CMake currently has issues with the nested LLD project, so build instructions are still provided on a per-platform basis. The version of LLVM used in this project is a fork with additions to LLD, so attempting to compile inNative with a different build of LLVM **will not work**.
