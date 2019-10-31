@@ -2913,30 +2913,21 @@ namespace innative {
     return ERR_SUCCESS;
   }
 
-#if defined(IN_64BIT) && defined(IN_ENDIAN_LITTLE)
-#define IN_LINKER_PLATFORM_STRING "elf_x86_64"
-#elif defined(IN_32BIT) && defined(IN_ENDIAN_LITTLE)
-#define IN_LINKER_PLATFORM_STRING "elf_i386"
-#elif defined(IN_64BIT) && defined(IN_ENDIAN_BIG)
-#define IN_LINKER_PLATFORM_STRING "elf64btsmip"
-#elif defined(IN_32BIT) && defined(IN_ENDIAN_BIG)
-#define IN_LINKER_PLATFORM_STRING "elf32btsmip"
-#endif
-
   std::vector<std::string> GetSymbols(const char* file, FILE* log)
   {
     std::string outbuf;
     llvm::raw_string_ostream sso(outbuf);
-    
+
+    std::vector<std::string> symbols;
 #ifdef IN_PLATFORM_WIN32
-    auto v = lld::coff::GetSymbols(file, sso);
+    lld::coff::iterateSymbols(file, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); }, &symbols, sso);
 #else
-    auto v = lld::elf::GetSymbols(file, sso, IN_LINKER_PLATFORM_STRING);
+    lld::elf::iterateSymbols(file, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); }, &symbols, sso);
 #endif
 
-    if(!v.size())
+    if(!symbols.size())
       fputs(outbuf.c_str(), log);
-    return v;
+    return symbols;
   }
 
   void AppendIntrinsics(Environment& env)

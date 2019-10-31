@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.4.3)
-project(inNative)
+project(innative)
 
 SET(CMAKE_PREFIX_PATH  "bin/llvm;${CMAKE_PREFIX_PATH}")
 find_package(LLVM REQUIRED CONFIG)
