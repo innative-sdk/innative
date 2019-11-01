@@ -95,13 +95,13 @@ namespace innative {
 
     bool Win32Install(uint64_t version, bool full)
     {
-      std::wstring path(IN_WIN32_REGPATH);
-      path += L"\\" + std::to_wstring((version >> 48) & 0xFFFF);
-      path += L"\\" + std::to_wstring((version >> 32) & 0xFFFF);
-      path += L"\\" + std::to_wstring((version >> 16) & 0xFFFF);
+      std::wstring target(IN_WIN32_REGPATH);
+      target += L"\\" + std::to_wstring((version >> 48) & 0xFFFF);
+      target += L"\\" + std::to_wstring((version >> 32) & 0xFFFF);
+      target += L"\\" + std::to_wstring((version >> 16) & 0xFFFF);
 
       HKEY hKey;
-      if(RegOpenKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, KEY_READ | KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS)
+      if(RegOpenKeyExW(HKEY_CURRENT_USER, target.c_str(), 0, KEY_READ | KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS)
         return false;
 
       DWORD len = 0;
@@ -169,25 +169,6 @@ namespace innative {
 
 #elif defined(IN_PLATFORM_POSIX)
 #define POSIX_VERSION_STR "." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
-    int CopyFile(const char* from, const char* to)
-    {
-      std::ifstream source(from, std::ios::binary | std::ios::in);
-      if(!source.is_open())
-        return -16;
-      std::ofstream dest(to, std::ios::binary | std::ios::out | std::ios::trunc);
-      if(!dest.is_open())
-      {
-        printf("Could not open %s, did you try using sudo?\n", to);
-        return -17;
-      }
-
-      dest << source.rdbuf();
-
-      dest.close();
-      source.close();
-      return 0;
-    }
-
     int FindLatestVersion(const std::string& prefix, const std::vector<std::string>& files)
     {
       int v = -1;
@@ -278,12 +259,12 @@ namespace innative {
 
     int InstallFile(const char* arg0, const char* file, const char* folder)
     {
-      Path path = GetProgramPath(arg0).BaseDir() += file;
-      auto target = std::string(folder) + file + POSIX_VERSION_STR;
-      int err = CopyFile(path.c_str(), target.c_str());
+      path src = GetProgramPath(arg0).parent_path() / file;
+      auto target = (path(folder) / src) += POSIX_VERSION_STR;
+      bool success = copy_file(src, target, copy_options::overwrite_existing);
 
       // Calculate new master symlinks
-      return !err ? UpdateSymlinks(file, folder) : err;
+      return success ? UpdateSymlinks(file, folder) : -16;
     }
 #endif
 

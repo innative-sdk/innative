@@ -5,13 +5,20 @@
 #define IN__BENCHMARK_H
 
 #include "innative/export.h"
-#include "innative/path.h"
 #include <utility>
 #include <stdint.h>
 #include <stdio.h>
 #include <vector>
 #include <string.h>
 #include <chrono>
+
+#if defined(IN_COMPILER_GCC) && __GNUC__ < 8
+#include <experimental/filesystem>
+using namespace std::experimental::filesystem;
+#else
+#include <filesystem>
+using namespace std::filesystem;
+#endif
 
 #ifdef IN_PLATFORM_WIN32
 #define ALLOCA(sz) _alloca(sz)
@@ -31,7 +38,7 @@ class Benchmarks
   };
 
 public:
-  Benchmarks(const IRExports& exports, const char* arg0, int loglevel, const char* folder);
+  Benchmarks(const IRExports& exports, const char* arg0, int loglevel, const path& folder);
   ~Benchmarks();
   void Run(FILE* out);
   static int64_t fac(int64_t n);
@@ -96,8 +103,8 @@ protected:
   const IRExports& _exports;
   const char* _arg0;
   int _loglevel;
-  std::vector<std::string> _garbage;
-  innative::Path _folder;
+  std::vector<path> _garbage;
+  path _folder;
 };
 
 #endif

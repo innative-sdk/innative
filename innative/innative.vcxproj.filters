@@ -125,9 +125,6 @@
     <ClInclude Include="constants.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\innative\path.h">
-      <Filter>include</Filter>
-    </ClInclude>
     <ClInclude Include="lexer.h">
       <Filter>Header Files</Filter>
     </ClInclude>

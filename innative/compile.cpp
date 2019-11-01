@@ -13,6 +13,8 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/InstIterator.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/Analysis/TargetTransformInfoImpl.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -1853,12 +1855,12 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
   if(env->flags & ENV_DEBUG)
   {
     assert(context.m.path != nullptr);
-    Path path = GetAbsolutePath(context.m.path);
+    path abspath = GetAbsolutePath(u8path(context.m.path));
     context.dbuilder = new llvm::DIBuilder(*context.llvm);
 
     context.dcu = context.dbuilder->createCompileUnit(
       llvm::dwarf::DW_LANG_C99,
-      context.dbuilder->createFile(path.File().Get(), path.BaseDir().Get()),
+      context.dbuilder->createFile(abspath.filename().u8string(), abspath.parent_path().u8string()),
       "inNative Runtime v" IN_VERSION_STRING,
       env->optimize != 0,
       llvm::StringRef(),
@@ -2246,10 +2248,10 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
   return ERR_SUCCESS;
 }
 
-IN_ERROR OutputObjectFile(code::Context& context, const char* out)
+IN_ERROR OutputObjectFile(code::Context& context, const path& out)
 {
   std::error_code EC;
-  llvm::raw_fd_ostream dest(out, EC, llvm::sys::fs::F_None);
+  llvm::raw_fd_ostream dest(out.u8string(), EC, llvm::sys::fs::F_None);
 
   if(EC)
   {
@@ -2263,6 +2265,9 @@ IN_ERROR OutputObjectFile(code::Context& context, const char* out)
 
   llvm::legacy::PassManager pass;
   auto FileType = llvm::TargetMachine::CGFT_ObjectFile;
+  llvm::TargetLibraryInfoImpl TLII(context.machine->getTargetTriple());
+  pass.add(new llvm::TargetLibraryInfoWrapperPass(TLII));
+  pass.add(createTargetTransformInfoWrapperPass(context.machine->getTargetIRAnalysis()));
 
   if(context.machine->addPassesToEmitFile(pass, dest, nullptr, FileType))
   {
@@ -2406,9 +2411,11 @@ void ResolveModuleExports(const Environment* env, Module* root, llvm::LLVMContex
   }
 }
 
-int CallLinker(const Environment* env, const vector<const char*>& linkargs)
+int CallLinker(const Environment* env, vector<const char*>& linkargs)
 {
   int err = ERR_SUCCESS;
+
+  //const_cast<Environment*>(env)->linker = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\VC\\Tools\\MSVC\\14.23.28105\\bin\\Hostx64\\x64\\link.exe";
 
   // Link object code
   if(env->linker != 0)
@@ -2458,6 +2465,7 @@ int CallLinker(const Environment* env, const vector<const char*>& linkargs)
       fflush(env->log);
     }
 
+    linkargs.insert(linkargs.begin(), "lld");
     std::string outbuf;
     llvm::raw_fd_ostream fdo(1, false, true);
     llvm::raw_string_ostream sso(outbuf);
@@ -2477,9 +2485,9 @@ int CallLinker(const Environment* env, const vector<const char*>& linkargs)
   return err;
 }
 
-Path GetLinkerObjectPath(const Environment& env, Module& m)
+path GetLinkerObjectPath(const Environment& env, Module& m)
 {
-  Path objpath(!env.objpath ? "" : env.objpath);
+  path objpath = u8path(!env.objpath ? "" : env.objpath);
 
   // The default module name must be an entire path to gaurantee uniqueness, but we need to write it in the objpath directory
   std::string file(m.name.str()); 
@@ -2487,8 +2495,12 @@ Path GetLinkerObjectPath(const Environment& env, Module& m)
   std::replace(file.begin(), file.end(), '/', '_');
   std::replace(file.begin(), file.end(), '.', '_');
 
-  objpath += file;
-  objpath.AppendString(".o");
+  objpath /= file;
+#ifdef IN_PLATFORM_WIN32
+  objpath += ".obj";
+#else
+  objpath += ".o";
+#endif
   return objpath;
 }
 
@@ -2498,15 +2510,16 @@ IN_ERROR GenerateLinkerObjects(const Environment& env, vector<string>& cache)
   {
     assert(env.modules[i].cache != 0);
     assert(env.modules[i].name.get() != nullptr);
-    cache.emplace_back(GetLinkerObjectPath(env, env.modules[i]).Get());
-
+    path objpath = GetLinkerObjectPath(env, env.modules[i]);
+    cache.emplace_back(objpath.u8string());
+    
     FILE* f;
-    FOPEN(f, cache.back().c_str(), "rb");
+    FOPEN(f, objpath.c_str(), "rb");
     if(f)
       fclose(f);
     else
     {
-      IN_ERROR err = OutputObjectFile(*env.modules[i].cache, cache.back().c_str());
+      IN_ERROR err = OutputObjectFile(*env.modules[i].cache, objpath);
       if(err < 0)
         return err;
     }
@@ -2533,8 +2546,8 @@ namespace innative {
   {
     // Certain error conditions can result in us clearing the cache of an invalid module.
     if(m.name.size() > 0) // Prevent an error from happening if the name is invalid.
-      std::remove(GetLinkerObjectPath(env, m).c_str()); // Always remove the file if it exists
-
+      std::remove(GetLinkerObjectPath(env, m).u8string().c_str()); // Always remove the file if it exists
+    
     if(m.cache != nullptr)
     {
       auto context = static_cast<code::Context*>(m.cache);
@@ -2567,21 +2580,21 @@ namespace innative {
     // Construct the LLVM environment and current working directories
     if(!env->context)
       const_cast<Environment*>(env)->context = new llvm::LLVMContext();
-    Path file(outfile);
-    Path workdir = GetWorkingDir();
-    Path libpath(env->libpath);
+    path file = u8path(outfile);
+    path workdir = GetWorkingDir();
+    path libpath = u8path(env->libpath);
     if(!env->objpath)
     {
-      const_cast<Environment*>(env)->objpath = utility::AllocString(*const_cast<Environment*>(env), file.BaseDir().Get());
+      const_cast<Environment*>(env)->objpath = utility::AllocString(*const_cast<Environment*>(env), file.parent_path().u8string());
 
       if(!env->objpath)
         return ERR_FATAL_OUT_OF_MEMORY;
     }
 
-    Path objpath(env->objpath);
+    path objpath = u8path(env->objpath);
 
-    if(!file.IsAbsolute())
-      file = workdir + file;
+    if(!file.is_absolute())
+      file = workdir / file;
 
     llvm::IRBuilder<> builder(*env->context);
     bool has_start = false;
@@ -2817,7 +2830,7 @@ namespace innative {
       if(env->flags&ENV_EMIT_LLVM)
       {
         std::error_code EC;
-        llvm::raw_fd_ostream dest((file.BaseDir() += (std::string(env->modules[i].cache->llvm->getName()) + ".llvm")).Get(), EC, llvm::sys::fs::F_None);
+        llvm::raw_fd_ostream dest(((file.parent_path() / env->modules[i].cache->llvm->getName().str()) += ".llvm").u8string(), EC, llvm::sys::fs::F_None);
         env->modules[i].cache->llvm->print(dest, nullptr);
       }
 
@@ -2829,15 +2842,16 @@ namespace innative {
 
     {
 #ifdef IN_PLATFORM_WIN32
-      vector<const char*> linkargs = { "lld", "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO",
-        "/nodefaultlib", /*"/MANIFEST", "/MANIFEST:embed",*/ "/SUBSYSTEM:CONSOLE", "/VERBOSE",
-        "/LARGEADDRESSAWARE", "/OPT:REF", "/OPT:ICF", "/STACK:10000000", "/DYNAMICBASE", "/NXCOMPAT",
+      // /PDB:"D:\code\innative\bin\innative-d.pdb" /IMPLIB:"D:\code\innative\bin\innative-d.lib"
+      vector<const char*> linkargs = { "/ERRORREPORT:QUEUE", "/INCREMENTAL:NO", "/NOLOGO",
+          "/NODEFAULTLIB", /*"/MANIFESTUAC:level=asInvoker", "/MANIFEST:EMBED",*/ "/SUBSYSTEM:CONSOLE", "/VERBOSE",
+          "/OPT:REF", "/DYNAMICBASE", "/NXCOMPAT",
 #ifdef IN_CPU_x86_64
-        "/MACHINE:X64", "/machine:x64",
+        "/MACHINE:X64",
 #elif defined(IN_CPU_x86)
-        "/MACHINE:X86", "/machine:x86",
+        "/MACHINE:X86", "/LARGEADDRESSAWARE",
 #elif defined(IN_CPU_ARM) || defined(IN_CPU_ARM64)
-        "/MACHINE:ARM", "/machine:arm",
+        "/MACHINE:ARM",
 #endif
       };
 
@@ -2849,28 +2863,33 @@ namespace innative {
       else
         linkargs.push_back("/ENTRY:" IN_INIT_FUNCTION);
 
-      if(env->flags&ENV_DEBUG)
+      if(env->flags & ENV_DEBUG)
+      {
         linkargs.push_back("/DEBUG");
+        linkargs.push_back("/OPT:NOICF");
+      }
+      else
+        linkargs.push_back("/OPT:ICF");
 
-      vector<string> cache = { string("/OUT:") + file.Get(), "/LIBPATH:" + libpath.Get(), "/LIBPATH:" + workdir.Get() };
+      vector<string> cache = { string("/OUT:") + file.u8string(), "/LIBPATH:" + libpath.u8string(), "/LIBPATH:" + workdir.u8string() };
 #elif defined(IN_PLATFORM_POSIX)
-      vector<const char*> linkargs = { "lld" };
+      vector<const char*> linkargs = { };
 
       if(env->flags&ENV_LIBRARY)
         linkargs.push_back("-shared");
       if(!(env->flags&ENV_DEBUG))
         linkargs.push_back("--strip-debug");
 
-      vector<string> cache = { string("--output=") + file.Get(), "-L" + libpath.Get(), "-L" + workdir.Get() };
+      vector<string> cache = { string("--output=") + file.u8string(), "-L" + libpath.u8string(), "-L" + workdir.u8string() };
 #else 
 #error unknown platform
 #endif
-      vector<string> garbage;
+      vector<path> garbage;
 
       // Defer lambda deleting temporary files
       utility::DeferLambda<std::function<void()>> deferclean([&garbage]() {
         for(auto& v : garbage)
-          std::remove(v.c_str());
+          remove(v);
         }
       );
 
@@ -2885,15 +2904,18 @@ namespace innative {
         if(cur->size > 0) // If the size is greater than 0, this is an in-memory embedding
         {
           union { Embedding* p; size_t z; } u = { cur };
-          cache.emplace_back((objpath + std::to_string(u.z) + IN_ENV_EXTENSION + IN_STATIC_EXTENSION).Get());
+          auto embed = objpath / std::to_string(u.z);
+          embed += IN_ENV_EXTENSION;
+          embed += IN_STATIC_EXTENSION;
+          cache.emplace_back(embed.u8string());
           FILE* f;
-          FOPEN(f, cache.back().c_str(), "wb");
+          FOPEN(f, embed.c_str(), "wb");
           if(!f)
             return ERR_FATAL_FILE_ERROR;
 
           fwrite(cur->data, 1, cur->size, f);
           fclose(f);
-          garbage.emplace_back(cache.back().c_str());
+          garbage.emplace_back(embed);
         }
         else
           cache.emplace_back((const char*)cur->data);

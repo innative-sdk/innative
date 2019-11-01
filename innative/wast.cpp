@@ -40,6 +40,14 @@ namespace innative {
   }
 
   namespace wat {
+    path GenUniquePath(const path& src, int& counter)
+    {
+      auto cur = src;
+      cur += std::to_string(counter++);
+      cur += IN_LIBRARY_EXTENSION;
+      return cur;
+    }
+
     kh_stringmap_t* GenWastStringMap(std::initializer_list<std::pair<const char*, const char*>> map)
     {
       kh_stringmap_t* h = kh_init_stringmap();
@@ -92,7 +100,7 @@ namespace innative {
       LONGJMP(jump_location, 1);
     }
 
-    void InvalidateCache(void*& cache, const Path& cachepath)
+    void InvalidateCache(void*& cache, path cachepath)
     {
       if(cache)
       {
@@ -104,9 +112,11 @@ namespace innative {
           assert(false);
 
         FreeDLL(cache);
-        std::remove(cachepath.c_str());
-        std::remove((cachepath.RemoveExtension().Get() + IN_STATIC_EXTENSION).c_str());
-        std::remove((cachepath.RemoveExtension().Get() + ".pdb").c_str());
+        remove(cachepath);
+        cachepath.replace_extension(IN_STATIC_EXTENSION);
+        remove(cachepath);
+        cachepath.replace_extension(".pdb");
+        remove(cachepath);
       }
       cache = nullptr;
     }
@@ -133,7 +143,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int CompileWast(Environment& env, const char* out, void*& cache, Path& cachepath)
+    int CompileWast(Environment& env, const path& out, void*& cache, path& cachepath)
     {
       InvalidateCache(cache, cachepath);
 
@@ -141,14 +151,14 @@ namespace innative {
       ValidateEnvironment(env);
       if(env.errors)
         return ERR_VALIDATION_ERROR;
-      if(err = CompileEnvironment(&env, out))
+      if(err = CompileEnvironment(&env, out.u8string().c_str()))
         return err;
 
       cachepath = out;
       signal(SIGILL, WastCrashHandler);
       signal(SIGFPE, WastCrashHandler);
 
-      err = IsolateInitCall(env, cache, out);
+      err = IsolateInitCall(env, cache, out.u8string().c_str());
 
       signal(SIGILL, SIG_DFL);
       signal(SIGFPE, SIG_DFL);
@@ -168,7 +178,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module& m, const char* path)
+    int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module& m, const path& file)
     {
       EXPECTED(tokens, TOKEN_MODULE, ERR_WAT_EXPECTED_MODULE);
       int err;
@@ -220,7 +230,7 @@ namespace innative {
       }
       else if(err = WatParser::ParseModule(env, m, tokens, StringRef{ tempname.data(), tempname.size() }, name))
         return err;
-      m.path = path;
+      m.path = AllocString(env, file.u8string());
 
       if(name.id == TOKEN_NAME) // Only add this to our name mapping if an actual name token was specified, regardless of whether the module has a name.
       {
@@ -391,12 +401,12 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache, Path& cachepath, int& counter, const std::string& path, WastResult& result)
+    int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache, path& cachepath, int& counter, const path& file, WastResult& result)
     {
       int err;
       int cache_err = 0;
       if(!cache) // If cache is null we need to recompile the current environment, but we can't bail on error messages yet or we'll corrupt the parse
-        cache_err = CompileWast(env, (path + std::to_string(counter++) + IN_LIBRARY_EXTENSION).c_str(), cache, cachepath);
+        cache_err = CompileWast(env, GenUniquePath(file, counter), cache, cachepath);
 
       switch(tokens.Pop().id)
       {
@@ -595,14 +605,14 @@ namespace innative {
 }
 
 // This parses an entire extended WAT testing script into an environment
-int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const char* path, bool always_compile, const char* output)
+int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const path& file, bool always_compile, const path& output)
 {
   Queue<WatToken> tokens;
   const char* start = (const char*)data;
   TokenizeWAT(tokens, start, (const char*)data + sz);
   ValidationError* errors = nullptr;
   int counter = 0; // Even if we unload wast.dll, visual studio will keep the .pdb open forever, so we have to generate new DLLs for each new test section.
-  std::string targetpath = (Path(output) + Path(path).File().RemoveExtension()).Get(); // We also have to be sure we don't overlap with any other .wast files, so we name the DLL based on the file path.
+  path targetpath = output / file.stem(); // We also have to be sure we don't overlap with any other .wast files, so we name the DLL based on the file path.
   env.flags |= ENV_NO_INIT; // We can't allow the DLL to call _DllInit because we can't catch exceptions from it, so we manually call it instead.
 
   int err = CheckWatTokens(env, env.errors, tokens, start);
@@ -617,7 +627,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
 
   Module* last = nullptr; // For anything not providing a module name, this was the most recently defined module.
   void* cache = nullptr;
-  Path cachepath;
+  path cachepath;
 
   while(tokens.Size() > 0 && tokens[0].id != TOKEN_CLOSE)
   {
@@ -633,7 +643,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
         return ERR_FATAL_OUT_OF_MEMORY;
       last = &env.modules[env.n_modules - 1];
 
-      if(err = ParseWastModule(env, tokens, mapping, *last, path))
+      if(err = ParseWastModule(env, tokens, mapping, *last, file))
         return err;
       ValidateModule(env, *last);
       if(env.errors)
@@ -696,11 +706,11 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
         env.modules = trealloc<Module>(env.modules, ++env.n_modules); // We temporarily add this module to the environment, but don't set the "last" module to it
         if(!env.modules)
           return ERR_FATAL_OUT_OF_MEMORY;
-        if(err = ParseWastModule(env, tokens, mapping, env.modules[env.n_modules - 1], path))
+        if(err = ParseWastModule(env, tokens, mapping, env.modules[env.n_modules - 1], file))
           return err;
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
-        err = CompileWast(env, (targetpath + std::to_string(counter++) + IN_LIBRARY_EXTENSION).c_str(), cache, cachepath);
+        err = CompileWast(env, GenUniquePath(targetpath, counter), cache, cachepath);
         --env.n_modules; // Remove the module from the environment to avoid poisoning other compilations
         if(err != ERR_RUNTIME_TRAP)
           AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
@@ -812,7 +822,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       WatToken t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       Module m;
-      int code = ParseWastModule(env, tokens, mapping, m, path);
+      int code = ParseWastModule(env, tokens, mapping, m, file);
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
       ByteArray error;
@@ -832,7 +842,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       WatToken t = tokens.Pop();
       EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
       Module m;
-      int code = ParseWastModule(env, tokens, mapping, m, path);
+      int code = ParseWastModule(env, tokens, mapping, m, file);
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
       string assertcode = GetAssertionString(code);
@@ -890,7 +900,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       if(err = WatParser::ParseModule(env, *last, tokens, StringRef{ name.data(), name.size() }, t))
         return err;
 
-      last->path = path;
+      last->path = AllocString(env, file.u8string());
       tokens.SetPosition(tokens.GetPosition() - 1); // Recover the ')'
       break;
     }
@@ -901,7 +911,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
 
   if(always_compile && !cache) // If cache is null we must ensure we've at least tried to compile the test even if there's nothing to run.
   {
-    if(err = CompileWast(env, (targetpath + std::to_string(counter++) + IN_LIBRARY_EXTENSION).c_str(), cache, cachepath))
+    if(err = CompileWast(env, GenUniquePath(targetpath, counter), cache, cachepath))
       return err;
     assert(cache);
   }
