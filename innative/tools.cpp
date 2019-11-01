@@ -38,7 +38,7 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
     env->linker = 0;
     env->log = stdout;
     env->loglevel = LOG_WARNING;
-    env->libpath = utility::AllocString(*env, GetProgramPath(arg0).BaseDir().Get());
+    env->libpath = utility::AllocString(*env, GetProgramPath(arg0).parent_path().u8string());
     if(!env->libpath) // Out of memory
     {
       free(env);
@@ -82,7 +82,7 @@ void innative::DestroyEnvironment(Environment* env)
   free(env);
 }
 
-void innative::LoadModule(Environment* env, size_t index, const void* data, uint64_t size, const char* name, const char* path, int* err)
+void innative::LoadModule(Environment* env, size_t index, const void* data, uint64_t size, const char* name, const char* file, int* err)
 {
   Stream s = { (uint8_t*)data, size, 0 };
   std::string fallback;
@@ -100,7 +100,7 @@ void innative::LoadModule(Environment* env, size_t index, const void* data, uint
   else
     *err = ParseModule(s, *env, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
 
-  env->modules[index].path = path;
+  env->modules[index].path = file;
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
 }
 
@@ -112,13 +112,13 @@ void innative::AddModule(Environment* env, const void* data, uint64_t size, cons
     return;
   }
 
-  const char* path = nullptr;
+  const char* file = nullptr;
   std::unique_ptr<uint8_t[]> data_module;
   if(!size)
   {
     long sz = 0;
-    path = (const char*)data;
-    data_module = utility::LoadFile(path, sz);
+    file = (const char*)data;
+    data_module = utility::LoadFile(file, sz);
     if(data_module.get() == nullptr)
     {
       *err = ERR_FATAL_FILE_ERROR;
@@ -150,9 +150,9 @@ void innative::AddModule(Environment* env, const void* data, uint64_t size, cons
   }
 
   if(env->flags & ENV_MULTITHREADED)
-    std::thread(LoadModule, env, index, data, size, name, path, err).detach();
+    std::thread(LoadModule, env, index, data, size, name, file, err).detach();
   else
-    LoadModule(env, index, data, size, name, path, err);
+    LoadModule(env, index, data, size, name, file, err);
 }
 
 enum IN_ERROR innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name)
@@ -197,9 +197,9 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
   {
     for(Embedding* embed = env->embeddings; embed != nullptr; embed = embed->next)
     {
-      Path path(env->libpath);
+      path envpath(env->libpath);
       std::string tmp;
-      const char* src = (const char*)embed->data;
+      path src((const char*)embed->data);
 
       if(embed->size)
       {
@@ -207,7 +207,7 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
         tmp = std::to_string((size_t)embed->data) + ".tmp";
         src = tmp.c_str();
         FILE* f;
-        FOPEN(f, src, "wb");
+        FOPEN(f, src.c_str(), "wb");
         if(!f)
           return ERR_FATAL_FILE_ERROR;
         fwrite(embed->data, 1, embed->size, f);
@@ -215,36 +215,37 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
       }
 
       {
-        path.Append(src);
+        envpath /= src;
 
         FILE* f;
-        FOPEN(f, path.c_str(), "rb");
+        FOPEN(f, envpath.c_str(), "rb");
         if(!f)
-          path = src;
+          envpath = src;
 
-        FOPEN(f, path.c_str(), "rb");
+        FOPEN(f, envpath.c_str(), "rb");
 #ifdef IN_PLATFORM_POSIX
         if(!f)
         {
-          path = Path("/usr/lib/") + (const char*)embed->data;
-          char* tmp = tmalloc<char>(*env, path.Get().size() + 1);
+          std::string buf = std::string("/usr/lib/") + (const char*)embed->data;
+          envpath = u8path(buf);
+          char* tmp = tmalloc<char>(*env, buf.size() + 1);
           if(!tmp)
             return ERR_FATAL_OUT_OF_MEMORY;
-          tmemcpy<char>(tmp, path.Get().size() + 1, path.c_str(), path.Get().size() + 1);
+          tmemcpy<char>(tmp, buf.size() + 1, buf.c_str(), buf.size() + 1);
           embed->data = tmp;
         }
 
-        FOPEN(f, path.c_str(), "rb");
+        FOPEN(f, envpath.c_str(), "rb");
 #endif
         if(!f)
         {
-          fprintf(env->log, "Error loading file: %s\n", path.c_str());
+          fprintf(env->log, "Error loading file: %s\n", envpath.u8string().c_str());
           return ERR_FATAL_FILE_ERROR;
         }
         fclose(f);
       }
 
-      auto symbols = GetSymbols(path.c_str(), env->log);
+      auto symbols = GetSymbols(envpath.u8string().c_str(), env->log);
       if(!tmp.empty())
         std::remove(tmp.c_str());
 
@@ -325,9 +326,9 @@ void* innative::LoadAssembly(const char* file)
   if(!file)
     return 0;
 
-  Path path(file);
+  path envpath = u8path(file);
   
-  return path.IsAbsolute() ? LoadDLL(path.c_str()) : LoadDLL((GetWorkingDir() + path).c_str());
+  return envpath.is_absolute() ? LoadDLL(envpath) : LoadDLL(GetWorkingDir() / envpath);
 }
 
 void innative::FreeAssembly(void* assembly)

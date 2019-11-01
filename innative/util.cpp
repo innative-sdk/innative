@@ -256,57 +256,59 @@ namespace innative {
       return pair;
     }
 
-    Path GetProgramPath(const char* arg0)
+    path GetProgramPath(const char* arg0)
     {
-      string buf;
 #ifdef IN_PLATFORM_WIN32
+      std::wstring buf;
       buf.resize(MAX_PATH);
-      buf.resize(GetModuleFileNameA(NULL, const_cast<char*>(buf.data()), (DWORD)buf.capacity()));
+      buf.resize(GetModuleFileNameW(NULL, const_cast<wchar_t*>(buf.data()), (DWORD)buf.capacity()));
+      return path(std::move(buf));
 #else
-      return Path(std::move(GetAbsolutePath(arg0)));
+      return path(std::move(GetAbsolutePath(arg0)));
 #endif
-      return Path(std::move(buf));
     }
 
-    Path GetWorkingDir()
+    path GetWorkingDir()
     {
-      string buf;
 #ifdef IN_PLATFORM_WIN32
-      buf.resize(GetCurrentDirectoryA(0, 0));
-      buf.resize(GetCurrentDirectoryA((DWORD)buf.capacity(), const_cast<char*>(buf.data())));
+      std::wstring buf;
+      buf.resize(GetCurrentDirectoryW(0, 0));
+      buf.resize(GetCurrentDirectoryW((DWORD)buf.capacity(), const_cast<wchar_t*>(buf.data())));
 #elif defined(IN_PLATFORM_POSIX)
+      string buf;
       buf.resize(PATH_MAX);
       getcwd(const_cast<char*>(buf.data()), buf.capacity());
       buf.resize(strlen(buf.data()));
 #else
 #error unknown platform
 #endif
-      return Path(std::move(buf));
+      return path(std::move(buf));
     }
 
-    Path GetAbsolutePath(const char* path)
+    path GetAbsolutePath(const path& src)
     {
-      string buf;
 #ifdef IN_PLATFORM_WIN32
-      buf.resize(GetFullPathNameA(path, 0, 0, 0));
-      buf.resize(GetFullPathNameA(path, (DWORD)buf.capacity(), const_cast<char*>(buf.data()), 0));
+      std::wstring buf;
+      buf.resize(GetFullPathNameW(src.c_str(), 0, 0, 0));
+      buf.resize(GetFullPathNameW(src.c_str(), (DWORD)buf.capacity(), const_cast<wchar_t*>(buf.data()), 0));
 #elif defined(IN_PLATFORM_POSIX)
+      std::string buf;
       buf.resize(PATH_MAX);
-      const char* resolve = realpath(path, const_cast<char*>(buf.data()));
+      const char* resolve = realpath(src.c_str(), const_cast<char*>(buf.data()));
       if(!resolve)
-        return Path(path);
+        return path(src);
       buf.resize(strlen(resolve));
 #else
 #error unknown platform
 #endif
-      return Path(std::move(buf));
+      return path(std::move(buf));
     }
-    bool SetWorkingDir(const char* path)
+    bool SetWorkingDir(const path& dir)
     {
 #ifdef IN_PLATFORM_WIN32
-      return SetCurrentDirectoryA(path) != 0;
+      return SetCurrentDirectoryW(dir.c_str()) != 0;
 #elif defined(IN_PLATFORM_POSIX)
-      return chdir(path) != 0;
+      return chdir(dir.c_str()) != 0;
 #endif
     }
     const char* AllocString(Environment& env, const char* s, size_t n)
@@ -348,11 +350,11 @@ namespace innative {
     }
 
 #ifdef IN_PLATFORM_WIN32
-    void* LoadDLL(const char* path) { return LoadLibraryA(path); }
+    void* LoadDLL(const path& path) { return LoadLibraryW(path.c_str()); }
     void* LoadDLLFunction(void* dll, const char* name) { return GetProcAddress((HMODULE)dll, name); }
     void FreeDLL(void* dll) { FreeLibrary((HMODULE)dll); }
 #elif defined(IN_PLATFORM_POSIX)
-    void* LoadDLL(const char* path) { return dlopen(path, RTLD_NOW); } // We MUST load and initialize WASM dlls immediately for init function testing
+    void* LoadDLL(const path& path) { return dlopen(path.c_str(), RTLD_NOW); } // We MUST load and initialize WASM dlls immediately for init function testing
     void* LoadDLLFunction(void* dll, const char* name) { return dlsym(dll, name); }
     void FreeDLL(void* dll) { dlclose(dll); }
 #endif

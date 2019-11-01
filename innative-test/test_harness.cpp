@@ -4,19 +4,18 @@
 #include "test.h"
 #include <stdio.h>
 
-TestHarness::TestHarness(const IRExports& exports, const char* arg0, int loglevel, FILE* out, const char* folder) : _exports(exports), _arg0(arg0), _loglevel(loglevel), _target(out), _folder(folder), _testdata(0, 0){}
+TestHarness::TestHarness(const IRExports& exports, const char* arg0, int loglevel, FILE* out, const path& folder) : _exports(exports), _arg0(arg0), _loglevel(loglevel), _target(out), _folder(folder), _testdata(0, 0){}
 TestHarness::~TestHarness()
 {
   // Clean up all the files we just produced
   for(auto f : _garbage)
-    std::remove(f.c_str());
+    remove(f);
 }
 size_t TestHarness::Run(FILE* out)
 {
   std::pair<const char*, void(TestHarness::*)()> tests[] = {
     { "wasm_malloc.c", &TestHarness::test_malloc },
     { "internal.c", &TestHarness::test_environment },
-    { "path.h", &TestHarness::test_path },
     { "queue.h", &TestHarness::test_queue },
     { "stack.h", &TestHarness::test_stack },
     { "stream.h", &TestHarness::test_stream },
@@ -59,7 +58,7 @@ size_t TestHarness::Run(FILE* out)
   return failures;
 }
 
-int TestHarness::CompileWASM(const char* file)
+int TestHarness::CompileWASM(const path& file)
 {
   Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);
   env->flags = ENV_ENABLE_WAT | ENV_LIBRARY;
@@ -72,24 +71,26 @@ int TestHarness::CompileWASM(const char* file)
   if(err < 0)
     return err;
 
-  (*_exports.AddModule)(env, file, 0, file, &err);
+  (*_exports.AddModule)(env, file.u8string().c_str(), 0, file.u8string().c_str(), &err);
   if(err < 0)
     return err;
 
   (*_exports.FinalizeEnvironment)(env);
-  std::string base = (_folder + innative::Path(file).File().RemoveExtension()).Get();
-  std::string out = base + IN_LIBRARY_EXTENSION;
+  path base = _folder / file.stem();
+  path out = base;
+  out.replace_extension(IN_LIBRARY_EXTENSION);
 
-  err = (*_exports.Compile)(env, out.c_str());
+  err = (*_exports.Compile)(env, out.u8string().c_str());
   if(err < 0)
     return err;
 
   _garbage.push_back(out);
 #ifdef IN_PLATFORM_WIN32
-  _garbage.push_back(base + ".lib");
+  out.replace_extension(".lib");
+  _garbage.push_back(out);
 #endif
   (*_exports.DestroyEnvironment)(env);
-  void* m = (*_exports.LoadAssembly)(out.c_str());
+  void* m = (*_exports.LoadAssembly)(out.u8string().c_str());
   if(!m)
     return ERR_FATAL_INVALID_MODULE;
   (*_exports.FreeAssembly)(m);

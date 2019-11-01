@@ -2,7 +2,6 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "innative/export.h"
-#include "innative/path.h"
 #include "util.h"
 #pragma warning(push)
 #pragma warning(disable : 4146 4267 4141 4244 4624)
@@ -28,7 +27,6 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
 {
   // Construct the LLVM environment and current working directories
   llvm::LLVMContext llvm_context;
-  Path workdir = utility::GetWorkingDir();
 
   bool has_start = false;
   IN_ERROR err = ERR_SUCCESS;

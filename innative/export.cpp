@@ -2,7 +2,6 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "innative/export.h"
-#include "innative/path.h"
 #include "serialize.h"
 #include "tools.h"
 #include "wast.h"
@@ -41,15 +40,15 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bo
 #else
   snprintf(buf, 40, "/memory--%p", data);
 #endif
-  const char* path = buf;
+  const char* target = buf;
 
   // Load the module
   std::unique_ptr<uint8_t[]> data_module;
   if(!sz)
   {
     long len;
-    path = reinterpret_cast<const char*>(data);
-    data_module = utility::LoadFile(path, len);
+    target = reinterpret_cast<const char*>(data);
+    data_module = utility::LoadFile(u8path(target), len);
     if(data_module.get() == nullptr)
       return ERR_FATAL_FILE_ERROR;
     data = data_module.get();
@@ -70,7 +69,7 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bo
     return err;
   }
 
-  err = ParseWast(*env, data, sz, path, always_compile, output);
+  err = ParseWast(*env, data, sz, u8path(target), always_compile, output);
 
   if(env->loglevel >= LOG_ERROR && err < 0)
   {
@@ -78,14 +77,14 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bo
     FPRINTF(env->log, "Error loading modules: %s\n", utility::EnumToString(utility::ERR_ENUM_MAP, err, buf, 10));
   }
 
-  if(env->loglevel >= LOG_NOTICE && path)
-    FPRINTF(env->log, "Finished Script: %s\n", path);
+  if(env->loglevel >= LOG_NOTICE && target)
+    FPRINTF(env->log, "Finished Script: %s\n", target);
   return err;
 }
 
 void innative_set_work_dir_to_bin(const char* arg0)
 {
-  utility::SetWorkingDir(utility::GetProgramPath(arg0).BaseDir().c_str());
+  utility::SetWorkingDir(utility::GetProgramPath(arg0).parent_path().u8string().c_str());
 }
 
 int innative_install(const char* arg0, bool full)

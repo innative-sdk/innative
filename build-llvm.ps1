@@ -17,6 +17,10 @@ pushd llvm
 ..\cmake\bin\cmake.exe --build . --config MinSizeRel
 ..\cmake\bin\cmake.exe --build . --config Debug
 
+Remove-Item -Recurse -Force "bin"
+mkdir -p bin
+Copy-Item -Path "MinSizeRel\bin\*" -Destination "bin" -Recurse
+
 popd
 popd
 

@@ -8,15 +8,6 @@
 #include <iostream>
 #include <fstream>
 
-#if defined(IN_COMPILER_GCC) && __GNUC__ < 8
-#include <experimental/filesystem>
-using namespace std::experimental::filesystem;
-#else
-#include <filesystem>
-using namespace std::filesystem;
-#endif
-
-
 // This defines the testing environment that we need to inject
 const char testenv[] = "(module $spectest "
 "\n  (global $global_i32 (export \"global_i32\") i32 i32.const 666)"

@@ -12,7 +12,7 @@ invoke-expression -Command .\get-cmake.ps1
 pushd bin
 pushd lld
 
-..\cmake\bin\cmake.exe "-Tv142,host=x64" -DCMAKE_GENERATOR_PLATFORM="x64" -DLLVM_TARGETS_TO_BUILD="X86;WebAssembly" -DLLVM_CONFIG_PATH="../llvm/MinSizeRel/bin/llvm-config.exe" -DLLVM_TABLEGEN_EXE="../llvm/MinSizeRel/bin/llvm-tblgen.exe" -DLLVM_INCLUDE_TESTS=OFF -DCMAKE_CXX_FLAGS_RELEASE="/MT" -DCMAKE_CXX_FLAGS_MINSIZEREL="/MT" -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="/MT" -DCMAKE_CXX_FLAGS_DEBUG="/MTd" ../../llvm-project/lld
+..\cmake\bin\cmake.exe "-Tv142,host=x64" -DCMAKE_GENERATOR_PLATFORM="x64" -DLLVM_TARGETS_TO_BUILD="X86;WebAssembly" -DLLVM_CONFIG_PATH="../llvm/bin/llvm-config.exe" -DLLVM_TABLEGEN_EXE="../llvm/bin/llvm-tblgen.exe" -DLLVM_INCLUDE_TESTS=OFF -DCMAKE_CXX_FLAGS_RELEASE="/MT" -DCMAKE_CXX_FLAGS_MINSIZEREL="/MT" -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="/MT" -DCMAKE_CXX_FLAGS_DEBUG="/MTd" ../../llvm-project/lld
  
 ..\cmake\bin\cmake.exe --build . --config MinSizeRel
 ..\cmake\bin\cmake.exe --build . --config Debug

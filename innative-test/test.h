@@ -4,30 +4,36 @@
 #ifndef IN__TEST_H
 #define IN__TEST_H
 
+#include "innative/export.h"
 #include <utility>
 #include <stdint.h>
 #include <stdio.h>
 #include <vector>
 #include <string.h>
-#include "innative/path.h"
-#include "innative/export.h"
+
+#if defined(IN_COMPILER_GCC) && __GNUC__ < 8
+#include <experimental/filesystem>
+using namespace std::experimental::filesystem;
+#else
+#include <filesystem>
+using namespace std::filesystem;
+#endif
 
 class TestHarness
 {
 public:
-  TestHarness(const IRExports& exports, const char* arg0, int loglevel, FILE* out, const char* folder);
+  TestHarness(const IRExports& exports, const char* arg0, int loglevel, FILE* out, const path& folder);
   ~TestHarness();
   size_t Run(FILE* out);
   void test_allocator();
   void test_environment();
-  void test_path();
   void test_queue();
   void test_stack();
   void test_stream();
   void test_util();
   void test_parallel_parsing();
   void test_malloc();
-  int CompileWASM(const char* file);
+  int CompileWASM(const path& file);
 
   inline std::pair<uint32_t, uint32_t> Results() { auto r = _testdata; _testdata = { 0,0 }; return r; }
 
@@ -53,8 +59,8 @@ protected:
   const IRExports& _exports;
   const char* _arg0;
   int _loglevel;
-  std::vector<std::string> _garbage;
-  innative::Path _folder;
+  std::vector<path> _garbage;
+  path _folder;
 };
 
 #define TEST(x) DoTest(x, ""#x, __FILE__, __LINE__)

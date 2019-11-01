@@ -29,6 +29,6 @@
 #define WIN32_RESOURCE_FLAGS_FLAGS "flags"
 #define WIN32_RESOURCE_FLAGS_OPTIMIZE "optimize"
 #define WIN32_RESOURCE_FLAGS_FEATURES "features"
-#define WIDESTRING(x) L ## x
+#define WIDESTRING(x) L#x
 
 #endif

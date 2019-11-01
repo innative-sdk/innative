@@ -24,9 +24,6 @@
     <ClCompile Include="test_environment.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="test_path.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="test_queue.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

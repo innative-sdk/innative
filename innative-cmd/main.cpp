@@ -2,7 +2,6 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "innative/export.h"
-#include "innative/path.h"
 #include <iostream>
 #include <vector>
 #include <fstream>
@@ -10,13 +9,21 @@
 #include <functional>
 #include <algorithm>
 
+#if defined(IN_COMPILER_GCC) && __GNUC__ < 8
+#include <experimental/filesystem>
+using namespace std::experimental::filesystem;
+#else
+#include <filesystem>
+using namespace std::filesystem;
+#endif
+
 #ifdef IN_PLATFORM_WIN32
 #include "../innative/win32.h"
 
-inline std::unique_ptr<uint8_t[]> LoadFile(const char* file, long& sz)
+inline std::unique_ptr<uint8_t[]> LoadFile(const path& file, long& sz)
 {
   FILE* f = nullptr;
-  FOPEN(f, file, "rb");
+  FOPEN(f, file.c_str(), "rb");
   if(!f)
     return nullptr;
   fseek(f, 0, SEEK_END);
@@ -28,13 +35,13 @@ inline std::unique_ptr<uint8_t[]> LoadFile(const char* file, long& sz)
   return data;
 }
 
-std::string GetProgramPath()
+inline path GetProgramPath()
 {
-  std::string programpath;
+  std::wstring programpath;
   programpath.resize(MAX_PATH);
-  programpath.resize(GetModuleFileNameA(NULL, const_cast<char*>(programpath.data()), (DWORD)programpath.capacity()));
-  programpath.resize(strrchr(programpath.data(), '\\') - programpath.data());
-  return programpath;
+  programpath.resize(GetModuleFileNameW(NULL, const_cast<wchar_t*>(programpath.data()), (DWORD)programpath.capacity()));
+  programpath.resize(wcsrchr(programpath.data(), '\\') - programpath.data());
+  return path(programpath);
 }
 
 #endif
@@ -140,7 +147,7 @@ int main(int argc, char* argv[])
   std::vector<const char*> whitelist;
   unsigned int flags = ENV_ENABLE_WAT; // Always enable WAT
   unsigned int optimize = ENV_OPTIMIZE_O3; // Default to O3
-  innative::Path out;
+  path out;
   std::vector<const char*> wast; // WAST files will be executed in the order they are specified, after all other modules are injected into the environment
   const char* libpath = nullptr;
   const char* objpath = nullptr;
@@ -214,7 +221,7 @@ int main(int argc, char* argv[])
           checkarg(++i, argc, argv, err, [&]() { embeddings.push_back({ argv[i], IN_TAG_DYNAMIC }); });
           break;
         case 'o': // out
-          checkarg(++i, argc, argv, err, [&]() { out = argv[i]; });
+          checkarg(++i, argc, argv, err, [&]() { out = u8path(argv[i]); });
           break;
         case 's': // serialize
           serialize = (i + 1 < argc && argv[i + 1][0] != '-') ? argv[++i] : "";
@@ -273,7 +280,7 @@ int main(int argc, char* argv[])
         }
       }
     }
-    else if(!STRICMP(innative::Path(argv[i]).Extension().c_str(), "wast")) // Check if this is a .wast script
+    else if(!STRICMP(u8path(argv[i]).extension().u8string().c_str(), "wast")) // Check if this is a .wast script
       wast.push_back(argv[i]);
     else // Everything else is an input file
       inputs.push_back(argv[i]);
@@ -293,20 +300,20 @@ int main(int argc, char* argv[])
     return ERR_NO_INPUT_FILES;
   }
 
-  if(out.Get().empty()) // If no out is specified, default to name of first input file
+  if(out.empty()) // If no out is specified, default to name of first input file
   {
-    out = !inputs.size() ? wast[0] : inputs[0];
-    out = out.RemoveExtension();
+    out = u8path(!inputs.size() ? wast[0] : inputs[0]);
+
     if(reverse)
-      out.AppendString(".wasm");
+      out.replace_extension(".wasm");
     else if(flags & ENV_LIBRARY)
-      out.AppendString(IN_LIBRARY_EXTENSION);
+      out.replace_extension(IN_LIBRARY_EXTENSION);
     else
-      out.AppendString(IN_EXE_EXTENSION);
+      out.replace_extension(IN_EXE_EXTENSION);
   }
 
   if(reverse) // If we're compiling LLVM IR instead of webassembly, we divert to another code path
-    return innative_compile_llvm(inputs.data(), inputs.size(), flags, out.c_str(), stdout);
+    return innative_compile_llvm(inputs.data(), inputs.size(), flags, out.u8string().c_str(), stdout);
 
   IRExports exports = { 0 };
   if(generate) // If we are generating a loader, we replace all of the normal functions to reroute the resources into the EXE file
@@ -352,17 +359,17 @@ int main(int argc, char* argv[])
       if(!size)
       {
         long sz = 0;
-        innative::Path path((const char*)data);
+        path src = u8path((const char*)data);
         FILE* f;
-        FOPEN(f, path.c_str(), "rb");
+        FOPEN(f, src.c_str(), "rb");
         if(!f)
         {
-          path = innative::Path(!env->libpath ? GetProgramPath().c_str() : env->libpath) + path;
+          src = (!env->libpath ? GetProgramPath() : u8path(env->libpath)) / src;
         }
         else
           fclose(f);
 
-        auto file = LoadFile(path.c_str(), sz);
+        auto file = LoadFile(src.c_str(), sz);
         if(!sz)
           return ERR_FATAL_FILE_ERROR;
         if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, file.get(), sz))
@@ -390,7 +397,7 @@ int main(int argc, char* argv[])
 #else
     std::string exe = "innative-loader" IN_EXE_EXTENSION;
 #endif
-    if(!CopyFileA((innative::Path(GetProgramPath()) + exe).c_str(), out.c_str(), FALSE))
+    if(!copy_file(GetProgramPath() / exe, out, copy_options::overwrite_existing))
     {
       std::cout << "Could not find or copy loader EXE!" << std::endl;
       return ERR_MISSING_LOADER;
@@ -408,7 +415,7 @@ int main(int argc, char* argv[])
 
 #ifdef IN_PLATFORM_WIN32
   if(generate)
-    env->alloc = (IN_WASM_ALLOCATOR*)BeginUpdateResourceA(out.c_str(), TRUE);
+    env->alloc = (IN_WASM_ALLOCATOR*)BeginUpdateResourceA(out.u8string().c_str(), TRUE);
   if(!env->alloc)
   {
     std::cout << "Failed to begin resource update!" << std::endl;
@@ -449,7 +456,7 @@ int main(int argc, char* argv[])
 
   // Load all modules
   for(size_t i = 0; i < inputs.size(); ++i)
-    (*exports.AddModule)(env, inputs[i], 0, innative::Path(inputs[i]).File().RemoveExtension().c_str(), &err);
+    (*exports.AddModule)(env, inputs[i], 0, u8path(inputs[i]).stem().u8string().c_str(), &err);
 
   if(err < 0)
   {
@@ -514,10 +521,10 @@ int main(int argc, char* argv[])
   if(wast.size() > 0)
   {
     for(size_t i = 0; i < wast.size() && !err; ++i)
-      err = innative_compile_script((const uint8_t*)wast[i], 0, env, true, out.BaseDir().c_str());
+      err = innative_compile_script((const uint8_t*)wast[i], 0, env, true, out.parent_path().u8string().c_str());
   }
   else // Attempt to compile. If an error happens, output it and any validation errors to stderr
-    err = (*exports.Compile)(env, out.c_str());
+    err = (*exports.Compile)(env, out.u8string().c_str());
 
   if(err < 0)
   {
@@ -539,7 +546,7 @@ int main(int argc, char* argv[])
   {
     if(run)
     {
-      void* assembly = (*exports.LoadAssembly)(out.c_str());
+      void* assembly = (*exports.LoadAssembly)(out.u8string().c_str());
       if(!assembly)
       {
         fprintf(env->log, "Generated file cannot be found! Does innative-cmd have permissions for this directory?\n");
@@ -562,7 +569,7 @@ int main(int argc, char* argv[])
       return ERR_SUCCESS;
     }
     else
-      std::cout << "Successfully built " << out.Get() << std::endl;
+      std::cout << "Successfully built " << out.u8string().c_str() << std::endl;
   }
 
   return err;

@@ -5,7 +5,6 @@
 #define IN__UTIL_H
 
 #include "innative/schema.h"
-#include "innative/path.h"
 #include "constants.h"
 #include <string>
 #include <math.h>
@@ -15,6 +14,14 @@
 #include <memory>
 #include <atomic>
 #include <vector>
+
+#if defined(IN_COMPILER_GCC) && __GNUC__ < 8
+#include <experimental/filesystem>
+using namespace std::experimental::filesystem;
+#else
+#include <filesystem>
+using namespace std::filesystem;
+#endif
 
 struct IN_WASM_ALLOCATOR
 {
@@ -210,12 +217,12 @@ namespace innative {
     std::pair<Module*, Export*> ResolveExport(const Environment& env, const Import& imp);
     std::pair<Module*, Export*> ResolveTrueExport(const Environment& env, const Import& imp);
     Import* ResolveImport(const Module& m, const Export& imp);
-    Path GetProgramPath(const char* arg0);
-    Path GetWorkingDir();
-    bool SetWorkingDir(const char* path);
-    Path GetAbsolutePath(const char* path);
+    path GetProgramPath(const char* arg0);
+    path GetWorkingDir();
+    bool SetWorkingDir(const path& path);
+    path GetAbsolutePath(const path& path);
     IN_COMPILER_DLLEXPORT void GetCPUInfo(uintcpuinfo& info, int flags);
-    void* LoadDLL(const char* path);
+    void* LoadDLL(const path& path);
     void* LoadDLLFunction(void* dll, const char* name);
     void FreeDLL(void* dll);
     int Install(const char* arg0, bool full);
@@ -314,10 +321,10 @@ namespace innative {
       return s;
     }
 
-    inline std::unique_ptr<uint8_t[]> LoadFile(const char* file, long& sz)
+    inline std::unique_ptr<uint8_t[]> LoadFile(const path& file, long& sz)
     {
       FILE* f = nullptr;
-      FOPEN(f, file, "rb");
+      FOPEN(f, file.c_str(), "rb");
       if(!f)
         return nullptr;
       fseek(f, 0, SEEK_END);

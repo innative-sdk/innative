@@ -2,15 +2,14 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "benchmark.h"
-#include "innative/path.h"
 #include <chrono>
 
-Benchmarks::Benchmarks(const IRExports& exports, const char* arg0, int loglevel, const char* folder) : _exports(exports), _arg0(arg0), _loglevel(loglevel), _folder(folder) {}
+Benchmarks::Benchmarks(const IRExports& exports, const char* arg0, int loglevel, const path& folder) : _exports(exports), _arg0(arg0), _loglevel(loglevel), _folder(folder) {}
 Benchmarks::~Benchmarks()
 {
   // Clean up all the files we just produced
   for(auto f : _garbage)
-    std::remove(f.c_str());
+    remove(f.c_str());
 }
 
 void Benchmarks::Run(FILE* out)
@@ -44,20 +43,24 @@ void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
     return 0;
 
   (*_exports.FinalizeEnvironment)(env);
-  std::string base = (_folder + innative::Path(wasm).File().RemoveExtension()).Get() + std::to_string(counter);
-  std::string out = base + IN_LIBRARY_EXTENSION;
+  path base = _folder / u8path(wasm).stem();
+  base += std::to_string(counter);
+  path out = base;
+  out.replace_extension(IN_LIBRARY_EXTENSION);
 
-  err = (*_exports.Compile)(env, out.c_str());
+  err = (*_exports.Compile)(env, out.u8string().c_str());
   if(err < 0)
     return 0;
   
   _garbage.push_back(out);
 #ifdef IN_PLATFORM_WIN32
-  _garbage.push_back(base + ".lib");
+  out.replace_extension(".lib");
+  _garbage.push_back(out);
   if(flags & ENV_DEBUG)
-    _garbage.push_back(base + ".pdb");
+    out.replace_extension(".pdb");
+    _garbage.push_back(out);
 #endif
-  void* m = (*_exports.LoadAssembly)(out.c_str());
+  void* m = (*_exports.LoadAssembly)(out.u8string().c_str());
   (*_exports.DestroyEnvironment)(env);
 
   return m;
