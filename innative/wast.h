@@ -7,7 +7,8 @@
 #include "wat.h"
 
 namespace innative {
-  int ParseWast(Environment& env, const uint8_t* data, size_t sz, const path& file, bool always_compile, const path& output);
+  int ParseWast(Environment& env, const uint8_t* data, size_t sz, const path& file, bool always_compile,
+                const path& output);
 }
 
 #endif

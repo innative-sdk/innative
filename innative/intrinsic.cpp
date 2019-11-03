@@ -16,7 +16,9 @@ IN_ERROR innative::code::IN_Intrinsic_ToC(struct code::Context& context, llvm::V
   if(!context.memories.size())
     return ERR_INVALID_MEMORY_INDEX;
 
-  out = context.builder.CreateAdd(context.builder.CreatePtrToInt(context.builder.CreateLoad(context.memories[0]), context.builder.getInt64Ty()), params[0], "", true, true);
+  out = context.builder.CreateAdd(context.builder.CreatePtrToInt(context.builder.CreateLoad(context.memories[0]),
+                                                                 context.builder.getInt64Ty()),
+                                  params[0], "", true, true);
   return ERR_SUCCESS;
 }
 
@@ -25,13 +27,15 @@ IN_ERROR innative::code::IN_Intrinsic_FromC(struct code::Context& context, llvm:
   if(!context.memories.size())
     return ERR_INVALID_MEMORY_INDEX;
 
-  out = context.builder.CreateSub(context.builder.CreatePtrToInt(context.builder.CreateLoad(context.memories[0]), context.builder.getInt64Ty()), params[0], "", true, true);
+  out = context.builder.CreateSub(context.builder.CreatePtrToInt(context.builder.CreateLoad(context.memories[0]),
+                                                                 context.builder.getInt64Ty()),
+                                  params[0], "", true, true);
   return ERR_SUCCESS;
 }
 
 IN_ERROR innative::code::IN_Intrinsic_Trap(struct code::Context& context, llvm::Value** params, llvm::Value*& out)
 {
-  auto call = context.builder.CreateCall(llvm::Intrinsic::getDeclaration(context.llvm, llvm::Intrinsic::trap), { });
+  auto call = context.builder.CreateCall(llvm::Intrinsic::getDeclaration(context.llvm, llvm::Intrinsic::trap), {});
   call->setDoesNotReturn();
   out = nullptr;
   return ERR_SUCCESS;
@@ -47,7 +51,8 @@ IN_ERROR innative::code::IN_Intrinsic_FuncPtr(struct code::Context& context, llv
   uint64_t index = v->getValue().getLimitedValue();
   if(index >= context.functions.size())
     return ERR_INVALID_ARGUMENT_TYPE;
-  llvm::Function* fn = (!context.functions[index].imported) ? (context.functions[index].internal) : context.functions[index].imported;
+  llvm::Function* fn = (!context.functions[index].imported) ? (context.functions[index].internal) :
+                                                              context.functions[index].imported;
   out = context.builder.CreatePtrToInt(fn, context.builder.getInt64Ty());
   return ERR_SUCCESS;
 }

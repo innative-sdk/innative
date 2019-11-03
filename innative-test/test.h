@@ -35,13 +35,18 @@ public:
   void test_malloc();
   int CompileWASM(const path& file);
 
-  inline std::pair<uint32_t, uint32_t> Results() { auto r = _testdata; _testdata = { 0,0 }; return r; }
+  inline std::pair<uint32_t, uint32_t> Results()
+  {
+    auto r    = _testdata;
+    _testdata = { 0, 0 };
+    return r;
+  }
 
 protected:
   inline void DoTest(bool test, const char* text, const char* file, int line)
   {
     ++_testdata.second;
-    
+
     const char* f = strrchr(file, '/');
     if(!f)
       f = strrchr(file, '\\');
@@ -63,6 +68,6 @@ protected:
   path _folder;
 };
 
-#define TEST(x) DoTest(x, ""#x, __FILE__, __LINE__)
+#define TEST(x) DoTest(x, "" #x, __FILE__, __LINE__)
 
 #endif

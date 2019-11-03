@@ -17,9 +17,9 @@
 #define PAGE_ALLOC_POWER (WASM_PAGE_POWER + MIN_ALLOC_POWER - 1)
 #define PAGE_ALLOC_SIZE (1 << PAGE_ALLOC_POWER)
 
-#define HEAP_PARENT(i) ((i-1)/2)
-#define HEAP_LEFT(i) ((i<<1)+1)
-#define HEAP_RIGHT(i) ((i<<1)+2)
+#define HEAP_PARENT(i) ((i - 1) / 2)
+#define HEAP_LEFT(i) ((i << 1) + 1)
+#define HEAP_RIGHT(i) ((i << 1) + 2)
 #define HEAP_SIZE(i) ((size_t)1 << (i + MIN_ALLOC_POWER - 1))
 
 #ifdef TESTING_WASM
@@ -28,7 +28,7 @@
 #define FREE wasm_free
 #define REALLOC wasm_realloc
 #define CALLOC wasm_calloc
-#define EXPORT 
+#define EXPORT
 size_t __builtin_wasm_memory_size(size_t memory);
 size_t __builtin_wasm_memory_grow(size_t memory, size_t delta);
 #else
@@ -41,7 +41,7 @@ size_t __builtin_wasm_memory_grow(size_t memory, size_t delta);
 EXPORT void* memcpy(void* pdest, const void* psrc, size_t sz)
 {
   char* dest = (char*)pdest;
-  char* src = (char*)psrc;
+  char* src  = (char*)psrc;
 
   // Align dest pointer
   while((size_t)dest % sizeof(uint64_t) && sz)
@@ -129,15 +129,15 @@ void _wasm_allocate_to_end(uint8_t* target, uint8_t* end)
     __builtin_wasm_memory_grow(0, (target - end + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE);
 }
 
-uint8_t * _find_bucket(void* ptr, size_t * capacity)
+uint8_t* _find_bucket(void* ptr, size_t* capacity)
 {
-  uint8_t* end = (uint8_t*)(__builtin_wasm_memory_size(0) * WASM_PAGE_SIZE);
+  uint8_t* end  = (uint8_t*)(__builtin_wasm_memory_size(0) * WASM_PAGE_SIZE);
   uint8_t* heap = HeapRoot;
-  *capacity = 1;
+  *capacity     = 1;
 
   while(heap < end)
   {
-    uint8_t* mem = heap + (*capacity * WASM_PAGE_SIZE);
+    uint8_t* mem  = heap + (*capacity * WASM_PAGE_SIZE);
     uint8_t* next = mem + (*capacity * PAGE_ALLOC_SIZE);
     if((uint8_t*)ptr >= mem && (uint8_t*)ptr < next)
       return heap;
@@ -149,21 +149,23 @@ uint8_t * _find_bucket(void* ptr, size_t * capacity)
   return 0;
 }
 
-size_t _find_indice(void* ptr, uint8_t * heap, size_t capacity, uint8_t * size)
+size_t _find_indice(void* ptr, uint8_t* heap, size_t capacity, uint8_t* size)
 {
-  uint8_t* mem = heap + (capacity * WASM_PAGE_SIZE);
+  uint8_t* mem     = heap + (capacity * WASM_PAGE_SIZE);
   ptrdiff_t offset = (uint8_t*)ptr - mem;
   if(!heap || offset % MIN_ALLOC_SIZE)
     return (size_t)~0;
 
-  uint8_t sz = 1;
+  uint8_t sz   = 1;
   size_t index = (offset / MIN_ALLOC_SIZE) + (capacity * WASM_PAGE_SIZE / 2) - 1;
 
-  // Starting from the bottom of the heap (using the alignment of the pointer), walk up each level until we find an allocated node
+  // Starting from the bottom of the heap (using the alignment of the pointer), walk up each level until we find an
+  // allocated node
   while(heap[index] > 0)
   {
     if((index % 2) == 0) // All right-side children have an even index, where all left-side children are odd.
-      return (size_t)~0; // An unallocated right-side pointer is an impossible because going up further in the tree violates alignment
+      return (size_t)~0; // An unallocated right-side pointer is an impossible because going up further in the tree violates
+                         // alignment
 
     index = HEAP_PARENT(index);
     sz += 1;
@@ -179,11 +181,11 @@ char _verify_ptr(void* ptr)
   uint8_t* heap = _find_bucket(ptr, &capacity);
   uint8_t size;
   size_t index = _find_indice(ptr, heap, capacity, &size);
-  int test = heap[index];
+  int test     = heap[index];
   return index != (size_t)~0;
 }
 
-char _verify_heap(size_t index, uint8_t * heap, size_t capacity, char allocated)
+char _verify_heap(size_t index, uint8_t* heap, size_t capacity, char allocated)
 {
   if(index >= (capacity * WASM_PAGE_SIZE) - 1)
     return 1;
@@ -216,8 +218,9 @@ char _verify_heap(size_t index, uint8_t * heap, size_t capacity, char allocated)
 
 char _verify_heaps()
 {
-  uint8_t* end = (uint8_t*)(__builtin_wasm_memory_size(0) * WASM_PAGE_SIZE);;
-  uint8_t* heap = HeapRoot;
+  uint8_t* end = (uint8_t*)(__builtin_wasm_memory_size(0) * WASM_PAGE_SIZE);
+  ;
+  uint8_t* heap   = HeapRoot;
   size_t capacity = 1;
 
   while(heap < end)
@@ -233,15 +236,17 @@ char _verify_heaps()
 
 EXPORT void* MALLOC(size_t num)
 {
-  uint8_t* end = (uint8_t*)(__builtin_wasm_memory_size(0) * WASM_PAGE_SIZE);;
+  uint8_t* end = (uint8_t*)(__builtin_wasm_memory_size(0) * WASM_PAGE_SIZE);
+  ;
 
-  // The root of malloc is the only pointer in this entire program that can legally be 0, but the C++ compiler doesn't know that, so we have to account for this
+  // The root of malloc is the only pointer in this entire program that can legally be 0, but the C++ compiler doesn't know
+  // that, so we have to account for this
   if(HeapRoot == (uint8_t*)~0)
     HeapRoot = end;
 
-  uint8_t * heap = HeapRoot;
+  uint8_t* heap   = HeapRoot;
   size_t capacity = 1;
-  uint8_t power = 1;
+  uint8_t power   = 1;
 
   while(heap < end)
   {
@@ -256,20 +261,22 @@ EXPORT void* MALLOC(size_t num)
 
   size_t length = capacity * WASM_PAGE_SIZE;
 
-  if(heap >= end) // If our current heap points past addressable memory, there are no buckets large enough for this allocation
+  if(heap >=
+     end) // If our current heap points past addressable memory, there are no buckets large enough for this allocation
   {
-    _wasm_allocate_to_end(heap, end); // Make sure that the most recent bucket (the one at root) has allocated all possible pages
+    _wasm_allocate_to_end(heap,
+                          end); // Make sure that the most recent bucket (the one at root) has allocated all possible pages
 
     // Then we allocate pages for the bytemap, plus one additional page
     heap = (uint8_t*)(__builtin_wasm_memory_grow(0, capacity) * WASM_PAGE_SIZE);
 
     // Set up the free nodes
-    size_t i = 0;
+    size_t i     = 0;
     uint8_t size = WASM_PAGE_POWER - 1 + power;
 
     for(size_t j = 0; i < length - 1; ++j) // length - 1 is necessary because a heap takes up 2^n - 1
     {
-      //for(size_t k = 0; k < ((size_t)1 << j); ++k)
+      // for(size_t k = 0; k < ((size_t)1 << j); ++k)
       //  heap[i++] = size;
       memset(heap + i, size, (size_t)1 << j);
       i += (size_t)1 << j;
@@ -280,8 +287,8 @@ EXPORT void* MALLOC(size_t num)
     return MALLOC(num); // Then we recurse, because it's possible this new bucket still isn't big enough for this allocation
   }
 
-  size_t index = 0;
-  size_t offset = capacity * PAGE_ALLOC_SIZE;
+  size_t index    = 0;
+  size_t offset   = capacity * PAGE_ALLOC_SIZE;
   uint8_t* target = heap + (capacity * WASM_PAGE_SIZE);
 
   while(index < HEAP_PARENT(length - 1))
@@ -310,9 +317,9 @@ EXPORT void* MALLOC(size_t num)
 
   while(index > 0)
   {
-    index = HEAP_PARENT(index);
-    uint8_t l = heap[HEAP_LEFT(index)];
-    uint8_t r = heap[HEAP_RIGHT(index)];
+    index       = HEAP_PARENT(index);
+    uint8_t l   = heap[HEAP_LEFT(index)];
+    uint8_t r   = heap[HEAP_RIGHT(index)];
     heap[index] = r > l ? r : l; // We don't bother to check for the special free case here because its no longer possible.
   }
 
@@ -335,11 +342,11 @@ EXPORT void FREE(void* ptr)
 
   while(index > 0)
   {
-    index = HEAP_PARENT(index);
+    index     = HEAP_PARENT(index);
     uint8_t l = heap[HEAP_LEFT(index)];
     uint8_t r = heap[HEAP_RIGHT(index)];
     if(l == size && r == size) // If both children are completely free, our true free size is both of them combined
-      heap[index] = size + 1; // size + 1 is actually the size times two since this is a power of two
+      heap[index] = size + 1;  // size + 1 is actually the size times two since this is a power of two
     else
       heap[index] = l > r ? l : r;
 
@@ -389,14 +396,14 @@ EXPORT void* REALLOC(void* src, size_t num)
   // We can't expand the allocation, so we just copy to a new one
   void* dest = MALLOC(num);
   memcpy(dest, src, old); // Copy over the old data
-  FREE(src); // Free the old memory
+  FREE(src);              // Free the old memory
   return dest;
 }
 
 EXPORT void* CALLOC(size_t num, size_t size)
 {
   size_t n = num * size;
-  void* p = MALLOC(n);
+  void* p  = MALLOC(n);
   _zero_memory((char*)p, n); // We DO need to zero this memory, because we didn't get it directly from memory.grow
   return p;
 }

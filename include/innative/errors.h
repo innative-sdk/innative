@@ -4,7 +4,7 @@
 #ifndef IN__ERRORS_H
 #define IN__ERRORS_H
 
-#ifdef  __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -162,7 +162,7 @@ enum IN_ERROR
   ERR_RUNTIME_ASSERT_FAILURE,
 };
 
-#ifdef  __cplusplus
+#ifdef __cplusplus
 }
 #endif
 

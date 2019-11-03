@@ -43,7 +43,7 @@ void TestHarness::test_queue()
   TEST(q.Size() == 1);
   TEST(q.Capacity() == 1);
   TEST(q.GetPosition() == 0);
-  
+
   q.Push(7);
   TEST(q[0] == 5);
   TEST(q[1] == 7);

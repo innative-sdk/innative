@@ -30,8 +30,8 @@ namespace innative {
     enum WatTokens : WatTokenID
     {
       TOKEN_NONE = 0, // Error state
-      TOKEN_OPEN, // (
-      TOKEN_CLOSE, // )
+      TOKEN_OPEN,     // (
+      TOKEN_CLOSE,    // )
       TOKEN_MODULE,
       TOKEN_IMPORT,
       TOKEN_TYPE,
@@ -79,7 +79,7 @@ namespace innative {
       TOKEN_OUTPUT,
       TOKEN_NUMBER,
       TOKEN_STRING,
-      TOKEN_NAME, // Same as string but more restricted
+      TOKEN_NAME,     // Same as string but more restricted
       TOKEN_OPERATOR, // Represents all operators other than the control flow ones above
       TOKEN_COMMENT,
       TOKEN_RANGE_ERROR,

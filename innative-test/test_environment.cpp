@@ -4,9 +4,9 @@
 #include "test.h"
 
 extern "C" {
-  extern void _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz);
-  extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max);
-  extern void _innative_internal_env_print(uint64_t a);
+extern void _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz);
+extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max);
+extern void _innative_internal_env_print(uint64_t a);
 }
 
 void TestHarness::test_environment()
@@ -15,21 +15,21 @@ void TestHarness::test_environment()
   _innative_internal_env_memcpy(0, 0, 0);
 
   {
-    char src[1] = { 14 };
+    char src[1]  = { 14 };
     char dest[1] = { 0 };
     _innative_internal_env_memcpy(dest, src, 0);
     TEST(dest[0] == 0);
   }
 
   {
-    char src[1] = { 14 };
+    char src[1]  = { 14 };
     char dest[1] = { 0 };
     _innative_internal_env_memcpy(dest, src, 1);
     TEST(dest[0] == 14);
   }
 
   {
-    char src[8] = { 14, 5, 5, 5, 5, 5, 5, 5 };
+    char src[8]  = { 14, 5, 5, 5, 5, 5, 5, 5 };
     char dest[8] = { 0 };
     _innative_internal_env_memcpy(dest, src, 1);
     TEST(dest[0] == 14);
@@ -44,7 +44,7 @@ void TestHarness::test_environment()
   {
     for(int i = 0; i < 64; ++i)
     {
-      src[i] = i;
+      src[i]  = i;
       dest[i] = 0;
     }
 
@@ -56,7 +56,6 @@ void TestHarness::test_environment()
     for(int i = n; i < 64; ++i)
       TEST(!dest[i]);
   }
-
 
   uint64_t* p = (uint64_t*)_innative_internal_env_grow_memory(0, 0, 0);
   TEST(!_innative_internal_env_grow_memory(0, 9, 1));

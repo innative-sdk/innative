@@ -8,8 +8,8 @@
 #include <limits>
 #include <cmath>
 
-using std::string;
 using std::numeric_limits;
+using std::string;
 
 using namespace innative;
 using namespace utility;
@@ -28,28 +28,69 @@ namespace innative {
       int r;
       for(int i = 0; i < LEN; ++i)
       {
-        auto iter = kh_put_tokens(h, StringRef{ list[i], strlen(list[i]) }, &r);
+        auto iter       = kh_put_tokens(h, StringRef{ list[i], strlen(list[i]) }, &r);
         kh_val(h, iter) = ++count;
       }
 
       for(auto& e : legacy)
       {
-        auto iter = kh_put_tokens(h, StringRef{ e.first, strlen(e.first) }, &r);
+        auto iter       = kh_put_tokens(h, StringRef{ e.first, strlen(e.first) }, &r);
         kh_val(h, iter) = e.second;
       }
 
       return h;
     }
 
-    static const char* tokenlist[] = { "(", ")", "module", "import", "type", "start", "func", "table", "memory", "global", "export",
-      "data", "elem", "offset", "align", "local", "result", "param", "i32", "i64", "f32", "f64", "funcref", "cref", "mut", "block", "loop",
-      "if", "then", "else", "end", /* script extensions */ "binary", "quote", "register", "invoke", "get", "assert_return",
-      "assert_return_canonical_nan", "assert_return_arithmetic_nan", "assert_trap", "assert_malformed", "assert_invalid",
-      "assert_unlinkable", "assert_exhaustion", "script", "input", "output" };
+    static const char* tokenlist[]      = { "(",
+                                       ")",
+                                       "module",
+                                       "import",
+                                       "type",
+                                       "start",
+                                       "func",
+                                       "table",
+                                       "memory",
+                                       "global",
+                                       "export",
+                                       "data",
+                                       "elem",
+                                       "offset",
+                                       "align",
+                                       "local",
+                                       "result",
+                                       "param",
+                                       "i32",
+                                       "i64",
+                                       "f32",
+                                       "f64",
+                                       "funcref",
+                                       "cref",
+                                       "mut",
+                                       "block",
+                                       "loop",
+                                       "if",
+                                       "then",
+                                       "else",
+                                       "end",
+                                       /* script extensions */ "binary",
+                                       "quote",
+                                       "register",
+                                       "invoke",
+                                       "get",
+                                       "assert_return",
+                                       "assert_return_canonical_nan",
+                                       "assert_return_arithmetic_nan",
+                                       "assert_trap",
+                                       "assert_malformed",
+                                       "assert_invalid",
+                                       "assert_unlinkable",
+                                       "assert_exhaustion",
+                                       "script",
+                                       "input",
+                                       "output" };
     static const kh_tokens_t* tokenhash = GenTokenHash(tokenlist, { { "anyfunc", TOKEN_FUNCREF } });
 
-    template<int LEN>
-    inline const char* IN_getTokenString(WatTokenID token, const char* (&list)[LEN])
+    template<int LEN> inline const char* IN_getTokenString(WatTokenID token, const char* (&list)[LEN])
     {
       return token < LEN ? list[token] : 0;
     }
@@ -78,7 +119,7 @@ namespace innative {
       return s;
     }
 
-    const char* CheckTokenNAN(const char* s, const char* end, std::string * target)
+    const char* CheckTokenNAN(const char* s, const char* end, std::string* target)
     {
       if(s >= end)
         return nullptr;
@@ -119,16 +160,18 @@ namespace innative {
     }
 
     template<typename T, typename Arg, typename... Args>
-    int ResolveTokenNumber(const WatToken & token, string & numbuf, Arg(*fn)(const char*, char**, Args...), T & out, Args... args)
+    int ResolveTokenNumber(const WatToken& token, string& numbuf, Arg (*fn)(const char*, char**, Args...), T& out,
+                           Args... args)
     {
       numbuf.clear();
-      int length = token.len;
-      int(*digitcheck)(int) = (token.len > 2 && token.pos[0] == '0' && token.pos[1] == 'x') ? &isxdigit : &isdigit;
+      int length             = token.len;
+      int (*digitcheck)(int) = (token.len > 2 && token.pos[0] == '0' && token.pos[1] == 'x') ? &isxdigit : &isdigit;
       for(size_t i = 0; i < token.len; ++i)
       {
         if(token.pos[i] == '_')
         {
-          if(!i || (i + 1) >= token.len || !(*digitcheck)(token.pos[i - 1]) || !(*digitcheck)(token.pos[i + 1])) // If it's a _, it's valid only if it's surrounded by valid digits
+          if(!i || (i + 1) >= token.len || !(*digitcheck)(token.pos[i - 1]) ||
+             !(*digitcheck)(token.pos[i + 1])) // If it's a _, it's valid only if it's surrounded by valid digits
             return ERR_WAT_INVALID_NUMBER;
           --length; // Compensate for the character we removed from the amount we expect to consume
         }
@@ -136,7 +179,8 @@ namespace innative {
           numbuf += token.pos[i];
       }
 
-      if(digitcheck == &isdigit) // If this is a decimal number, strip all leading 0s because otherwise it'll be considered octal 
+      if(digitcheck ==
+         &isdigit) // If this is a decimal number, strip all leading 0s because otherwise it'll be considered octal
       {
         size_t iter = numbuf.find_first_not_of('0');
         if(iter != std::string::npos && iter > 0)
@@ -149,7 +193,7 @@ namespace innative {
       errno = 0;
       char* end;
       out = (*fn)(numbuf.c_str(), &end, args...);
-#ifdef IN_PLATFORM_POSIX 
+#ifdef IN_PLATFORM_POSIX
       if(std::is_floating_point<T>::value)
       {
         if(std::isinf(out)) // libc incorrectly parses certain edge cases as "inf" without setting errno to ERANGE
@@ -162,7 +206,8 @@ namespace innative {
         }
       }
 #endif
-      if(std::is_same<float, T>::value && fabs(out) <= 1.1754942e-38f) // WebAssembly never considers an underflow to be a range error, it rounds to zero
+      if(std::is_same<float, T>::value &&
+         fabs(out) <= 1.1754942e-38f) // WebAssembly never considers an underflow to be a range error, it rounds to zero
         errno = 0;
       if(std::is_same<double, T>::value && fabs(out) <= 2.2250738585072012e-308)
         errno = 0;
@@ -172,7 +217,7 @@ namespace innative {
       return (errno != 0 || (end - numbuf.c_str()) != length) ? ERR_WAT_INVALID_NUMBER : ERR_SUCCESS;
     }
 
-    int ResolveTokenf32(const WatToken & token, string & numbuf, float32 & out)
+    int ResolveTokenf32(const WatToken& token, string& numbuf, float32& out)
     {
       char* last;
 
@@ -182,7 +227,11 @@ namespace innative {
         auto mantissa = strtoul(numbuf.c_str(), &last, 16);
         if(mantissa < 0x1 || mantissa > 0x7fffff)
           return ERR_WAT_OUT_OF_RANGE;
-        union { uint32_t i; float f; } u = { 0x7F800000U | mantissa };
+        union
+        {
+          uint32_t i;
+          float f;
+        } u = { 0x7F800000U | mantissa };
         if(token.pos[0] == '-')
           u.i |= 0x80000000U;
 
@@ -198,7 +247,7 @@ namespace innative {
       return ResolveTokenNumber<float32>(token, numbuf, &strtof, out);
     }
 
-    int ResolveTokenf64(const WatToken & token, string & numbuf, float64 & out)
+    int ResolveTokenf64(const WatToken& token, string& numbuf, float64& out)
     {
       char* last;
 
@@ -208,7 +257,11 @@ namespace innative {
         auto mantissa = strtoull(numbuf.c_str(), &last, 16);
         if(mantissa < 0x1 || mantissa > 0xfffffffffffff)
           return ERR_WAT_OUT_OF_RANGE;
-        union { uint64_t i; double f; } u = { 0x7FF0000000000000ULL | mantissa };
+        union
+        {
+          uint64_t i;
+          double f;
+        } u = { 0x7FF0000000000000ULL | mantissa };
         if(token.pos[0] == '-')
           u.i |= 0x8000000000000000ULL;
 
@@ -224,21 +277,21 @@ namespace innative {
       return ResolveTokenNumber<float64>(token, numbuf, &strtod, out);
     }
 
-    int ResolveTokeni64(const WatToken & token, string & numbuf, varsint64 & out)
+    int ResolveTokeni64(const WatToken& token, string& numbuf, varsint64& out)
     {
       if(token.len > 0 && token.pos[0] == '-')
         return ResolveTokenNumber<varsint64, long long, int>(token, numbuf, strtoll, out, 0);
       return ResolveTokenNumber<varsint64, unsigned long long, int>(token, numbuf, strtoull, out, 0);
     }
 
-    int ResolveTokenu64(const WatToken & token, string & numbuf, varuint64 & out)
+    int ResolveTokenu64(const WatToken& token, string& numbuf, varuint64& out)
     {
       if(token.len > 0 && token.pos[0] == '-')
         return ERR_WAT_OUT_OF_RANGE;
       return ResolveTokeni64(token, numbuf, reinterpret_cast<varsint64&>(out));
     }
 
-    int ResolveTokeni32(const WatToken & token, string & numbuf, varsint32 & out)
+    int ResolveTokeni32(const WatToken& token, string& numbuf, varsint32& out)
     {
       varsint64 buf;
       int err = ResolveTokeni64(token, numbuf, buf);
@@ -251,7 +304,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int ResolveTokenu32(const WatToken & token, string & numbuf, varuint32 & out)
+    int ResolveTokenu32(const WatToken& token, string& numbuf, varuint32& out)
     {
       varsint64 buf;
       int err = ResolveTokeni64(token, numbuf, buf);
@@ -281,7 +334,7 @@ namespace innative {
 
 void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* end)
 {
-  unsigned int line = 0;
+  unsigned int line   = 0;
   unsigned int column = 0;
   while(s < end)
   {
@@ -361,7 +414,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
       }
 
       WatToken t = { TOKEN_STRING, begin, line };
-      t.len = s - begin;
+      t.len      = s - begin;
       tokens.Push(t);
 
       if(s[0] == '"')
@@ -372,7 +425,8 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
     {
       WatToken t = { TOKEN_NAME, s + 1, line };
 
-      // We avoid using a regex here because extremely long names are still technically valid but can overwhelm the standard C++ regex evaluator
+      // We avoid using a regex here because extremely long names are still technically valid but can overwhelm the standard
+      // C++ regex evaluator
       while(s < end)
       {
         IncToken(s, end, line, column);
@@ -400,9 +454,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
         case '_':
         case '`':
         case '|':
-        case '~':
-          t.len++;
-          continue;
+        case '~': t.len++; continue;
         default:
           if(isalnum(s[0]))
           {
@@ -468,7 +520,8 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
       {
         begin = s;
 
-        while(s < end && s[0] != ' ' && s[0] != '\n' && s[0] != '\r' && s[0] != '\t' && s[0] != '\f' && s[0] != '=' && s[0] != ')' && s[0] != '(' && s[0] != ';')
+        while(s < end && s[0] != ' ' && s[0] != '\n' && s[0] != '\r' && s[0] != '\t' && s[0] != '\f' && s[0] != '=' &&
+              s[0] != ')' && s[0] != '(' && s[0] != ';')
           IncToken(s, end, line, column);
 
         StringRef ref = { begin, static_cast<size_t>(s - begin) };
@@ -504,13 +557,14 @@ int innative::CheckWatTokens(const Environment& env, ValidationError*& errors, Q
     switch(tokens[i].id)
     {
     case TOKEN_NONE:
-      AppendError(env, errors, nullptr, ERR_WAT_INVALID_TOKEN, "[%zu] Invalid token: %s", WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
+      AppendError(env, errors, nullptr, ERR_WAT_INVALID_TOKEN, "[%zu] Invalid token: %s",
+                  WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
       break;
     case TOKEN_RANGE_ERROR:
-      AppendError(env, errors, nullptr, ERR_WAT_OUT_OF_RANGE, "[%zu] Constant out of range: %s", WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
+      AppendError(env, errors, nullptr, ERR_WAT_OUT_OF_RANGE, "[%zu] Constant out of range: %s",
+                  WatLineNumber(start, tokens[i].pos), string(tokens[i].pos, tokens[i].len).c_str());
       break;
-    default:
-      continue;
+    default: continue;
     }
     err = ERR_WAT_INVALID_TOKEN;
   }

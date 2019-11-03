@@ -17,16 +17,38 @@ __KHASH_IMPL(modules, , Identifier, size_t, 1, __ac_X31_hash_bytearray, kh_int_h
 
 namespace innative {
   namespace internal {
-    IN_FORCEINLINE IN_ERROR ParseVarUInt32(Stream& s, varuint32& target) { IN_ERROR err; target = static_cast<varuint32>(s.DecodeLEB128(err, 32, false)); return err; }
-    IN_FORCEINLINE IN_ERROR ParseVarSInt7(Stream& s, varsint7& target) { IN_ERROR err; target = static_cast<varsint7>(s.DecodeLEB128(err, 7, true)); return err; }
-    IN_FORCEINLINE IN_ERROR ParseVarUInt7(Stream& s, varuint7& target) { IN_ERROR err; target = static_cast<varuint7>(s.DecodeLEB128(err, 7, false)); return err; }
-    IN_FORCEINLINE IN_ERROR ParseVarUInt1(Stream& s, varuint1& target) { IN_ERROR err; target = static_cast<varuint1>(s.DecodeLEB128(err, 1, false)); return err; }
-    IN_FORCEINLINE IN_ERROR ParseByte(Stream& s, uint8_t& target) { return !s.Read(target) ? ERR_PARSE_UNEXPECTED_EOF : ERR_SUCCESS; }
-
-    template<class T, typename... Args>
-    struct Parse
+    IN_FORCEINLINE IN_ERROR ParseVarUInt32(Stream& s, varuint32& target)
     {
-      template<IN_ERROR(*PARSE)(Stream&, T&, Args...)>
+      IN_ERROR err;
+      target = static_cast<varuint32>(s.DecodeLEB128(err, 32, false));
+      return err;
+    }
+    IN_FORCEINLINE IN_ERROR ParseVarSInt7(Stream& s, varsint7& target)
+    {
+      IN_ERROR err;
+      target = static_cast<varsint7>(s.DecodeLEB128(err, 7, true));
+      return err;
+    }
+    IN_FORCEINLINE IN_ERROR ParseVarUInt7(Stream& s, varuint7& target)
+    {
+      IN_ERROR err;
+      target = static_cast<varuint7>(s.DecodeLEB128(err, 7, false));
+      return err;
+    }
+    IN_FORCEINLINE IN_ERROR ParseVarUInt1(Stream& s, varuint1& target)
+    {
+      IN_ERROR err;
+      target = static_cast<varuint1>(s.DecodeLEB128(err, 1, false));
+      return err;
+    }
+    IN_FORCEINLINE IN_ERROR ParseByte(Stream& s, uint8_t& target)
+    {
+      return !s.Read(target) ? ERR_PARSE_UNEXPECTED_EOF : ERR_SUCCESS;
+    }
+
+    template<class T, typename... Args> struct Parse
+    {
+      template<IN_ERROR (*PARSE)(Stream&, T&, Args...)>
       static IN_ERROR Array(Stream& s, T*& ptr, varuint32& size, const Environment& env, Args... args)
       {
         IN_ERROR err = ParseVarUInt32(s, size);
@@ -92,7 +114,8 @@ IN_ERROR innative::ParseByteArray(Stream& s, ByteArray& section, bool terminator
 
 IN_ERROR innative::ParseIdentifier(Stream& s, ByteArray& section, const Environment& env)
 {
-  return ParseByteArray(s, section, true, env); // For identifiers, we allocate one extra null terminator byte that isn't included in the size
+  return ParseByteArray(s, section, true,
+                        env); // For identifiers, we allocate one extra null terminator byte that isn't included in the size
 }
 
 IN_ERROR innative::ParseInitializer(Stream& s, Instruction& ins, const Environment& env)
@@ -140,10 +163,7 @@ IN_ERROR innative::ParseResizableLimits(Stream& s, ResizableLimits& limits)
 
   return err;
 }
-IN_ERROR innative::ParseMemoryDesc(Stream& s, MemoryDesc& mem)
-{
-  return ParseResizableLimits(s, mem.limits);
-}
+IN_ERROR innative::ParseMemoryDesc(Stream& s, MemoryDesc& mem) { return ParseResizableLimits(s, mem.limits); }
 
 IN_ERROR innative::ParseTableDesc(Stream& s, TableDesc& t)
 {
@@ -197,17 +217,13 @@ IN_ERROR innative::ParseImport(Stream& s, Import& i, const Environment& env)
   switch(i.kind)
   {
   case WASM_KIND_FUNCTION:
-    i.func_desc.debug = { 0 };
+    i.func_desc.debug       = { 0 };
     i.func_desc.param_names = 0;
     return ParseVarUInt32(s, i.func_desc.type_index);
-  case WASM_KIND_TABLE:
-    return ParseTableDesc(s, i.table_desc);
-  case WASM_KIND_MEMORY:
-    return ParseMemoryDesc(s, i.mem_desc);
-  case WASM_KIND_GLOBAL:
-    return ParseGlobalDesc(s, i.global_desc);
-  default:
-    err = ERR_FATAL_UNKNOWN_KIND;
+  case WASM_KIND_TABLE: return ParseTableDesc(s, i.table_desc);
+  case WASM_KIND_MEMORY: return ParseMemoryDesc(s, i.mem_desc);
+  case WASM_KIND_GLOBAL: return ParseGlobalDesc(s, i.global_desc);
+  default: err = ERR_FATAL_UNKNOWN_KIND;
   }
 
   return err;
@@ -236,9 +252,7 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   {
   case OP_block:
   case OP_loop:
-  case OP_if:
-    ins.immediates[0]._varsint7 = s.ReadVarInt7(err);
-    break;
+  case OP_if: ins.immediates[0]._varsint7 = s.ReadVarInt7(err); break;
   case OP_br:
   case OP_br_if:
   case OP_local_get:
@@ -246,25 +260,16 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_local_tee:
   case OP_global_get:
   case OP_global_set:
-  case OP_call:
-    ins.immediates[0]._varuint32 = s.ReadVarUInt32(err);
-    break;
-  case OP_i32_const:
-    ins.immediates[0]._varsint32 = s.ReadVarInt32(err);
-    break;
-  case OP_i64_const:
-    ins.immediates[0]._varsint64 = s.ReadVarInt64(err);
-    break;
-  case OP_f32_const:
-    ins.immediates[0]._float32 = s.ReadFloat32(err);
-    break;
-  case OP_f64_const:
-    ins.immediates[0]._float64 = s.ReadFloat64(err);
-    break;
+  case OP_call: ins.immediates[0]._varuint32 = s.ReadVarUInt32(err); break;
+  case OP_i32_const: ins.immediates[0]._varsint32 = s.ReadVarInt32(err); break;
+  case OP_i64_const: ins.immediates[0]._varsint64 = s.ReadVarInt64(err); break;
+  case OP_f32_const: ins.immediates[0]._float32 = s.ReadFloat32(err); break;
+  case OP_f64_const: ins.immediates[0]._float64 = s.ReadFloat64(err); break;
   case OP_memory_grow:
   case OP_memory_size:
     ins.immediates[0]._varuint1 = s.ReadVarUInt1(err);
-    if(err < 0 || ins.immediates[0]._varuint1 != 0) // We override any error here with ERR_INVALID_RESERVED_VALUE because that's what webassembly expects
+    if(err < 0 || ins.immediates[0]._varuint1 !=
+                    0) // We override any error here with ERR_INVALID_RESERVED_VALUE because that's what webassembly expects
       err = ERR_INVALID_RESERVED_VALUE;
     break;
   case OP_br_table:
@@ -280,7 +285,9 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
     {
       ins.immediates[1]._varuint1 = s.ReadVarUInt1(err);
 
-      if(err < 0 || ins.immediates[1]._varuint1 != 0) // We override any error here with ERR_INVALID_RESERVED_VALUE because that's what webassembly expects
+      if(err < 0 ||
+         ins.immediates[1]._varuint1 !=
+           0) // We override any error here with ERR_INVALID_RESERVED_VALUE because that's what webassembly expects
         err = ERR_INVALID_RESERVED_VALUE;
     }
 
@@ -443,10 +450,8 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_i32_reinterpret_f32:
   case OP_i64_reinterpret_f64:
   case OP_f32_reinterpret_i32:
-  case OP_f64_reinterpret_i64:
-    break;
-  default:
-    err = ERR_FATAL_UNKNOWN_INSTRUCTION;
+  case OP_f64_reinterpret_i64: break;
+  default: err = ERR_FATAL_UNKNOWN_INSTRUCTION;
   }
 
   return err;
@@ -476,7 +481,7 @@ IN_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const E
 IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, const Environment& env)
 {
   IN_ERROR err = ParseVarUInt32(s, f.body_size);
-  size_t end = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
+  size_t end   = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
 
   if(err >= 0) // Parse local entries into a temporary array, then expand them into a usable local type array.
   {
@@ -515,7 +520,7 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, const Environme
   }
   f.local_names = 0;
   f.param_names = 0;
-  f.debug = { 0 };
+  f.debug       = { 0 };
 
   return err;
 }
@@ -537,7 +542,8 @@ IN_ERROR innative::ParseNameSectionLocal(Stream& s, size_t num, DebugInfo*& targ
 {
   IN_ERROR err;
   auto index = s.ReadVarUInt32(err);
-  if(err < 0) return err;
+  if(err < 0)
+    return err;
   if(index >= num)
     return ERR_INVALID_LOCAL_INDEX;
 
@@ -559,9 +565,11 @@ IN_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Envi
   while(s.pos < end && err >= ERR_SUCCESS)
   {
     auto type = s.ReadVarUInt7(err);
-    if(err < 0) return err;
+    if(err < 0)
+      return err;
     auto len = s.ReadVarUInt32(err);
-    if(err < 0) return err;
+    if(err < 0)
+      return err;
 
     switch(type)
     {
@@ -575,7 +583,8 @@ IN_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Envi
       for(varuint32 i = 0; i < count && err >= 0; ++i)
       {
         auto index = s.ReadVarUInt32(err);
-        if(err < 0) return err;
+        if(err < 0)
+          return err;
 
         if(index < m.importsection.functions)
         {
@@ -597,17 +606,19 @@ IN_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Envi
       for(varuint32 i = 0; i < count && err >= 0; ++i)
       {
         auto fn = s.ReadVarUInt32(err);
-        if(err < 0) return err;
+        if(err < 0)
+          return err;
 
         if(fn < m.importsection.functions)
         {
           varuint32 num = s.ReadVarUInt32(err);
-          auto sig = m.importsection.imports[fn].func_desc.type_index;
+          auto sig      = m.importsection.imports[fn].func_desc.type_index;
           if(sig >= m.type.n_functions)
             return ERR_INVALID_TYPE_INDEX;
 
           for(varuint32 j = 0; j < num && err >= 0; ++j)
-            ParseNameSectionLocal(s, m.type.functions[sig].n_params, m.importsection.imports[fn].func_desc.param_names, env);
+            ParseNameSectionLocal(s, m.type.functions[sig].n_params, m.importsection.imports[fn].func_desc.param_names,
+                                  env);
 
           continue;
         }
@@ -623,8 +634,7 @@ IN_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Envi
       }
     }
     break;
-    default:
-      s.pos += len;
+    default: s.pos += len;
     }
   }
 
@@ -635,7 +645,7 @@ IN_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, Byt
 {
   m = { 0 };
 
-  IN_ERROR err = ERR_SUCCESS;
+  IN_ERROR err   = ERR_SUCCESS;
   m.magic_cookie = s.ReadUInt32(err);
 
   if(err < 0)
@@ -651,7 +661,7 @@ IN_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, Byt
     return ERR_PARSE_INVALID_VERSION;
 
   size_t begin = s.pos;
-  m.n_custom = 0; // Count the custom sections so we can preallocate them
+  m.n_custom   = 0; // Count the custom sections so we can preallocate them
   while(!s.End())
   {
     varuint7 op = s.ReadVarUInt7(err);
@@ -671,9 +681,9 @@ IN_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, Byt
   if(s.pos != s.size)
     return ERR_PARSE_INVALID_FILE_LENGTH;
 
-  s.pos = begin;
+  s.pos            = begin;
   size_t curcustom = 0;
-  m.exports = kh_init_exports();
+  m.exports        = kh_init_exports();
 
   if(m.n_custom > 0)
   {
@@ -693,38 +703,36 @@ IN_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, Byt
     if(opcode != WASM_SECTION_CUSTOM) // Section order only applies to known sections
     {
       if(!ValidateSectionOrder(m.knownsections, opcode))
-        return ERR_FATAL_INVALID_WASM_SECTION_ORDER; // This has to be a fatal error because some sections rely on others being loaded
+        return ERR_FATAL_INVALID_WASM_SECTION_ORDER; // This has to be a fatal error because some sections rely on others
+                                                     // being loaded
       m.knownsections |= (1 << opcode);
     }
 
     switch(opcode)
     {
     case WASM_SECTION_TYPE:
-      err = Parse<FunctionType, const Environment&>::template Array<&ParseFunctionType>(s, m.type.functions, m.type.n_functions, env, env);
+      err = Parse<FunctionType, const Environment&>::template Array<&ParseFunctionType>(s, m.type.functions,
+                                                                                        m.type.n_functions, env, env);
       break;
     case WASM_SECTION_IMPORT:
     {
-      if(err = Parse<Import, const Environment&>::template Array<&ParseImport>(s, m.importsection.imports, m.importsection.n_import, env, env))
+      if(err = Parse<Import, const Environment&>::template Array<&ParseImport>(s, m.importsection.imports,
+                                                                               m.importsection.n_import, env, env))
         return err;
-      std::stable_sort(m.importsection.imports, m.importsection.imports + m.importsection.n_import, [](const Import& a, const Import& b) -> bool { return a.kind < b.kind; });
+      std::stable_sort(m.importsection.imports, m.importsection.imports + m.importsection.n_import,
+                       [](const Import& a, const Import& b) -> bool { return a.kind < b.kind; });
 
-      varuint32 num = m.importsection.n_import;
+      varuint32 num           = m.importsection.n_import;
       m.importsection.globals = 0;
       for(varuint32 i = 0; i < num; ++i)
       {
         switch(m.importsection.imports[i].kind)
         {
-        case WASM_KIND_FUNCTION:
-          ++m.importsection.functions;
-        case WASM_KIND_TABLE:
-          ++m.importsection.tables;
-        case WASM_KIND_MEMORY:
-          ++m.importsection.memories;
-        case WASM_KIND_GLOBAL:
-          ++m.importsection.globals;
-          break;
-        default:
-          return ERR_FATAL_UNKNOWN_KIND;
+        case WASM_KIND_FUNCTION: ++m.importsection.functions;
+        case WASM_KIND_TABLE: ++m.importsection.tables;
+        case WASM_KIND_MEMORY: ++m.importsection.memories;
+        case WASM_KIND_GLOBAL: ++m.importsection.globals; break;
+        default: return ERR_FATAL_UNKNOWN_KIND;
         }
       }
 
@@ -742,33 +750,37 @@ IN_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, Byt
       err = Parse<MemoryDesc>::template Array<&ParseMemoryDesc>(s, m.memory.memories, m.memory.n_memories, env);
       break;
     case WASM_SECTION_GLOBAL:
-      err = Parse<GlobalDecl, const Environment&>::template Array<&ParseGlobalDecl>(s, m.global.globals, m.global.n_globals, env, env);
+      err = Parse<GlobalDecl, const Environment&>::template Array<&ParseGlobalDecl>(s, m.global.globals, m.global.n_globals,
+                                                                                    env, env);
       break;
     case WASM_SECTION_EXPORT:
-      err = Parse<Export, const Environment&>::template Array<&ParseExport>(s, m.exportsection.exports, m.exportsection.n_exports, env, env);
+      err = Parse<Export, const Environment&>::template Array<&ParseExport>(s, m.exportsection.exports,
+                                                                            m.exportsection.n_exports, env, env);
       break;
-    case WASM_SECTION_START:
-      m.start = s.ReadVarUInt32(err);
-      break;
+    case WASM_SECTION_START: m.start = s.ReadVarUInt32(err); break;
     case WASM_SECTION_ELEMENT:
-      err = Parse<TableInit, Module&, const Environment&>::template Array<&ParseTableInit>(s, m.element.elements, m.element.n_elements, env, m, env);
+      err = Parse<TableInit, Module&, const Environment&>::template Array<&ParseTableInit>(s, m.element.elements,
+                                                                                           m.element.n_elements, env, m,
+                                                                                           env);
       break;
     case WASM_SECTION_CODE:
-      err = Parse<FunctionBody, const Environment&>::template Array<&ParseFunctionBody>(s, m.code.funcbody, m.code.n_funcbody, env, env);
+      err = Parse<FunctionBody, const Environment&>::template Array<&ParseFunctionBody>(s, m.code.funcbody,
+                                                                                        m.code.n_funcbody, env, env);
       break;
     case WASM_SECTION_DATA:
       err = Parse<DataInit, const Environment&>::template Array<&ParseDataInit>(s, m.data.data, m.data.n_data, env, env);
       break;
     case WASM_SECTION_CUSTOM:
-      if(payload < 1) // A custom section MUST have an identifier, which itself must take up at least 1 byte, so a payload of 0 bytes is impossible.
+      if(payload < 1) // A custom section MUST have an identifier, which itself must take up at least 1 byte, so a payload
+                      // of 0 bytes is impossible.
         return ERR_PARSE_INVALID_FILE_LENGTH;
       else
       {
         assert(curcustom < m.n_custom);
         m.custom[curcustom].payload = payload;
-        m.custom[curcustom].data = s.data + s.pos;
-        size_t custom = s.pos + payload;
-        err = ParseIdentifier(s, m.custom[curcustom].name, env);
+        m.custom[curcustom].data    = s.data + s.pos;
+        size_t custom               = s.pos + payload;
+        err                         = ParseIdentifier(s, m.custom[curcustom].name, env);
         if(err == ERR_SUCCESS && !ValidateIdentifier(m.custom[curcustom].name))
           return ERR_INVALID_UTF8_ENCODING; // An invalid UTF8 encoding for the name is an actual parse error for some reason
         if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), "name"))
@@ -777,8 +789,7 @@ IN_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, Byt
           s.pos = custom; // Skip over the custom payload, minus the name
         break;
       }
-    default:
-      return ERR_FATAL_UNKNOWN_SECTION;
+    default: return ERR_FATAL_UNKNOWN_SECTION;
     }
   }
 
@@ -805,12 +816,13 @@ IN_ERROR innative::ParseExportFixup(Module& m, ValidationError*& errors, const E
 {
   for(varuint32 i = 0; i < m.exportsection.n_exports; ++i)
   {
-    int r = 0;
+    int r        = 0;
     khint_t iter = kh_put_exports(m.exports, m.exportsection.exports[i].name, &r);
     if(r < 0)
       return ERR_FATAL_BAD_HASH;
     if(!r)
-      AppendError(env, errors, &m, ERR_FATAL_DUPLICATE_EXPORT, "Duplicate export name %s", m.exportsection.exports[i].name.str());
+      AppendError(env, errors, &m, ERR_FATAL_DUPLICATE_EXPORT, "Duplicate export name %s",
+                  m.exportsection.exports[i].name.str());
     kh_value(m.exports, iter) = i;
   }
 

@@ -13,13 +13,13 @@ WatTokens innative::wat::TypeEncodingToken(varsint7 type_encoding)
 {
   switch(type_encoding)
   {
-  case TE_i32:return TOKEN_i32;
-  case TE_i64:return TOKEN_i64;
-  case TE_f32:return TOKEN_f32;
-  case TE_f64:return TOKEN_f64;
-  case TE_funcref:return TOKEN_FUNCREF;
-  case TE_func:return TOKEN_FUNC;
-  case TE_void:return TOKEN_NONE;
+  case TE_i32: return TOKEN_i32;
+  case TE_i64: return TOKEN_i64;
+  case TE_f32: return TOKEN_f32;
+  case TE_f64: return TOKEN_f64;
+  case TE_funcref: return TOKEN_FUNCREF;
+  case TE_func: return TOKEN_FUNC;
+  case TE_void: return TOKEN_NONE;
   }
   return TOKEN_NONE;
 }
@@ -38,7 +38,6 @@ void innative::wat::PushNewNameToken(const Environment& env, Queue<WatToken>& to
   vsnprintf(s, len + 1, format, args);
   va_end(args);
   tokens.Push(WatToken{ TOKEN_NAME, s, 0, 0, (int64_t)len });
-
 }
 
 void innative::wat::PushFunctionName(const Environment& env, Queue<WatToken>& tokens, const Module& m, varuint32 index)
@@ -60,7 +59,8 @@ void innative::wat::PushIdentifierToken(Queue<WatToken>& tokens, const ByteArray
   tokens.Push(WatToken{ token, id.str(), 0, 0, id.size() });
 }
 
-void innative::wat::PushLocalName(const Environment& env, Queue<WatToken>& tokens, varuint32 index, const DebugInfo* names, varuint32 num, char prefix)
+void innative::wat::PushLocalName(const Environment& env, Queue<WatToken>& tokens, varuint32 index, const DebugInfo* names,
+                                  varuint32 num, char prefix)
 {
   if(index < num && names && names[index].name.size() != 0)
     PushIdentifierToken(tokens, names[index].name, TOKEN_NAME);
@@ -68,7 +68,8 @@ void innative::wat::PushLocalName(const Environment& env, Queue<WatToken>& token
     PushNewNameToken(env, tokens, "%c%u", prefix, index);
 }
 
-void innative::wat::TokenizeInstruction(const Environment& env, Queue<WatToken>& tokens, const Module& m, const Instruction& ins, const FunctionBody* body, const FunctionType* ftype)
+void innative::wat::TokenizeInstruction(const Environment& env, Queue<WatToken>& tokens, const Module& m,
+                                        const Instruction& ins, const FunctionBody* body, const FunctionType* ftype)
 {
   if(ins.opcode >= OPNAMES.size())
   {
@@ -94,15 +95,9 @@ void innative::wat::TokenizeInstruction(const Environment& env, Queue<WatToken>&
   case OP_global_get:
   case OP_global_set:
   case OP_br:
-  case OP_br_if:
-    tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varuint32 });
-    break;
-  case OP_i32_const:
-    tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varsint32 });
-    break;
-  case OP_i64_const:
-    tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varsint64 });
-    break;
+  case OP_br_if: tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varuint32 }); break;
+  case OP_i32_const: tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varsint32 }); break;
+  case OP_i64_const: tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varsint64 }); break;
   case OP_f32_const:
     tokens.Push(WatToken{ TOKEN_FLOAT, 0 });
     tokens.Back().f = ins.immediates[0]._float32;
@@ -119,12 +114,8 @@ void innative::wat::TokenizeInstruction(const Environment& env, Queue<WatToken>&
 
     tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[1]._varuint32 });
     break;
-  case OP_call:
-    PushFunctionName(env, tokens, m, ins.immediates[0]._varuint32);
-    break;
-  case OP_call_indirect:
-    tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varuint32 });
-    break;
+  case OP_call: PushFunctionName(env, tokens, m, ins.immediates[0]._varuint32); break;
+  case OP_call_indirect: tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, ins.immediates[0]._varuint32 }); break;
   case OP_i32_load:
   case OP_i64_load:
   case OP_f32_load:
@@ -157,7 +148,7 @@ void innative::wat::TokenizeInstruction(const Environment& env, Queue<WatToken>&
     if(ins.immediates[1]._varuptr != 0)
     {
       tokens.Push(WatToken{ TOKEN_OFFSET });
-      tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0,  (1LL << (int64_t)ins.immediates[1]._varuptr) });
+      tokens.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, (1LL << (int64_t)ins.immediates[1]._varuptr) });
     }
     break;
   }
@@ -165,7 +156,7 @@ void innative::wat::TokenizeInstruction(const Environment& env, Queue<WatToken>&
 
 void innative::wat::PushExportToken(Queue<WatToken>& tokens, const Module& m, varuint7 kind, varuint32 index, bool outside)
 {
-  if(m.knownsections&(1 << WASM_SECTION_EXPORT))
+  if(m.knownsections & (1 << WASM_SECTION_EXPORT))
     for(uint64_t i = 0; i < m.exportsection.n_exports; ++i)
     {
       if(m.exportsection.exports[i].kind == kind && m.exportsection.exports[i].index == index)
@@ -195,7 +186,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
   if(m.name.size())
     tokens.Push(WatToken{ TOKEN_NAME, m.name.str(), 0, 0, m.name.size() });
 
-  if(m.knownsections&(1 << WASM_SECTION_TYPE))
+  if(m.knownsections & (1 << WASM_SECTION_TYPE))
     for(uint64_t i = 0; i < m.type.n_functions; ++i)
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
@@ -228,7 +219,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
 
   auto tokenize_limits = [](Queue<WatToken>& t, const ResizableLimits& limits) {
     t.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, limits.minimum });
-    if(limits.flags&WASM_LIMIT_HAS_MAXIMUM)
+    if(limits.flags & WASM_LIMIT_HAS_MAXIMUM)
       t.Push(WatToken{ TOKEN_INTEGER, 0, 0, 0, limits.maximum });
   };
 
@@ -244,7 +235,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
       t.Push(WatToken{ TypeEncodingToken(global.type) });
   };
 
-  if(m.knownsections&(1 << WASM_SECTION_IMPORT))
+  if(m.knownsections & (1 << WASM_SECTION_IMPORT))
     for(uint64_t i = 0; i < m.importsection.n_import; ++i)
     {
       auto& imp = m.importsection.imports[i];
@@ -312,7 +303,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
       PushExportToken(tokens, m, imp.kind, index, true);
     }
 
-  if(m.knownsections&(1 << WASM_SECTION_TABLE))
+  if(m.knownsections & (1 << WASM_SECTION_TABLE))
     for(uint64_t i = 0; i < m.table.n_tables; ++i)
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
@@ -323,7 +314,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
       tokens.Push(WatToken{ TOKEN_CLOSE });
     }
 
-  if(m.knownsections&(1 << WASM_SECTION_MEMORY))
+  if(m.knownsections & (1 << WASM_SECTION_MEMORY))
     for(uint64_t i = 0; i < m.memory.n_memories; ++i)
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
@@ -333,12 +324,13 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
       tokens.Push(WatToken{ TOKEN_CLOSE });
     }
 
-  if(m.knownsections&(1 << WASM_SECTION_GLOBAL))
+  if(m.knownsections & (1 << WASM_SECTION_GLOBAL))
     for(uint64_t i = 0; i < m.global.n_globals; ++i)
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
       tokens.Push(WatToken{ TOKEN_GLOBAL });
-      PushExportToken(tokens, m, WASM_KIND_GLOBAL, (varuint32)i + m.importsection.globals - m.importsection.memories, false);
+      PushExportToken(tokens, m, WASM_KIND_GLOBAL, (varuint32)i + m.importsection.globals - m.importsection.memories,
+                      false);
       tokenize_global(tokens, m.global.globals[i].desc);
       tokens.Push(WatToken{ TOKEN_OPEN });
       TokenizeInstruction(env, tokens, m, m.global.globals[i].init, 0, 0);
@@ -346,7 +338,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
       tokens.Push(WatToken{ TOKEN_CLOSE });
     }
 
-  if(m.knownsections&(1 << WASM_SECTION_START))
+  if(m.knownsections & (1 << WASM_SECTION_START))
   {
     tokens.Push(WatToken{ TOKEN_OPEN });
     tokens.Push(WatToken{ TOKEN_START });
@@ -354,7 +346,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
     tokens.Push(WatToken{ TOKEN_CLOSE });
   }
 
-  if(m.knownsections&(1 << WASM_SECTION_ELEMENT))
+  if(m.knownsections & (1 << WASM_SECTION_ELEMENT))
     for(uint64_t i = 0; i < m.element.n_elements; ++i)
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
@@ -424,7 +416,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
     tokens.Push(WatToken{ TOKEN_CLOSE });
   }
 
-  if(m.knownsections&(1 << WASM_SECTION_DATA))
+  if(m.knownsections & (1 << WASM_SECTION_DATA))
     for(uint64_t i = 0; i < m.data.n_data; ++i)
     {
       tokens.Push(WatToken{ TOKEN_OPEN });
@@ -447,7 +439,7 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out)
 {
   size_t depth = 0;
   size_t stack = 0;
-  size_t line = 0;
+  size_t line  = 0;
 
   for(size_t i = 0; i < tokens.Size(); ++i)
   {
@@ -459,9 +451,7 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out)
 
     switch(tokens[i].id)
     {
-    case TOKEN_RANGE_ERROR:
-      out << "[RANGE ERROR]";
-      break;
+    case TOKEN_RANGE_ERROR: out << "[RANGE ERROR]"; break;
     case TOKEN_NONE:
       if(tokens[i].pos)
       {
@@ -472,9 +462,7 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out)
       else
         out << "[UNKNOWN TOKEN]";
       break;
-    case TOKEN_NUMBER:
-      out.write(tokens[i].pos, tokens[i].len);
-      break;
+    case TOKEN_NUMBER: out.write(tokens[i].pos, tokens[i].len); break;
     case TOKEN_STRING:
       out << '"';
       out.write(tokens[i].pos, tokens[i].len); // TODO: encode non-ascii to make it more portable
@@ -489,14 +477,10 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out)
         break; // Skip the final end in the function
       switch(tokens[i].u)
       {
-      case OP_end:
-        --stack;
-        break;
+      case OP_end: --stack; break;
       case OP_block:
       case OP_if:
-      case OP_loop:
-        ++stack;
-        break;
+      case OP_loop: ++stack; break;
       }
 
       if(depth == 2)
@@ -516,12 +500,8 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out)
       out.write(tokens[i].pos, tokens[i].len);
       out << ";)";
       break;
-    case TOKEN_INTEGER:
-      out << std::to_string(tokens[i].i);
-      break;
-    case TOKEN_FLOAT:
-      out << std::to_string(tokens[i].f);
-      break;
+    case TOKEN_INTEGER: out << std::to_string(tokens[i].i); break;
+    case TOKEN_FLOAT: out << std::to_string(tokens[i].f); break;
     case TOKEN_OPEN:
       ++depth;
       if(depth == 2)
@@ -531,11 +511,8 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out)
       }
       out << GetTokenString(tokens[i].id);
       break;
-    case TOKEN_CLOSE:
-      --depth;
-    default:
-      out << GetTokenString(tokens[i].id);
-      break;
+    case TOKEN_CLOSE: --depth;
+    default: out << GetTokenString(tokens[i].id); break;
     }
   }
 

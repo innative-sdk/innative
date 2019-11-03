@@ -16,13 +16,13 @@
 
 #ifdef IN_PLATFORM_WIN32
 #include "../innative/win32.h"
-#endif 
+#endif
 
 #ifdef IN_PLATFORM_POSIX
-#define LONGJMP(x,i) siglongjmp(x,i)
-#define SETJMP(x) sigsetjmp(x,1)
+#define LONGJMP(x, i) siglongjmp(x, i)
+#define SETJMP(x) sigsetjmp(x, 1)
 #else
-#define LONGJMP(x,i) longjmp(x,i)
+#define LONGJMP(x, i) longjmp(x, i)
 #define SETJMP(x) setjmp(x)
 #endif
 
@@ -35,9 +35,11 @@ KHASH_INIT(stringmap, const char*, const char*, 1, kh_str_hash_funcins, kh_str_h
 
 namespace innative {
   namespace internal {
-    template<typename X>
-    struct HType { typedef int64_t T; };
-  }
+    template<typename X> struct HType
+    {
+      typedef int64_t T;
+    };
+  } // namespace internal
 
   namespace wat {
     path GenUniquePath(const path& src, int& counter)
@@ -55,7 +57,7 @@ namespace innative {
       int r;
       for(auto& m : map)
       {
-        auto iter = kh_put_stringmap(h, m.first, &r);
+        auto iter       = kh_put_stringmap(h, m.first, &r);
         kh_val(h, iter) = m.second;
       }
 
@@ -63,17 +65,17 @@ namespace innative {
     }
 
     static kh_stringmap_t* assertmap = GenWastStringMap({
-      {"unknown function 0", "unknown function"},
-      {"unknown memory 0", "unknown memory"},
-      {"unknown table 0", "unknown table"},
-      {"i32 constant", "constant out of range"},
-      {"length out of bounds", "unexpected end"},
-      {"import after function", "invalid import order"},
-      {"import after global", "invalid import order"},
-      {"import after table", "invalid import order"},
-      {"import after memory", "invalid import order"},
-      {"result before parameter", "unexpected token"},
-      });
+      { "unknown function 0", "unknown function" },
+      { "unknown memory 0", "unknown memory" },
+      { "unknown table 0", "unknown table" },
+      { "i32 constant", "constant out of range" },
+      { "length out of bounds", "unexpected end" },
+      { "import after function", "invalid import order" },
+      { "import after global", "invalid import order" },
+      { "import after table", "invalid import order" },
+      { "import after memory", "invalid import order" },
+      { "result before parameter", "unexpected token" },
+    });
 
     size_t GetWastMapping(kh_indexname_t* mapping, const WatToken& t)
     {
@@ -95,10 +97,7 @@ namespace innative {
 
     jmp_buf jump_location;
 
-    void WastCrashHandler(int sig)
-    {
-      LONGJMP(jump_location, 1);
-    }
+    void WastCrashHandler(int sig) { LONGJMP(jump_location, 1); }
 
     void InvalidateCache(void*& cache, path cachepath)
     {
@@ -169,7 +168,8 @@ namespace innative {
     {
       static std::atomic_size_t modcount(1); // We can't use n_modules in case a module is malformed
 
-      auto buf = std::string(IN_TEMP_PREFIX) + std::to_string(modcount.fetch_add(1, std::memory_order::memory_order_relaxed));
+      auto buf =
+        std::string(IN_TEMP_PREFIX) + std::to_string(modcount.fetch_add(1, std::memory_order::memory_order_relaxed));
       m.name.resize(buf.size(), true, env);
       if(!m.name.get())
         return ERR_FATAL_OUT_OF_MEMORY;
@@ -183,7 +183,7 @@ namespace innative {
       EXPECTED(tokens, TOKEN_MODULE, ERR_WAT_EXPECTED_MODULE);
       int err;
       WatToken name = { TOKEN_NONE };
-      m = { 0 }; // We have to ensure this is zeroed, because an error could occur before ParseModule is called
+      m             = { 0 }; // We have to ensure this is zeroed, because an error could occur before ParseModule is called
       std::string tempname(IN_TEMP_PREFIX);
       tempname += std::to_string(env.n_modules);
 
@@ -232,7 +232,8 @@ namespace innative {
         return err;
       m.path = AllocString(env, file.u8string());
 
-      if(name.id == TOKEN_NAME) // Only add this to our name mapping if an actual name token was specified, regardless of whether the module has a name.
+      if(name.id == TOKEN_NAME) // Only add this to our name mapping if an actual name token was specified, regardless of
+                                // whether the module has a name.
       {
         int r;
         khiter_t iter = kh_put_indexname(mapping, { name.pos, name.len }, &r);
@@ -245,24 +246,30 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    template<int I, typename... Args>
-    struct GenWastFunction
+    template<int I, typename... Args> struct GenWastFunction
     {
       inline static void Call(void* f, WastResult& result, const Instruction* param, Args... args)
       {
         switch(param[I - 1].opcode)
         {
-        case OP_i32_const: return GenWastFunction<I - 1, int32_t, Args...>::Call(f, result, param, param[I - 1].immediates[0]._varsint32, args...);
-        case OP_i64_const: return GenWastFunction<I - 1, int64_t, Args...>::Call(f, result, param, param[I - 1].immediates[0]._varsint64, args...);
-        case OP_f32_const: return GenWastFunction<I - 1, float, Args...>::Call(f, result, param, param[I - 1].immediates[0]._float32, args...);
-        case OP_f64_const: return GenWastFunction<I - 1, double, Args...>::Call(f, result, param, param[I - 1].immediates[0]._float64, args...);
+        case OP_i32_const:
+          return GenWastFunction<I - 1, int32_t, Args...>::Call(f, result, param, param[I - 1].immediates[0]._varsint32,
+                                                                args...);
+        case OP_i64_const:
+          return GenWastFunction<I - 1, int64_t, Args...>::Call(f, result, param, param[I - 1].immediates[0]._varsint64,
+                                                                args...);
+        case OP_f32_const:
+          return GenWastFunction<I - 1, float, Args...>::Call(f, result, param, param[I - 1].immediates[0]._float32,
+                                                              args...);
+        case OP_f64_const:
+          return GenWastFunction<I - 1, double, Args...>::Call(f, result, param, param[I - 1].immediates[0]._float64,
+                                                               args...);
         }
         assert(false);
       }
     };
 
-    template<typename... Args>
-    struct GenWastFunction<0, Args...>
+    template<typename... Args> struct GenWastFunction<0, Args...>
     {
       inline static void Call(void* f, WastResult& result, const Instruction* param, Args... args)
       {
@@ -270,14 +277,10 @@ namespace innative {
         {
         case TE_i32: result.i32 = ((int32_t(*)(Args...))(f))(args...); break;
         case TE_i64: result.i64 = ((int64_t(*)(Args...))(f))(args...); break;
-        case TE_f32: result.f32 = ((float(*)(Args...))(f))(args...); break;
-        case TE_f64: result.f64 = ((double(*)(Args...))(f))(args...); break;
-        default:
-          assert(false);
-          result.type = TE_NONE;
-        case TE_void:
-          ((void(*)(Args...))(f))(args...);
-          break;
+        case TE_f32: result.f32 = ((float (*)(Args...))(f))(args...); break;
+        case TE_f64: result.f64 = ((double (*)(Args...))(f))(args...); break;
+        default: assert(false); result.type = TE_NONE;
+        case TE_void: ((void (*)(Args...))(f))(args...); break;
         }
       }
     };
@@ -296,26 +299,23 @@ namespace innative {
       return 0;
     }
 
-    template<typename... Args>
-    void GenWastFunctionCall(void* f, WastResult& result, Args... params)
+    template<typename... Args> void GenWastFunctionCall(void* f, WastResult& result, Args... params)
     {
-      int64_t r = reinterpret_cast<int64_t(*)(typename internal::HType<Args>::T...)>(f)(Homogenize(params)...);
+      int64_t r = reinterpret_cast<int64_t (*)(typename internal::HType<Args>::T...)>(f)(Homogenize(params)...);
       switch(result.type)
       {
       case TE_i32:
       case TE_f32:
       case TE_f64:
       case TE_i64: result.i64 = r; break;
-      default:
-        assert(false);
-        result.type = TE_NONE;
-      case TE_void:
-        break;
+      default: assert(false); result.type = TE_NONE;
+      case TE_void: break;
       }
     }
 
     // SEH exceptions and destructors don't mix, so we isolate all this signal and exception handling in this function.
-    int IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, WastResult& result, std::vector<Instruction>& params)
+    int IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, WastResult& result,
+                            std::vector<Instruction>& params)
     {
       if(SETJMP(jump_location) != 0)
       {
@@ -337,12 +337,18 @@ namespace innative {
           case 4: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3]); break;
           case 5: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4]); break;
           case 6: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5]); break;
-          case 7: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6]); break;
-          case 8: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7]); break;
-          case 9: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7], params[8]); break;
-          default:
-            assert(false);
-            return ERR_FATAL_UNKNOWN_KIND;
+          case 7:
+            GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6]);
+            break;
+          case 8:
+            GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6],
+                                params[7]);
+            break;
+          case 9:
+            GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6],
+                                params[7], params[8]);
+            break;
+          default: assert(false); return ERR_FATAL_UNKNOWN_KIND;
           }
         }
         else
@@ -353,9 +359,7 @@ namespace innative {
           case 1: GenWastFunction<1>::Call(f, result, params.data()); break;
           case 2: GenWastFunction<2>::Call(f, result, params.data()); break;
           case 3: GenWastFunction<3>::Call(f, result, params.data()); break;
-          default:
-            assert(false);
-            return ERR_FATAL_UNKNOWN_KIND;
+          default: assert(false); return ERR_FATAL_UNKNOWN_KIND;
           }
         }
 #ifdef IN_COMPILER_MSC
@@ -401,11 +405,13 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache, path& cachepath, int& counter, const path& file, WastResult& result)
+    int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache,
+                        path& cachepath, int& counter, const path& file, WastResult& result)
     {
       int err;
       int cache_err = 0;
-      if(!cache) // If cache is null we need to recompile the current environment, but we can't bail on error messages yet or we'll corrupt the parse
+      if(!cache) // If cache is null we need to recompile the current environment, but we can't bail on error messages yet
+                 // or we'll corrupt the parse
         cache_err = CompileWast(env, GenUniquePath(file, counter), cache, cachepath);
 
       switch(tokens.Pop().id)
@@ -413,7 +419,7 @@ namespace innative {
       case TOKEN_INVOKE:
       {
         WatToken name = WatParser::GetWatNameToken(tokens);
-        Module* m = last;
+        Module* m     = last;
         if(name.id == TOKEN_NAME)
         {
           size_t i = GetWastMapping(mapping, name);
@@ -469,7 +475,8 @@ namespace innative {
         if(cache_err != 0)
           return cache_err;
         assert(cache);
-        void* f = reinterpret_cast<void*>(LoadDLLFunction(cache, utility::CanonicalName(StringRef::From(m->name), StringRef::From(func)).c_str()));
+        void* f = reinterpret_cast<void*>(
+          LoadDLLFunction(cache, utility::CanonicalName(StringRef::From(m->name), StringRef::From(func)).c_str()));
         if(!f)
           return ERR_INVALID_FUNCTION_INDEX;
 
@@ -490,12 +497,12 @@ namespace innative {
 
         // Don't need much stack space, we immediately longjmp()
         // back out of the signal handler
-        ss.ss_sp = alloca(MINSIGSTKSZ);
-        ss.ss_size = MINSIGSTKSZ;
+        ss.ss_sp    = alloca(MINSIGSTKSZ);
+        ss.ss_size  = MINSIGSTKSZ;
         ss.ss_flags = 0;
 
         sigaltstack(&ss, NULL);
-        sa.sa_flags = SA_ONSTACK;
+        sa.sa_flags   = SA_ONSTACK;
         sa.sa_handler = WastCrashHandler;
         sigemptyset(&sa.sa_mask);
         sigaction(SIGSEGV, &sa, NULL);
@@ -514,7 +521,7 @@ namespace innative {
       case TOKEN_GET:
       {
         WatToken name = WatParser::GetWatNameToken(tokens);
-        Module* m = last;
+        Module* m     = last;
         if(name.id == TOKEN_NAME)
         {
           size_t i = GetWastMapping(mapping, name);
@@ -532,7 +539,7 @@ namespace innative {
         khiter_t iter = kh_get_exports(m->exports, global);
         if(!kh_exist2(m->exports, iter))
           return ERR_INVALID_GLOBAL_INDEX;
-        Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
+        Export& e     = m->exportsection.exports[kh_val(m->exports, iter)];
         GlobalDesc* g = nullptr;
         if(e.kind != WASM_KIND_GLOBAL || !(g = ModuleGlobal(*m, e.index)))
           return ERR_INVALID_GLOBAL_INDEX;
@@ -546,17 +553,28 @@ namespace innative {
 
         switch(g->type)
         {
-        case TE_i32: result.i32 = *(int32_t*)f; result.type = TE_i32; break;
-        case TE_i64: result.i64 = *(int64_t*)f; result.type = TE_i64; break;
-        case TE_f32: result.f32 = *(float*)f; result.type = TE_f32; break;
-        case TE_f64: result.f64 = *(double*)f; result.type = TE_f64; break;
+        case TE_i32:
+          result.i32  = *(int32_t*)f;
+          result.type = TE_i32;
+          break;
+        case TE_i64:
+          result.i64  = *(int64_t*)f;
+          result.type = TE_i64;
+          break;
+        case TE_f32:
+          result.f32  = *(float*)f;
+          result.type = TE_f32;
+          break;
+        case TE_f64:
+          result.f64  = *(double*)f;
+          result.type = TE_f64;
+          break;
         default: return ERR_INVALID_TYPE;
         }
 
         break;
       }
-      default:
-        return ERR_WAT_EXPECTED_TOKEN;
+      default: return ERR_WAT_EXPECTED_TOKEN;
       }
 
       return ERR_SUCCESS;
@@ -566,8 +584,13 @@ namespace innative {
     {
       if(!isnan(f))
         return false;
-      if(!canonical) return true; // Due to webassembly's NaN requirements not mapping to hardware, we ignore this subcase right now.
-      union { float f; uint32_t i; } u = { f };
+      if(!canonical)
+        return true; // Due to webassembly's NaN requirements not mapping to hardware, we ignore this subcase right now.
+      union
+      {
+        float f;
+        uint32_t i;
+      } u = { f };
       return ((u.i & 0x200000U) != 0) != canonical;
     }
 
@@ -575,8 +598,13 @@ namespace innative {
     {
       if(!isnan(f))
         return false;
-      if(!canonical) return true; // Due to webassembly's NaN requirements not mapping to hardware, we ignore this subcase right now.
-      union { double f; uint64_t i; } u = { f };
+      if(!canonical)
+        return true; // Due to webassembly's NaN requirements not mapping to hardware, we ignore this subcase right now.
+      union
+      {
+        double f;
+        uint64_t i;
+      } u = { f };
       return ((u.i & 0x4000000000000ULL) != 0) != canonical;
     }
 
@@ -601,19 +629,23 @@ namespace innative {
         return kh_val(assertmap, i);
       return s;
     }
-  }
-}
+  } // namespace wat
+} // namespace innative
 
 // This parses an entire extended WAT testing script into an environment
-int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const path& file, bool always_compile, const path& output)
+int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const path& file, bool always_compile,
+                        const path& output)
 {
   Queue<WatToken> tokens;
   const char* start = (const char*)data;
   TokenizeWAT(tokens, start, (const char*)data + sz);
   ValidationError* errors = nullptr;
-  int counter = 0; // Even if we unload wast.dll, visual studio will keep the .pdb open forever, so we have to generate new DLLs for each new test section.
-  path targetpath = output / file.stem(); // We also have to be sure we don't overlap with any other .wast files, so we name the DLL based on the file path.
-  env.flags |= ENV_NO_INIT; // We can't allow the DLL to call _DllInit because we can't catch exceptions from it, so we manually call it instead.
+  int counter = 0; // Even if we unload wast.dll, visual studio will keep the .pdb open forever, so we have to generate new
+                   // DLLs for each new test section.
+  path targetpath = output / file.stem(); // We also have to be sure we don't overlap with any other .wast files, so we name
+                                          // the DLL based on the file path.
+  env.flags |= ENV_NO_INIT; // We can't allow the DLL to call _DllInit because we can't catch exceptions from it, so we
+                            // manually call it instead.
 
   int err = CheckWatTokens(env, env.errors, tokens, start);
   if(err)
@@ -622,11 +654,12 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
   if(env.errors)
     return ERR_WAT_INVALID_TOKEN;
 
-  kh_indexname_t* mapping = kh_init_indexname(); // This is a special mapping for all modules using the module name itself, not just registered ones.
+  kh_indexname_t* mapping =
+    kh_init_indexname(); // This is a special mapping for all modules using the module name itself, not just registered ones.
   DeferLambda<std::function<void()>> defer([&]() { kh_destroy_indexname(mapping); });
 
   Module* last = nullptr; // For anything not providing a module name, this was the most recently defined module.
-  void* cache = nullptr;
+  void* cache  = nullptr;
   path cachepath;
 
   while(tokens.Size() > 0 && tokens[0].id != TOKEN_CLOSE)
@@ -673,7 +706,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
         return ERR_PARSE_INVALID_NAME;
 
       kh_val(env.modulemap, iter) = i;
-      env.modules[i].name = name;
+      env.modules[i].name         = name;
       break;
     }
     case TOKEN_INVOKE:
@@ -686,7 +719,8 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
         if(err != ERR_RUNTIME_TRAP && err != ERR_RUNTIME_INIT_ERROR)
           return err;
         char buf[10];
-        AppendError(env, errors, last, err, "[%zu] Runtime error %s while attempting to verify result.", WatLineNumber(start, t.pos), EnumToString(ERR_ENUM_MAP, err, buf, 10));
+        AppendError(env, errors, last, err, "[%zu] Runtime error %s while attempting to verify result.",
+                    WatLineNumber(start, t.pos), EnumToString(ERR_ENUM_MAP, err, buf, 10));
       }
       break;
     }
@@ -700,10 +734,13 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     case TOKEN_ASSERT_TRAP:
     {
       WatToken t = tokens.Pop();
-      if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_MODULE) // Check if we're actually trapping on a module load
+      if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN &&
+         tokens[1].id == TOKEN_MODULE) // Check if we're actually trapping on a module load
       {
         EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-        env.modules = trealloc<Module>(env.modules, ++env.n_modules); // We temporarily add this module to the environment, but don't set the "last" module to it
+        env.modules = trealloc<Module>(
+          env.modules,
+          ++env.n_modules); // We temporarily add this module to the environment, but don't set the "last" module to it
         if(!env.modules)
           return ERR_FATAL_OUT_OF_MEMORY;
         if(err = ParseWastModule(env, tokens, mapping, env.modules[env.n_modules - 1], file))
@@ -713,7 +750,8 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
         err = CompileWast(env, GenUniquePath(targetpath, counter), cache, cachepath);
         --env.n_modules; // Remove the module from the environment to avoid poisoning other compilations
         if(err != ERR_RUNTIME_TRAP)
-          AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
+          AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded",
+                      WatLineNumber(start, t.pos));
         EXPECTED(tokens, TOKEN_STRING, ERR_WAT_EXPECTED_STRING);
       }
       else
@@ -722,7 +760,8 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
         WastResult result;
         err = ParseWastAction(env, tokens, mapping, last, cache, cachepath, counter, targetpath, result);
         if(err != ERR_RUNTIME_TRAP)
-          AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded", WatLineNumber(start, t.pos));
+          AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded",
+                      WatLineNumber(start, t.pos));
         EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
         EXPECTED(tokens, TOKEN_STRING, ERR_WAT_EXPECTED_STRING);
       }
@@ -740,7 +779,8 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
         if(err != ERR_RUNTIME_TRAP && err != ERR_RUNTIME_INIT_ERROR)
           return err;
         char buf[10];
-        AppendError(env, errors, last, err, "[%zu] Runtime error %s while attempting to verify result.", WatLineNumber(start, t.pos), EnumToString(ERR_ENUM_MAP, err, buf, 10));
+        AppendError(env, errors, last, err, "[%zu] Runtime error %s while attempting to verify result.",
+                    WatLineNumber(start, t.pos), EnumToString(ERR_ENUM_MAP, err, buf, 10));
       }
       EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
       Instruction value;
@@ -764,41 +804,52 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
         {
         case OP_nop:
           if(result.type != TE_void)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected no return value but got %s", WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected no return value but got %s",
+                        WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
           break;
         case OP_i32_const:
           if(result.type != TE_i32)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i32 type but got %s", WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i32 type but got %s",
+                        WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
           else if(result.i32 != value.immediates[0]._varsint32)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %i but got %i", WatLineNumber(start, t.pos), value.immediates[0]._varsint32, result.i32);
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %i but got %i",
+                        WatLineNumber(start, t.pos), value.immediates[0]._varsint32, result.i32);
           break;
         case OP_i64_const:
           if(result.type != TE_i64)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i64 type but got %s", WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i64 type but got %s",
+                        WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
           else if(result.i64 != value.immediates[0]._varsint64)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %lli but got %lli", WatLineNumber(start, t.pos), value.immediates[0]._varsint64, result.i64);
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %lli but got %lli",
+                        WatLineNumber(start, t.pos), value.immediates[0]._varsint64, result.i64);
           break;
         case OP_f32_const:
           if(result.type != TE_f32)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f32 type but got %s", WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f32 type but got %s",
+                        WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
           else if(isnan(value.immediates[0]._float32)) // If this is an NAN we must match the exact bit pattern
           {
             if(value.immediates[0]._varsint32 != result.i32)
-              AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g", WatLineNumber(start, t.pos), value.immediates[0]._float32, result.f32);
+              AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g",
+                          WatLineNumber(start, t.pos), value.immediates[0]._float32, result.f32);
           }
           else if(result.f32 != value.immediates[0]._float32)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g", WatLineNumber(start, t.pos), value.immediates[0]._float32, result.f32);
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g",
+                        WatLineNumber(start, t.pos), value.immediates[0]._float32, result.f32);
           break;
         case OP_f64_const:
           if(result.type != TE_f64)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f64 type but got %s", WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f64 type but got %s",
+                        WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
           else if(isnan(value.immediates[0]._float64)) // If this is an NAN we must match the exact bit pattern
           {
             if(value.immediates[0]._varsint64 != result.i64)
-              AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g", WatLineNumber(start, t.pos), value.immediates[0]._float64, result.f64);
+              AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g",
+                          WatLineNumber(start, t.pos), value.immediates[0]._float64, result.f64);
           }
           else if(result.f64 != value.immediates[0]._float64)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g", WatLineNumber(start, t.pos), value.immediates[0]._float64, result.f64);
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g",
+                        WatLineNumber(start, t.pos), value.immediates[0]._float64, result.f64);
           break;
         }
         break;
@@ -807,11 +858,14 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       {
         bool canonical = t.id == TOKEN_ASSERT_RETURN_CANONICAL_NAN;
         if(result.type != TE_f32 && result.type != TE_f64)
-          AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got unexpected integer %z", WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.i64);
+          AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got unexpected integer %z",
+                      WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.i64);
         if(result.type == TE_f32 && !WastIsNaN(result.f32, canonical))
-          AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g", WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.f32);
+          AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g",
+                      WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.f32);
         if(result.type == TE_f64 && !WastIsNaN(result.f64, canonical))
-          AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g", WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.f64);
+          AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g",
+                      WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.f64);
       }
       break;
       }
@@ -832,7 +886,8 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       string assertcode = GetAssertionString(code);
 
       if(STRICMP(assertcode.c_str(), MapAssertionString(error.str())))
-        AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead", WatLineNumber(start, t.pos), error.str(), assertcode.c_str());
+        AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead",
+                    WatLineNumber(start, t.pos), error.str(), assertcode.c_str());
       env.errors = 0;
       break;
     }
@@ -849,7 +904,9 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
 
       if(code < 0)
       {
-        AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected module parsing success, but got '%s' instead", WatLineNumber(start, t.pos), assertcode.c_str());
+        AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE,
+                    "[%zu] Expected module parsing success, but got '%s' instead", WatLineNumber(start, t.pos),
+                    assertcode.c_str());
         return code; // A parsing failure means we cannot recover
       }
 
@@ -857,13 +914,14 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       if(err = WatParser::WatString(env, error, tokens.Pop()))
         return err;
 
-      if(!env.errors) // Only do additional validation if we didn't find validation errors during the parsing process that must trump our normal validation
+      if(!env.errors) // Only do additional validation if we didn't find validation errors during the parsing process that
+                      // must trump our normal validation
         ValidateModule(env, m);
       code = ERR_SUCCESS;
 
       while(env.errors)
       {
-        code = env.errors->code;
+        code       = env.errors->code;
         assertcode = GetAssertionString(code);
         if(!STRICMP(assertcode.c_str(), MapAssertionString(error.str())))
           break;
@@ -871,7 +929,8 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       }
 
       if(!env.errors)
-        AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead", WatLineNumber(start, t.pos), error.str(), assertcode.c_str());
+        AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead",
+                    WatLineNumber(start, t.pos), error.str(), assertcode.c_str());
       else
         env.errors = 0;
       break;
@@ -888,7 +947,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     default:
     {
       // If we get an unexpected token, try to parse it as an inline module
-      WatToken t = WatToken{ TOKEN_NONE };
+      WatToken t  = WatToken{ TOKEN_NONE };
       env.modules = trealloc<Module>(env.modules, ++env.n_modules);
       if(!env.modules)
         return ERR_FATAL_OUT_OF_MEMORY;
@@ -909,7 +968,8 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
-  if(always_compile && !cache) // If cache is null we must ensure we've at least tried to compile the test even if there's nothing to run.
+  // If cache is null we must ensure we've at least tried to compile the test even if there's nothing to run.
+  if(always_compile && !cache)
   {
     if(err = CompileWast(env, GenUniquePath(targetpath, counter), cache, cachepath))
       return err;

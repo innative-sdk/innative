@@ -47,7 +47,8 @@ public:
   static int minimum(int n);
 
   template<typename R, typename... Args>
-  Timing DoBenchmark(FILE* out, const char* wasm, const char* func, const int (&COLUMNS)[6], R(*f)(Args...), Args&&... args)
+  Timing DoBenchmark(FILE* out, const char* wasm, const char* func, const int (&COLUMNS)[6], R (*f)(Args...),
+                     Args&&... args)
   {
     Timing timing;
 
@@ -57,7 +58,8 @@ public:
     timing.c = MeasureFunction<R, Args...>(f, std::forward<Args>(args)...); // Do it again to account for CPU caching
 #endif
     fprintf(out, "%-*lli ", COLUMNS[1], timing.c);
-    timing.debug = MeasureWASM<R, Args...>(wasm, func, ENV_DEBUG|ENV_STRICT, ENV_OPTIMIZE_O0, std::forward<Args>(args)...);
+    timing.debug =
+      MeasureWASM<R, Args...>(wasm, func, ENV_DEBUG | ENV_STRICT, ENV_OPTIMIZE_O0, std::forward<Args>(args)...);
     fprintf(out, "%-*lli ", COLUMNS[2], timing.debug);
     timing.strict = MeasureWASM<R, Args...>(wasm, func, ENV_STRICT, ENV_OPTIMIZE_O3, std::forward<Args>(args)...);
     fprintf(out, "%-*lli ", COLUMNS[3], timing.strict);
@@ -65,13 +67,9 @@ public:
     fprintf(out, "%-*lli ", COLUMNS[4], timing.sandbox);
     timing.native = MeasureWASM<R, Args...>(wasm, func, 0, ENV_OPTIMIZE_O3, std::forward<Args>(args)...);
     fprintf(out, "%-*lli ", COLUMNS[5], timing.native);
-    fprintf(out, "\n%-*s %-*.2f %-*.2f %-*.2f %-*.2f %-*.2f\n", 
-      COLUMNS[0], "", 
-      COLUMNS[1], double(timing.c) / timing.c,
-      COLUMNS[2], double(timing.c) / timing.debug,
-      COLUMNS[3], double(timing.c) / timing.strict,
-      COLUMNS[4], double(timing.c) / timing.sandbox,
-      COLUMNS[5], double(timing.c) / timing.native);
+    fprintf(out, "\n%-*s %-*.2f %-*.2f %-*.2f %-*.2f %-*.2f\n", COLUMNS[0], "", COLUMNS[1], double(timing.c) / timing.c,
+            COLUMNS[2], double(timing.c) / timing.debug, COLUMNS[3], double(timing.c) / timing.strict, COLUMNS[4],
+            double(timing.c) / timing.sandbox, COLUMNS[5], double(timing.c) / timing.native);
 
     return timing;
   }
@@ -79,16 +77,15 @@ public:
   template<typename R, typename... Args>
   int64_t MeasureWASM(const char* wasm, const char* func, int flags, int optimize, Args&&... args)
   {
-    void* m = LoadWASM(wasm, flags, optimize);
-    R(*f)(Args...) = (R(*)(Args...))(*_exports.LoadFunction)(m, wasm, func);
+    void* m         = LoadWASM(wasm, flags, optimize);
+    R (*f)(Args...) = (R(*)(Args...))(*_exports.LoadFunction)(m, wasm, func);
     assert(f != nullptr);
     int64_t t = MeasureFunction(f, std::forward<Args>(args)...);
     (*_exports.FreeAssembly)(m);
     return t;
   }
 
-  template<typename R, typename... Args>
-  int64_t MeasureFunction(R(*f)(Args...), Args&&... args)
+  template<typename R, typename... Args> int64_t MeasureFunction(R (*f)(Args...), Args&&... args)
   {
     auto t = start();
     f(std::forward<Args>(args)...);

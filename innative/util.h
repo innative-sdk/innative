@@ -55,7 +55,7 @@ namespace innative {
       static StringRef From(const ByteArray& b) { return StringRef{ b.str(), b.size() }; }
       static StringRef From(const char* s) { return StringRef{ s, !s ? 0 : strlen(s) }; }
 
-      bool operator ==(const StringRef& r) const
+      bool operator==(const StringRef& r) const
       {
         if(len != r.len)
           return false;
@@ -68,14 +68,14 @@ namespace innative {
     // For simplicity reasons, we assemble the error list backwards. This reverses it so it appears in the correct order.
     inline void ReverseErrorList(ValidationError*& errors) noexcept
     {
-      auto cur = errors;
+      auto cur              = errors;
       ValidationError* prev = nullptr;
       while(cur != nullptr)
       {
         auto next = cur->next;
         cur->next = prev;
-        prev = cur;
-        cur = next;
+        prev      = cur;
+        cur       = next;
       }
       errors = prev;
     }
@@ -87,23 +87,22 @@ namespace innative {
       --n;
       for(uint8_t i = 0; i < end; ++i)
       {
-        t = target[n - i];
+        t             = target[n - i];
         target[n - i] = target[i];
-        target[i] = t;
+        target[i]     = t;
       }
     }
 
-    template<typename T>
-    IN_FORCEINLINE void FlipEndian(T* target) noexcept
+    template<typename T> IN_FORCEINLINE void FlipEndian(T* target) noexcept
     {
       FlipEndian(reinterpret_cast<uint8_t*>(target), sizeof(T));
     }
 
     inline khint_t __ac_X31_hash_stringrefins(utility::StringRef ref)
     {
-      const char* s = ref.s;
+      const char* s   = ref.s;
       const char* end = ref.s + ref.len;
-      khint_t h = ((*s) > 64 && (*s) < 91) ? (*s) + 32 : *s;
+      khint_t h       = ((*s) > 64 && (*s) < 91) ? (*s) + 32 : *s;
       if(h)
         for(++s; s < end; ++s)
           h = (h << 5) - h + (((*s) > 64 && (*s) < 91) ? (*s) + 32 : *s);
@@ -112,9 +111,9 @@ namespace innative {
 
     inline khint_t __ac_X31_hash_bytearray(const ByteArray& id)
     {
-      const char* s = (const char*)id.get();
+      const char* s   = (const char*)id.get();
       const char* end = s + id.size();
-      khint_t h = 0;
+      khint_t h       = 0;
       if(s < end)
       {
         h = *s;
@@ -125,18 +124,20 @@ namespace innative {
     }
 
     // Hashes a pair of strings seperated by a null terminator
-    kh_inline khint_t __ac_X31_hash_string_pair(const char *s)
+    kh_inline khint_t __ac_X31_hash_string_pair(const char* s)
     {
       khint_t h = (khint_t)*s;
-      if(h) for(++s; *s; ++s) h = (h << 5) - h + (khint_t)*s;
-      for(++s; *s; ++s) h = (h << 5) - h + (khint_t)*s;
+      if(h)
+        for(++s; *s; ++s)
+          h = (h << 5) - h + (khint_t)*s;
+      for(++s; *s; ++s)
+        h = (h << 5) - h + (khint_t)*s;
       return h;
     }
   }
 
   namespace utility {
-    template<class F>
-    class DeferLambda
+    template<class F> class DeferLambda
     {
     public:
       inline DeferLambda(const F& f) : _f(f) {}
@@ -146,8 +147,7 @@ namespace innative {
       F _f;
     };
 
-    template<class T>
-    inline void tmemcpy(T* dest, size_t destsize, const T* src, size_t srcsize)
+    template<class T> inline void tmemcpy(T* dest, size_t destsize, const T* src, size_t srcsize)
     {
 #ifdef IN_COMPILER_MSC
       memcpy_s(dest, destsize * sizeof(T), src, srcsize * sizeof(T));
@@ -156,23 +156,15 @@ namespace innative {
 #endif
     }
 
-    template<class T>
-    inline T* trealloc(T* p, size_t sz)
-    {
-      return reinterpret_cast<T*>(realloc(p, sz * sizeof(T)));
-    }
+    template<class T> inline T* trealloc(T* p, size_t sz) { return reinterpret_cast<T*>(realloc(p, sz * sizeof(T))); }
 
-    template<class T>
-    inline T* tmalloc(const Environment& env, size_t n)
+    template<class T> inline T* tmalloc(const Environment& env, size_t n)
     {
       return reinterpret_cast<T*>(env.alloc->allocate(n * sizeof(T)));
     }
 
     // Checks if an integer is a power of two
-    inline bool IsPowerOfTwo(varuint32 x) noexcept
-    {
-      return (x & (x - 1)) == 0;
-    }
+    inline bool IsPowerOfTwo(varuint32 x) noexcept { return (x & (x - 1)) == 0; }
 
     // Given an exact power of two, quickly gets the log2 value
     inline uint32_t Power2Log2(uint32_t v) noexcept
@@ -185,7 +177,7 @@ namespace innative {
       uint32_t r = (sizeof(uint32_t) << 3) - 1 - __builtin_clz(v);
 #else
       const uint32_t b[] = { 0xAAAAAAAA, 0xCCCCCCCC, 0xF0F0F0F0, 0xFF00FF00, 0xFFFF0000 };
-      uint32_t r = (v & b[0]) != 0;
+      uint32_t r         = (v & b[0]) != 0;
       r |= ((v & b[4]) != 0) << 4;
       r |= ((v & b[3]) != 0) << 3;
       r |= ((v & b[2]) != 0) << 2;
@@ -206,7 +198,10 @@ namespace innative {
       return v + 1;
     }
 
-    IN_FORCEINLINE bool ModuleHasSection(const Module& m, varuint7 opcode) { return (m.knownsections&(1 << opcode)) != 0; }
+    IN_FORCEINLINE bool ModuleHasSection(const Module& m, varuint7 opcode)
+    {
+      return (m.knownsections & (1 << opcode)) != 0;
+    }
 
     uint8_t GetInstruction(StringRef s);
     varuint32 ModuleFunctionType(const Module& m, varuint32 index);
@@ -230,7 +225,10 @@ namespace innative {
     bool RestoreStackGuard(void* lpPage);
     const char* AllocString(Environment& env, const char* s, size_t n);
     IN_FORCEINLINE const char* AllocString(Environment& env, const char* s) { return AllocString(env, s, strlen(s)); }
-    IN_FORCEINLINE const char* AllocString(Environment& env, const std::string& s) { return AllocString(env, s.data(), s.size()); }
+    IN_FORCEINLINE const char* AllocString(Environment& env, const std::string& s)
+    {
+      return AllocString(env, s.data(), s.size());
+    }
 
     // Creates a C-compatible mangled name with an optional index
     inline std::string CanonicalName(StringRef prefix, StringRef name, int index = -1)
@@ -263,12 +261,12 @@ namespace innative {
         case '"': canonical += "#22"; break;
         case ',': canonical += "#2C"; break;
         case '@': canonical += "#40"; break;
-        default: 
+        default:
           if(c < 32 || c > 126)
           {
             char buf[4] = { '#' };
-            buf[1] = HEX[c / 16];
-            buf[2] = HEX[c % 16];
+            buf[1]      = HEX[c / 16];
+            buf[2]      = HEX[c % 16];
             canonical += buf;
           }
           else
@@ -290,7 +288,7 @@ namespace innative {
     inline std::string CanonImportName(const Import& imp, const char* system)
     {
       if(IsSystemImport(imp.module_name, system)) // system module imports are always raw function names
-        return CanonicalName(StringRef{ 0,0 }, StringRef::From(imp.export_name));
+        return CanonicalName(StringRef{ 0, 0 }, StringRef::From(imp.export_name));
       return CanonicalName(StringRef::From(imp.module_name), StringRef::From(imp.export_name));
     }
 
@@ -300,7 +298,7 @@ namespace innative {
       if(!module_name)
         module_name = "";
       size_t module_len = strlen((const char*)module_name);
-      const char* call = strchr((const char*)module_name, '!');
+      const char* call  = strchr((const char*)module_name, '!');
       if(call && !strcmp(call, "!C")) // !C is the same as having no calling convention, so we remove it
         module_len -= 2;
 

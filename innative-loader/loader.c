@@ -20,10 +20,11 @@ BOOL CALLBACK CountResource(__in_opt HMODULE hModule, __in LPCSTR lpType, __in L
   return TRUE;
 }
 
-BOOL CALLBACK EnumHandler(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPSTR lpName, __in LONG_PTR lParam, void(*handler)(struct WinPass*, uint8_t*, DWORD, const char*))
+BOOL CALLBACK EnumHandler(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPSTR lpName, __in LONG_PTR lParam,
+                          void (*handler)(struct WinPass*, uint8_t*, DWORD, const char*))
 {
   struct WinPass* pass = (struct WinPass*)lParam;
-  HRSRC res = FindResourceA(hModule, lpName, lpType);
+  HRSRC res            = FindResourceA(hModule, lpName, lpType);
   if(res != NULL)
   {
     HGLOBAL buf = LoadResource(hModule, res);
@@ -104,7 +105,7 @@ int main(int argc, char** argv)
   IRExports exports;
   innative_runtime(&exports);
   unsigned int maxthreads = 0;
-  void* assembly = (*exports.LoadAssembly)("out.cache");
+  void* assembly          = (*exports.LoadAssembly)("out.cache");
 
   // Before doing anything, check if we have a cached version available
   if(!assembly)
@@ -135,9 +136,9 @@ int main(int argc, char** argv)
 
     // Set the flag values
 #ifdef IN_PLATFORM_WIN32
-    int err = ERR_SUCCESS;
+    int err             = ERR_SUCCESS;
     struct WinPass pass = { &exports, env, &err };
-    if(EnumResourceNamesA(NULL, WIN32_RESOURCE_FLAGS, &EnumFlags, (LONG_PTR)& pass) == FALSE || err < 0)
+    if(EnumResourceNamesA(NULL, WIN32_RESOURCE_FLAGS, &EnumFlags, (LONG_PTR)&pass) == FALSE || err < 0)
     {
       if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
       {
@@ -227,7 +228,7 @@ int main(int argc, char** argv)
 
   // Load the entry point and execute it
   IN_Entrypoint start = (*exports.LoadFunction)(assembly, 0, IN_INIT_FUNCTION);
-  IN_Entrypoint exit = (*exports.LoadFunction)(assembly, 0, IN_EXIT_FUNCTION);
+  IN_Entrypoint exit  = (*exports.LoadFunction)(assembly, 0, IN_EXIT_FUNCTION);
   if(!start)
   {
     (*exports.FreeAssembly)(assembly);

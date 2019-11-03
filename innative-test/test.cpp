@@ -10,43 +10,44 @@
 
 // This defines the testing environment that we need to inject
 const char testenv[] = "(module $spectest "
-"\n  (global $global_i32 (export \"global_i32\") i32 i32.const 666)"
-"\n  (global $global_i64 (export \"global_i64\") i64 i64.const 666)"
-"\n  (global $global_f32 (export \"global_f32\") f32 f32.const 666)"
-"\n  (global $global_f64 (export \"global_f64\") f64 f64.const 666)"
-"\n  (memory $memory1 (export \"memory\") 1 2)"
-"\n  (table $table10 (export \"table\") 10 20 funcref)"
-"\n  (func $print (export \"print\"))"
-"\n  (func $print_i32 (export \"print_i32\") (param i32))"
-"\n  (func $print_i64 (export \"print_i64\") (param i64))"
-"\n  (func $print_f32 (export \"print_f32\") (param f32))"
-"\n  (func $print_f64 (export \"print_f64\") (param f64))"
-"\n  (func $print_i32_f32 (export \"print_i32_f32\") (param i32 f32))"
-"\n  (func $print_f64_f64 (export \"print_f64_f64\") (param f64 f64))"
-"\n) (register \"spectest\" $spectest)";
+                       "\n  (global $global_i32 (export \"global_i32\") i32 i32.const 666)"
+                       "\n  (global $global_i64 (export \"global_i64\") i64 i64.const 666)"
+                       "\n  (global $global_f32 (export \"global_f32\") f32 f32.const 666)"
+                       "\n  (global $global_f64 (export \"global_f64\") f64 f64.const 666)"
+                       "\n  (memory $memory1 (export \"memory\") 1 2)"
+                       "\n  (table $table10 (export \"table\") 10 20 funcref)"
+                       "\n  (func $print (export \"print\"))"
+                       "\n  (func $print_i32 (export \"print_i32\") (param i32))"
+                       "\n  (func $print_i64 (export \"print_i64\") (param i64))"
+                       "\n  (func $print_f32 (export \"print_f32\") (param f32))"
+                       "\n  (func $print_f64 (export \"print_f64\") (param f64))"
+                       "\n  (func $print_i32_f32 (export \"print_i32_f32\") (param i32 f32))"
+                       "\n  (func $print_f64_f64 (export \"print_f64_f64\") (param f64 f64))"
+                       "\n) (register \"spectest\" $spectest)";
 
 // We use khash instead of unordered_set so we can make it case-insensitive
 KHASH_INIT(match, kh_cstr_t, char, 0, kh_str_hash_funcins, kh_str_hash_insequal);
 
 enum TEST_STAGES
 {
-  TEST_INTERNAL = (1 << 0),
+  TEST_INTERNAL  = (1 << 0),
   TEST_BENCHMARK = (1 << 1),
   TEST_WASM_CORE = (1 << 2),
 };
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
   innative_set_work_dir_to_bin(!argc ? 0 : argv[0]);
-  int log = LOG_WARNING;
-  int stages = 0;
+  int log              = LOG_WARNING;
+  int stages           = 0;
   std::string temppath = temp_directory_path().u8string();
 
-  std::cout << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION << " Test Utility" << std::endl;
+  std::cout << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION
+            << " Test Utility" << std::endl;
   std::cout << std::endl;
 
-  std::unique_ptr<kh_match_t, void(*)(kh_match_t*)> matchfiles(kh_init_match(), kh_destroy_match);
-  
+  std::unique_ptr<kh_match_t, void (*)(kh_match_t*)> matchfiles(kh_init_match(), kh_destroy_match);
+
   for(int i = 1; i < argc; ++i)
   {
     int r;
@@ -123,20 +124,24 @@ int main(int argc, char *argv[])
     for(auto file : testfiles)
     {
       Environment* env = (*exports.CreateEnvironment)(1, 0, (!argc ? 0 : argv[0]));
-      env->flags = ENV_LIBRARY | ENV_DEBUG | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS;
+      env->flags       = ENV_LIBRARY | ENV_DEBUG | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS;
 #ifdef IN_DEBUG
       env->optimize = ENV_OPTIMIZE_O0;
 #else
       env->optimize = ENV_OPTIMIZE_O3;
 #endif
       env->features = ENV_FEATURE_ALL;
-      env->log = stdout;
+      env->log      = stdout;
       env->loglevel = log;
-      env->wasthook = [](void*) { fputc('.', stdout); fflush(stdout); };
+      env->wasthook = [](void*) {
+        fputc('.', stdout);
+        fflush(stdout);
+      };
 
       int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
       if(err >= 0)
-        err = innative_compile_script(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env, false, temppath.c_str());
+        err =
+          innative_compile_script(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env, false, temppath.c_str());
 
       if(err < 0)
       {

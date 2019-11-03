@@ -27,7 +27,8 @@ namespace innative {
     varuint32 GetJump(WatToken var);
     int ParseInitializer(Queue<WatToken>& tokens, Instruction& op);
     int ParseFunctionType(Queue<WatToken>& tokens, varuint32* index);
-    static int ParseFunctionTypeInner(const Environment& env, Queue<WatToken>& tokens, FunctionType& sig, DebugInfo** info, bool anonymous);
+    static int ParseFunctionTypeInner(const Environment& env, Queue<WatToken>& tokens, FunctionType& sig, DebugInfo** info,
+                                      bool anonymous);
     varuint32 GetFromHash(wat::kh_indexname_t* hash, const WatToken& t);
     int MergeFunctionType(const FunctionType& ftype, varuint32& out);
     int ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo** info, bool anonymous);
@@ -53,10 +54,12 @@ namespace innative {
     int ParseElem(TableInit& e, Queue<WatToken>& tokens);
     int ParseData(Queue<WatToken>& tokens);
     int AppendImport(Module& m, const Import& i, varuint32* index);
-    int InlineImportExport(const Environment& env, Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out);
+    int InlineImportExport(const Environment& env, Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind,
+                           Import** out);
 
     static int ParseBlockType(Queue<WatToken>& tokens, varsint7& out);
-    static int ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens, utility::StringRef name, WatToken& internalname);
+    static int ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens, utility::StringRef name,
+                           WatToken& internalname);
     static int ParseName(const Environment& env, ByteArray& name, const WatToken& t);
     static int AddWatValType(const Environment& env, WatTokenID id, varsint7*& a, varuint32& n);
     static int WatString(const Environment& env, ByteArray& str, utility::StringRef t);
@@ -77,8 +80,7 @@ namespace innative {
       return (tokens.Peek().id == wat::TOKEN_NAME) ? tokens.Pop() : WatToken{ wat::TOKEN_NONE };
     }
 
-    template<class T>
-    inline static int ReallocArray(const Environment& env, T*& a, varuint32& n)
+    template<class T> inline static int ReallocArray(const Environment& env, T*& a, varuint32& n)
     {
       // We only allocate power of two chunks from our greedy allocator
       varuint32 i = utility::NextPow2(n++);
@@ -94,8 +96,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    template<class T>
-    inline static int AppendArray(const Environment& env, T item, T*& a, varuint32& n)
+    template<class T> inline static int AppendArray(const Environment& env, T item, T*& a, varuint32& n)
     {
       int err;
       if((err = ReallocArray(env, a, n)) != ERR_SUCCESS)
@@ -104,7 +105,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    template<int(WatParser::*F)(Queue<WatToken>&, varuint32*)>
+    template<int (WatParser::*F)(Queue<WatToken>&, varuint32*)>
     inline int ParseIndexProcess(Queue<WatToken>& tokens, wat::kh_indexname_t* hash)
     {
       WatToken t = GetWatNameToken(tokens);
@@ -118,8 +119,7 @@ namespace innative {
       return AddName(hash, t, index);
     }
 
-    template<typename T, int(*FN)(const WatToken&, std::string&, T&)>
-    inline T ResolveInlineToken(const WatToken& token)
+    template<typename T, int (*FN)(const WatToken&, std::string&, T&)> inline T ResolveInlineToken(const WatToken& token)
     {
       T t;
       int err = (*FN)(token, numbuf, t);
@@ -138,7 +138,9 @@ namespace innative {
     std::string numbuf;
   };
 
-#define EXPECTED(t, e, err) if((t).Size() == 0 || (t).Pop().id != (e)) return (err)
+#define EXPECTED(t, e, err)                  \
+  if((t).Size() == 0 || (t).Pop().id != (e)) \
+  return (err)
 
   int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, utility::StringRef name);
   void WatSkipSection(Queue<WatToken>& tokens, int count = 1);

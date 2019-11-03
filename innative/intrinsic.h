@@ -24,10 +24,10 @@ namespace innative {
     };
 
     static Intrinsic intrinsics[] = {
-      { "_innative_to_c", &IN_Intrinsic_ToC, {TE_i64}, 1 },
-      { "_innative_from_c", &IN_Intrinsic_FromC, {TE_i64}, 1},
+      { "_innative_to_c", &IN_Intrinsic_ToC, { TE_i64 }, 1 },
+      { "_innative_from_c", &IN_Intrinsic_FromC, { TE_i64 }, 1 },
       { "_innative_trap", &IN_Intrinsic_Trap, {}, 0 },
-      { "_innative_funcptr", &IN_Intrinsic_FuncPtr, {TE_i32}, 1},
+      { "_innative_funcptr", &IN_Intrinsic_FuncPtr, { TE_i32 }, 1 },
     };
   }
 }

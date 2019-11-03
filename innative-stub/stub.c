@@ -6,12 +6,12 @@
 #ifdef IN_PLATFORM_WIN32
 #include "../innative/win32.h"
 
-const wchar_t* GetRegString(wchar_t* buf, size_t sz, int major, int  minor, int revision)
+const wchar_t* GetRegString(wchar_t* buf, size_t sz, int major, int minor, int revision)
 {
   buf[0] = 0;
   wcscat_s(buf, sz, IN_WIN32_REGPATH L"\\");
   _itow_s(major, buf + wcslen(buf), sz - wcslen(buf), 10);
-  
+
   if(minor >= 0)
   {
     wcscat_s(buf, sz, L"\\");
@@ -35,7 +35,7 @@ wchar_t* GetRuntimeVersion(wchar_t* buf, size_t sz, uint16_t major, uint16_t min
 
   DWORD len;
   RegQueryValueExW(hKey, L"runtime", 0, 0, 0, &len);
-  LPBYTE runtime = malloc(sizeof(wchar_t)*((len + 1) / 2));
+  LPBYTE runtime = malloc(sizeof(wchar_t) * ((len + 1) / 2));
   if(!runtime)
     return 0;
 
@@ -58,17 +58,18 @@ bool EnumKeyValue(HKEY hive, const wchar_t* key, uint16_t* version)
   FILETIME ftWrite;
   DWORD dwSize = MAX_PATH;
   wchar_t szName[MAX_PATH];
-  DWORD index = 0;
+  DWORD index     = 0;
   LSTATUS lResult = RegEnumKeyExW(hKey, index, szName, &dwSize, 0, 0, 0, &ftWrite);
 
   while(lResult == ERROR_SUCCESS)
   {
     wchar_t* end;
     uint16_t v = (uint16_t)wcstoul(szName, &end, 10);
-    if(!*end && v > *version) // This only counts if end points at the actual end of the string, otherwise it wasn't a pure number
+    if(!*end &&
+       v > *version) // This only counts if end points at the actual end of the string, otherwise it wasn't a pure number
       *version = v;
 
-    dwSize = MAX_PATH;
+    dwSize  = MAX_PATH;
     lResult = RegEnumKeyExW(hKey, ++index, szName, &dwSize, 0, 0, 0, &ftWrite);
   }
 
@@ -90,20 +91,22 @@ IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
   // On windows, we use the registry to store versions, with a key set to the DLL path of the runtime.
   // We prefer using an exact match to our compiled version if it is available. Otherwise, we get the next closest version.
 
-  wchar_t buf[(sizeof(IN_WIN32_REGPATH)/2) + 6 * 4]; // uint16_t is a maximum of 5 digits, plus the backspace character
+  wchar_t buf[(sizeof(IN_WIN32_REGPATH) / 2) + 6 * 4]; // uint16_t is a maximum of 5 digits, plus the backspace character
 
-  wchar_t* runtime = GetRuntimeVersion(buf, sizeof(buf)/2, INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR, INNATIVE_VERSION_REVISION);
+  wchar_t* runtime =
+    GetRuntimeVersion(buf, sizeof(buf) / 2, INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR, INNATIVE_VERSION_REVISION);
   if(!runtime)
   {
     uint16_t revision = 0;
-    if(EnumKeyValue(HKEY_CURRENT_USER, GetRegString(buf, sizeof(buf) / 2, INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR, -1), &revision))
+    if(EnumKeyValue(HKEY_CURRENT_USER,
+                    GetRegString(buf, sizeof(buf) / 2, INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR, -1), &revision))
       runtime = GetRuntimeVersion(buf, sizeof(buf) / 2, INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR, revision);
   }
 
   if(!runtime)
   {
     uint16_t revision = 0;
-    uint16_t minor = 0;
+    uint16_t minor    = 0;
     if(EnumKeyValue(HKEY_CURRENT_USER, GetRegString(buf, sizeof(buf) / 2, INNATIVE_VERSION_MAJOR, -1, -1), &minor))
     {
       if(EnumKeyValue(HKEY_CURRENT_USER, GetRegString(buf, sizeof(buf) / 2, INNATIVE_VERSION_MAJOR, minor, -1), &revision))
@@ -114,8 +117,8 @@ IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
   if(!runtime)
   {
     uint16_t revision = 0;
-    uint16_t minor = 0;
-    uint16_t major = 0;
+    uint16_t minor    = 0;
+    uint16_t major    = 0;
 
     if(EnumKeyValue(HKEY_CURRENT_USER, IN_WIN32_REGPATH, &major))
     {
@@ -132,11 +135,12 @@ IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
     HMODULE dll = LoadLibraryW(runtime);
     if(dll != NULL)
     {
-      void (*hook)(IRExports*) = (void(*)(IRExports*))GetProcAddress((HMODULE)dll, "innative_runtime");
+      void (*hook)(IRExports*) = (void (*)(IRExports*))GetProcAddress((HMODULE)dll, "innative_runtime");
       if(hook)
         (*hook)(exports);
       else
-        FreeLibrary(dll); // Only free the library if the function FAILED, we'll need it later if the runtime was loaded correctly
+        FreeLibrary(
+          dll); // Only free the library if the function FAILED, we'll need it later if the runtime was loaded correctly
     }
 
     free(runtime);
@@ -144,7 +148,9 @@ IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
 
 #elif defined(IN_PLATFORM_POSIX)
   // Try each symlink level sequentially
-  void* lib = dlopen("libinnative.so." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION), RTLD_NOW);
+  void* lib = dlopen("libinnative.so." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(
+                       INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION),
+                     RTLD_NOW);
   if(!lib)
     lib = dlopen("libinnative.so." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR), RTLD_NOW);
   if(!lib)
@@ -154,7 +160,7 @@ IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
 
   if(lib != NULL)
   {
-    void(*hook)(IRExports*) = (void(*)(IRExports*))dlsym(lib, "innative_runtime");
+    void (*hook)(IRExports*) = (void (*)(IRExports*))dlsym(lib, "innative_runtime");
     if(hook)
       (*hook)(exports);
     else

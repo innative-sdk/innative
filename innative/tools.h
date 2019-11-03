@@ -14,7 +14,8 @@ namespace innative {
   struct IN_WASM_ENVIRONMENT* CreateEnvironment(unsigned int modules, unsigned int maxthreads, const char* arg0);
   void ClearEnvironmentCache(struct IN_WASM_ENVIRONMENT* env, Module* m);
   void DestroyEnvironment(struct IN_WASM_ENVIRONMENT* env);
-  void LoadModule(struct IN_WASM_ENVIRONMENT* env, size_t index, const void* data, uint64_t size, const char* name, const char* file, int* err);
+  void LoadModule(struct IN_WASM_ENVIRONMENT* env, size_t index, const void* data, uint64_t size, const char* name,
+                  const char* file, int* err);
   void AddModule(struct IN_WASM_ENVIRONMENT* env, const void* data, uint64_t size, const char* name, int* err);
   enum IN_ERROR AddWhitelist(struct IN_WASM_ENVIRONMENT* env, const char* module_name, const char* export_name);
   enum IN_ERROR AddEmbedding(struct IN_WASM_ENVIRONMENT* env, int tag, const void* data, uint64_t size);
@@ -28,4 +29,4 @@ namespace innative {
   void DumpModule(std::ostream& stream, Module& mod);
 }
 
-#endif  
+#endif
