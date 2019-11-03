@@ -11,30 +11,27 @@ using namespace utility;
 
 static const int WASM_PAGE = (1 << 16);
 static const int MAX_PAGES = 32;
-static void* wasm_buf = malloc(WASM_PAGE * (MAX_PAGES + 1));
-static size_t wasm_end = 0;
+static void* wasm_buf      = malloc(WASM_PAGE * (MAX_PAGES + 1));
+static size_t wasm_end     = 0;
 
 extern "C" {
-  size_t __builtin_wasm_memory_size(size_t memory)
-  {
-    return ((size_t)wasm_buf + wasm_end) / WASM_PAGE;
-  }
+size_t __builtin_wasm_memory_size(size_t memory) { return ((size_t)wasm_buf + wasm_end) / WASM_PAGE; }
 
-  size_t __builtin_wasm_memory_grow(size_t memory, size_t delta)
-  {
-    delta *= WASM_PAGE;
-    size_t old = __builtin_wasm_memory_size(memory);
-    memset((char*)wasm_buf + wasm_end, 0, delta);
-    wasm_end += delta;
-    return old;
-  }
+size_t __builtin_wasm_memory_grow(size_t memory, size_t delta)
+{
+  delta *= WASM_PAGE;
+  size_t old = __builtin_wasm_memory_size(memory);
+  memset((char*)wasm_buf + wasm_end, 0, delta);
+  wasm_end += delta;
+  return old;
+}
 
-  extern void* wasm_malloc(size_t num);
-  extern void wasm_free(void* ptr);
-  extern void* wasm_realloc(void* src, size_t num);
-  extern void* wasm_calloc(size_t num, size_t size);
-  extern char _verify_ptr(void* ptr);
-  extern char _verify_heaps();
+extern void* wasm_malloc(size_t num);
+extern void wasm_free(void* ptr);
+extern void* wasm_realloc(void* src, size_t num);
+extern void* wasm_calloc(size_t num, size_t size);
+extern char _verify_ptr(void* ptr);
+extern char _verify_heaps();
 }
 
 void TestHarness::test_malloc()
@@ -81,9 +78,9 @@ void TestHarness::test_malloc()
   wasm_free(ptr);
 
   // Fuzzing
-  const int MAXSIZE = 5000;
+  const int MAXSIZE    = 5000;
   const int ITERATIONS = 200000;
-  int64_t total = 0;
+  int64_t total        = 0;
   std::map<void*, int> tracker;
 
   for(uint32_t i = 0; i < ITERATIONS; ++i)
@@ -91,7 +88,7 @@ void TestHarness::test_malloc()
     if((total < (WASM_PAGE * MAX_PAGES / 8)) && (tracker.size() < (ITERATIONS - i)) && (tracker.empty() || (rand() % 2)))
     {
       size_t len = rand() % MAXSIZE;
-      void* p = wasm_malloc(len);
+      void* p    = wasm_malloc(len);
       TEST(tracker.count(p) == 0);
 
       tracker.emplace(p, len);
@@ -113,7 +110,7 @@ void TestHarness::test_malloc()
     {
       auto index = tracker.begin();
       std::advance(index, rand() % tracker.size());
-      void* p = (*index).first;
+      void* p    = (*index).first;
       size_t len = (*index).second;
 
       bool valid = true;

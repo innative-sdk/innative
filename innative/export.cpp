@@ -16,19 +16,19 @@ using namespace innative;
 // Return pointers to all our internal functions
 void innative_runtime(IRExports* exports)
 {
-  exports->CreateEnvironment = &CreateEnvironment;
-  exports->AddModule = &AddModule;
-  exports->AddWhitelist = &AddWhitelist;
-  exports->AddEmbedding = &AddEmbedding;
-  exports->FinalizeEnvironment = &FinalizeEnvironment;
-  exports->Compile = &Compile;
-  exports->LoadFunction = &LoadFunction;
-  exports->LoadTable = &LoadTable;
-  exports->LoadGlobal = &LoadGlobal;
-  exports->LoadAssembly = &LoadAssembly;
-  exports->FreeAssembly = &FreeAssembly;
+  exports->CreateEnvironment     = &CreateEnvironment;
+  exports->AddModule             = &AddModule;
+  exports->AddWhitelist          = &AddWhitelist;
+  exports->AddEmbedding          = &AddEmbedding;
+  exports->FinalizeEnvironment   = &FinalizeEnvironment;
+  exports->Compile               = &Compile;
+  exports->LoadFunction          = &LoadFunction;
+  exports->LoadTable             = &LoadTable;
+  exports->LoadGlobal            = &LoadGlobal;
+  exports->LoadAssembly          = &LoadAssembly;
+  exports->FreeAssembly          = &FreeAssembly;
   exports->ClearEnvironmentCache = &ClearEnvironmentCache;
-  exports->DestroyEnvironment = &DestroyEnvironment;
+  exports->DestroyEnvironment    = &DestroyEnvironment;
 }
 
 int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bool always_compile, const char* output)
@@ -47,12 +47,12 @@ int innative_compile_script(const uint8_t* data, size_t sz, Environment* env, bo
   if(!sz)
   {
     long len;
-    target = reinterpret_cast<const char*>(data);
+    target      = reinterpret_cast<const char*>(data);
     data_module = utility::LoadFile(u8path(target), len);
     if(data_module.get() == nullptr)
       return ERR_FATAL_FILE_ERROR;
     data = data_module.get();
-    sz = len;
+    sz   = len;
   }
 
   if(!env)
@@ -87,23 +87,14 @@ void innative_set_work_dir_to_bin(const char* arg0)
   utility::SetWorkingDir(utility::GetProgramPath(arg0).parent_path().u8string().c_str());
 }
 
-int innative_install(const char* arg0, bool full)
-{
-  return utility::Install(arg0, full);
-}
+int innative_install(const char* arg0, bool full) { return utility::Install(arg0, full); }
 
-int innative_uninstall()
-{
-  return utility::Uninstall();
-}
+int innative_uninstall() { return utility::Uninstall(); }
 const char* innative_type_encoding_string(int type_encoding)
 {
   return utility::EnumToString(utility::TYPE_ENCODING_MAP, type_encoding, 0, 0);
 }
-const char* innative_error_string(int error_code)
-{
-  return utility::EnumToString(utility::ERR_ENUM_MAP, error_code, 0, 0);
-}
+const char* innative_error_string(int error_code) { return utility::EnumToString(utility::ERR_ENUM_MAP, error_code, 0, 0); }
 
 int innative_serialize_module(Environment* env, size_t m, const char* out)
 {
@@ -125,7 +116,7 @@ int innative_serialize_module(Environment* env, size_t m, const char* out)
   else
     name += ".wat";
 
-  std::ofstream f(name, std::ios_base::binary|std::ios_base::out|std::ios_base::trunc);
+  std::ofstream f(name, std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
   if(f.bad())
     return ERR_FATAL_FILE_ERROR;
 

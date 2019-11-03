@@ -30,5 +30,4 @@ namespace innative {
   bool ValidateSectionOrder(const uint32& sections, varuint7 opcode);
 }
 
-
 #endif

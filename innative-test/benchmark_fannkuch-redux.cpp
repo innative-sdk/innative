@@ -27,13 +27,12 @@ int Benchmarks::fannkuch_redux(int n)
 #include <stdint.h>
 
 extern "C" void* malloc(uintptr_t n);
-extern "C" __attribute__((visibility("default")))
-int fannkuch_redux(int n)
+extern "C" __attribute__((visibility("default"))) int fannkuch_redux(int n)
 #endif
 {
   // Create and initialize factorial_Lookup_Table.
-  intptr_t* factorial_Lookup_Table = (intptr_t*)malloc((n + 1)*sizeof(intptr_t));
-  factorial_Lookup_Table[0] = 1;
+  intptr_t* factorial_Lookup_Table = (intptr_t*)malloc((n + 1) * sizeof(intptr_t));
+  factorial_Lookup_Table[0]        = 1;
   for(intptr_t i = 0; ++i <= n;)
     factorial_Lookup_Table[i] = i * factorial_Lookup_Table[i - 1];
 
@@ -42,53 +41,44 @@ int fannkuch_redux(int n)
   // block_Size from being set to 0. This also causes smaller values of n to
   // be computed serially which is faster and uses less resources for small
   // values of n.
-  const intptr_t block_Size = factorial_Lookup_Table[n] /
-    (factorial_Lookup_Table[n] < PREFERRED_NUMBER_OF_BLOCKS_TO_USE ?
-      1 : PREFERRED_NUMBER_OF_BLOCKS_TO_USE);
+  const intptr_t block_Size =
+    factorial_Lookup_Table[n] /
+    (factorial_Lookup_Table[n] < PREFERRED_NUMBER_OF_BLOCKS_TO_USE ? 1 : PREFERRED_NUMBER_OF_BLOCKS_TO_USE);
 
   intptr_t maximum_Flip_Count = 0, checksum = 0;
-  intptr_t* count = (intptr_t*)malloc(n * sizeof(intptr_t));
-  int8_t* temp_Permutation = (int8_t*)malloc(n * sizeof(int8_t));
+  intptr_t* count             = (intptr_t*)malloc(n * sizeof(intptr_t));
+  int8_t* temp_Permutation    = (int8_t*)malloc(n * sizeof(int8_t));
   int8_t* current_Permutation = (int8_t*)malloc(n * sizeof(int8_t));
 
   // Iterate over each block.
-#pragma omp parallel for \
-     reduction(max:maximum_Flip_Count) reduction(+:checksum)
-  for(intptr_t initial_Permutation_Index_For_Block = 0;
-    initial_Permutation_Index_For_Block < factorial_Lookup_Table[n];
-    initial_Permutation_Index_For_Block += block_Size)
+#pragma omp parallel for reduction(max : maximum_Flip_Count) reduction(+ : checksum)
+  for(intptr_t initial_Permutation_Index_For_Block = 0; initial_Permutation_Index_For_Block < factorial_Lookup_Table[n];
+      initial_Permutation_Index_For_Block += block_Size)
   {
     // Initialize count and current_Permutation.
     count[0] = 0;
     for(intptr_t i = 0; i < n; ++i)
       current_Permutation[i] = i;
-    for(intptr_t i = n - 1,
-      permutation_Index = initial_Permutation_Index_For_Block; i > 0; --i)
+    for(intptr_t i = n - 1, permutation_Index = initial_Permutation_Index_For_Block; i > 0; --i)
     {
-      const intptr_t d = permutation_Index / factorial_Lookup_Table[i];
+      const intptr_t d  = permutation_Index / factorial_Lookup_Table[i];
       permutation_Index = permutation_Index % factorial_Lookup_Table[i];
-      count[i] = d;
+      count[i]          = d;
 
       for(intptr_t j = 0; j < n; ++j)
         temp_Permutation[j] = current_Permutation[j];
       for(intptr_t j = 0; j <= i; ++j)
-        current_Permutation[j] = j + d <= i ?
-        temp_Permutation[j + d] : temp_Permutation[j + d - i - 1];
+        current_Permutation[j] = j + d <= i ? temp_Permutation[j + d] : temp_Permutation[j + d - i - 1];
     }
 
-
     // Iterate over each permutation in the block.
-    const intptr_t last_Permutation_Index_In_Block =
-      initial_Permutation_Index_For_Block + block_Size - 1;
-    for(intptr_t permutation_Index = initial_Permutation_Index_For_Block; ;
-      ++permutation_Index)
+    const intptr_t last_Permutation_Index_In_Block = initial_Permutation_Index_For_Block + block_Size - 1;
+    for(intptr_t permutation_Index = initial_Permutation_Index_For_Block;; ++permutation_Index)
     {
-
       // If the first value in the current_Permutation is not 1 (0) then
       // we will need to do at least one flip for the current_Permutation.
       if(current_Permutation[0] > 0)
       {
-
         // Make a copy of current_Permutation[] to work on. Note that we
         // don't need to copy the first value since that will be stored
         // in a separate variable since it gets used a lot.
@@ -99,13 +89,11 @@ int fannkuch_redux(int n)
 
         // Flip temp_Permutation until the element at the first_Value
         // index is 1 (0).
-        for(intptr_t first_Value = current_Permutation[0];
-          temp_Permutation[first_Value] > 0; ++flip_Count)
+        for(intptr_t first_Value = current_Permutation[0]; temp_Permutation[first_Value] > 0; ++flip_Count)
         {
-
           // Record the new_First_Value and restore the old
           // first_Value at its new flipped position.
-          const int8_t new_First_Value = temp_Permutation[first_Value];
+          const int8_t new_First_Value  = temp_Permutation[first_Value];
           temp_Permutation[first_Value] = first_Value;
 
           // If first_Value is greater than 3 (2) then we are flipping
@@ -126,10 +114,9 @@ int fannkuch_redux(int n)
             // modern desktop computer. ;-)
             do
             {
-              const int8_t temp = temp_Permutation[high_Index];
-              temp_Permutation[high_Index] =
-                temp_Permutation[low_Index];
-              temp_Permutation[low_Index] = temp;
+              const int8_t temp            = temp_Permutation[high_Index];
+              temp_Permutation[high_Index] = temp_Permutation[low_Index];
+              temp_Permutation[low_Index]  = temp;
             } while(low_Index++ + 3 <= high_Index-- && low_Index < 16);
           }
 
@@ -137,7 +124,6 @@ int fannkuch_redux(int n)
           // earlier.
           first_Value = new_First_Value;
         }
-
 
         // Update the checksum.
         if(permutation_Index % 2 == 0)
@@ -150,27 +136,25 @@ int fannkuch_redux(int n)
           maximum_Flip_Count = flip_Count;
       }
 
-
       // Break out of the loop when we get to the
       // last_Permutation_Index_In_Block.
       if(permutation_Index >= last_Permutation_Index_In_Block)
         break;
 
       // Generate the next permutation.
-      int8_t first_Value = current_Permutation[1];
+      int8_t first_Value     = current_Permutation[1];
       current_Permutation[1] = current_Permutation[0];
       current_Permutation[0] = first_Value;
       for(intptr_t i = 1; ++count[i] > i;)
       {
-        count[i++] = 0;
-        const int8_t new_First_Value = current_Permutation[0] =
-          current_Permutation[1];
+        count[i++]                   = 0;
+        const int8_t new_First_Value = current_Permutation[0] = current_Permutation[1];
 
         for(intptr_t j = 0; ++j < i;)
           current_Permutation[j] = current_Permutation[j + 1];
 
         current_Permutation[i] = first_Value;
-        first_Value = new_First_Value;
+        first_Value            = new_First_Value;
       }
     }
   }

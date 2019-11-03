@@ -24,9 +24,9 @@ namespace innative {
   IN_ERROR ParseDataInit(utility::Stream& s, DataInit& data, const Environment& env);
   IN_ERROR ParseNameSectionLocal(utility::Stream& s, size_t num, DebugInfo*& target, const Environment& env);
   IN_ERROR ParseNameSection(utility::Stream& s, size_t end, Module& m, const Environment& env);
-  IN_ERROR ParseModule(utility::Stream& s, const Environment& env, Module& module, ByteArray name, ValidationError*& errors);
+  IN_ERROR ParseModule(utility::Stream& s, const Environment& env, Module& module, ByteArray name,
+                       ValidationError*& errors);
   IN_ERROR ParseExportFixup(Module& module, ValidationError*& errors, const Environment& env);
 }
-
 
 #endif

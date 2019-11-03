@@ -17,7 +17,7 @@
 
 #define kh_exist2(h, x) ((x < kh_end(h)) && kh_exist(h, x))
 
-#ifdef  __cplusplus
+#ifdef __cplusplus
 #include <string>
 extern "C" {
 #endif
@@ -40,14 +40,14 @@ typedef double float64;
 // WASM binary type encodings, stored as a varsint7
 enum WASM_TYPE_ENCODING
 {
-  TE_i32 = -0x01,
-  TE_i64 = -0x02,
-  TE_f32 = -0x03,
-  TE_f64 = -0x04,
+  TE_i32     = -0x01,
+  TE_i64     = -0x02,
+  TE_f32     = -0x03,
+  TE_f64     = -0x04,
   TE_funcref = -0x10,
-  TE_cref = -0x19,
-  TE_func = -0x20,
-  TE_void = -0x40,
+  TE_cref    = -0x19,
+  TE_func    = -0x20,
+  TE_void    = -0x40,
 
   TE_iPTR = 0x70, // Internal values, never encoded
   TE_NONE = 0x71,
@@ -91,7 +91,7 @@ struct IN_WASM_ENVIRONMENT;
 // Represents a binary webassembly byte array structure
 typedef struct IN_WASM_BYTE_ARRAY
 {
-#ifdef  __cplusplus
+#ifdef __cplusplus
   IN_WASM_BYTE_ARRAY() : bytes(nullptr), n_bytes(0) {}
   IN_WASM_BYTE_ARRAY(uint8_t* b, varuint32 n) : bytes(b), n_bytes(n) {}
   inline uint8_t* get() { return bytes; }
@@ -103,8 +103,16 @@ typedef struct IN_WASM_BYTE_ARRAY
 
   bool operator==(const IN_WASM_BYTE_ARRAY& r) const;
   inline bool operator!=(const IN_WASM_BYTE_ARRAY& r) const { return !operator==(r); }
-  inline const uint8_t& operator[](varuint32 i) const { assert(i < n_bytes); return bytes[i]; }
-  inline uint8_t& operator[](varuint32 i) { assert(i < n_bytes); return bytes[i]; }
+  inline const uint8_t& operator[](varuint32 i) const
+  {
+    assert(i < n_bytes);
+    return bytes[i];
+  }
+  inline uint8_t& operator[](varuint32 i)
+  {
+    assert(i < n_bytes);
+    return bytes[i];
+  }
 
 protected:
 #endif
@@ -140,7 +148,11 @@ typedef union IN_WASM_IMMEDIATE
   float32 _float32;
   float64 _float64;
   varuptr _varuptr;
-  struct { varuint32 n_table; varuint32* table; };
+  struct
+  {
+    varuint32 n_table;
+    varuint32* table;
+  };
 } Immediate;
 
 // Encodes a single webassembly instruction and it's associated immediate values, plus it's location in the source.
@@ -200,7 +212,8 @@ typedef struct IN_WASM_GLOBAL_DECL
   Instruction init;
 } GlobalDecl;
 
-// A single function description, which encodes both a type index telling us the function type signature, and the debug information associated with it.
+// A single function description, which encodes both a type index telling us the function type signature, and the debug
+// information associated with it.
 typedef struct IN_WASM_FUNCTION_DESC
 {
   varuint32 type_index;
@@ -247,7 +260,7 @@ typedef struct IN_WASM_FUNCTION_BODY
   varuint32 n_locals;
   varsint7* locals;
   Instruction* body;
-  varuint32 n_body; // INTERNAL: track actual number of instructions
+  varuint32 n_body;       // INTERNAL: track actual number of instructions
   DebugInfo* local_names; // INTERNAL: debug names of locals, always the size of n_locals or NULL if it doesn't exist
   DebugInfo* param_names; // INTERNAL: debug names of parameters, always the size of n_params or NULL if it doesn't exist
   DebugInfo debug;
@@ -270,7 +283,7 @@ typedef struct IN_WASM_CUSTOM_SECTION
   uint8_t* data;
 } CustomSection;
 
-#ifdef  __cplusplus
+#ifdef __cplusplus
 namespace innative {
   namespace code {
     struct Context;
@@ -292,7 +305,7 @@ typedef struct IN_WASM_MODULE
   uint32 magic_cookie;
   uint32 version;
   uint32_t knownsections; // bit-index corresponds to that OPCODE section being loaded
-  Identifier name; // Name of the module as determined by the environment or name section
+  Identifier name;        // Name of the module as determined by the environment or name section
 
   struct TypeSection
   {
@@ -367,7 +380,7 @@ typedef struct IN_WASM_MODULE
   CustomSection* custom;
 
   struct kh_exports_s* exports;
-  const char* path; // For debugging purposes, store path to source .wat file, if it exists.
+  const char* path;       // For debugging purposes, store path to source .wat file, if it exists.
   IN_CODE_CONTEXT* cache; // If non-zero, points to a cached compilation of this module
 } Module;
 
@@ -385,18 +398,19 @@ typedef struct IN_WASM_EMBEDDING
 {
   const void* data;
   uint64_t size; // If size is 0, data points to a null terminated UTF8 file path
-  int tag; // defines the type of embedding data included, determined by the runtime. 0 is always a static library file for the current platform.
+  int tag; // defines the type of embedding data included, determined by the runtime. 0 is always a static library file for
+           // the current platform.
   struct IN_WASM_EMBEDDING* next;
 } Embedding;
 
 enum WASM_LOG_LEVEL
 {
-  LOG_NONE = -1, // Suppress all log output no matter what
+  LOG_NONE  = -1, // Suppress all log output no matter what
   LOG_FATAL = 0,
   LOG_ERROR,
   LOG_WARNING, // Default setting
-  LOG_NOTICE, // Verbose setting
-  LOG_DEBUG, // Only useful for library developers
+  LOG_NOTICE,  // Verbose setting
+  LOG_DEBUG,   // Only useful for library developers
 };
 
 KHASH_DECLARE(modulepair, kh_cstr_t, FunctionType);
@@ -406,24 +420,25 @@ struct IN_WASM_ALLOCATOR;
 // Represents a collection of webassembly modules and configuration options that will be compiled into a single binary
 typedef struct IN_WASM_ENVIRONMENT
 {
-  size_t n_modules; // number of completely loaded modules (for multithreading)
-  size_t size; // Size of loaded or loading modules
-  size_t capacity; // Capacity of the modules array
-  Module* modules; // Use AddModule() to manage this list
-  Embedding* embeddings; // Use AddEmbedding to manage this list
+  size_t n_modules;        // number of completely loaded modules (for multithreading)
+  size_t size;             // Size of loaded or loading modules
+  size_t capacity;         // Capacity of the modules array
+  Module* modules;         // Use AddModule() to manage this list
+  Embedding* embeddings;   // Use AddEmbedding to manage this list
   ValidationError* errors; // A linked list of non-fatal validation errors that prevent proper execution.
-  uint64_t flags; // WASM_ENVIRONMENT_FLAGS
-  uint64_t features; // WASM_FEATURE_FLAGS
-  uint64_t optimize; // WASM_OPTIMIZE_FLAGS
+  uint64_t flags;          // WASM_ENVIRONMENT_FLAGS
+  uint64_t features;       // WASM_FEATURE_FLAGS
+  uint64_t optimize;       // WASM_OPTIMIZE_FLAGS
   unsigned int maxthreads; // Max number of threads for any multithreaded action. If 0, there is no limit.
-  const char* libpath; // Path to look for default environment libraries
+  const char* libpath;     // Path to look for default environment libraries
   const char* objpath; // Path to store intermediate results. If NULL, intermediate results are stored in the output folder
-  const char* linker; // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
-  const char* system; // prefix for the "system" module, which simply attempts to link the function name as a C function. Defaults to a blank string.
+  const char* linker;  // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
+  const char* system;  // prefix for the "system" module, which simply attempts to link the function name as a C function.
+                       // Defaults to a blank string.
   struct IN_WASM_ALLOCATOR* alloc; // Stores a pointer to the internal allocator
-  int loglevel; // WASM_LOG_LEVEL
-  FILE* log; // Output stream for log messages
-  void(*wasthook)(void*); // Optional hook for WAST debugging cases
+  int loglevel;                    // WASM_LOG_LEVEL
+  FILE* log;                       // Output stream for log messages
+  void (*wasthook)(void*);         // Optional hook for WAST debugging cases
 
   struct kh_modules_s* modulemap;
   struct kh_modulepair_s* whitelist;
@@ -431,7 +446,7 @@ typedef struct IN_WASM_ENVIRONMENT
   LLVM_LLVM_CONTEXT* context;
 } Environment;
 
-#ifdef  __cplusplus
+#ifdef __cplusplus
 }
 #endif
 

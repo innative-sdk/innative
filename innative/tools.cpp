@@ -20,9 +20,9 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
   {
     env->modulemap = kh_init_modules();
     env->whitelist = kh_init_modulepair();
-    env->cimports = kh_init_cimport();
-    env->modules = trealloc<Module>(0, modules);
-    env->alloc = new IN_WASM_ALLOCATOR();
+    env->cimports  = kh_init_cimport();
+    env->modules   = trealloc<Module>(0, modules);
+    env->alloc     = new IN_WASM_ALLOCATOR();
 
     if(!env->modules)
     {
@@ -30,23 +30,23 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
       return nullptr;
     }
 
-    env->capacity = modules;
-    env->flags = ENV_SANDBOX;
-    env->optimize = ENV_OPTIMIZE_O3;
-    env->features = ENV_FEATURE_ALL;
+    env->capacity   = modules;
+    env->flags      = ENV_SANDBOX;
+    env->optimize   = ENV_OPTIMIZE_O3;
+    env->features   = ENV_FEATURE_ALL;
     env->maxthreads = maxthreads;
-    env->linker = 0;
-    env->log = stdout;
-    env->loglevel = LOG_WARNING;
-    env->libpath = utility::AllocString(*env, GetProgramPath(arg0).parent_path().u8string());
+    env->linker     = 0;
+    env->log        = stdout;
+    env->loglevel   = LOG_WARNING;
+    env->libpath    = utility::AllocString(*env, GetProgramPath(arg0).parent_path().u8string());
     if(!env->libpath) // Out of memory
     {
       free(env);
       return nullptr;
     }
 
-    env->objpath = 0;
-    env->system = "";
+    env->objpath  = 0;
+    env->system   = "";
     env->wasthook = 0;
   }
   return env;
@@ -59,7 +59,8 @@ void innative::ClearEnvironmentCache(Environment* env, Module* m)
   if(m)
     DeleteCache(*env, *m);
   else
-    DeleteContext(*env, false); // We can't actually shutdown LLVM here because that permanently shuts it down and there is no way to restore it.
+    DeleteContext(*env, false); // We can't actually shutdown LLVM here because that permanently shuts it down and there is
+                                // no way to restore it.
 }
 
 void innative::DestroyEnvironment(Environment* env)
@@ -82,14 +83,15 @@ void innative::DestroyEnvironment(Environment* env)
   free(env);
 }
 
-void innative::LoadModule(Environment* env, size_t index, const void* data, uint64_t size, const char* name, const char* file, int* err)
+void innative::LoadModule(Environment* env, size_t index, const void* data, uint64_t size, const char* name,
+                          const char* file, int* err)
 {
   Stream s = { (uint8_t*)data, size, 0 };
   std::string fallback;
   if(!name)
   {
     fallback = "m" + std::to_string(index);
-    name = fallback.data();
+    name     = fallback.data();
   }
 
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
@@ -116,8 +118,8 @@ void innative::AddModule(Environment* env, const void* data, uint64_t size, cons
   std::unique_ptr<uint8_t[]> data_module;
   if(!size)
   {
-    long sz = 0;
-    file = (const char*)data;
+    long sz     = 0;
+    file        = (const char*)data;
     data_module = utility::LoadFile(file, sz);
     if(data_module.get() == nullptr)
     {
@@ -130,15 +132,19 @@ void innative::AddModule(Environment* env, const void* data, uint64_t size, cons
 
   if((env->flags & ENV_MULTITHREADED) != 0 && env->maxthreads > 0)
   {
-    while(((std::atomic<size_t>&)env->size).load(std::memory_order_relaxed) - ((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed) >= env->maxthreads)
-      std::this_thread::sleep_for(std::chrono::milliseconds(2)); // If we're using maxthreads, block until one finishes (we must block up here or we risk a deadlock)
+    while(((std::atomic<size_t>&)env->size).load(std::memory_order_relaxed) -
+            ((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed) >=
+          env->maxthreads)
+      std::this_thread::sleep_for(std::chrono::milliseconds(
+        2)); // If we're using maxthreads, block until one finishes (we must block up here or we risk a deadlock)
   }
 
   size_t index = ((std::atomic<size_t>&)env->size).fetch_add(1, std::memory_order_acq_rel);
   if(index >= ((std::atomic<size_t>&)env->capacity).load(std::memory_order_acquire))
   {
     while(((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed) != index)
-      std::this_thread::sleep_for(std::chrono::milliseconds(5)); // If we've exceeded our capacity, block until all other threads have finished
+      std::this_thread::sleep_for(
+        std::chrono::milliseconds(5)); // If we've exceeded our capacity, block until all other threads have finished
 
     env->modules = trealloc<Module>(env->modules, index * 2);
     if(!env->modules)
@@ -168,7 +174,7 @@ enum IN_ERROR innative::AddWhitelist(Environment* env, const char* module_name, 
 
   int r;
   auto iter = kh_put_modulepair(env->whitelist, whitelist, &r);
-  //kh_val(env->whitelist, iter) = !ftype ? FunctionType{ TE_NONE, 0, 0, 0, 0 } : *ftype;
+  // kh_val(env->whitelist, iter) = !ftype ? FunctionType{ TE_NONE, 0, 0, 0, 0 } : *ftype;
   return ERR_SUCCESS;
 }
 
@@ -181,10 +187,10 @@ enum IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data
   if(!embed)
     return ERR_FATAL_OUT_OF_MEMORY;
 
-  embed->tag = tag;
-  embed->data = data;
-  embed->size = size;
-  embed->next = env->embeddings;
+  embed->tag      = tag;
+  embed->data     = data;
+  embed->size     = size;
+  embed->next     = env->embeddings;
   env->embeddings = embed;
 
   return ERR_SUCCESS;
@@ -227,8 +233,8 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
         if(!f)
         {
           std::string buf = std::string("/usr/lib/") + (const char*)embed->data;
-          envpath = u8path(buf);
-          char* tmp = tmalloc<char>(*env, buf.size() + 1);
+          envpath         = u8path(buf);
+          char* tmp       = tmalloc<char>(*env, buf.size() + 1);
           if(!tmp)
             return ERR_FATAL_OUT_OF_MEMORY;
           tmemcpy<char>(tmp, buf.size() + 1, buf.c_str(), buf.size() + 1);
@@ -269,7 +275,8 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
     }
   }
 
-  while(((std::atomic<size_t>&)env->size).load(std::memory_order_relaxed) > ((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed))
+  while(((std::atomic<size_t>&)env->size).load(std::memory_order_relaxed) >
+        ((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed))
     std::this_thread::sleep_for(std::chrono::milliseconds(5)); // Spin until all modules have loaded
 
   return ERR_SUCCESS;
@@ -301,7 +308,9 @@ enum IN_ERROR innative::Compile(Environment* env, const char* file)
 }
 IN_Entrypoint innative::LoadFunction(void* assembly, const char* module_name, const char* function)
 {
-  return (IN_Entrypoint)LoadDLLFunction(assembly, !function ? IN_INIT_FUNCTION : utility::CanonicalName(StringRef::From(module_name), StringRef::From(function)).c_str());
+  return (IN_Entrypoint)LoadDLLFunction(
+    assembly,
+    !function ? IN_INIT_FUNCTION : utility::CanonicalName(StringRef::From(module_name), StringRef::From(function)).c_str());
 }
 
 struct IN_TABLE
@@ -312,13 +321,16 @@ struct IN_TABLE
 
 IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const char* table, varuint32 index)
 {
-  IN_TABLE* ref = (IN_TABLE*)LoadDLLFunction(assembly, utility::CanonicalName(StringRef::From(module_name), StringRef::From(table)).c_str());
+  IN_TABLE* ref =
+    (IN_TABLE*)LoadDLLFunction(assembly,
+                               utility::CanonicalName(StringRef::From(module_name), StringRef::From(table)).c_str());
   return !ref ? nullptr : ref[index].func;
 }
 
 IRGlobal* innative::LoadGlobal(void* assembly, const char* module_name, const char* export_name)
 {
-  return (IRGlobal*)LoadDLLFunction(assembly, utility::CanonicalName(StringRef::From(module_name), StringRef::From(export_name)).c_str());
+  return (IRGlobal*)LoadDLLFunction(
+    assembly, utility::CanonicalName(StringRef::From(module_name), StringRef::From(export_name)).c_str());
 }
 
 void* innative::LoadAssembly(const char* file)
@@ -327,11 +339,8 @@ void* innative::LoadAssembly(const char* file)
     return 0;
 
   path envpath = u8path(file);
-  
+
   return envpath.is_absolute() ? LoadDLL(envpath) : LoadDLL(GetWorkingDir() / envpath);
 }
 
-void innative::FreeAssembly(void* assembly)
-{
-  FreeDLL(assembly);
-}
+void innative::FreeAssembly(void* assembly) { FreeDLL(assembly); }

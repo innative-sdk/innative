@@ -34,13 +34,13 @@ namespace innative {
 
     struct Block
     {
-      llvm::BasicBlock* block; // Label
+      llvm::BasicBlock* block;  // Label
       llvm::BasicBlock* ifelse; // Label for else statement
-      size_t limit; // Limit of value stack
-      varsint7 sig; // Block signature
-      uint8_t op; // instruction that pushed this label
-      llvm::DIScope* scope; // Debug lexical scope for this block
-      BlockResult* results; // Holds alternative branch results targeting this block
+      size_t limit;             // Limit of value stack
+      varsint7 sig;             // Block signature
+      uint8_t op;               // instruction that pushed this label
+      llvm::DIScope* scope;     // Debug lexical scope for this block
+      BlockResult* results;     // Holds alternative branch results targeting this block
     };
 
     struct Function
@@ -74,7 +74,7 @@ namespace innative {
       llvm::DICompileUnit* dcu;
       llvm::DIFile* dunit;
       Stack<llvm::Value*> values; // Tracks the current value stack
-      Stack<Block> control; // Control flow stack
+      Stack<Block> control;       // Control flow stack
       std::vector<llvm::AllocaInst*> locals;
       llvm::AllocaInst* memlocal;
       std::vector<llvm::GlobalVariable*> memories;

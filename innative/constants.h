@@ -13,7 +13,8 @@
 #define MAKESTRING2(x) #x
 #define MAKESTRING(x) MAKESTRING2(x)
 
-#define IN_VERSION_STRING MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
+#define IN_VERSION_STRING \
+  MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
 
 KHASH_DECLARE(mapenum, int, const char*);
 
@@ -30,7 +31,7 @@ namespace innative {
 
     extern const std::array<const char*, OP_CODE_COUNT> OPNAMES;
 
-    static const unsigned int WASM_MAGIC_COOKIE = 0x6d736100;
+    static const unsigned int WASM_MAGIC_COOKIE  = 0x6d736100;
     static const unsigned int WASM_MAGIC_VERSION = 0x01;
 
     extern const struct kh_mapenum_s* ERR_ENUM_MAP;

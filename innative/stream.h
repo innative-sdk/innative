@@ -10,7 +10,8 @@
 
 namespace innative {
   namespace utility {
-    // We just read the entire payload into memory, so this re-implements trivial stream operations without C++ stream overhead
+    // We just read the entire payload into memory, so this re-implements trivial stream operations without C++ stream
+    // overhead
     struct Stream
     {
       uint8_t* data;
@@ -33,8 +34,8 @@ namespace innative {
       }
 
       // Reads a type from the stream, returns false if EOF reached before entire type could be read.
-      template<typename T>
-      IN_FORCEINLINE bool Read(T& t) noexcept {
+      template<typename T> IN_FORCEINLINE bool Read(T& t) noexcept
+      {
         if(sizeof(T) > (size - pos))
         {
           pos = size; // We advance the read pointer to the end, but don't read anything
@@ -76,8 +77,7 @@ namespace innative {
       IN_FORCEINLINE varsint7 ReadVarInt7(IN_ERROR& err) { return static_cast<varsint7>(DecodeLEB128(err, 7, true)); }
       IN_FORCEINLINE varsint32 ReadVarInt32(IN_ERROR& err) { return static_cast<varsint32>(DecodeLEB128(err, 32, true)); }
       IN_FORCEINLINE varsint64 ReadVarInt64(IN_ERROR& err) { return static_cast<varsint64>(DecodeLEB128(err, 64, true)); }
-      template<class T>
-      inline T ReadPrimitive(IN_ERROR& err)
+      template<class T> inline T ReadPrimitive(IN_ERROR& err)
       {
         T r = 0;
         if(!Read<T>(r))

@@ -27,26 +27,30 @@ using std::string;
 void* IN_WASM_ALLOCATOR::allocate(size_t n)
 {
   size_t index = cur.fetch_add(n, std::memory_order_acq_rel);
-  size_t end = index + n;
+  size_t end   = index + n;
   size_t max;
 
   while(end > (max = sz.load(std::memory_order_acquire)))
   {
-    if(index <= max && end > max) // Exactly one allocation can be in this state at a time, the others will spin while waiting for the reallocation
+    if(index <= max && end > max) // Exactly one allocation can be in this state at a time, the others will spin while
+                                  // waiting for the reallocation
     {
-      while(commit.load(std::memory_order_acquire) != index); // Spin until all reads are done
+      while(commit.load(std::memory_order_acquire) != index)
+        ; // Spin until all reads are done
 
       size_t len = std::max<size_t>(end, 4096) * 2;
       void* prev = malloc(len);
       if(prev != nullptr)
       {
         list.push_back({ prev, len }); // Add real pointer and size to our destructor list
-        mem.exchange((char*)prev - index, std::memory_order_release); // backtrack to trick the current index into pointing to the right address
+        mem.exchange((char*)prev - index,
+                     std::memory_order_release); // backtrack to trick the current index into pointing to the right address
       }
       else // If malloc failed, set the memory pointer to NULL, but increase sz anyway to unblock other threads
         mem.exchange(nullptr, std::memory_order_release);
 
-      sz.exchange(len + index, std::memory_order_release); // Actual "end" is our previous allocation endpoint (not the memory endpoint) plus current size
+      sz.exchange(len + index, std::memory_order_release); // Actual "end" is our previous allocation endpoint (not the
+                                                           // memory endpoint) plus current size
     }
   }
 
@@ -83,7 +87,7 @@ namespace innative {
       {
         if(strcmp(OPNAMES[i], "RESERVED") != 0)
         {
-          khiter_t iter = kh_put_opnames(h, StringRef{ OPNAMES[i], strlen(OPNAMES[i]) }, &r);
+          khiter_t iter   = kh_put_opnames(h, StringRef{ OPNAMES[i], strlen(OPNAMES[i]) }, &r);
           kh_val(h, iter) = (uint8_t)i;
         }
       }
@@ -97,37 +101,37 @@ namespace innative {
         { "tee_local", "local.tee" },
         { "get_global", "global.get" },
         { "set_global", "global.set" },
-        {"i32.wrap/i64", "i32.wrap_i64"},          // 0xa7
-        {"i32.trunc_s/f32", "i32.trunc_f32_s"},       // 0xa8
-        {"i32.trunc_u/f32", "i32.trunc_f32_u"},       // 0xa9
-        {"i32.trunc_s/f64", "i32.trunc_f64_s"},       // 0xaa
-        {"i32.trunc_u/f64", "i32.trunc_f64_u"},       // 0xab
-        {"i64.extend_s/i32", "i64.extend_i32_s"},      // 0xac
-        {"i64.extend_u/i32", "i64.extend_i32_u"},      // 0xad
-        {"i64.trunc_s/f32", "i64.trunc_f32_s"},       // 0xae
-        {"i64.trunc_u/f32", "i64.trunc_f32_u"},       // 0xaf
-        {"i64.trunc_s/f64", "i64.trunc_f64_s"},       // 0xb0
-        {"i64.trunc_u/f64", "i64.trunc_f64_u"},       // 0xb1
-        {"f32.convert_s/i32", "f32.convert_i32_s"},     // 0xb2
-        {"f32.convert_u/i32", "f32.convert_i32_u"},     // 0xb3
-        {"f32.convert_s/i64", "f32.convert_i64_s"},     // 0xb4
-        {"f32.convert_u/i64", "f32.convert_i64_u"},     // 0xb5
-        {"f32.demote/f64", "f32.demote_f64"},        // 0xb6
-        {"f64.convert_s/i32", "f64.convert_i32_s"},     // 0xb7
-        {"f64.convert_u/i32", "f64.convert_i32_u"},     // 0xb8
-        {"f64.convert_s/i64", "f64.convert_i64_s"},     // 0xb9
-        {"f64.convert_u/i64", "f64.convert_i64_u"},     // 0xba
-        {"f64.promote/f32", "f64.promote_f32"},       // 0xbb
-        {"i32.reinterpret/f32", "i32.reinterpret_f32"},   // 0xbc
-        {"i64.reinterpret/f64", "i64.reinterpret_f64"},   // 0xbd
-        {"f32.reinterpret/i32", "f32.reinterpret_i32"},   // 0xbe
-        {"f64.reinterpret/i64", "f64.reinterpret_i64"}    // 0xbf
+        { "i32.wrap/i64", "i32.wrap_i64" },               // 0xa7
+        { "i32.trunc_s/f32", "i32.trunc_f32_s" },         // 0xa8
+        { "i32.trunc_u/f32", "i32.trunc_f32_u" },         // 0xa9
+        { "i32.trunc_s/f64", "i32.trunc_f64_s" },         // 0xaa
+        { "i32.trunc_u/f64", "i32.trunc_f64_u" },         // 0xab
+        { "i64.extend_s/i32", "i64.extend_i32_s" },       // 0xac
+        { "i64.extend_u/i32", "i64.extend_i32_u" },       // 0xad
+        { "i64.trunc_s/f32", "i64.trunc_f32_s" },         // 0xae
+        { "i64.trunc_u/f32", "i64.trunc_f32_u" },         // 0xaf
+        { "i64.trunc_s/f64", "i64.trunc_f64_s" },         // 0xb0
+        { "i64.trunc_u/f64", "i64.trunc_f64_u" },         // 0xb1
+        { "f32.convert_s/i32", "f32.convert_i32_s" },     // 0xb2
+        { "f32.convert_u/i32", "f32.convert_i32_u" },     // 0xb3
+        { "f32.convert_s/i64", "f32.convert_i64_s" },     // 0xb4
+        { "f32.convert_u/i64", "f32.convert_i64_u" },     // 0xb5
+        { "f32.demote/f64", "f32.demote_f64" },           // 0xb6
+        { "f64.convert_s/i32", "f64.convert_i32_s" },     // 0xb7
+        { "f64.convert_u/i32", "f64.convert_i32_u" },     // 0xb8
+        { "f64.convert_s/i64", "f64.convert_i64_s" },     // 0xb9
+        { "f64.convert_u/i64", "f64.convert_i64_u" },     // 0xba
+        { "f64.promote/f32", "f64.promote_f32" },         // 0xbb
+        { "i32.reinterpret/f32", "i32.reinterpret_f32" }, // 0xbc
+        { "i64.reinterpret/f64", "i64.reinterpret_f64" }, // 0xbd
+        { "f32.reinterpret/i32", "f32.reinterpret_i32" }, // 0xbe
+        { "f64.reinterpret/i64", "f64.reinterpret_i64" }  // 0xbf
       };
 
       for(auto& i : legacy)
       {
         khiter_t iter = kh_put_opnames(h, StringRef{ i.first, strlen(i.first) }, &r);
-        khint_t k = kh_get_opnames(h, StringRef{ i.second, strlen(i.second) });
+        khint_t k     = kh_get_opnames(h, StringRef{ i.second, strlen(i.second) });
         assert(k != kh_end(h));
         kh_val(h, iter) = kh_val(h, k);
       }
@@ -192,7 +196,7 @@ namespace innative {
         return &m.global.globals[i].desc;
       return nullptr;
     }
-    //Export* ModuleExport(const Module& m, varuint32 index, WASM_KIND kind)
+    // Export* ModuleExport(const Module& m, varuint32 index, WASM_KIND kind)
     //{
     //  for(varuint32 i = 0; i < m.exportsection.n_exports; ++i)
     //    if(m.exportsection.exports[i].kind == kind && m.exportsection.exports[i].index == index)
@@ -228,11 +232,11 @@ namespace innative {
     {
       khint_t iter = kh_get_modules(env.modulemap, imp.module_name);
       if(iter == kh_end(env.modulemap))
-        return { nullptr,nullptr };
+        return { nullptr, nullptr };
 
       size_t i = kh_value(env.modulemap, iter);
       if(i >= env.n_modules)
-        return { nullptr,nullptr };
+        return { nullptr, nullptr };
 
       iter = kh_get_exports(env.modules[i].exports, imp.export_name);
       if(iter == kh_end(env.modules[i].exports))
@@ -248,7 +252,7 @@ namespace innative {
     std::pair<Module*, Export*> ResolveTrueExport(const Environment& env, const Import& init)
     {
       const Import* imp = &init;
-      auto pair = ResolveExport(env, *imp);
+      auto pair         = ResolveExport(env, *imp);
 
       while(imp = ResolveImport(*pair.first, *pair.second))
         pair = ResolveExport(env, *imp);
@@ -354,7 +358,10 @@ namespace innative {
     void* LoadDLLFunction(void* dll, const char* name) { return GetProcAddress((HMODULE)dll, name); }
     void FreeDLL(void* dll) { FreeLibrary((HMODULE)dll); }
 #elif defined(IN_PLATFORM_POSIX)
-    void* LoadDLL(const path& path) { return dlopen(path.c_str(), RTLD_NOW); } // We MUST load and initialize WASM dlls immediately for init function testing
+    void* LoadDLL(const path& path)
+    {
+      return dlopen(path.c_str(), RTLD_NOW);
+    } // We MUST load and initialize WASM dlls immediately for init function testing
     void* LoadDLLFunction(void* dll, const char* name) { return dlsym(dll, name); }
     void FreeDLL(void* dll) { dlclose(dll); }
 #endif

@@ -8,7 +8,7 @@ using namespace innative;
 
 void TestHarness::test_stream()
 {
-  uint8_t buf[] = { 1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 9 };
+  uint8_t buf[]     = { 1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 9 };
   utility::Stream s = { buf, sizeof(buf), 0 };
 
   TEST(!s.End());

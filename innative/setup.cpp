@@ -29,19 +29,22 @@ namespace innative {
 #ifdef IN_PLATFORM_WIN32
 #define MAKEWSTRING2(x) L#x
 #define MAKEWSTRING(x) MAKEWSTRING2(x)
-#define IN_VERSION_PATH MAKEWSTRING(INNATIVE_VERSION_MAJOR) L"\\" MAKEWSTRING(INNATIVE_VERSION_MINOR) L"\\" MAKEWSTRING(INNATIVE_VERSION_REVISION)
+#define IN_VERSION_PATH \
+  MAKEWSTRING(INNATIVE_VERSION_MAJOR) L"\\" MAKEWSTRING(INNATIVE_VERSION_MINOR) L"\\" MAKEWSTRING(INNATIVE_VERSION_REVISION)
 #define IN_WIN32_APPS L"SOFTWARE\\Classes\\Applications\\"
 #define IN_WIN32_CLASSPATH IN_WIN32_APPS L"innative-cmd.exe"
 #define IN_WIN32_CLSID L"25A4AE98-4F30-4735-B29B-37B6EDC5A9E9"
 
     bool Win32SetKey(HKEY hive, const wchar_t* key, const wchar_t* value, const wchar_t* data)
     {
-      DWORD	dwDisposition = 0;
-      HKEY hTempKey = (HKEY)0;
-      bool ret = false;
-      if(ERROR_SUCCESS == ::RegCreateKeyExW(hive, key, 0, 0, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, 0, &hTempKey, &dwDisposition))
+      DWORD dwDisposition = 0;
+      HKEY hTempKey       = (HKEY)0;
+      bool ret            = false;
+      if(ERROR_SUCCESS ==
+         ::RegCreateKeyExW(hive, key, 0, 0, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, 0, &hTempKey, &dwDisposition))
       {
-        if(!data || ::RegSetValueExW(hTempKey, value, 0, REG_SZ, (LPBYTE)data, ((DWORD)wcslen(data) + 1) * sizeof(wchar_t)) == ERROR_SUCCESS)
+        if(!data || ::RegSetValueExW(hTempKey, value, 0, REG_SZ, (LPBYTE)data,
+                                     ((DWORD)wcslen(data) + 1) * sizeof(wchar_t)) == ERROR_SUCCESS)
           ret = true;
       }
 
@@ -54,7 +57,7 @@ namespace innative {
     bool Win32DeleteKeyValue(HKEY hive, const wchar_t* key, const wchar_t* value)
     {
       HKEY hTempKey = (HKEY)0;
-      bool ret = false;
+      bool ret      = false;
 
       if(ERROR_SUCCESS == ::RegOpenKeyExW(hive, key, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, &hTempKey))
       {
@@ -69,8 +72,7 @@ namespace innative {
       return ret;
     }
 
-    template<typename F>
-    bool Win32EnumKey(HKEY hive, const wchar_t* key, F && f)
+    template<typename F> bool Win32EnumKey(HKEY hive, const wchar_t* key, F&& f)
     {
       HKEY hKey;
       if(RegOpenKeyExW(hive, key, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
@@ -79,13 +81,13 @@ namespace innative {
       FILETIME ftWrite;
       DWORD dwSize = MAX_PATH;
       wchar_t szName[MAX_PATH];
-      DWORD index = 0;
+      DWORD index     = 0;
       LSTATUS lResult = RegEnumKeyExW(hKey, index, szName, &dwSize, nullptr, nullptr, nullptr, &ftWrite);
 
       while(lResult == ERROR_SUCCESS)
       {
         f(szName);
-        dwSize = MAX_PATH;
+        dwSize  = MAX_PATH;
         lResult = RegEnumKeyExW(hKey, ++index, szName, &dwSize, nullptr, nullptr, nullptr, &ftWrite);
       }
 
@@ -133,7 +135,6 @@ namespace innative {
       if(!Win32SetKey(HKEY_CURRENT_USER, IN_WIN32_CLASSPATH L"\\shell\\open\\command", nullptr, cmdline.c_str()))
         return false;
 
-
       // Set file type handlers
       if(!Win32SetKey(HKEY_CURRENT_USER, L"Software\\Classes\\CLSID\\{" IN_WIN32_CLSID L"}", nullptr, L"inNative Runtime"))
         return false;
@@ -147,7 +148,8 @@ namespace innative {
           return false;
         if(!Win32SetKey(HKEY_CURRENT_USER, IN_WIN32_CLASSPATH L"\\SupportedTypes", ext, id.c_str()))
           return false;
-        if(!Win32SetKey(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\") + ext + L"\\OpenWithProgids").c_str(), id.c_str(), L""))
+        if(!Win32SetKey(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\") + ext + L"\\OpenWithProgids").c_str(),
+                        id.c_str(), L""))
           return false;
         return true;
       };
@@ -162,13 +164,15 @@ namespace innative {
       return true;
     }
 
-    bool DeleteRegKey(const wchar_t* s) {
+    bool DeleteRegKey(const wchar_t* s)
+    {
       LSTATUS status = RegDeleteKeyW(HKEY_CURRENT_USER, s);
       return status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND;
     };
 
 #elif defined(IN_PLATFORM_POSIX)
-#define POSIX_VERSION_STR "." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
+#define POSIX_VERSION_STR \
+  "." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
     int FindLatestVersion(const std::string& prefix, const std::vector<std::string>& files)
     {
       int v = -1;
@@ -241,11 +245,13 @@ namespace innative {
         return !unlink(link.c_str()); // No version exists here, so just delete it
 
       unlink(link.c_str());
-      auto origin = std::string(folder) + file + "." + std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(revision);
+      auto origin = std::string(folder) + file + "." + std::to_string(major) + "." + std::to_string(minor) + "." +
+                    std::to_string(revision);
       return !symlink(origin.c_str(), link.c_str());
     }
 
-    // Finds the latest version for each level: revision, minor, major. Then sets the /usr/bin symlink to the executable corresponding to the latest version
+    // Finds the latest version for each level: revision, minor, major. Then sets the /usr/bin symlink to the executable
+    // corresponding to the latest version
     int UpdateSymlinks(const char* file, const char* folder)
     {
       if(!GenSymlink(file, folder, INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR))
@@ -259,8 +265,8 @@ namespace innative {
 
     int InstallFile(const char* arg0, const char* file, const char* folder)
     {
-      path src = GetProgramPath(arg0).parent_path() / file;
-      auto target = (path(folder) / src) += POSIX_VERSION_STR;
+      path src     = GetProgramPath(arg0).parent_path() / file;
+      auto target  = (path(folder) / src) += POSIX_VERSION_STR;
       bool success = copy_file(src, target, copy_options::overwrite_existing);
 
       // Calculate new master symlinks
@@ -270,29 +276,39 @@ namespace innative {
 
     uint64_t GetLatestVersion()
     {
-      uint16_t major = 0;
-      uint16_t minor = 0;
+      uint16_t major    = 0;
+      uint16_t minor    = 0;
       uint16_t revision = 0;
-      uint16_t build = 0;
+      uint16_t build    = 0;
 
 #ifdef IN_PLATFORM_WIN32
-      if(!Win32EnumKey(HKEY_CURRENT_USER,
-        IN_WIN32_REGPATH,
-        [&major](const wchar_t* s) { wchar_t *end; major = std::max((uint16_t)wcstol(s, &end, 10), major); }))
+      if(!Win32EnumKey(HKEY_CURRENT_USER, IN_WIN32_REGPATH, [&major](const wchar_t* s) {
+           wchar_t* end;
+           major = std::max((uint16_t)wcstol(s, &end, 10), major);
+         }))
+        return 0;
+
+      if(!Win32EnumKey(HKEY_CURRENT_USER, (IN_WIN32_REGPATH L"\\" + std::to_wstring(major)).c_str(),
+                       [&minor](const wchar_t* s) {
+                         wchar_t* end;
+                         minor = std::max((uint16_t)wcstol(s, &end, 10), minor);
+                       }))
         return 0;
 
       if(!Win32EnumKey(HKEY_CURRENT_USER,
-        (IN_WIN32_REGPATH L"\\" + std::to_wstring(major)).c_str(),
-        [&minor](const wchar_t* s) { wchar_t *end; minor = std::max((uint16_t)wcstol(s, &end, 10), minor); }))
-        return 0;
-
-      if(!Win32EnumKey(HKEY_CURRENT_USER,
-        (IN_WIN32_REGPATH L"\\" + std::to_wstring(major) + L"\\" + std::to_wstring(minor)).c_str(),
-        [&revision](const wchar_t* s) { wchar_t *end; revision = std::max((uint16_t)wcstol(s, &end, 10), revision); }))
+                       (IN_WIN32_REGPATH L"\\" + std::to_wstring(major) + L"\\" + std::to_wstring(minor)).c_str(),
+                       [&revision](const wchar_t* s) {
+                         wchar_t* end;
+                         revision = std::max((uint16_t)wcstol(s, &end, 10), revision);
+                       }))
         return 0;
 
       HKEY hKey;
-      if(RegOpenKeyExW(HKEY_CURRENT_USER, (IN_WIN32_REGPATH L"\\" + std::to_wstring(major) + L"\\" + std::to_wstring(minor) + L"\\" + std::to_wstring(revision)).c_str(), 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+      if(RegOpenKeyExW(HKEY_CURRENT_USER,
+                       (IN_WIN32_REGPATH L"\\" + std::to_wstring(major) + L"\\" + std::to_wstring(minor) + L"\\" +
+                        std::to_wstring(revision))
+                         .c_str(),
+                       0, KEY_READ, &hKey) != ERROR_SUCCESS)
         return 0;
       RegCloseKey(hKey);
 #elif defined(IN_PLATFORM_POSIX)
@@ -317,7 +333,8 @@ namespace innative {
       if(!Win32SetKey(HKEY_CURRENT_USER, IN_WIN32_REGPATH L"\\" IN_VERSION_PATH, L"runtime", runtime.c_str()))
         return -2;
 
-      constexpr uint64_t cur = INNATIVE_VERSION(INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR, INNATIVE_VERSION_REVISION, 0);
+      constexpr uint64_t cur =
+        INNATIVE_VERSION(INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR, INNATIVE_VERSION_REVISION, 0);
       if(GetLatestVersion() <= cur) // Only if we are the latest version do we perform a full install
         if(!Win32Install(cur, full))
           return -3;
@@ -332,7 +349,8 @@ namespace innative {
         return err - 768;
       if((err = InstallFile(arg0, "innative-cmd", "/usr/bin/")) < 0)
         return err - 1024;
-      chmod("/usr/bin/innative-cmd" POSIX_VERSION_STR, 0777); // Make the actual file executable (we don't need to fix the symlinks)
+      chmod("/usr/bin/innative-cmd" POSIX_VERSION_STR,
+            0777); // Make the actual file executable (we don't need to fix the symlinks)
 #endif
       return 0;
     }
@@ -340,9 +358,10 @@ namespace innative {
     int Uninstall()
     {
 #ifdef IN_PLATFORM_WIN32
-      // Remove this version from the registry by deleting all version levels. Only the levels that have no more subkeys will actually be deleted.
+      // Remove this version from the registry by deleting all version levels. Only the levels that have no more subkeys
+      // will actually be deleted.
       uint64_t oldversion = GetLatestVersion();
-      bool r = DeleteRegKey(IN_WIN32_REGPATH L"\\" IN_VERSION_PATH);
+      bool r              = DeleteRegKey(IN_WIN32_REGPATH L"\\" IN_VERSION_PATH);
       DeleteRegKey(IN_WIN32_REGPATH L"\\" MAKEWSTRING(INNATIVE_VERSION_MAJOR) L"\\" MAKEWSTRING(INNATIVE_VERSION_MINOR));
       DeleteRegKey(IN_WIN32_REGPATH L"\\" MAKEWSTRING(INNATIVE_VERSION_MAJOR));
 
@@ -371,7 +390,9 @@ namespace innative {
             r &= DeleteRegKey((IN_WIN32_APPS + id + L"\\shell\\open").c_str());
             r &= DeleteRegKey((IN_WIN32_APPS + id + L"\\shell").c_str());
             r &= DeleteRegKey((IN_WIN32_APPS + id).c_str());
-            r &= Win32DeleteKeyValue(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\") + ext + L"\\OpenWithProgids").c_str(), id.c_str());
+            r &= Win32DeleteKeyValue(HKEY_CURRENT_USER,
+                                     (std::wstring(L"Software\\Classes\\") + ext + L"\\OpenWithProgids").c_str(),
+                                     id.c_str());
           };
 
           deregtype(r, L"innative-cmd", L".wast");

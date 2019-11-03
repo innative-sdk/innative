@@ -4,7 +4,14 @@
 #include "test.h"
 #include <stdio.h>
 
-TestHarness::TestHarness(const IRExports& exports, const char* arg0, int loglevel, FILE* out, const path& folder) : _exports(exports), _arg0(arg0), _loglevel(loglevel), _target(out), _folder(folder), _testdata(0, 0){}
+TestHarness::TestHarness(const IRExports& exports, const char* arg0, int loglevel, FILE* out, const path& folder) :
+  _exports(exports),
+  _arg0(arg0),
+  _loglevel(loglevel),
+  _target(out),
+  _folder(folder),
+  _testdata(0, 0)
+{}
 TestHarness::~TestHarness()
 {
   // Clean up all the files we just produced
@@ -13,18 +20,14 @@ TestHarness::~TestHarness()
 }
 size_t TestHarness::Run(FILE* out)
 {
-  std::pair<const char*, void(TestHarness::*)()> tests[] = {
-    { "wasm_malloc.c", &TestHarness::test_malloc },
-    { "internal.c", &TestHarness::test_environment },
-    { "queue.h", &TestHarness::test_queue },
-    { "stack.h", &TestHarness::test_stack },
-    { "stream.h", &TestHarness::test_stream },
-    { "util.h", &TestHarness::test_util },
-    { "allocator", &TestHarness::test_allocator },
-    { "parallel parsing", &TestHarness::test_parallel_parsing}
+  std::pair<const char*, void (TestHarness::*)()> tests[] = {
+    { "wasm_malloc.c", &TestHarness::test_malloc }, { "internal.c", &TestHarness::test_environment },
+    { "queue.h", &TestHarness::test_queue },        { "stack.h", &TestHarness::test_stack },
+    { "stream.h", &TestHarness::test_stream },      { "util.h", &TestHarness::test_util },
+    { "allocator", &TestHarness::test_allocator },  { "parallel parsing", &TestHarness::test_parallel_parsing }
   };
 
-  static const size_t NUMTESTS = sizeof(tests) / sizeof(decltype(tests[0]));
+  static const size_t NUMTESTS    = sizeof(tests) / sizeof(decltype(tests[0]));
   static constexpr int COLUMNS[3] = { 24, 11, 8 };
 
   fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], "Internal Tests", COLUMNS[1], "Subtests", COLUMNS[2], "Pass/Fail");
@@ -39,16 +42,18 @@ size_t TestHarness::Run(FILE* out)
 
     char buf[COLUMNS[1] + 1] = { 0 };
     snprintf(buf, COLUMNS[1] + 1, "%u/%u", results.first, results.second);
-    fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], tests[i].first, COLUMNS[1], buf, COLUMNS[2], (results.first == results.second) ? "PASS" : "FAIL");
+    fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], tests[i].first, COLUMNS[1], buf, COLUMNS[2],
+            (results.first == results.second) ? "PASS" : "FAIL");
   }
 
   {
     TEST(CompileWASM("../scripts/test-h.wat") == ERR_SUCCESS);
 
     char buf[COLUMNS[1] + 1] = { 0 };
-    auto results = Results();
+    auto results             = Results();
     snprintf(buf, COLUMNS[1] + 1, "%u/%u", results.first, results.second);
-    fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], "aux tests", COLUMNS[1], buf, COLUMNS[2], (results.first == results.second) ? "PASS" : "FAIL");
+    fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], "aux tests", COLUMNS[1], buf, COLUMNS[2],
+            (results.first == results.second) ? "PASS" : "FAIL");
   }
 
   // Test compiling EXE
@@ -61,11 +66,11 @@ size_t TestHarness::Run(FILE* out)
 int TestHarness::CompileWASM(const path& file)
 {
   Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);
-  env->flags = ENV_ENABLE_WAT | ENV_LIBRARY;
-  env->optimize = ENV_OPTIMIZE_O3;
-  env->features = ENV_FEATURE_ALL;
-  env->log = stdout;
-  env->loglevel = _loglevel;
+  env->flags       = ENV_ENABLE_WAT | ENV_LIBRARY;
+  env->optimize    = ENV_OPTIMIZE_O3;
+  env->features    = ENV_FEATURE_ALL;
+  env->log         = stdout;
+  env->loglevel    = _loglevel;
 
   int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
   if(err < 0)
@@ -77,7 +82,7 @@ int TestHarness::CompileWASM(const path& file)
 
   (*_exports.FinalizeEnvironment)(env);
   path base = _folder / file.stem();
-  path out = base;
+  path out  = base;
   out.replace_extension(IN_LIBRARY_EXTENSION);
 
   err = (*_exports.Compile)(env, out.u8string().c_str());
@@ -86,8 +91,8 @@ int TestHarness::CompileWASM(const path& file)
 
   _garbage.push_back(out);
 #ifdef IN_PLATFORM_WIN32
-  out.replace_extension(".lib");
-  _garbage.push_back(out);
+  base.replace_extension(".lib");
+  _garbage.push_back(base);
 #endif
   (*_exports.DestroyEnvironment)(env);
   void* m = (*_exports.LoadAssembly)(out.u8string().c_str());

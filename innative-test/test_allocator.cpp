@@ -11,22 +11,23 @@ using namespace utility;
 
 void TestHarness::test_allocator()
 {
-  const size_t TRIALS = 5;
+  const size_t TRIALS   = 5;
   const size_t MAXALLOC = 150;
-  const size_t MAXSIZE = 500000;
-  int NUM = std::thread::hardware_concurrency();
+  const size_t MAXSIZE  = 500000;
+  int NUM               = std::thread::hardware_concurrency();
   std::atomic_bool start;
 
   for(size_t k = 0; k < TRIALS; ++k)
   {
-	std::atomic_size_t count;
-	count.exchange(0);
+    std::atomic_size_t count;
+    count.exchange(0);
     std::unique_ptr<std::thread[]> threads(new std::thread[NUM]);
     std::unique_ptr<std::vector<std::pair<void*, size_t>>[]> maps(new std::vector<std::pair<void*, size_t>>[NUM]);
     IN_WASM_ALLOCATOR alloc;
 
     auto fn = [&](int id) {
-      while(!start.load());
+      while(!start.load())
+        ;
       size_t total = 0;
       while(total < MAXSIZE)
       {
@@ -53,7 +54,8 @@ void TestHarness::test_allocator()
       for(auto& e : maps[i])
         merge.push_back(e);
 
-    std::sort(merge.begin(), merge.end(), [](const std::pair<void*, size_t>& a, const std::pair<void*, size_t>& b) { return a.first < b.first; });
+    std::sort(merge.begin(), merge.end(),
+              [](const std::pair<void*, size_t>& a, const std::pair<void*, size_t>& b) { return a.first < b.first; });
     bool pass = true;
 
     for(size_t i = 1; i < merge.size(); ++i)

@@ -23,11 +23,11 @@ void TestHarness::test_stack()
   TEST(!s.Limit());
   TEST(s.Size() == 1);
   TEST(s.Peek() == 3);
-  
+
   s.SetLimit(1);
   TEST(s.Limit() == 1);
   TEST(s.Size() == 0);
-  
+
   s.Push(5);
   TEST(s.Limit() == 1);
   TEST(s.Size() == 1);

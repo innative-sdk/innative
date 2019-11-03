@@ -48,8 +48,8 @@ IN_ERROR innative::OptimizeModules(const Environment* env)
     if(name.contains_lower("PassManager") && env->n_modules > 1)
     {
       std::error_code EC;
-      llvm::raw_fd_ostream dest(std::string(env->modules[1].cache->llvm->getName()) + "_" + std::to_string(++counter) + ".llvm", EC, llvm::sys::fs::OpenFlags::OF_None);
-      env->modules[1].cache->llvm->print(dest, nullptr);
+      llvm::raw_fd_ostream dest(std::string(env->modules[1].cache->llvm->getName()) + "_" + std::to_string(++counter) +
+  ".llvm", EC, llvm::sys::fs::OpenFlags::OF_None); env->modules[1].cache->llvm->print(dest, nullptr);
     }
     fprintf(aux, "%i: %s\n", counter, name.begin());
     });*/
@@ -58,21 +58,22 @@ IN_ERROR innative::OptimizeModules(const Environment* env)
   passBuilder.registerCGSCCAnalyses(cGSCCAnalysisManager);
   passBuilder.registerFunctionAnalyses(functionAnalysisManager);
   passBuilder.registerLoopAnalyses(loopAnalysisManager);
-  passBuilder.crossRegisterProxies(loopAnalysisManager, functionAnalysisManager, cGSCCAnalysisManager, moduleAnalysisManager);
+  passBuilder.crossRegisterProxies(loopAnalysisManager, functionAnalysisManager, cGSCCAnalysisManager,
+                                   moduleAnalysisManager);
 
   llvm::PassBuilder::OptimizationLevel optlevel = llvm::PassBuilder::OptimizationLevel::O0;
 
-  switch(env->optimize&ENV_OPTIMIZE_OMASK)
+  switch(env->optimize & ENV_OPTIMIZE_OMASK)
   {
   case ENV_OPTIMIZE_O1: optlevel = llvm::PassBuilder::OptimizationLevel::O1; break;
   case ENV_OPTIMIZE_O2: optlevel = llvm::PassBuilder::OptimizationLevel::O2; break;
   case ENV_OPTIMIZE_O3: optlevel = llvm::PassBuilder::OptimizationLevel::O3; break;
   case ENV_OPTIMIZE_Os: optlevel = llvm::PassBuilder::OptimizationLevel::Os; break;
-  default:
-    assert(false);
+  default: assert(false);
   }
 
-  llvm::ModulePassManager modulePassManager = passBuilder.buildPerModuleDefaultPipeline(optlevel, env->loglevel >= LOG_DEBUG);
+  llvm::ModulePassManager modulePassManager =
+    passBuilder.buildPerModuleDefaultPipeline(optlevel, env->loglevel >= LOG_DEBUG);
 
   // Optimize all modules
   for(size_t i = 0; i < env->n_modules; ++i)
@@ -148,6 +149,6 @@ IN_ERROR innative::OptimizeModules(const Environment* env)
     manager->doInitialization();
   }*/
 
-  //fclose(aux);
+  // fclose(aux);
   return ERR_SUCCESS;
 }

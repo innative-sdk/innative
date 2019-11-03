@@ -29,7 +29,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
   llvm::LLVMContext llvm_context;
 
   bool has_start = false;
-  IN_ERROR err = ERR_SUCCESS;
+  IN_ERROR err   = ERR_SUCCESS;
 
   // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
   llvm::InitializeAllTargetInfos();
@@ -47,7 +47,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
   llvm::TargetOptions opt;
   auto RM = llvm::Optional<llvm::Reloc::Model>();
 #ifdef IN_PLATFORM_POSIX
-  if(flags&ENV_LIBRARY)
+  if(flags & ENV_LIBRARY)
     RM = llvm::Optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
 #endif
   auto machine = arch->createTargetMachine("wasm32-unknown-unknown", "", "", opt, RM, llvm::None);
@@ -103,10 +103,11 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
   dest.flush();
   std::string outfile("-o");
   outfile += out;
-  
-  std::vector<const char*> args = { "inNative", "--strip-all", "--export-dynamic", objfile.c_str(), "--allow-undefined", outfile.c_str() };
 
-  if(flags&ENV_LIBRARY)
+  std::vector<const char*> args = { "inNative",      "--strip-all",       "--export-dynamic",
+                                    objfile.c_str(), "--allow-undefined", outfile.c_str() };
+
+  if(flags & ENV_LIBRARY)
     args.push_back("--no-entry");
 
   {
