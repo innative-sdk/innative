@@ -18,3 +18,12 @@ else
   make -j $CORES
 fi
 cd ../..
+
+echo "Building LLD"
+mkdir -p bin/lld
+cd bin/lld
+cmake -GNinja ../../llvm-project/lld -DLLVM_TARGETS_TO_BUILD="X86;WebAssembly" -DLLVM_CONFIG_PATH="../llvm/bin/llvm-config" -DLLVM_TABLEGEN_EXE="../llvm/bin/llvm-tblgen" -DLLVM_INCLUDE_TESTS=OFF -DCMAKE_CXX_FLAGS_RELEASE="/MT" -DCMAKE_CXX_FLAGS_MINSIZEREL="/MT" -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="/MT" -DCMAKE_CXX_FLAGS_DEBUG="/MTd" 
+ninja
+cd ../..
+cp llvm-project/lld/include/* bin/lld/include -R
+cp bin/lld/lib/*.a bin/llvm/lib/*.a
