@@ -17,13 +17,17 @@ pushd llvm
 ..\cmake\bin\cmake.exe --build . --config MinSizeRel
 ..\cmake\bin\cmake.exe --build . --config Debug
 
-Remove-Item -Recurse -Force "bin"
-mkdir -p bin
-Copy-Item -Path "MinSizeRel\bin\*" -Destination "bin" -Recurse
+if(!(Test-Path -path "./bin/"))
+{
+  mkdir -p bin
+}
+
+Copy-Item -Path "MinSizeRel\bin\*" -Destination "bin" -Force
+Copy-Item -Path "MinSizeRel\lib\*.lib" -Destination "lib" -Force
 
 popd
 popd
 
-Copy-Item -Path "llvm-project\llvm\include\*" -Destination "bin\llvm\include" -Recurse
+robocopy "llvm-project\llvm\include" "bin\llvm\include" *.h *.inc *.def *.td *.modulemap /S /XO /XN /XC
 
 echo "Finished building LLVM!"

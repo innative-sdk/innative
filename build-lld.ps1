@@ -20,6 +20,6 @@ pushd lld
 popd
 popd
 
-Copy-Item -Path "llvm-project\lld\include\*" -Destination "bin\lld\include" -Recurse
+robocopy "llvm-project\lld\include" "bin\lld\include" *.h *.inc *.def *.td *.modulemap /S /XO /XN /XC
 
 echo "Finished building LLD!"
