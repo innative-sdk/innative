@@ -5,10 +5,13 @@
 #include "validate.h"
 #include "compile.h"
 #include "tools.h"
-#include "wat.h"
+#include "wast.h"
+#include "serialize.h"
 #include <atomic>
 #include <thread>
+#include <fstream>
 #include <stdio.h>
+#include <sstream>
 
 using namespace innative;
 using namespace utility;
@@ -161,7 +164,7 @@ void innative::AddModule(Environment* env, const void* data, uint64_t size, cons
     LoadModule(env, index, data, size, name, file, err);
 }
 
-enum IN_ERROR innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name)
+IN_ERROR innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name)
 {
   if(!export_name)
     return ERR_PARSE_INVALID_NAME;
@@ -178,7 +181,7 @@ enum IN_ERROR innative::AddWhitelist(Environment* env, const char* module_name, 
   return ERR_SUCCESS;
 }
 
-enum IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, uint64_t size)
+IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, uint64_t size)
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;
@@ -196,7 +199,7 @@ enum IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data
   return ERR_SUCCESS;
 }
 
-enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
+IN_ERROR innative::FinalizeEnvironment(Environment* env)
 {
   // If we have an empty whitelist defined, all C function imports are illegal, so don't bother dumping symbols
   if(env->cimports && (!(env->flags & ENV_WHITELIST) || kh_size(env->whitelist) > 0))
@@ -251,7 +254,13 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
         fclose(f);
       }
 
-      auto symbols = GetSymbols(envpath.u8string().c_str(), env->log);
+#ifdef IN_PLATFORM_WIN32
+      LLD_FORMAT format = LLD_FORMAT::COFF;
+#else
+      LLD_FORMAT format = LLD_FORMAT::ELF;
+#endif
+
+      auto symbols = GetSymbols(envpath.u8string().c_str(), env->log, format);
       if(!tmp.empty())
         std::remove(tmp.c_str());
 
@@ -259,8 +268,8 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
       for(auto symbol : symbols)
       {
         Identifier id;
-        id.resize(symbol.size(), true, *env);
-        if(!id.get())
+        id.resize((varuint32)symbol.size(), true, *env);
+        if(!id.get() || symbol.size() > std::numeric_limits<varuint32>::max())
           return ERR_FATAL_OUT_OF_MEMORY;
 
         memcpy(id.get(), symbol.data(), symbol.size());
@@ -282,7 +291,7 @@ enum IN_ERROR innative::FinalizeEnvironment(Environment* env)
   return ERR_SUCCESS;
 }
 
-enum IN_ERROR innative::Compile(Environment* env, const char* file)
+IN_ERROR innative::Compile(Environment* env, const char* file)
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;
@@ -338,9 +347,135 @@ void* innative::LoadAssembly(const char* file)
   if(!file)
     return 0;
 
-  path envpath = u8path(file);
+  path envpath = GetPath(file);
 
   return envpath.is_absolute() ? LoadDLL(envpath) : LoadDLL(GetWorkingDir() / envpath);
 }
 
 void innative::FreeAssembly(void* assembly) { FreeDLL(assembly); }
+
+const char* innative::GetTypeEncodingString(int type_encoding)
+{
+  return utility::EnumToString(utility::TYPE_ENCODING_MAP, type_encoding, 0, 0);
+}
+
+const char* innative::GetErrorString(int error_code)
+{
+  return utility::EnumToString(utility::ERR_ENUM_MAP, error_code, 0, 0);
+}
+
+int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bool always_compile, const char* output)
+{
+  int err = ERR_SUCCESS;
+  char buf[40];
+#ifdef IN_PLATFORM_WIN32
+  snprintf(buf, 40, "memory--%p", data);
+#else
+  snprintf(buf, 40, "/memory--%p", data);
+#endif
+  const char* target = buf;
+
+  // Load the module
+  std::unique_ptr<uint8_t[]> data_module;
+  if(!sz)
+  {
+    long len;
+    target      = reinterpret_cast<const char*>(data);
+    data_module = utility::LoadFile(utility::GetPath(target), len);
+    if(data_module.get() == nullptr)
+      return ERR_FATAL_FILE_ERROR;
+    data = data_module.get();
+    sz   = len;
+  }
+
+  if(!env)
+  {
+    fputs("Environment cannot be null.\n", stderr);
+    return -1;
+  }
+
+  if(err < 0)
+  {
+    char buf[10];
+    if(env->loglevel >= LOG_FATAL)
+      FPRINTF(env->log, "Error loading environment: %s\n", utility::EnumToString(utility::ERR_ENUM_MAP, err, buf, 10));
+    return err;
+  }
+
+  err = ParseWast(*env, data, sz, utility::GetPath(target), always_compile, output);
+
+  if(env->loglevel >= LOG_ERROR && err < 0)
+  {
+    char buf[10];
+    FPRINTF(env->log, "Error loading modules: %s\n", utility::EnumToString(utility::ERR_ENUM_MAP, err, buf, 10));
+  }
+
+  if(env->loglevel >= LOG_NOTICE && target)
+    FPRINTF(env->log, "Finished Script: %s\n", target);
+  return err;
+}
+
+template<int bufferSize> class FixedStream : public std::streambuf
+{
+public:
+  FixedStream()
+  {
+    std::memset(buffer, 0, sizeof(buffer));
+    setp(buffer, &buffer[bufferSize - 1]);         // Remember the -1 to preserve the terminator.
+    setg(buffer, buffer, &buffer[bufferSize - 1]); // Technically not necessary for an std::ostream.
+  }
+
+  std::string get() const { return buffer; }
+
+private:
+  char buffer[bufferSize];
+};
+
+int innative::SerializeModule(Environment* env, size_t m, const char* out, size_t* len)
+{
+  if(!env)
+    return ERR_FATAL_NULL_POINTER;
+
+  if(m >= env->n_modules)
+    return ERR_FATAL_INVALID_MODULE;
+
+  Queue<WatToken> tokens;
+  wat::TokenizeModule(*env, tokens, env->modules[m]);
+  int err = CheckWatTokens(*env, env->errors, tokens, "");
+  if(err < 0)
+    return err;
+
+  std::string name = env->modules[m].name.str();
+  if(!len)
+  {
+    if(out != nullptr)
+      name = out;
+    else
+      name += ".wat";
+  }
+  else
+  {
+    std::ostringstream ss;
+    wat::WriteTokens(tokens, ss);
+    if(ss.tellp() < 0)
+      return ERR_FATAL_FILE_ERROR;
+
+    size_t pos = (size_t)ss.tellp();
+    if(*len < pos)
+    {
+      *len = pos;
+      return ERR_INSUFFICIENT_BUFFER;
+    }
+
+    tmemcpy<char>(const_cast<char*>(out), *len, ss.str().data(), pos);
+    *len = pos;
+    return ERR_SUCCESS;
+  }
+
+  std::ofstream f(name, std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
+  if(f.bad())
+    return ERR_FATAL_FILE_ERROR;
+
+  wat::WriteTokens(tokens, f);
+  return ERR_SUCCESS;
+}

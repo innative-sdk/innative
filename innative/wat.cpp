@@ -39,9 +39,9 @@ WatParser::~WatParser()
 
 varuint32 WatParser::GetJump(WatToken var)
 {
-  if(var.id == TOKEN_NUMBER)
+  if(var.id == WatTokens::NUMBER)
     return ResolveInlineToken<varuint32, &ResolveTokenu32>(var);
-  if(var.id == TOKEN_NAME)
+  if(var.id == WatTokens::NAME)
   {
     utility::StringRef err = { var.pos, var.len };
     for(varuint32 i = 0; i < stack.Size(); ++i)
@@ -94,9 +94,9 @@ int WatParser::WatString(const Environment& env, ByteArray& str, StringRef t)
   varuint32 index = 0;
   if(str.get())
   {
-    index      = str.size();
-    size_t n   = str.size() + t.len;
-    uint8_t* b = tmalloc<uint8_t>(env, n + 1);
+    index       = str.size();
+    varuint32 n = str.size() + (varuint32)t.len;
+    uint8_t* b  = tmalloc<uint8_t>(env, n + 1);
     if(!b)
       return ERR_FATAL_OUT_OF_MEMORY;
 
@@ -104,7 +104,7 @@ int WatParser::WatString(const Environment& env, ByteArray& str, StringRef t)
     new(&str) ByteArray(b, n);
   }
   else
-    str.resize(t.len, true, env);
+    str.resize((varuint32)t.len, true, env);
 
   if(!t.len)
     return ERR_SUCCESS;
@@ -161,32 +161,32 @@ int WatParser::WatString(const Environment& env, ByteArray& str, StringRef t)
 
 int WatParser::ParseName(const Environment& env, ByteArray& name, const WatToken& t)
 {
-  if(t.id != TOKEN_NAME || !t.pos || !t.len)
+  if(t.id != WatTokens::NAME || !t.pos || !t.len || t.len > numeric_limits<varuint32>::max())
     return ERR_PARSE_INVALID_NAME;
 
-  name.resize(t.len, true, env);
-  if(!name.get() || t.len > numeric_limits<varuint32>::max())
+  name.resize((varuint32)t.len, true, env);
+  if(!name.get())
     return ERR_FATAL_OUT_OF_MEMORY;
   tmemcpy((char*)name.get(), name.size(), t.pos, t.len);
 
   return ERR_SUCCESS;
 }
 
-varsint7 WatParser::WatValType(WatTokenID id)
+varsint7 WatParser::WatValType(WatTokens id)
 {
   switch(id)
   {
-  case TOKEN_i32: return TE_i32;
-  case TOKEN_i64: return TE_i64;
-  case TOKEN_f32: return TE_f32;
-  case TOKEN_f64: return TE_f64;
-  case TOKEN_CREF: return TE_cref;
+  case WatTokens::i32: return TE_i32;
+  case WatTokens::i64: return TE_i64;
+  case WatTokens::f32: return TE_f32;
+  case WatTokens::f64: return TE_f64;
+  case WatTokens::CREF: return TE_cref;
   }
 
   return 0;
 }
 
-int WatParser::AddWatValType(const Environment& env, WatTokenID id, varsint7*& a, varuint32& n)
+int WatParser::AddWatValType(const Environment& env, WatTokens id, varsint7*& a, varuint32& n)
 {
   varsint7 ty = WatValType(id);
   if(!ty)
@@ -199,13 +199,13 @@ int WatParser::ParseFunctionTypeInner(const Environment& env, Queue<WatToken>& t
 {
   sig.form = TE_func;
   int err;
-  while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_PARAM)
+  while(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::PARAM)
   {
     WatToken src = tokens[1];
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-    EXPECTED(tokens, TOKEN_PARAM, ERR_WAT_EXPECTED_TOKEN);
+    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+    EXPECTED(tokens, WatTokens::PARAM, ERR_WAT_EXPECTED_TOKEN);
 
-    if(tokens.Peek().id == TOKEN_NAME)
+    if(tokens.Peek().id == WatTokens::NAME)
     {
       if(anonymous)
         return ERR_WAT_UNEXPECTED_NAME;
@@ -226,7 +226,7 @@ int WatParser::ParseFunctionTypeInner(const Environment& env, Queue<WatToken>& t
     }
     else
     {
-      while(tokens.Peek().id != TOKEN_CLOSE)
+      while(tokens.Peek().id != WatTokens::CLOSE)
       {
         if(info)
         {
@@ -239,31 +239,31 @@ int WatParser::ParseFunctionTypeInner(const Environment& env, Queue<WatToken>& t
       }
     }
 
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
-  while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_RESULT)
+  while(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::RESULT)
   {
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-    EXPECTED(tokens, TOKEN_RESULT, ERR_WAT_EXPECTED_TOKEN);
+    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+    EXPECTED(tokens, WatTokens::RESULT, ERR_WAT_EXPECTED_TOKEN);
 
-    while(tokens.Peek().id != TOKEN_CLOSE)
+    while(tokens.Peek().id != WatTokens::CLOSE)
       if(err = AddWatValType(env, tokens.Pop().id, sig.returns, sig.n_returns))
         return err;
 
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
   // We detect this special case because otherwise it can turn into a "type mismatch" error, which is very confusing
-  if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_PARAM)
+  if(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::PARAM)
     return ERR_WAT_PARAM_AFTER_RESULT;
   return ERR_SUCCESS;
 }
 
 int WatParser::ParseFunctionType(Queue<WatToken>& tokens, varuint32* index)
 {
-  EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-  EXPECTED(tokens, TOKEN_FUNC, ERR_WAT_EXPECTED_FUNC);
+  EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+  EXPECTED(tokens, WatTokens::FUNC, ERR_WAT_EXPECTED_FUNC);
 
   FunctionType sig = { 0 };
   int err          = ParseFunctionTypeInner(env, tokens, sig, 0, false);
@@ -274,7 +274,7 @@ int WatParser::ParseFunctionType(Queue<WatToken>& tokens, varuint32* index)
   if(err = AppendArray<FunctionType>(env, sig, m.type.functions, m.type.n_functions))
     return err;
 
-  EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+  EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   return ERR_SUCCESS;
 }
 
@@ -327,9 +327,9 @@ int WatParser::AppendImport(Module& m, const Import& i, varuint32* index)
 
 varuint32 WatParser::GetFromHash(kh_indexname_t* hash, const WatToken& t)
 {
-  if(t.id == TOKEN_NUMBER)
+  if(t.id == WatTokens::NUMBER)
     return ResolveInlineToken<varuint32, &ResolveTokenu32>(t);
-  else if(t.id == TOKEN_NAME)
+  else if(t.id == WatTokens::NAME)
   {
     khiter_t iter = kh_get_indexname(hash, StringRef{ t.pos, t.len });
 
@@ -343,7 +343,7 @@ varuint32 WatParser::GetFromHash(kh_indexname_t* hash, const WatToken& t)
 // This looks for an identical existing type and returns that ID if it exists, or inserts the signature as a new type
 int WatParser::MergeFunctionType(const FunctionType& ftype, varuint32& out)
 {
-  for(uint64_t i = 0; i < m.type.n_functions; ++i) // The WASM spec requires we look for the lowest possible matching index
+  for(varuint32 i = 0; i < m.type.n_functions; ++i) // The WASM spec requires we look for the lowest possible matching index
   {
     if(MatchFunctionType(m.type.functions[i], ftype))
     {
@@ -360,12 +360,12 @@ int WatParser::MergeFunctionType(const FunctionType& ftype, varuint32& out)
 int WatParser::ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo** info, bool anonymous)
 {
   sig = (varuint32)~0;
-  if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_TYPE)
+  if(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::TYPE)
   {
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-    EXPECTED(tokens, TOKEN_TYPE, ERR_WAT_EXPECTED_TYPE);
+    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+    EXPECTED(tokens, WatTokens::TYPE, ERR_WAT_EXPECTED_TYPE);
 
-    if(tokens.Peek().id != TOKEN_NUMBER && tokens.Peek().id != TOKEN_NAME)
+    if(tokens.Peek().id != WatTokens::NUMBER && tokens.Peek().id != WatTokens::NAME)
       return ERR_WAT_EXPECTED_VAR;
 
     sig = GetFromHash(typehash, tokens.Pop());
@@ -373,10 +373,11 @@ int WatParser::ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo**
     if(sig >= m.type.n_functions)
       AppendError(env, env.errors, &m, ERR_WAT_UNKNOWN_TYPE, "Invalid type signature %u", sig);
 
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
-  if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && (tokens[1].id == TOKEN_PARAM || tokens[1].id == TOKEN_RESULT))
+  if(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN &&
+     (tokens[1].id == WatTokens::PARAM || tokens[1].id == WatTokens::RESULT))
   {
     // Create a type to match this function signature
     FunctionType func = { 0 };
@@ -407,19 +408,19 @@ int WatParser::ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo**
 
 varuint32 WatParser::GetLocal(FunctionBody& f, FunctionType& sig, const WatToken& t)
 {
-  if(t.id == TOKEN_NUMBER)
+  if(t.id == WatTokens::NUMBER)
     return ResolveInlineToken<varuint32, &ResolveTokenu32>(t);
-  else if(t.id == TOKEN_NAME)
+  else if(t.id == WatTokens::NAME)
   {
-    ByteArray n((uint8_t*)t.pos, t.len);
+    ByteArray n((uint8_t*)t.pos, (varuint32)t.len);
 
-    for(uint64_t i = 0; i < sig.n_params; ++i)
+    for(varuint32 i = 0; i < sig.n_params; ++i)
       if(n == f.param_names[i].name)
-        return (varuint32)i;
+        return i;
 
-    for(uint64_t i = 0; i < f.n_locals; ++i)
+    for(varuint32 i = 0; i < f.n_locals; ++i)
       if(n == f.local_names[i].name)
-        return (varuint32)(i + sig.n_params);
+        return i + sig.n_params;
   }
 
   return (varuint32)~0;
@@ -448,7 +449,7 @@ int WatParser::ParseConstantOperator(Queue<WatToken>& tokens, Instruction& op)
 int WatParser::ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionBody& f, FunctionType& sig,
                              WatParser::DeferWatAction& defer)
 {
-  if(tokens.Peek().id != TOKEN_OPERATOR)
+  if(tokens.Peek().id != WatTokens::OPERATOR)
     return ERR_WAT_EXPECTED_OPERATOR;
 
   int err;
@@ -499,7 +500,7 @@ int WatParser::ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionB
 
       if(err = AppendArray<varuint32>(env, jump, op.immediates[0].table, op.immediates[0].n_table))
         return err;
-    } while(tokens.Peek().id == TOKEN_NAME || tokens.Peek().id == TOKEN_NUMBER);
+    } while(tokens.Peek().id == WatTokens::NAME || tokens.Peek().id == WatTokens::NUMBER);
 
     op.immediates[1]._varuint32 =
       op.immediates[0].table[--op.immediates[0].n_table]; // Remove last jump from table and make it the default
@@ -531,7 +532,7 @@ int WatParser::ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionB
   case OP_i64_store8:
   case OP_i64_store16:
   case OP_i64_store32:
-    if(tokens.Peek().id == TOKEN_OFFSET)
+    if(tokens.Peek().id == WatTokens::OFFSET)
     {
       tokens.Pop();
       if(err = ResolveTokenu32(tokens.Pop(), numbuf, op.immediates[1]._varuint32))
@@ -539,7 +540,7 @@ int WatParser::ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionB
         // supports 64-bit
         return err;
     }
-    if(tokens.Peek().id == TOKEN_ALIGN)
+    if(tokens.Peek().id == WatTokens::ALIGN)
     {
       tokens.Pop();
       if(err = ResolveTokenu32(tokens.Pop(), numbuf, op.immediates[0]._varuint32))
@@ -558,7 +559,7 @@ int WatParser::ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionB
 
 void WatParser::ParseLabel(Queue<WatToken>& tokens)
 {
-  if(tokens.Peek().id == TOKEN_NAME)
+  if(tokens.Peek().id == WatTokens::NAME)
   {
     stack.Push(StringRef{ tokens.Peek().pos, tokens.Peek().len });
     tokens.Pop();
@@ -569,7 +570,7 @@ void WatParser::ParseLabel(Queue<WatToken>& tokens)
 
 bool WatParser::CheckLabel(Queue<WatToken>& tokens)
 {
-  if(tokens.Peek().id == TOKEN_NAME)
+  if(tokens.Peek().id == WatTokens::NAME)
   {
     WatToken t = tokens.Pop();
     return stack.Peek() == StringRef{ t.pos, t.len };
@@ -581,38 +582,38 @@ bool WatParser::CheckLabel(Queue<WatToken>& tokens)
 int WatParser::ParseBlockType(Queue<WatToken>& tokens, varsint7& out)
 {
   out = TE_void;
-  if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_RESULT)
+  if(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::RESULT)
   {
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-    EXPECTED(tokens, TOKEN_RESULT, ERR_WAT_EXPECTED_RESULT);
+    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+    EXPECTED(tokens, WatTokens::RESULT, ERR_WAT_EXPECTED_RESULT);
 
-    if(tokens.Peek().id != TOKEN_CLOSE)
+    if(tokens.Peek().id != WatTokens::CLOSE)
     {
       if(!(out = WatValType(tokens.Pop().id)))
         return ERR_WAT_EXPECTED_VALTYPE;
 
-      if(tokens.Peek().id != TOKEN_CLOSE)
+      if(tokens.Peek().id != WatTokens::CLOSE)
         return ERR_MULTIPLE_RETURN_VALUES;
     }
 
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
-  if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_RESULT)
+  if(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::RESULT)
     return ERR_MULTIPLE_RETURN_VALUES;
   return ERR_SUCCESS;
 }
 
 int WatParser::ParseExpression(Queue<WatToken>& tokens, FunctionBody& f, FunctionType& sig, varuint32 index)
 {
-  EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+  EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
 
   int err;
   varsint7 blocktype;
   switch(tokens[0].id)
   {
-  case TOKEN_BLOCK:
-  case TOKEN_LOOP:
+  case WatTokens::BLOCK:
+  case WatTokens::LOOP:
   {
     WatToken t = tokens.Pop();
     ParseLabel(tokens);
@@ -620,7 +621,7 @@ int WatParser::ParseExpression(Queue<WatToken>& tokens, FunctionBody& f, Functio
       return err;
 
     {
-      Instruction op = { t.id == TOKEN_BLOCK ? (uint8_t)OP_block : (uint8_t)OP_loop };
+      Instruction op = { t.id == WatTokens::BLOCK ? (uint8_t)OP_block : (uint8_t)OP_loop };
 
       op.immediates[0]._varsint7 = blocktype;
       op.line                    = t.line;
@@ -629,7 +630,7 @@ int WatParser::ParseExpression(Queue<WatToken>& tokens, FunctionBody& f, Functio
         return err;
     }
 
-    while(tokens.Peek().id != TOKEN_CLOSE)
+    while(tokens.Peek().id != WatTokens::CLOSE)
       if(err = ParseInstruction(tokens, f, sig, index))
         return err;
 
@@ -642,14 +643,14 @@ int WatParser::ParseExpression(Queue<WatToken>& tokens, FunctionBody& f, Functio
     stack.Pop();
     break;
   }
-  case TOKEN_IF:
+  case WatTokens::IF:
   {
     WatToken t = tokens.Pop();
     ParseLabel(tokens);
     if(err = ParseBlockType(tokens, blocktype))
       return err;
 
-    while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id != TOKEN_THEN)
+    while(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id != WatTokens::THEN)
       if(err = ParseExpression(tokens, f, sig, index))
         return err;
 
@@ -665,33 +666,33 @@ int WatParser::ParseExpression(Queue<WatToken>& tokens, FunctionBody& f, Functio
     }
   }
 
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN); // There must always be a Then branch
-    EXPECTED(tokens, TOKEN_THEN, ERR_WAT_EXPECTED_THEN);
+    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN); // There must always be a Then branch
+    EXPECTED(tokens, WatTokens::THEN, ERR_WAT_EXPECTED_THEN);
 
-    while(tokens.Peek().id != TOKEN_CLOSE)
+    while(tokens.Peek().id != WatTokens::CLOSE)
       if(err = ParseInstruction(tokens, f, sig, index))
         return err;
 
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
-    if(tokens.Peek().id == TOKEN_OPEN) // Must be an else branch if it exists
+    if(tokens.Peek().id == WatTokens::OPEN) // Must be an else branch if it exists
     {
-      EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+      EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
 
       WatToken t     = tokens.Peek();
       Instruction op = { OP_else };
-      EXPECTED(tokens, TOKEN_ELSE, ERR_WAT_EXPECTED_ELSE);
+      EXPECTED(tokens, WatTokens::ELSE, ERR_WAT_EXPECTED_ELSE);
 
       op.line   = t.line;
       op.column = t.column;
       if(err = AppendArray<Instruction>(env, op, f.body, f.n_body))
         return err;
 
-      while(tokens.Peek().id != TOKEN_CLOSE)
+      while(tokens.Peek().id != WatTokens::CLOSE)
         if(err = ParseInstruction(tokens, f, sig, index))
           return err;
 
-      EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
     }
 
     {
@@ -713,7 +714,7 @@ int WatParser::ParseExpression(Queue<WatToken>& tokens, FunctionBody& f, Functio
       return err;
 
     // Expressions are folded instructions, so we must unfold them before inserting the operator
-    while(tokens[0].id != TOKEN_CLOSE)
+    while(tokens[0].id != WatTokens::CLOSE)
       if(err = ParseExpression(tokens, f, sig, index))
         return err;
 
@@ -725,7 +726,7 @@ int WatParser::ParseExpression(Queue<WatToken>& tokens, FunctionBody& f, Functio
   }
   }
 
-  EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+  EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   return ERR_SUCCESS;
 }
 
@@ -735,10 +736,10 @@ int WatParser::ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, Functi
   varsint7 blocktype;
   switch(tokens[0].id)
   {
-  case TOKEN_OPEN: // This must be an expression
+  case WatTokens::OPEN: // This must be an expression
     return ParseExpression(tokens, f, sig, index);
-  case TOKEN_BLOCK:
-  case TOKEN_LOOP:
+  case WatTokens::BLOCK:
+  case WatTokens::LOOP:
   {
     WatToken t = tokens.Pop();
     ParseLabel(tokens);
@@ -746,7 +747,7 @@ int WatParser::ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, Functi
       return err;
 
     {
-      Instruction op = { t.id == TOKEN_BLOCK ? (uint8_t)OP_block : (uint8_t)OP_loop };
+      Instruction op = { t.id == WatTokens::BLOCK ? (uint8_t)OP_block : (uint8_t)OP_loop };
 
       op.immediates[0]._varsint7 = blocktype;
       op.line                    = t.line;
@@ -755,11 +756,11 @@ int WatParser::ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, Functi
         return err;
     }
 
-    while(tokens.Peek().id != TOKEN_END)
+    while(tokens.Peek().id != WatTokens::END)
       if(err = ParseInstruction(tokens, f, sig, index))
         return err;
 
-    EXPECTED(tokens, TOKEN_END, ERR_WAT_EXPECTED_END);
+    EXPECTED(tokens, WatTokens::END, ERR_WAT_EXPECTED_END);
 
     if(!CheckLabel(tokens))
       return ERR_WAT_LABEL_MISMATCH;
@@ -776,7 +777,7 @@ int WatParser::ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, Functi
     stack.Pop();
     break;
   }
-  case TOKEN_IF:
+  case WatTokens::IF:
   {
     WatToken t = tokens.Pop();
     ParseLabel(tokens);
@@ -794,12 +795,12 @@ int WatParser::ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, Functi
         return err;
     }
 
-    while(tokens.Peek().id != TOKEN_ELSE && tokens.Peek().id != TOKEN_END)
+    while(tokens.Peek().id != WatTokens::ELSE && tokens.Peek().id != WatTokens::END)
       if(err = ParseInstruction(tokens, f, sig, index))
         return err;
 
     t = tokens.Pop();
-    if(t.id == TOKEN_ELSE) // Handle else branch
+    if(t.id == WatTokens::ELSE) // Handle else branch
     {
       if(!CheckLabel(tokens))
         return ERR_WAT_LABEL_MISMATCH;
@@ -811,11 +812,11 @@ int WatParser::ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, Functi
       if(err = AppendArray<Instruction>(env, op, f.body, f.n_body))
         return err;
 
-      while(tokens.Peek().id != TOKEN_END)
+      while(tokens.Peek().id != WatTokens::END)
         if(err = ParseInstruction(tokens, f, sig, index))
           return err;
 
-      EXPECTED(tokens, TOKEN_END, ERR_WAT_EXPECTED_END);
+      EXPECTED(tokens, WatTokens::END, ERR_WAT_EXPECTED_END);
     }
   }
 
@@ -853,10 +854,10 @@ int WatParser::InlineImportExport(const Environment& env, Module& m, Queue<WatTo
                                   varuint7 kind, Import** out)
 {
   int err;
-  while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_EXPORT)
+  while(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::EXPORT)
   {
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-    EXPECTED(tokens, TOKEN_EXPORT, ERR_WAT_EXPECTED_EXPORT);
+    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+    EXPECTED(tokens, WatTokens::EXPORT, ERR_WAT_EXPECTED_EXPORT);
 
     Export e = {};
     e.kind   = kind;
@@ -869,12 +870,12 @@ int WatParser::InlineImportExport(const Environment& env, Module& m, Queue<WatTo
     m.knownsections |= (1 << WASM_SECTION_EXPORT);
     if(err = AppendArray<Export>(env, e, m.exportsection.exports, m.exportsection.n_exports))
       return err;
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
-  if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_IMPORT)
+  if(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::IMPORT)
   {
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-    EXPECTED(tokens, TOKEN_IMPORT, ERR_WAT_EXPECTED_IMPORT);
+    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+    EXPECTED(tokens, WatTokens::IMPORT, ERR_WAT_EXPECTED_IMPORT);
 
     Import i = {};
     if(err = WatString(env, i.module_name, tokens.Pop()))
@@ -898,7 +899,7 @@ int WatParser::InlineImportExport(const Environment& env, Module& m, Queue<WatTo
     case WASM_KIND_GLOBAL: *out = m.importsection.imports + m.importsection.memories + *index; break;
     }
 
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
   return ERR_SUCCESS;
@@ -937,13 +938,13 @@ int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringRe
       return err;
 
   // Read in all the locals
-  while(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_LOCAL)
+  while(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::LOCAL)
   {
     WatToken src = tokens[1];
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-    EXPECTED(tokens, TOKEN_LOCAL, ERR_WAT_EXPECTED_LOCAL);
+    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+    EXPECTED(tokens, WatTokens::LOCAL, ERR_WAT_EXPECTED_LOCAL);
 
-    if(tokens.Peek().id == TOKEN_NAME)
+    if(tokens.Peek().id == WatTokens::NAME)
     {
       if(tokens.Peek().len > numeric_limits<varuint32>::max())
         return ERR_WAT_OUT_OF_RANGE;
@@ -959,7 +960,7 @@ int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringRe
     }
     else // Otherwise can have zero or more val_types
     {
-      while(tokens[0].id != TOKEN_CLOSE)
+      while(tokens[0].id != WatTokens::CLOSE)
       {
         varuint32 sz = body.n_locals; // n_locals is the count, but we don't want to increment it yet
         if(err = AppendArray<DebugInfo>(env, DebugInfo{ src.line, src.column }, body.local_names, sz))
@@ -969,12 +970,12 @@ int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringRe
       }
     }
 
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
   // Read in all instructions
   assert(stack.Size() == 0);
-  while(tokens.Peek().id != TOKEN_CLOSE)
+  while(tokens.Peek().id != WatTokens::CLOSE)
   {
     if(err = ParseInstruction(tokens, body, desc, *index))
       return err;
@@ -999,7 +1000,7 @@ int WatParser::ParseResizableLimits(ResizableLimits& limits, Queue<WatToken>& to
   int err = ResolveTokenu32(tokens.Pop(), numbuf, limits.minimum);
   if(err)
     return err;
-  if(tokens.Peek().id == TOKEN_NUMBER)
+  if(tokens.Peek().id == WatTokens::NUMBER)
   {
     if(err = ResolveTokenu32(tokens.Pop(), numbuf, limits.maximum))
       return err;
@@ -1015,7 +1016,7 @@ int WatParser::ParseTableDesc(TableDesc& t, Queue<WatToken>& tokens)
   if(err = ParseResizableLimits(t.resizable, tokens))
     return err;
 
-  EXPECTED(tokens, TOKEN_FUNCREF, ERR_WAT_EXPECTED_FUNCREF);
+  EXPECTED(tokens, WatTokens::FUNCREF, ERR_WAT_EXPECTED_FUNCREF);
 
   t.element_type = TE_funcref;
   return ERR_SUCCESS;
@@ -1035,16 +1036,16 @@ int WatParser::ParseTable(Queue<WatToken>& tokens, varuint32* index)
   TableDesc table = { 0 };
   switch(tokens.Peek().id)
   {
-  case TOKEN_NUMBER:
+  case WatTokens::NUMBER:
     if(err = ParseTableDesc(table, tokens))
       return err;
     break;
   default:
-    EXPECTED(tokens, TOKEN_FUNCREF, ERR_WAT_EXPECTED_FUNCREF);
+    EXPECTED(tokens, WatTokens::FUNCREF, ERR_WAT_EXPECTED_FUNCREF);
 
     table.element_type    = TE_funcref;
     table.resizable.flags = 0;
-    deferred.Push(WatParser::DeferWatAction{ -TOKEN_ELEM, { TOKEN_NONE }, tokens.GetPosition(), *index });
+    deferred.Push(WatParser::DeferWatAction{ -(int)WatTokens::ELEM, { WatTokens::NONE }, tokens.GetPosition(), *index });
     WatSkipSection(tokens); // Defer element section to after we know we've loaded everything.
   }
 
@@ -1065,7 +1066,7 @@ int WatParser::ParseInitializerInstruction(Queue<WatToken>& tokens, Instruction&
   }
   else
   {
-    while(tokens.Peek().id != TOKEN_CLOSE)
+    while(tokens.Peek().id != WatTokens::CLOSE)
     {
       if(err = ParseInstruction(tokens, blank, typeblank, 0))
         return err;
@@ -1107,7 +1108,7 @@ int WatParser::ParseInitializer(Queue<WatToken>& tokens, Instruction& op)
   if(err < 0)
     return err;
 
-  if(tokens.Peek().id != TOKEN_CLOSE)
+  if(tokens.Peek().id != WatTokens::CLOSE)
     return ERR_INVALID_INITIALIZER;
 
   return ERR_SUCCESS;
@@ -1115,15 +1116,15 @@ int WatParser::ParseInitializer(Queue<WatToken>& tokens, Instruction& op)
 
 int WatParser::ParseGlobalDesc(GlobalDesc& g, Queue<WatToken>& tokens)
 {
-  if(tokens.Peek().id == TOKEN_OPEN)
+  if(tokens.Peek().id == WatTokens::OPEN)
   {
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-    EXPECTED(tokens, TOKEN_MUT, ERR_WAT_EXPECTED_MUT);
+    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+    EXPECTED(tokens, WatTokens::MUT, ERR_WAT_EXPECTED_MUT);
     g.mutability = true;
     if(!(g.type = WatValType(tokens.Pop().id)))
       return ERR_WAT_EXPECTED_VALTYPE;
 
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
   else
   {
@@ -1172,17 +1173,17 @@ int WatParser::ParseMemory(Queue<WatToken>& tokens, varuint32* index)
 
   MemoryDesc mem = { 0 };
 
-  if(tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_DATA)
+  if(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::DATA)
   {
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-    EXPECTED(tokens, TOKEN_DATA, ERR_WAT_EXPECTED_TOKEN);
+    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+    EXPECTED(tokens, WatTokens::DATA, ERR_WAT_EXPECTED_TOKEN);
     DataInit init = { 0 };
     init.index    = *index;
     init.offset   = Instruction{ OP_i32_const, 0 };
 
-    while(tokens[0].id != TOKEN_CLOSE)
+    while(tokens[0].id != WatTokens::CLOSE)
     {
-      if(tokens[0].id != TOKEN_STRING)
+      if(tokens[0].id != WatTokens::STRING)
         return ERR_WAT_EXPECTED_STRING;
       if(err = WatString(env, init.data, tokens.Pop()))
         return err;
@@ -1194,7 +1195,7 @@ int WatParser::ParseMemory(Queue<WatToken>& tokens, varuint32* index)
 
     mem.limits.flags   = 0;
     mem.limits.minimum = init.data.size();
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
   else if(err = ParseMemoryDesc(mem, tokens))
     return err;
@@ -1205,7 +1206,7 @@ int WatParser::ParseMemory(Queue<WatToken>& tokens, varuint32* index)
 
 int WatParser::AddName(kh_indexname_t* h, WatToken t, varuint32 index)
 {
-  if(t.id == TOKEN_NAME)
+  if(t.id == WatTokens::NAME)
   {
     int r;
     khiter_t iter = kh_put_indexname(h, StringRef{ t.pos, t.len }, &r);
@@ -1227,34 +1228,34 @@ int WatParser::ParseImport(Queue<WatToken>& tokens)
   if(err = WatString(env, i.export_name, tokens.Pop()))
     return err;
 
-  EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+  EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
 
   WatToken t           = tokens.Pop();
   WatToken name        = GetWatNameToken(tokens);
   kh_indexname_t* hash = 0;
   switch(t.id)
   {
-  case TOKEN_FUNC:
+  case WatTokens::FUNC:
     i.kind = WASM_KIND_FUNCTION;
-    if(name.id == TOKEN_NAME && (err = ParseName(env, i.func_desc.debug.name, name)))
+    if(name.id == WatTokens::NAME && (err = ParseName(env, i.func_desc.debug.name, name)))
       return err;
     if(err = ParseTypeUse(tokens, i.func_desc.type_index, &i.func_desc.param_names, false))
       return err;
     hash = funchash;
     break;
-  case TOKEN_GLOBAL:
+  case WatTokens::GLOBAL:
     i.kind = WASM_KIND_GLOBAL;
     if(err = ParseGlobalDesc(i.global_desc, tokens))
       return err;
     hash = globalhash;
     break;
-  case TOKEN_TABLE:
+  case WatTokens::TABLE:
     i.kind = WASM_KIND_TABLE;
     if(err = ParseTableDesc(i.table_desc, tokens))
       return err;
     hash = tablehash;
     break;
-  case TOKEN_MEMORY:
+  case WatTokens::MEMORY:
     i.kind = WASM_KIND_MEMORY;
     if(err = ParseMemoryDesc(i.mem_desc, tokens))
       return err;
@@ -1262,7 +1263,7 @@ int WatParser::ParseImport(Queue<WatToken>& tokens)
     break;
   default: return ERR_WAT_EXPECTED_KIND;
   }
-  EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+  EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
   varuint32 index;
   if(err = AppendImport(m, i, &index))
@@ -1278,28 +1279,28 @@ int WatParser::ParseExport(Queue<WatToken>& tokens)
   if(err = WatString(env, e.name, tokens.Pop()))
     return err;
 
-  EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+  EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
   switch(tokens.Pop().id)
   {
-  case TOKEN_FUNC:
+  case WatTokens::FUNC:
     e.kind  = WASM_KIND_FUNCTION;
     e.index = GetFromHash(funchash, tokens.Pop());
     break;
-  case TOKEN_GLOBAL:
+  case WatTokens::GLOBAL:
     e.kind  = WASM_KIND_GLOBAL;
     e.index = GetFromHash(globalhash, tokens.Pop());
     break;
-  case TOKEN_TABLE:
+  case WatTokens::TABLE:
     e.kind  = WASM_KIND_TABLE;
     e.index = GetFromHash(tablehash, tokens.Pop());
     break;
-  case TOKEN_MEMORY:
+  case WatTokens::MEMORY:
     e.kind  = WASM_KIND_MEMORY;
     e.index = GetFromHash(memoryhash, tokens.Pop());
     break;
   default: return ERR_WAT_EXPECTED_KIND;
   }
-  EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+  EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
   m.knownsections |= (1 << WASM_SECTION_EXPORT);
   return AppendArray(env, e, m.exportsection.exports, m.exportsection.n_exports);
@@ -1307,19 +1308,19 @@ int WatParser::ParseExport(Queue<WatToken>& tokens)
 
 int WatParser::ParseElemData(Queue<WatToken>& tokens, varuint32& index, Instruction& op, kh_indexname_t* hash)
 {
-  if(tokens[0].id == TOKEN_NUMBER || tokens[0].id == TOKEN_NAME)
+  if(tokens[0].id == WatTokens::NUMBER || tokens[0].id == WatTokens::NAME)
     index = GetFromHash(hash, tokens.Pop());
 
   if(index == (varuint32)~0)
     return ERR_WAT_INVALID_VAR;
 
-  if(tokens[0].id == TOKEN_OPEN)
+  if(tokens[0].id == WatTokens::OPEN)
   {
-    bool offset = tokens.Size() > 1 && tokens[0].id == TOKEN_OPEN && tokens[1].id == TOKEN_OFFSET;
+    bool offset = tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::OFFSET;
     if(offset)
     {
-      EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-      EXPECTED(tokens, TOKEN_OFFSET, ERR_WAT_EXPECTED_TOKEN);
+      EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+      EXPECTED(tokens, WatTokens::OFFSET, ERR_WAT_EXPECTED_TOKEN);
     }
 
     int err = ParseInitializerInstruction(tokens, op, !offset); // Without an offset wrapper, only an expression is allowed
@@ -1327,7 +1328,7 @@ int WatParser::ParseElemData(Queue<WatToken>& tokens, varuint32& index, Instruct
       return err;
 
     if(offset)
-      EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
   return ERR_SUCCESS;
@@ -1335,7 +1336,7 @@ int WatParser::ParseElemData(Queue<WatToken>& tokens, varuint32& index, Instruct
 
 int WatParser::ParseElem(TableInit& e, Queue<WatToken>& tokens)
 {
-  while(tokens[0].id != TOKEN_CLOSE)
+  while(tokens[0].id != WatTokens::CLOSE)
   {
     int err = AppendArray(env, GetFromHash(funchash, tokens.Pop()), e.elements, e.n_elements);
     if(err)
@@ -1355,9 +1356,9 @@ int WatParser::ParseData(Queue<WatToken>& tokens)
   if(err = ParseElemData(tokens, d.index, d.offset, memoryhash))
     return err;
 
-  while(tokens[0].id != TOKEN_CLOSE)
+  while(tokens[0].id != WatTokens::CLOSE)
   {
-    if(tokens[0].id != TOKEN_STRING)
+    if(tokens[0].id != WatTokens::STRING)
       return ERR_WAT_EXPECTED_STRING;
     if(err = WatString(env, d.data, tokens.Pop()))
       return err;
@@ -1368,13 +1369,13 @@ int WatParser::ParseData(Queue<WatToken>& tokens)
 }
 
 // Skips over an entire section of tokens by counting paranthesis, assuming they are well-formed
-void innative::WatSkipSection(Queue<WatToken>& tokens, int count)
+void innative::WatSkipSection(Queue<WatToken>& tokens, ptrdiff_t count)
 {
   while(tokens.Size())
   {
-    if(tokens[0].id == TOKEN_OPEN)
+    if(tokens[0].id == WatTokens::OPEN)
       ++count;
-    else if(tokens[0].id == TOKEN_CLOSE)
+    else if(tokens[0].id == WatTokens::CLOSE)
     {
       if(!--count)
         break; // Deliberately do not pop the CLOSE token because we usually need it afterwards
@@ -1387,44 +1388,44 @@ int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens,
 {
   int err;
   m = { WASM_MAGIC_COOKIE, WASM_MAGIC_VERSION, 0 };
-  if(name.s && (err = ParseName(env, m.name, WatToken{ TOKEN_NAME, (const char*)name.s, 0, 0, (int64_t)name.len })))
+  if(name.s && (err = ParseName(env, m.name, WatToken{ WatTokens::NAME, (const char*)name.s, 0, 0, (int64_t)name.len })))
     return err;
 
-  if((tokens.Peek().id == TOKEN_NAME) && (err = ParseName(env, m.name, internalname = tokens.Pop())))
+  if((tokens.Peek().id == WatTokens::NAME) && (err = ParseName(env, m.name, internalname = tokens.Pop())))
     return err;
 
   WatParser state(env, m);
 
   WatToken t;
   size_t restore = tokens.GetPosition();
-  while(tokens.Size() > 0 && tokens.Peek().id != TOKEN_CLOSE)
+  while(tokens.Size() > 0 && tokens.Peek().id != WatTokens::CLOSE)
   {
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
     t = tokens.Pop();
     switch(t.id) // This initial pass is for types and function types only
     {
-    case TOKEN_TYPE:
+    case WatTokens::TYPE:
       if(err = state.ParseIndexProcess<&WatParser::ParseFunctionType>(tokens, state.typehash))
         return err;
       break;
     default: WatSkipSection(tokens); break;
     }
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
   // This is the main pass for functions/imports/etc. and also identifies illegal tokens
   tokens.SetPosition(restore);
-  while(tokens.Size() > 0 && tokens.Peek().id != TOKEN_CLOSE)
+  while(tokens.Size() > 0 && tokens.Peek().id != WatTokens::CLOSE)
   {
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
     t = tokens.Pop();
     switch(t.id)
     {
-    case TOKEN_FUNC:
+    case WatTokens::FUNC:
     {
       khiter_t iter  = kh_end(state.funchash);
       WatToken fname = GetWatNameToken(tokens);
-      if(fname.id == TOKEN_NAME)
+      if(fname.id == WatTokens::NAME)
       {
         int r;
         iter = kh_put_indexname(state.funchash, StringRef{ fname.pos, fname.len }, &r);
@@ -1439,7 +1440,7 @@ int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens,
       if(err = state.ParseFunction(tokens, &index, ref))
         return err;
 
-      if(fname.id == TOKEN_NAME)
+      if(fname.id == WatTokens::NAME)
       {
         if(index < m.importsection.functions)
           state.ParseName(env, m.importsection.imports[index].func_desc.debug.name, fname);
@@ -1451,45 +1452,45 @@ int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens,
         kh_val(state.funchash, iter) = index;
       break;
     }
-    case TOKEN_IMPORT:
+    case WatTokens::IMPORT:
       if(err = state.ParseImport(tokens))
         return err;
       break;
-    case TOKEN_TABLE:
+    case WatTokens::TABLE:
       if(err = state.ParseIndexProcess<&WatParser::ParseTable>(tokens, state.tablehash))
         return err;
       break;
-    case TOKEN_MEMORY:
+    case WatTokens::MEMORY:
       if(err = state.ParseIndexProcess<&WatParser::ParseMemory>(tokens, state.memoryhash))
         return err;
       break;
-    case TOKEN_GLOBAL:
+    case WatTokens::GLOBAL:
       if(err = state.ParseIndexProcess<&WatParser::ParseGlobal>(tokens, state.globalhash))
         return err;
       break;
-    case TOKEN_EXPORT:
-    case TOKEN_TYPE:
-    case TOKEN_ELEM:
-    case TOKEN_DATA:
-    case TOKEN_START: WatSkipSection(tokens); break;
+    case WatTokens::EXPORT:
+    case WatTokens::TYPE:
+    case WatTokens::ELEM:
+    case WatTokens::DATA:
+    case WatTokens::START: WatSkipSection(tokens); break;
     default: return ERR_WAT_INVALID_TOKEN;
     }
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
   // This pass resolves exports, elem, data, and the start function, to minimize deferred actions
   tokens.SetPosition(restore);
-  while(tokens.Size() > 0 && tokens.Peek().id != TOKEN_CLOSE)
+  while(tokens.Size() > 0 && tokens.Peek().id != WatTokens::CLOSE)
   {
-    EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
+    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
     t = tokens.Pop();
     switch(t.id)
     {
-    case TOKEN_EXPORT:
+    case WatTokens::EXPORT:
       if(err = state.ParseExport(tokens))
         return err;
       break;
-    case TOKEN_ELEM:
+    case WatTokens::ELEM:
     {
       TableInit init = { 0 };
       if(err = state.ParseElemData(tokens, init.index, init.offset, state.tablehash))
@@ -1498,13 +1499,13 @@ int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens,
         return err;
       break;
     }
-    case TOKEN_DATA:
+    case WatTokens::DATA:
       if(err = state.ParseData(tokens))
         return err;
       break;
-    case TOKEN_START:
+    case WatTokens::START:
       m.knownsections |= (1 << WASM_SECTION_START);
-      if(tokens[0].id != TOKEN_NUMBER && tokens[0].id != TOKEN_NAME)
+      if(tokens[0].id != WatTokens::NUMBER && tokens[0].id != WatTokens::NAME)
         return ERR_WAT_EXPECTED_VAR;
       m.start = state.GetFromHash(state.funchash, tokens.Pop());
       if(m.start == (varuint32)~0)
@@ -1512,7 +1513,7 @@ int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens,
       break;
     default: WatSkipSection(tokens); break;
     }
-    EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
   auto procRef = [](WatParser& s, Module& mod, varuint32 e) {
@@ -1531,19 +1532,19 @@ int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens,
   {
     switch(state.deferred[0].id)
     {
-    case -TOKEN_ELEM:
+    case -(int)WatTokens::ELEM:
     {
       size_t cache = tokens.GetPosition();
       tokens.SetPosition(state.deferred[0].func);
 
       TableInit init = { 0 };
-      init.index     = state.deferred[0].index;
+      init.index     = (varuint32)state.deferred[0].index;
       init.offset    = Instruction{ OP_i32_const, 0 };
 
-      EXPECTED(tokens, TOKEN_OPEN, ERR_WAT_EXPECTED_OPEN);
-      EXPECTED(tokens, TOKEN_ELEM, ERR_WAT_EXPECTED_ELEM);
+      EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+      EXPECTED(tokens, WatTokens::ELEM, ERR_WAT_EXPECTED_ELEM);
       err = state.ParseElem(init, tokens);
-      EXPECTED(tokens, TOKEN_CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
       state.m.table.tables[state.deferred[0].index].resizable.minimum = init.n_elements;
       tokens.SetPosition(cache);
@@ -1578,17 +1579,17 @@ int innative::ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t 
     return err;
 
   // If we don't detect "(module", just assume it's an inline module
-  if(tokens[0].id != TOKEN_OPEN || tokens[1].id != TOKEN_MODULE)
+  if(tokens[0].id != WatTokens::OPEN || tokens[1].id != WatTokens::MODULE)
     err = WatParser::ParseModule(env, m, tokens, name, nametoken);
   else
   {
-    if(tokens.Size() == 0 || tokens.Pop().id != TOKEN_OPEN)
+    if(tokens.Size() == 0 || tokens.Pop().id != WatTokens::OPEN)
       err = ERR_WAT_EXPECTED_OPEN;
-    else if(tokens.Size() == 0 || tokens.Pop().id != TOKEN_MODULE)
+    else if(tokens.Size() == 0 || tokens.Pop().id != WatTokens::MODULE)
       err = ERR_WAT_EXPECTED_MODULE;
     else if(!(err = WatParser::ParseModule(env, m, tokens, name, nametoken)))
     {
-      if(tokens.Size() == 0 || tokens.Pop().id != TOKEN_CLOSE)
+      if(tokens.Size() == 0 || tokens.Pop().id != WatTokens::CLOSE)
         err = ERR_WAT_EXPECTED_CLOSE;
     }
   }

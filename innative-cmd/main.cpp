@@ -105,20 +105,20 @@ void usage()
     << std::endl;
 }
 
-void printerr(FILE* f, const char* prefix, int err)
+void printerr(IRExports& exports, FILE* f, const char* prefix, int err)
 {
-  const char* errstring = innative_error_string(err);
+  const char* errstring = (*exports.GetErrorString)(err);
   if(errstring)
     fprintf(f, "%s: %s\n", prefix, errstring);
   else
     fprintf(f, "%s: %i\n", prefix, err);
 }
 
-void dump_validation_errors(Environment* env)
+void dump_validation_errors(IRExports& exports, Environment* env)
 {
   for(ValidationError* error = env->errors; error != nullptr; error = error->next)
   {
-    const char* errstring = innative_error_string(error->code);
+    const char* errstring = (*exports.GetErrorString)(error->code);
     if(errstring)
       fprintf(env->log, "Error %s: %s\n", errstring, error->error);
     else
@@ -314,19 +314,20 @@ int main(int argc, char* argv[])
     return innative_compile_llvm(inputs.data(), inputs.size(), flags, out.u8string().c_str(), stdout);
 
   IRExports exports = { 0 };
-  if(generate) // If we are generating a loader, we replace all of the normal functions to reroute the resources into the
-               // EXE file
+
+  // If we are generating a loader, we replace all of the normal functions to reroute the resources into the EXE file
+  if(generate)
   {
     if(run)
     {
       std::cout << "You can't run a file dynamically and also generate a loader, make up your mind!" << std::endl;
       return ERR_COMMAND_LINE_CONFLICT;
     }
-
 #ifdef IN_PLATFORM_WIN32
     exports.CreateEnvironment = [](unsigned int modules, unsigned int maxthreads, const char* arg0) -> Environment* {
       Environment* env = (Environment*)calloc(1, sizeof(Environment));
-      env->log         = stdout;
+      if(env)
+        env->log = stdout;
       return env;
     };
     exports.AddModule = [](Environment* env, const void* data, uint64_t size, const char* name, int* err) {
@@ -342,226 +343,247 @@ int main(int argc, char* argv[])
       else if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_MODULE, name, 0, (void*)data, size))
         *err = ERR_FATAL_RESOURCE_ERROR;
     };
-    exports.AddWhitelist = [](Environment * env, const char* module_name, const char* export_name) -> enum IN_ERROR {
-      if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_WHITELIST, module_name, 0, (void*)export_name,
-                          strlen(export_name) + 1)){ std::cout << "Failed to add whitelist entry: "
-                                                               << (!module_name ? "" : module_name) << "|" << export_name
-                                                               << std::endl;
-                                                     return ERR_FATAL_FILE_ERROR; }
-    return ERR_SUCCESS;
-  };
-  exports.AddEmbedding = [](Environment * env, int tag, const void* data, uint64_t size) -> enum IN_ERROR {
-    char buf[20]; _itoa_s(tag, buf, 10);
-    if(!size){ long sz = 0; path src = u8path((const char*)data); FILE * f; FOPEN(f, src.c_str(), "rb");
-               if(!f){ src = (!env->libpath ? GetProgramPath() : u8path(env->libpath)) / src; }
-  else fclose(f);
 
-  auto file = LoadFile(src.c_str(), sz);
-  if(!sz)
-    return ERR_FATAL_FILE_ERROR;
-  if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, file.get(), sz))
-    return ERR_FATAL_RESOURCE_ERROR;
-}
-else if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, (void*)data,
-                         size)) return ERR_FATAL_RESOURCE_ERROR;
-return ERR_SUCCESS;
-}
-;
-exports.FinalizeEnvironment = [](Environment * env) -> enum IN_ERROR {
-  if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_FLAGS, "flags", 0, &env->flags,
-                      sizeof(env->flags))) return ERR_FATAL_RESOURCE_ERROR;
-  if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_FLAGS, "optimize", 0, &env->optimize,
-                      sizeof(env->optimize))) return ERR_FATAL_RESOURCE_ERROR;
-  if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_FLAGS, "features", 0, &env->features,
-                      sizeof(env->features))) return ERR_FATAL_RESOURCE_ERROR;
-  return ERR_SUCCESS;
-};
-exports.Compile            = [](Environment * env, const char* file) -> enum IN_ERROR { return ERR_SUCCESS; };
-exports.DestroyEnvironment = [](Environment* env) {
-  if(!EndUpdateResourceA((HANDLE)env->alloc, FALSE))
-    std::cout << "Failed to end resource update!" << std::endl;
-};
+    exports.AddWhitelist = [](Environment* env, const char* module_name, const char* export_name) -> IN_ERROR {
+      if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_WHITELIST, module_name, 0, (void*)export_name,
+                          strlen(export_name) + 1))
+      {
+        std::cout << "Failed to add whitelist entry: " << (!module_name ? "" : module_name) << "|" << export_name
+                  << std::endl;
+        return ERR_FATAL_FILE_ERROR;
+      }
+      return ERR_SUCCESS;
+    };
+    exports.AddEmbedding = [](Environment* env, int tag, const void* data, uint64_t size) -> IN_ERROR {
+      char buf[20];
+      _itoa_s(tag, buf, 10);
+      if(!size)
+      {
+        long sz  = 0;
+        path src = u8path((const char*)data);
+        FILE* f;
+        FOPEN(f, src.c_str(), "rb");
+
+        if(!f)
+        {
+          src = (!env->libpath ? GetProgramPath() : u8path(env->libpath)) / src;
+        }
+        else
+          fclose(f);
+
+        auto file = LoadFile(src.c_str(), sz);
+        if(!sz)
+          return ERR_FATAL_FILE_ERROR;
+        if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, file.get(), sz))
+          return ERR_FATAL_RESOURCE_ERROR;
+      }
+      else if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, (void*)data, size))
+        return ERR_FATAL_RESOURCE_ERROR;
+      return ERR_SUCCESS;
+    };
+    exports.FinalizeEnvironment = [](Environment* env) -> IN_ERROR {
+      if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_FLAGS, "flags", 0, &env->flags, sizeof(env->flags)))
+        return ERR_FATAL_RESOURCE_ERROR;
+      if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_FLAGS, "optimize", 0, &env->optimize, sizeof(env->optimize)))
+        return ERR_FATAL_RESOURCE_ERROR;
+      if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_FLAGS, "features", 0, &env->features, sizeof(env->features)))
+        return ERR_FATAL_RESOURCE_ERROR;
+      return ERR_SUCCESS;
+    };
+    exports.Compile            = [](Environment* env, const char* file) -> IN_ERROR { return ERR_SUCCESS; };
+    exports.DestroyEnvironment = [](Environment* env) {
+      if(!EndUpdateResourceA((HANDLE)env->alloc, FALSE))
+        std::cout << "Failed to end resource update!" << std::endl;
+    };
 
 #ifdef IN_DEBUG
-std::string exe = "innative-loader-d" IN_EXE_EXTENSION;
+    std::string exe = "innative-loader-d" IN_EXE_EXTENSION;
 #else
-std::string exe = "innative-loader" IN_EXE_EXTENSION;
+    std::string exe = "innative-loader" IN_EXE_EXTENSION;
 #endif
-if(!copy_file(GetProgramPath() / exe, out, copy_options::overwrite_existing))
-{
-  std::cout << "Could not find or copy loader EXE!" << std::endl;
-  return ERR_MISSING_LOADER;
-}
+    if(!copy_file(GetProgramPath() / exe, out, copy_options::overwrite_existing))
+    {
+      std::cout << "Could not find or copy loader EXE!" << std::endl;
+      return ERR_MISSING_LOADER;
+    }
 #endif
-}
-else innative_runtime(&exports);
+  }
+  else
+    innative_runtime(&exports);
 
-// Then create the runtime environment with the module count.
-Environment* env = (*exports.CreateEnvironment)(inputs.size(), 0, (!argc ? 0 : argv[0]));
-env->flags       = flags;
-env->features    = ENV_FEATURE_ALL;
-env->optimize    = optimize;
+  // Make sure the functions we're going to use actually exist
+  if(!exports.CreateEnvironment || !exports.DestroyEnvironment || !exports.AddModule || !exports.AddWhitelist ||
+     !exports.AddEmbedding || !exports.FinalizeEnvironment || !exports.Compile || !exports.LoadAssembly ||
+     !exports.FreeAssembly || !exports.GetErrorString || !exports.CompileScript || !exports.SerializeModule)
+    return ERR_UNKNOWN_ENVIRONMENT_ERROR;
+
+  // Then create the runtime environment with the module count.
+  Environment* env = (*exports.CreateEnvironment)(inputs.size(), 0, (!argc ? 0 : argv[0]));
+  env->flags       = flags;
+  env->features    = ENV_FEATURE_ALL;
+  env->optimize    = optimize;
+
+  if(!env)
+  {
+    fprintf(stderr, "Unknown error creating environment.\n");
+    return ERR_UNKNOWN_ENVIRONMENT_ERROR;
+  }
 
 #ifdef IN_PLATFORM_WIN32
-if(generate)
-  env->alloc = (IN_WASM_ALLOCATOR*)BeginUpdateResourceA(out.u8string().c_str(), TRUE);
-if(!env->alloc)
-{
-  std::cout << "Failed to begin resource update!" << std::endl;
-  return ERR_MISSING_LOADER;
-}
+  if(generate)
+    env->alloc = (IN_WASM_ALLOCATOR*)BeginUpdateResourceA(out.u8string().c_str(), TRUE);
+  if(!env->alloc)
+  {
+    std::cout << "Failed to begin resource update!" << std::endl;
+    (*exports.DestroyEnvironment)(env);
+    return ERR_MISSING_LOADER;
+  }
 #endif
 
-if(!env)
-{
-  fprintf(stderr, "Unknown error creating environment.\n");
-  return ERR_UNKNOWN_ENVIRONMENT_ERROR;
-}
+  if(verbose)
+    env->loglevel = LOG_NOTICE;
+  if(libpath)
+    env->libpath = libpath;
+  if(objpath)
+    env->objpath = objpath;
+  if(linker)
+    env->linker = linker;
+  if(system)
+    env->system = system;
 
-if(verbose)
-  env->loglevel = LOG_NOTICE;
-if(libpath)
-  env->libpath = libpath;
-if(objpath)
-  env->objpath = objpath;
-if(linker)
-  env->linker = linker;
-if(system)
-  env->system = system;
-
-std::string whitebuf;
-for(auto item : whitelist)
-{
-  whitebuf = item; // We have to make a copy of the string because the actual argv string isn't necessarily mutable
-  char* ctx;
-  char* first  = STRTOK((char*)whitebuf.data(), ":", &ctx);
-  char* second = STRTOK(NULL, ":", &ctx);
-
-  if(!second)
-    (*exports.AddWhitelist)(env, nullptr, first);
-  else
-    (*exports.AddWhitelist)(env, first, second);
-}
-
-// Load all modules
-for(size_t i = 0; i < inputs.size(); ++i)
-  (*exports.AddModule)(env, inputs[i], 0, u8path(inputs[i]).stem().u8string().c_str(), &err);
-
-if(err < 0)
-{
-  if(env->loglevel >= LOG_FATAL)
+  std::string whitebuf;
+  for(auto item : whitelist)
   {
-    printerr(env->log, "Error loading modules", err);
-    dump_validation_errors(env);
+    whitebuf = item; // We have to make a copy of the string because the actual argv string isn't necessarily mutable
+    char* ctx;
+    char* first  = STRTOK((char*)whitebuf.data(), ":", &ctx);
+    char* second = STRTOK(NULL, ":", &ctx);
+
+    if(!second)
+      (*exports.AddWhitelist)(env, nullptr, first);
+    else
+      (*exports.AddWhitelist)(env, first, second);
   }
 
-  (*exports.DestroyEnvironment)(env);
-  return err;
-}
+  // Load all modules
+  for(size_t i = 0; i < inputs.size(); ++i)
+    (*exports.AddModule)(env, inputs[i], 0, u8path(inputs[i]).stem().u8string().c_str(), &err);
 
-// Add all embedding environments, plus the default environment
-embeddings.push_back({ INNATIVE_DEFAULT_ENVIRONMENT, 0 });
-
-for(size_t i = 0; i < embeddings.size(); ++i)
-  if((*exports.AddEmbedding)(env, embeddings[i].second, embeddings[i].first, 0) == ERR_FATAL_FILE_ERROR)
+  if(err < 0)
   {
-    fprintf(env->log, "Error loading file: %s\n", embeddings[i].first);
-    (*exports.DestroyEnvironment)(env);
-    return ERR_FATAL_FILE_ERROR;
-  }
-
-// Ensure all modules are loaded, in case we have multithreading enabled
-if(err >= 0)
-  err = (*exports.FinalizeEnvironment)(env);
-
-if(err < 0)
-{
-  if(env->loglevel >= LOG_FATAL)
-  {
-    printerr(env->log, "Error loading environment", err);
-    dump_validation_errors(env);
-  }
-
-  (*exports.DestroyEnvironment)(env);
-  return err;
-}
-
-if(serialize != nullptr) // If you want to serialize the results, we do so now that the modules have been loaded
-{
-  if(serialize[0]) // If a name was specified, verify only one module exists
-  {
-    if(env->n_modules != 1)
-      fprintf(
-        stderr,
-        "If you have more than one module, you cannot specify an output file for serialization. Use [-s] by itself, instead.\n");
-  }
-
-  for(size_t i = 0; i < env->n_modules; ++i)
-  {
-    std::string target = env->modules[i].name.str();
-    target += ".wat";
-
-    if(serialize != nullptr)
-      target = serialize;
-
-    innative_serialize_module(env, i, target.c_str());
-  }
-}
-
-// Check if this is a .wast file, which must be handled differently because it's an entire environment
-if(wast.size() > 0)
-{
-  for(size_t i = 0; i < wast.size() && !err; ++i)
-    err = innative_compile_script((const uint8_t*)wast[i], 0, env, true, out.parent_path().u8string().c_str());
-}
-else // Attempt to compile. If an error happens, output it and any validation errors to stderr
-  err = (*exports.Compile)(env, out.u8string().c_str());
-
-if(err < 0)
-{
-  if(env->loglevel >= LOG_ERROR)
-  {
-    printerr(env->log, "Compile error", err);
-    dump_validation_errors(env);
-  }
-
-  (*exports.DestroyEnvironment)(env);
-  return err;
-}
-
-// Destroy environment now that compilation is complete
-(*exports.DestroyEnvironment)(env);
-
-// Automatically run the assembly, but only if there were no wast scripts (which are always executed)
-if(!wast.size())
-{
-  if(run)
-  {
-    void* assembly = (*exports.LoadAssembly)(out.u8string().c_str());
-    if(!assembly)
+    if(env->loglevel >= LOG_FATAL)
     {
-      fprintf(env->log, "Generated file cannot be found! Does innative-cmd have permissions for this directory?\n");
+      printerr(exports, env->log, "Error loading modules", err);
+      dump_validation_errors(exports, env);
+    }
+
+    (*exports.DestroyEnvironment)(env);
+    return err;
+  }
+
+  // Add all embedding environments, plus the default environment
+  embeddings.push_back({ INNATIVE_DEFAULT_ENVIRONMENT, 0 });
+
+  for(size_t i = 0; i < embeddings.size(); ++i)
+    if((*exports.AddEmbedding)(env, embeddings[i].second, embeddings[i].first, 0) == ERR_FATAL_FILE_ERROR)
+    {
+      fprintf(env->log, "Error loading file: %s\n", embeddings[i].first);
+      (*exports.DestroyEnvironment)(env);
       return ERR_FATAL_FILE_ERROR;
     }
-    IN_Entrypoint start = (*exports.LoadFunction)(assembly, 0, IN_INIT_FUNCTION);
-    IN_Entrypoint exit  = (*exports.LoadFunction)(assembly, 0, IN_EXIT_FUNCTION);
-    if(!start)
+
+  // Ensure all modules are loaded, in case we have multithreading enabled
+  if(err >= 0)
+    err = (*exports.FinalizeEnvironment)(env);
+
+  if(err < 0)
+  {
+    if(env->loglevel >= LOG_FATAL)
     {
-      fprintf(env->log, "Start function is invalid or cannot be found!\n");
-      (*exports.FreeAssembly)(assembly);
-      return ERR_INVALID_START_FUNCTION;
+      printerr(exports, env->log, "Error loading environment", err);
+      dump_validation_errors(exports, env);
     }
 
-    (*start)();
-    if(exit)
-      (*exit)();
-
-    (*exports.FreeAssembly)(assembly);
-    return ERR_SUCCESS;
+    (*exports.DestroyEnvironment)(env);
+    return err;
   }
-  else
-    std::cout << "Successfully built " << out.u8string().c_str() << std::endl;
-}
 
-return err;
+  if(serialize != nullptr) // If you want to serialize the results, we do so now that the modules have been loaded
+  {
+    if(serialize[0]) // If a name was specified, verify only one module exists
+    {
+      if(env->n_modules != 1)
+        fprintf(
+          stderr,
+          "If you have more than one module, you cannot specify an output file for serialization. Use [-s] by itself, instead.\n");
+    }
+
+    for(size_t i = 0; i < env->n_modules; ++i)
+    {
+      std::string target = env->modules[i].name.str();
+      target += ".wat";
+
+      if(serialize != nullptr)
+        target = serialize;
+
+      (*exports.SerializeModule)(env, i, target.c_str(), 0);
+    }
+  }
+
+  // Check if this is a .wast file, which must be handled differently because it's an entire environment
+  if(wast.size() > 0)
+  {
+    for(size_t i = 0; i < wast.size() && !err; ++i)
+      err = (*exports.CompileScript)((const uint8_t*)wast[i], 0, env, true, out.parent_path().u8string().c_str());
+  }
+  else // Attempt to compile. If an error happens, output it and any validation errors to stderr
+    err = (*exports.Compile)(env, out.u8string().c_str());
+
+  if(err < 0)
+  {
+    if(env->loglevel >= LOG_ERROR)
+    {
+      printerr(exports, env->log, "Compile error", err);
+      dump_validation_errors(exports, env);
+    }
+
+    (*exports.DestroyEnvironment)(env);
+    return err;
+  }
+
+  // Destroy environment now that compilation is complete
+  (*exports.DestroyEnvironment)(env);
+
+  // Automatically run the assembly, but only if there were no wast scripts (which are always executed)
+  if(!wast.size())
+  {
+    if(run)
+    {
+      void* assembly = (*exports.LoadAssembly)(out.u8string().c_str());
+      if(!assembly)
+      {
+        fprintf(env->log, "Generated file cannot be found! Does innative-cmd have permissions for this directory?\n");
+        return ERR_FATAL_FILE_ERROR;
+      }
+      IN_Entrypoint start = (*exports.LoadFunction)(assembly, 0, IN_INIT_FUNCTION);
+      IN_Entrypoint exit  = (*exports.LoadFunction)(assembly, 0, IN_EXIT_FUNCTION);
+      if(!start)
+      {
+        fprintf(env->log, "Start function is invalid or cannot be found!\n");
+        (*exports.FreeAssembly)(assembly);
+        return ERR_INVALID_START_FUNCTION;
+      }
+
+      (*start)();
+      if(exit)
+        (*exit)();
+
+      (*exports.FreeAssembly)(assembly);
+      return ERR_SUCCESS;
+    }
+    else
+      std::cout << "Successfully built " << out.u8string().c_str() << std::endl;
+  }
+
+  return err;
 }

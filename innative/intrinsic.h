@@ -8,17 +8,17 @@
 
 namespace innative {
   namespace code {
-    IN_ERROR IN_Intrinsic_ToC(struct Context& context, llvm::Value** params, llvm::Value*& out);
-    IN_ERROR IN_Intrinsic_FromC(struct Context& context, llvm::Value** params, llvm::Value*& out);
-    IN_ERROR IN_Intrinsic_Trap(struct Context& context, llvm::Value** params, llvm::Value*& out);
-    IN_ERROR IN_Intrinsic_FuncPtr(struct Context& context, llvm::Value** params, llvm::Value*& out);
+    IN_ERROR IN_Intrinsic_ToC(Context& context, llvm::Value** params, llvm::Value*& out);
+    IN_ERROR IN_Intrinsic_FromC(Context& context, llvm::Value** params, llvm::Value*& out);
+    IN_ERROR IN_Intrinsic_Trap(Context& context, llvm::Value** params, llvm::Value*& out);
+    IN_ERROR IN_Intrinsic_FuncPtr(Context& context, llvm::Value** params, llvm::Value*& out);
 
     struct Intrinsic
     {
       static const int MAX_PARAMS = 1;
 
       const char* name;
-      IN_ERROR (*fn)(struct Context&, llvm::Value**, llvm::Value*&);
+      IN_ERROR (*fn)(Context&, llvm::Value**, llvm::Value*&);
       WASM_TYPE_ENCODING params[MAX_PARAMS];
       int num;
     };

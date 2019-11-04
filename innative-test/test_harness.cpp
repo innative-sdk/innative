@@ -24,7 +24,8 @@ size_t TestHarness::Run(FILE* out)
     { "wasm_malloc.c", &TestHarness::test_malloc }, { "internal.c", &TestHarness::test_environment },
     { "queue.h", &TestHarness::test_queue },        { "stack.h", &TestHarness::test_stack },
     { "stream.h", &TestHarness::test_stream },      { "util.h", &TestHarness::test_util },
-    { "allocator", &TestHarness::test_allocator },  { "parallel parsing", &TestHarness::test_parallel_parsing }
+    { "allocator", &TestHarness::test_allocator },  { "parallel parsing", &TestHarness::test_parallel_parsing },
+    { "serializer", &TestHarness::test_serializer }
   };
 
   static const size_t NUMTESTS    = sizeof(tests) / sizeof(decltype(tests[0]));
@@ -74,11 +75,17 @@ int TestHarness::CompileWASM(const path& file)
 
   int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
   if(err < 0)
+  {
+    (*_exports.DestroyEnvironment)(env);
     return err;
+  }
 
   (*_exports.AddModule)(env, file.u8string().c_str(), 0, file.u8string().c_str(), &err);
   if(err < 0)
+  {
+    (*_exports.DestroyEnvironment)(env);
     return err;
+  }
 
   (*_exports.FinalizeEnvironment)(env);
   path base = _folder / file.stem();
@@ -86,6 +93,8 @@ int TestHarness::CompileWASM(const path& file)
   out.replace_extension(IN_LIBRARY_EXTENSION);
 
   err = (*_exports.Compile)(env, out.u8string().c_str());
+  (*_exports.DestroyEnvironment)(env);
+
   if(err < 0)
     return err;
 
@@ -94,7 +103,6 @@ int TestHarness::CompileWASM(const path& file)
   base.replace_extension(".lib");
   _garbage.push_back(base);
 #endif
-  (*_exports.DestroyEnvironment)(env);
   void* m = (*_exports.LoadAssembly)(out.u8string().c_str());
   if(!m)
     return ERR_FATAL_INVALID_MODULE;

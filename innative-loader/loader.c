@@ -143,6 +143,7 @@ int main(int argc, char** argv)
       if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
       {
         fprintf(stderr, "Error enumerating flag values: %u - %i\n", GetLastError(), err);
+        (*exports.DestroyEnvironment)(env);
         return err;
       }
     }
@@ -158,6 +159,7 @@ int main(int argc, char** argv)
       if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
       {
         fprintf(stderr, "Error enumerating modules: %u\n", GetLastError());
+        (*exports.DestroyEnvironment)(env);
         return err;
       }
     }
@@ -168,6 +170,7 @@ int main(int argc, char** argv)
     if(err < 0)
     {
       fprintf(stderr, "Error loading modules: %i\n", err);
+      (*exports.DestroyEnvironment)(env);
       return err;
     }
 
@@ -179,6 +182,7 @@ int main(int argc, char** argv)
       if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
       {
         fprintf(stderr, "Error enumerating embedding environments: %u - %i\n", GetLastError(), err);
+        (*exports.DestroyEnvironment)(env);
         return err;
       }
     }
@@ -193,6 +197,7 @@ int main(int argc, char** argv)
       if(GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
       {
         fprintf(stderr, "Error enumerating whitelist: %u - %i\n", GetLastError(), err);
+        (*exports.DestroyEnvironment)(env);
         return err;
       }
     }
@@ -215,6 +220,7 @@ int main(int argc, char** argv)
 
       int i = 0;
       scanf_s("%i", &i);
+      (*exports.DestroyEnvironment)(env);
       return err;
     }
 

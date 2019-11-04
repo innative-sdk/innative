@@ -9,11 +9,70 @@
 #include "queue.h"
 
 namespace innative {
-  typedef unsigned short WatTokenID;
+  enum class WatTokens : unsigned short
+  {
+    NONE = 0, // Error state
+    OPEN,     // (
+    CLOSE,    // )
+    MODULE,
+    IMPORT,
+    TYPE,
+    START,
+    FUNC,
+    TABLE,
+    MEMORY,
+    GLOBAL,
+    EXPORT,
+    DATA,
+    ELEM,
+    OFFSET,
+    ALIGN,
+    LOCAL,
+    RESULT,
+    PARAM,
+    i32,
+    i64,
+    f32,
+    f64,
+    FUNCREF,
+    CREF,
+    MUT,
+    BLOCK,
+    LOOP,
+    IF,
+    THEN,
+    ELSE,
+    END,
+    BINARY, // Script extension tokens
+    QUOTE,
+    REGISTER,
+    INVOKE,
+    GET,
+    ASSERT_RETURN,
+    ASSERT_RETURN_CANONICAL_NAN,
+    ASSERT_RETURN_ARITHMETIC_NAN,
+    ASSERT_TRAP,
+    ASSERT_MALFORMED,
+    ASSERT_INVALID,
+    ASSERT_UNLINKABLE,
+    ASSERT_EXHAUSTION,
+    SCRIPT,
+    INPUT,
+    OUTPUT,
+    NUMBER,
+    STRING,
+    NAME,     // Same as string but more restricted
+    OPERATOR, // Represents all operators other than the control flow ones above
+    COMMENT,
+    RANGE_ERROR,
+    INTEGER, // Explicit integer/float are only used as a shortcut when generating token lists
+    FLOAT,
+    TOTALCOUNT,
+  };
 
   typedef struct __WAT_TOKEN
   {
-    WatTokenID id;
+    WatTokens id;
     const char* pos;
     unsigned int line;
     unsigned int column;
@@ -27,68 +86,7 @@ namespace innative {
   } WatToken;
 
   namespace wat {
-    enum WatTokens : WatTokenID
-    {
-      TOKEN_NONE = 0, // Error state
-      TOKEN_OPEN,     // (
-      TOKEN_CLOSE,    // )
-      TOKEN_MODULE,
-      TOKEN_IMPORT,
-      TOKEN_TYPE,
-      TOKEN_START,
-      TOKEN_FUNC,
-      TOKEN_TABLE,
-      TOKEN_MEMORY,
-      TOKEN_GLOBAL,
-      TOKEN_EXPORT,
-      TOKEN_DATA,
-      TOKEN_ELEM,
-      TOKEN_OFFSET,
-      TOKEN_ALIGN,
-      TOKEN_LOCAL,
-      TOKEN_RESULT,
-      TOKEN_PARAM,
-      TOKEN_i32,
-      TOKEN_i64,
-      TOKEN_f32,
-      TOKEN_f64,
-      TOKEN_FUNCREF,
-      TOKEN_CREF,
-      TOKEN_MUT,
-      TOKEN_BLOCK,
-      TOKEN_LOOP,
-      TOKEN_IF,
-      TOKEN_THEN,
-      TOKEN_ELSE,
-      TOKEN_END,
-      TOKEN_BINARY, // Script extension tokens
-      TOKEN_QUOTE,
-      TOKEN_REGISTER,
-      TOKEN_INVOKE,
-      TOKEN_GET,
-      TOKEN_ASSERT_RETURN,
-      TOKEN_ASSERT_RETURN_CANONICAL_NAN,
-      TOKEN_ASSERT_RETURN_ARITHMETIC_NAN,
-      TOKEN_ASSERT_TRAP,
-      TOKEN_ASSERT_MALFORMED,
-      TOKEN_ASSERT_INVALID,
-      TOKEN_ASSERT_UNLINKABLE,
-      TOKEN_ASSERT_EXHAUSTION,
-      TOKEN_SCRIPT,
-      TOKEN_INPUT,
-      TOKEN_OUTPUT,
-      TOKEN_NUMBER,
-      TOKEN_STRING,
-      TOKEN_NAME,     // Same as string but more restricted
-      TOKEN_OPERATOR, // Represents all operators other than the control flow ones above
-      TOKEN_COMMENT,
-      TOKEN_RANGE_ERROR,
-      TOKEN_INTEGER, // Explicit integer/float are only used as a shortcut when generating token lists
-      TOKEN_FLOAT,
-      TOKEN_TOTALCOUNT,
-    };
-
-    const char* GetTokenString(WatTokenID token);
+    const char* GetTokenString(WatTokens token);
     int ResolveTokeni32(const WatToken& token, std::string& numbuf, varsint32& out);
     int ResolveTokenu32(const WatToken& token, std::string& numbuf, varuint32& out);
     int ResolveTokenf32(const WatToken& token, std::string& numbuf, float32& out);

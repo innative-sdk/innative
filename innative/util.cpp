@@ -268,7 +268,7 @@ namespace innative {
       buf.resize(GetModuleFileNameW(NULL, const_cast<wchar_t*>(buf.data()), (DWORD)buf.capacity()));
       return path(std::move(buf));
 #else
-      return path(std::move(GetAbsolutePath(arg0)));
+      return path(std::move(GetAbsolutePath(GetPath(arg0))));
 #endif
     }
 

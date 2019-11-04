@@ -25,6 +25,7 @@ enum IN_ERROR
   ERR_COMMAND_LINE_CONFLICT,
   ERR_UNKNOWN_FLAG,
   ERR_MISSING_LOADER,
+  ERR_INSUFFICIENT_BUFFER,
 
   // Fatal errors that prevent properly parsing the module
   ERR_FATAL_INVALID_WASM_SECTION_ORDER = -0xFF,

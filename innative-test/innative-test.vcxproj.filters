@@ -60,6 +60,9 @@
     <ClCompile Include="test_harness.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="test_serializer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="benchmark.h">

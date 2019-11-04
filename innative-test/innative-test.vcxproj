@@ -344,6 +344,7 @@
     <ClCompile Include="test_malloc.cpp" />
     <ClCompile Include="test_parallel_parsing.cpp" />
     <ClCompile Include="test_queue.cpp" />
+    <ClCompile Include="test_serializer.cpp" />
     <ClCompile Include="test_stack.cpp" />
     <ClCompile Include="test_stream.cpp" />
     <ClCompile Include="test_util.cpp" />

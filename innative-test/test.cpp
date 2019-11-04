@@ -124,7 +124,13 @@ int main(int argc, char* argv[])
     for(auto file : testfiles)
     {
       Environment* env = (*exports.CreateEnvironment)(1, 0, (!argc ? 0 : argv[0]));
-      env->flags       = ENV_LIBRARY | ENV_DEBUG | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS;
+      if(!env)
+      {
+        std::cout << "Failed to create inNative environment, aborting." << std::endl;
+        return -1;
+      }
+
+      env->flags = ENV_LIBRARY | ENV_DEBUG | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS;
 #ifdef IN_DEBUG
       env->optimize = ENV_OPTIMIZE_O0;
 #else
@@ -140,18 +146,19 @@ int main(int argc, char* argv[])
 
       int err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
       if(err >= 0)
-        err =
-          innative_compile_script(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env, false, temppath.c_str());
+        err = (*exports.CompileScript)(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv), env, false,
+                                       temppath.c_str());
 
       if(err < 0)
       {
         FPRINTF(env->log, "Error injecting test environment, aborting.");
+        (*exports.DestroyEnvironment)(env);
         return -1; // If the environment injection fails, abort everything
       }
 
       FPRINTF(env->log, "%s: .", file.generic_u8string().c_str());
       fflush(env->log);
-      err = innative_compile_script((const uint8_t*)file.generic_u8string().data(), 0, env, true, temppath.c_str());
+      err = (*exports.CompileScript)((const uint8_t*)file.generic_u8string().data(), 0, env, true, temppath.c_str());
 
       if(!err && !env->errors)
         fputs("SUCCESS\n", env->log);
@@ -161,7 +168,7 @@ int main(int argc, char* argv[])
 
         if(err < 0)
         {
-          const char* strerr = innative_error_string(err);
+          const char* strerr = (*exports.GetErrorString)(err);
           if(strerr)
             FPRINTF(env->log, "Error running script %s: %s\n", file.generic_u8string().c_str(), strerr);
           else
@@ -186,6 +193,7 @@ int main(int argc, char* argv[])
         fputc('\n', env->log);
         fflush(env->log);
       }
+
       (*exports.DestroyEnvironment)(env);
     }
   }

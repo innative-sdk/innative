@@ -216,6 +216,7 @@ namespace innative {
     path GetWorkingDir();
     bool SetWorkingDir(const path& path);
     path GetAbsolutePath(const path& path);
+    inline path GetPath(const char* utf8) { return u8path(!utf8 ? "" : utf8); }
     IN_COMPILER_DLLEXPORT void GetCPUInfo(uintcpuinfo& info, int flags);
     void* LoadDLL(const path& path);
     void* LoadDLLFunction(void* dll, const char* name);

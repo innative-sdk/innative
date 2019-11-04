@@ -155,11 +155,11 @@ bool innative::MatchFunctionType(const FunctionType& a, const FunctionType& b)
   if(a.form != b.form || a.n_params != b.n_params || a.n_returns != b.n_returns)
     return false;
 
-  for(uint64_t i = 0; i < a.n_params; ++i)
+  for(varuint32 i = 0; i < a.n_params; ++i)
     if(a.params[i] != b.params[i])
       return false;
 
-  for(uint64_t i = 0; i < a.n_returns; ++i)
+  for(varuint32 i = 0; i < a.n_returns; ++i)
     if(a.returns[i] != b.returns[i])
       return false;
 
@@ -181,7 +181,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
     if(env.cimports)
     {
       std::string name    = CanonImportName(imp, env.system);
-      khiter_t iterimport = kh_get_cimport(env.cimports, Identifier((uint8_t*)name.c_str(), name.size()));
+      khiter_t iterimport = kh_get_cimport(env.cimports, Identifier((uint8_t*)name.c_str(), (varuint32)name.size()));
       if(kh_exist2(env.cimports, iterimport))
       {
         if(env.flags & ENV_WHITELIST)
@@ -441,8 +441,8 @@ namespace innative {
                   ins.line);
   }
 
-  void ValidateBranch(const Instruction& ins, varuint32 depth, Stack<varsint7>& values,
-                      Stack<internal::ControlBlock>& control, Environment& env, Module* m)
+  void ValidateBranch(const Instruction& ins, size_t depth, Stack<varsint7>& values, Stack<internal::ControlBlock>& control,
+                      Environment& env, Module* m)
   {
     if(depth >= control.Size())
       AppendError(env, env.errors, m, ERR_INVALID_BRANCH_DEPTH, "[%u] Invalid branch depth: %u exceeds %zu", depth,
@@ -469,13 +469,13 @@ namespace innative {
                            Stack<varsint7>& values, Stack<internal::ControlBlock>& control, Environment& env, Module* m)
   {
     ValidateBranch(ins, def, values, control, env, m);
-    for(uint64_t i = 0; i < n_table; ++i)
+    for(varuint32 i = 0; i < n_table; ++i)
       ValidateBranch(ins, table[i], values, control, env, m);
 
     // Ensure all block label targets have the exact same signature as the default label
     if(def < control.Size())
     {
-      for(uint64_t i = 0; i < n_table; ++i)
+      for(varuint32 i = 0; i < n_table; ++i)
       {
         varsint7 type = GetBlockSig(control[def]);
         char buf[10];
@@ -530,14 +530,14 @@ namespace innative {
 
   void ValidateFunctionSig(const Instruction& ins, Stack<varsint7>& values, FunctionType& sig, Environment& env, Module* m)
   {
-    for(uint64_t i = sig.n_params; i-- > 0;) // Pop in reverse order
+    for(varuint32 i = sig.n_params; i-- > 0;) // Pop in reverse order
       ValidatePopType(ins, values, sig.params[i], env, m);
 
     if(sig.n_returns > 1)
       AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_SIG,
                   "[%u] Cannot return more than one value yet, tried to return %i.", ins.line, sig.n_returns);
 
-    for(uint64_t i = 0; i < sig.n_returns; ++i)
+    for(varuint32 i = 0; i < sig.n_returns; ++i)
       values.Push(sig.returns[i]);
   }
 
@@ -1050,7 +1050,7 @@ void innative::ValidateTableOffset(const TableInit& init, Environment& env, Modu
                   "Offset (%i) plus element count (%u) exceeds minimum table length (%u)", offset, init.n_elements,
                   table->resizable.minimum);
 
-    for(uint64_t i = 0; i < init.n_elements; ++i)
+    for(varuint32 i = 0; i < init.n_elements; ++i)
       if(!ModuleFunction(*m, init.elements[i]))
         AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid element initializer %u function index: %u", i,
                     init.elements[i]);
@@ -1090,7 +1090,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
     abort(); // Out of memory, abort execution
 
   n_local = sig.n_params;
-  for(uint64_t i = 0; i < body.n_locals; ++i)
+  for(varuint32 i = 0; i < body.n_locals; ++i)
     locals[n_local++] = body.locals[i];
 
   control.Push({ values.Limit(), ret, OP_block }); // Push the function body block with the function signature
@@ -1098,7 +1098,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
   if(!body.n_body)
     return AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Cannot have an empty function body!");
 
-  for(uint64_t i = 0; i < body.n_body; ++i)
+  for(varuint32 i = 0; i < body.n_body; ++i)
   {
     ValidateInstruction(cur[i], values, control, n_local, locals, env, m);
 
@@ -1142,7 +1142,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
     }
   }
 
-  for(uint64_t i = 0; i < sig.n_returns; ++i)
+  for(varuint32 i = 0; i < sig.n_returns; ++i)
     ValidatePopType(Instruction{ 0, 0, body.debug.line, body.debug.column }, values, sig.returns[i], env, m);
 
   if(control.Size() > 0)
@@ -1197,7 +1197,7 @@ void innative::ValidateDataOffset(const DataInit& init, Environment& env, Module
 void innative::ValidateImportOrder(Module& m)
 {
   int kind = 0;
-  for(uint64_t i = 0; i < m.importsection.n_import; ++i)
+  for(varuint32 i = 0; i < m.importsection.n_import; ++i)
   {
     // This is a debug operation that ensures we haven't forgotten to sort imports at some point
     assert(kind <= m.importsection.imports[i].kind);

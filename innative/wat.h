@@ -61,23 +61,23 @@ namespace innative {
     static int ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens, utility::StringRef name,
                            WatToken& internalname);
     static int ParseName(const Environment& env, ByteArray& name, const WatToken& t);
-    static int AddWatValType(const Environment& env, WatTokenID id, varsint7*& a, varuint32& n);
+    static int AddWatValType(const Environment& env, WatTokens id, varsint7*& a, varuint32& n);
     static int WatString(const Environment& env, ByteArray& str, utility::StringRef t);
     static void WriteUTF32(uint32_t ch, ByteArray& str, varuint32& index);
-    static varsint7 WatValType(WatTokenID id);
+    static varsint7 WatValType(WatTokens id);
     static int ParseLocalAppend(const Environment& env, FunctionBody& body, Queue<WatToken>& tokens);
     static int AddName(wat::kh_indexname_t* h, WatToken t, varuint32 index);
 
     IN_FORCEINLINE static int WatString(const Environment& env, ByteArray& str, const WatToken& t)
     {
-      if(t.id != wat::TOKEN_STRING)
+      if(t.id != WatTokens::STRING)
         return ERR_WAT_EXPECTED_STRING;
       return WatString(env, str, utility::StringRef{ t.pos, t.len });
     }
 
     IN_FORCEINLINE static WatToken GetWatNameToken(Queue<WatToken>& tokens)
     {
-      return (tokens.Peek().id == wat::TOKEN_NAME) ? tokens.Pop() : WatToken{ wat::TOKEN_NONE };
+      return (tokens.Peek().id == WatTokens::NAME) ? tokens.Pop() : WatToken{ WatTokens::NONE };
     }
 
     template<class T> inline static int ReallocArray(const Environment& env, T*& a, varuint32& n)
@@ -143,7 +143,7 @@ namespace innative {
   return (err)
 
   int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, utility::StringRef name);
-  void WatSkipSection(Queue<WatToken>& tokens, int count = 1);
+  void WatSkipSection(Queue<WatToken>& tokens, ptrdiff_t count = 1);
   size_t WatLineNumber(const char* start, const char* pos);
 }
 

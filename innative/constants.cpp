@@ -234,16 +234,7 @@ const std::array<const char*, OP_CODE_COUNT> innative::utility::OPNAMES = {
 
 namespace innative {
   namespace utility {
-    const char* IN_GETCPUINFO           = "__innative_getcpuinfo";
-    const char* IN_EXTENSION            = ".ir-cache";
-    const char* IN_ENV_EXTENSION        = ".ir-env-cache";
-    const char* IN_GLUE_STRING          = "_WASM_";
-    const char* IN_MEMORY_MAX_METADATA  = "__IN_MEMORY_MAX_METADATA";
-    const char* IN_MEMORY_GROW_METADATA = "__IN_MEMORY_GROW_METADATA";
-    const char* IN_FUNCTION_TRAVERSED   = "__IN_FUNCTION_TRAVERSED";
-    const char* IN_TEMP_PREFIX          = "wast_m";
-
-    struct kh_mapenum_s* GenMapEnum(std::initializer_list<std::pair<int, const char*>> list)
+    kh_mapenum_s* GenMapEnum(std::initializer_list<std::pair<int, const char*>> list)
     {
       auto h = kh_init_mapenum();
       int r;
@@ -257,7 +248,7 @@ namespace innative {
       return h;
     }
 
-    const struct kh_mapenum_s* ERR_ENUM_MAP = GenMapEnum({
+    const kh_mapenum_s* ERR_ENUM_MAP = GenMapEnum({
       { ERR_SUCCESS, "ERR_SUCCESS" },
       { ERR_PARSE_UNEXPECTED_EOF, "ERR_PARSE_UNEXPECTED_EOF" },
       { ERR_PARSE_INVALID_MAGIC_COOKIE, "ERR_PARSE_INVALID_MAGIC_COOKIE" },
@@ -400,7 +391,7 @@ namespace innative {
       { ERR_RUNTIME_ASSERT_FAILURE, "ERR_RUNTIME_ASSERT_FAILURE" },
     });
 
-    const struct kh_mapenum_s* TYPE_ENCODING_MAP = GenMapEnum({
+    const kh_mapenum_s* TYPE_ENCODING_MAP = GenMapEnum({
       { TE_i32, "TE_i32" },
       { TE_i64, "TE_i64" },
       { TE_f32, "TE_f32" },
@@ -414,7 +405,7 @@ namespace innative {
       { TE_POLY, "TE_POLY" },
     });
 
-    const struct kh_mapenum_s* WAST_ASSERTION_MAP = GenMapEnum({
+    const kh_mapenum_s* WAST_ASSERTION_MAP = GenMapEnum({
       { ERR_WAT_INVALID_ALIGNMENT, "alignment" },
       { ERR_INVALID_MEMORY_ALIGNMENT, "alignment must not be larger than natural" },
       { ERR_INVALID_MEMORY_OFFSET, "out of bounds memory access" },
@@ -483,7 +474,7 @@ namespace innative {
       { ERR_WAT_PARAM_AFTER_RESULT, "unexpected token" },
     });
 
-    const char* EnumToString(const struct kh_mapenum_s* h, int i, char* buf, size_t n)
+    const char* EnumToString(const kh_mapenum_s* h, int i, char* buf, size_t n)
     {
       khiter_t iter = kh_get_mapenum(h, i);
       if(kh_exist2(h, iter))
