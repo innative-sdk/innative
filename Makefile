@@ -10,12 +10,12 @@ CXX   ?= g++
 CXXLD ?= $(CXX)
 
 # Compiler flags
-CPPFLAGS := $(CPPFLAGS) -Iinclude -Ibin/llvm/include -Illvm/include -Illvm/tools/lld/include
+CPPFLAGS := $(CPPFLAGS) -Iinclude -Ibin/llvm/include -Ibin/lld/include
 CPPFLAGS += -Wall -Wshadow -Wno-attributes -Wno-unknown-pragmas -Wno-missing-braces \
 	    -Wno-unused-function -Wno-comment -Wno-char-subscripts -Wno-sign-compare \
 	    -Wno-unused-variable -Wno-switch
 LIBS     :=
-LDFLAGS  := -L$(LIBDIR) -Lbin/llvm/lib
+LDFLAGS  := -L$(LIBDIR) -Lbin/llvm/lib -Lbin/lld/lib
 
 # Destination settings
 PREFIX  ?= /usr/local
