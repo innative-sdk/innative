@@ -415,22 +415,6 @@ int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bo
   return err;
 }
 
-template<int bufferSize> class FixedStream : public std::streambuf
-{
-public:
-  FixedStream()
-  {
-    std::memset(buffer, 0, sizeof(buffer));
-    setp(buffer, &buffer[bufferSize - 1]);         // Remember the -1 to preserve the terminator.
-    setg(buffer, buffer, &buffer[bufferSize - 1]); // Technically not necessary for an std::ostream.
-  }
-
-  std::string get() const { return buffer; }
-
-private:
-  char buffer[bufferSize];
-};
-
 int innative::SerializeModule(Environment* env, size_t m, const char* out, size_t* len)
 {
   if(!env)
