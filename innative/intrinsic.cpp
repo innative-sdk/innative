@@ -11,7 +11,7 @@ namespace innative {
   }
 }
 
-IN_ERROR innative::code::IN_Intrinsic_ToC(struct code::Context& context, llvm::Value** params, llvm::Value*& out)
+IN_ERROR innative::code::IN_Intrinsic_ToC(code::Context& context, llvm::Value** params, llvm::Value*& out)
 {
   if(!context.memories.size())
     return ERR_INVALID_MEMORY_INDEX;
@@ -22,7 +22,7 @@ IN_ERROR innative::code::IN_Intrinsic_ToC(struct code::Context& context, llvm::V
   return ERR_SUCCESS;
 }
 
-IN_ERROR innative::code::IN_Intrinsic_FromC(struct code::Context& context, llvm::Value** params, llvm::Value*& out)
+IN_ERROR innative::code::IN_Intrinsic_FromC(code::Context& context, llvm::Value** params, llvm::Value*& out)
 {
   if(!context.memories.size())
     return ERR_INVALID_MEMORY_INDEX;
@@ -33,7 +33,7 @@ IN_ERROR innative::code::IN_Intrinsic_FromC(struct code::Context& context, llvm:
   return ERR_SUCCESS;
 }
 
-IN_ERROR innative::code::IN_Intrinsic_Trap(struct code::Context& context, llvm::Value** params, llvm::Value*& out)
+IN_ERROR innative::code::IN_Intrinsic_Trap(code::Context& context, llvm::Value** params, llvm::Value*& out)
 {
   auto call = context.builder.CreateCall(llvm::Intrinsic::getDeclaration(context.llvm, llvm::Intrinsic::trap), {});
   call->setDoesNotReturn();
@@ -41,7 +41,7 @@ IN_ERROR innative::code::IN_Intrinsic_Trap(struct code::Context& context, llvm::
   return ERR_SUCCESS;
 }
 
-IN_ERROR innative::code::IN_Intrinsic_FuncPtr(struct code::Context& context, llvm::Value** params, llvm::Value*& out)
+IN_ERROR innative::code::IN_Intrinsic_FuncPtr(code::Context& context, llvm::Value** params, llvm::Value*& out)
 {
   if(!params[0]->getType()->isIntegerTy())
     return ERR_INVALID_ARGUMENT_TYPE;

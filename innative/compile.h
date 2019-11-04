@@ -9,10 +9,17 @@
 #include <string>
 
 namespace innative {
+  enum class LLD_FORMAT : unsigned char
+  {
+    COFF,
+    ELF,
+    WASM,
+  };
+
   IN_ERROR CompileEnvironment(const Environment* env, const char* file);
   void DeleteCache(const Environment& env, Module& m);
   void DeleteContext(Environment& env, bool shutdown = false);
-  std::vector<std::string> GetSymbols(const char* file, FILE* log);
+  std::vector<std::string> GetSymbols(const char* file, FILE* log, LLD_FORMAT format);
   void AppendIntrinsics(Environment& env);
 }
 

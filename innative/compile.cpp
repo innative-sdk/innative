@@ -5,6 +5,7 @@
 #include "validate.h"
 #include "optimize.h"
 #include "intrinsic.h"
+#include "compile.h"
 #include "innative/export.h"
 #pragma warning(push)
 #pragma warning(disable : 4146 4267 4141 4244 4624)
@@ -1818,7 +1819,7 @@ IN_ERROR CompileFunctionBody(Func* fn, llvm::AllocaInst*& memlocal, FunctionType
     ++index;
   }
 
-  for(uint64_t i = 0; i < body.n_locals; ++i)
+  for(varuint32 i = 0; i < body.n_locals; ++i)
   {
     auto ty = GetLLVMType(body.locals[i], context);
     context.locals.push_back(context.builder.CreateAlloca(
@@ -1996,7 +1997,7 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
   if(env->flags & ENV_DEBUG)
   {
     assert(context.m.path != nullptr);
-    path abspath     = GetAbsolutePath(u8path(context.m.path));
+    path abspath     = GetAbsolutePath(GetPath(context.m.path));
     context.dbuilder = new llvm::DIBuilder(*context.llvm);
 
     context.dcu = context.dbuilder->createCompileUnit(llvm::dwarf::DW_LANG_C99,
@@ -2293,7 +2294,7 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
   }
 
   // Process element section by appending to the init function
-  for(uint64_t i = 0; i < context.m.element.n_elements; ++i)
+  for(varuint32 i = 0; i < context.m.element.n_elements; ++i)
   {
     TableInit& e = context.m.element.elements[i]; // First we declare a constant array that stores the data in the EXE
     TableDesc* t = ModuleTable(context.m, e.index);
@@ -2308,7 +2309,7 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
         return err;
 
       // Go through and resolve all indices to function pointers
-      for(uint64_t j = 0; j < e.n_elements; ++j)
+      for(varuint32 j = 0; j < e.n_elements; ++j)
       {
         if(e.elements[j] >= context.functions.size())
           return ERR_INVALID_FUNCTION_INDEX;
@@ -2572,7 +2573,7 @@ void ResolveModuleExports(const Environment* env, Module* root, llvm::LLVMContex
   }
 }
 
-int CallLinker(const Environment* env, vector<const char*>& linkargs)
+int CallLinker(const Environment* env, vector<const char*>& linkargs, LLD_FORMAT format)
 {
   int err = ERR_SUCCESS;
 
@@ -2634,11 +2635,14 @@ int CallLinker(const Environment* env, vector<const char*>& linkargs)
     llvm::raw_string_ostream sso(outbuf);
     llvm::raw_ostream& llvm_stream = (env->loglevel >= LOG_NOTICE) ? static_cast<llvm::raw_ostream&>(fdo) :
                                                                      static_cast<llvm::raw_ostream&>(sso);
-#ifdef IN_PLATFORM_WIN32
-    if(!lld::coff::link(linkargs, false, llvm_stream))
-#else
-    if(!lld::elf::link(linkargs, false, llvm_stream))
-#endif
+    bool result = false;
+    switch(format)
+    {
+    case LLD_FORMAT::COFF: result = lld::coff::link(linkargs, false, llvm_stream); break;
+    case LLD_FORMAT::ELF: result = lld::elf::link(linkargs, false, llvm_stream); break;
+    }
+
+    if(!result)
     {
       if(env->loglevel < LOG_NOTICE)
         fputs(outbuf.c_str(), env->log);
@@ -2651,9 +2655,10 @@ int CallLinker(const Environment* env, vector<const char*>& linkargs)
 
 path GetLinkerObjectPath(const Environment& env, Module& m)
 {
-  path objpath = u8path(!env.objpath ? "" : env.objpath);
+  path objpath = GetPath(env.objpath);
 
-  // The default module name must be an entire path to gaurantee uniqueness, but we need to write it in the objpath directory
+  // The default module name must be an entire path to gaurantee uniqueness, but we need to write it in the objpath
+  // directory
   std::string file(m.name.str());
   std::replace(file.begin(), file.end(), '\\', '_');
   std::replace(file.begin(), file.end(), '/', '_');
@@ -2745,9 +2750,9 @@ namespace innative {
     // Construct the LLVM environment and current working directories
     if(!env->context)
       const_cast<Environment*>(env)->context = new llvm::LLVMContext();
-    path file    = u8path(outfile);
+    path file    = GetPath(outfile);
     path workdir = GetWorkingDir();
-    path libpath = u8path(env->libpath);
+    path libpath = GetPath(env->libpath);
     if(!env->objpath)
     {
       const_cast<Environment*>(env)->objpath =
@@ -2757,7 +2762,7 @@ namespace innative {
         return ERR_FATAL_OUT_OF_MEMORY;
     }
 
-    path objpath = u8path(env->objpath);
+    path objpath = GetPath(env->objpath);
 
     if(!file.is_absolute())
       file = workdir / file;
@@ -2923,8 +2928,8 @@ namespace innative {
       }
       builder.CreateRetVoid();
     }
-    else // If this isn't a DLL, then the init function is actual the process entry point, which must clean up and call
-         // _exit()
+    else // If this isn't a DLL, then the init function is actual the process entry point, which must clean up and
+         // call _exit()
     {
       // Get prototype for the environment exit function
       Func* fn_exit = Func::Create(FuncTy::get(builder.getVoidTy(), { builder.getInt32Ty() }, false), Func::ExternalLinkage,
@@ -3009,6 +3014,8 @@ namespace innative {
 
     {
 #ifdef IN_PLATFORM_WIN32
+      LLD_FORMAT format = LLD_FORMAT::COFF;
+
       // /PDB:"D:\code\innative\bin\innative-d.pdb" /IMPLIB:"D:\code\innative\bin\innative-d.lib"
       vector<const char*> linkargs = {
         "/ERRORREPORT:QUEUE",
@@ -3049,6 +3056,7 @@ namespace innative {
       vector<string> cache = { string("/OUT:") + file.u8string(), "/LIBPATH:" + libpath.u8string(),
                                "/LIBPATH:" + workdir.u8string() };
 #elif defined(IN_PLATFORM_POSIX)
+      LLD_FORMAT format = LLD_FORMAT::ELF;
       vector<const char*> linkargs = {};
 
       if(env->flags & ENV_LIBRARY)
@@ -3109,27 +3117,31 @@ namespace innative {
       for(auto& v : cache) // We can only do this after we're finished adding everything to cache
         linkargs.push_back(v.c_str());
 
-      if(CallLinker(env, linkargs) != 0)
+      if(CallLinker(env, linkargs, format) != 0)
         return ERR_FATAL_LINK_ERROR;
     }
     return ERR_SUCCESS;
   }
 
-  std::vector<std::string> GetSymbols(const char* file, FILE* log)
+  std::vector<std::string> GetSymbols(const char* file, FILE* log, LLD_FORMAT format)
   {
     std::string outbuf;
     llvm::raw_string_ostream sso(outbuf);
 
     std::vector<std::string> symbols;
-#ifdef IN_PLATFORM_WIN32
-    lld::coff::iterateSymbols(
-      file, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); }, &symbols,
-      sso);
-#else
-    lld::elf::iterateSymbols(
-      file, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); }, &symbols,
-      sso);
-#endif
+    switch(format)
+    {
+    case LLD_FORMAT::COFF:
+      lld::coff::iterateSymbols(
+        file, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); },
+        &symbols, sso);
+      break;
+    case LLD_FORMAT::ELF:
+      lld::elf::iterateSymbols(
+        file, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); },
+        &symbols, sso);
+      break;
+    }
 
     if(!symbols.size())
       fputs(outbuf.c_str(), log);

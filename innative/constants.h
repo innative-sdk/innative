@@ -20,26 +20,26 @@ KHASH_DECLARE(mapenum, int, const char*);
 
 namespace innative {
   namespace utility {
-    extern const char* IN_GETCPUINFO;
-    extern const char* IN_EXTENSION;
-    extern const char* IN_ENV_EXTENSION;
-    extern const char* IN_GLUE_STRING;
-    extern const char* IN_MEMORY_MAX_METADATA;
-    extern const char* IN_MEMORY_GROW_METADATA;
-    extern const char* IN_FUNCTION_TRAVERSED;
-    extern const char* IN_TEMP_PREFIX;
+    constexpr char IN_GETCPUINFO[]           = "__innative_getcpuinfo";
+    constexpr char IN_EXTENSION[]            = ".ir-cache";
+    constexpr char IN_ENV_EXTENSION[]        = ".ir-env-cache";
+    constexpr char IN_GLUE_STRING[]          = "_WASM_";
+    constexpr char IN_MEMORY_MAX_METADATA[]  = "__IN_MEMORY_MAX_METADATA";
+    constexpr char IN_MEMORY_GROW_METADATA[] = "__IN_MEMORY_GROW_METADATA";
+    constexpr char IN_FUNCTION_TRAVERSED[]   = "__IN_FUNCTION_TRAVERSED";
+    constexpr char IN_TEMP_PREFIX[]          = "wast_m";
 
     extern const std::array<const char*, OP_CODE_COUNT> OPNAMES;
 
     static const unsigned int WASM_MAGIC_COOKIE  = 0x6d736100;
     static const unsigned int WASM_MAGIC_VERSION = 0x01;
 
-    extern const struct kh_mapenum_s* ERR_ENUM_MAP;
-    extern const struct kh_mapenum_s* TYPE_ENCODING_MAP;
-    extern const struct kh_mapenum_s* WAST_ASSERTION_MAP;
+    extern const kh_mapenum_s* ERR_ENUM_MAP;
+    extern const kh_mapenum_s* TYPE_ENCODING_MAP;
+    extern const kh_mapenum_s* WAST_ASSERTION_MAP;
 
-    const char* EnumToString(const struct kh_mapenum_s* h, int i, char* buf, size_t n);
-    struct kh_mapenum_s* GenMapEnum(std::initializer_list<std::pair<int, const char*>> list);
+    const char* EnumToString(const kh_mapenum_s* h, int i, char* buf, size_t n);
+    kh_mapenum_s* GenMapEnum(std::initializer_list<std::pair<int, const char*>> list);
   }
 }
 

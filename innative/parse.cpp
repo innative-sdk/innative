@@ -492,7 +492,7 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, const Environme
       return err;
 
     f.n_locals = 0;
-    for(uint64_t i = 0; i < n_locals; ++i)
+    for(varuint32 i = 0; i < n_locals; ++i)
     {
       if(locals[i].count > (std::numeric_limits<uint32_t>::max() - f.n_locals))
         return ERR_FATAL_TOO_MANY_LOCALS; // Ensure we don't overflow the local count
@@ -503,8 +503,8 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, const Environme
       return ERR_FATAL_OUT_OF_MEMORY;
 
     f.n_locals = 0;
-    for(uint64_t i = 0; i < n_locals; ++i)
-      for(uint64_t j = 0; j < locals[i].count; ++j)
+    for(varuint32 i = 0; i < n_locals; ++i)
+      for(varuint32 j = 0; j < locals[i].count; ++j)
         f.locals[f.n_locals++] = locals[i].type;
   }
 

@@ -4,27 +4,8 @@
 #ifndef IN__BENCHMARK_H
 #define IN__BENCHMARK_H
 
-#include "innative/export.h"
-#include <utility>
-#include <stdint.h>
-#include <stdio.h>
-#include <vector>
-#include <string.h>
+#include "test.h"
 #include <chrono>
-
-#if defined(IN_COMPILER_GCC) && __GNUC__ < 8
-#include <experimental/filesystem>
-using namespace std::experimental::filesystem;
-#else
-#include <filesystem>
-using namespace std::filesystem;
-#endif
-
-#ifdef IN_PLATFORM_WIN32
-#define ALLOCA(sz) _alloca(sz)
-#else
-#define ALLOCA(sz) alloca(sz)
-#endif
 
 class Benchmarks
 {

@@ -37,19 +37,29 @@ void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
     0; // We must gaurantee all file names are unique because windows basically never unloads DLLs properly
   ++counter;
   Environment* env = (*_exports.CreateEnvironment)(1, 0, _arg0);
-  env->flags       = flags | ENV_ENABLE_WAT | ENV_LIBRARY;
-  env->optimize    = optimize;
-  env->features    = ENV_FEATURE_ALL;
-  env->log         = stdout;
-  env->loglevel    = _loglevel;
+  if(!env)
+    return 0;
+
+  env->flags    = flags | ENV_ENABLE_WAT | ENV_LIBRARY;
+  env->optimize = optimize;
+  env->features = ENV_FEATURE_ALL;
+  env->log      = stdout;
+  env->loglevel = _loglevel;
 
   int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
+
   if(err < 0)
+  {
+    (*_exports.DestroyEnvironment)(env);
     return 0;
+  }
 
   (*_exports.AddModule)(env, wasm, 0, wasm, &err);
   if(err < 0)
+  {
+    (*_exports.DestroyEnvironment)(env);
     return 0;
+  }
 
   (*_exports.FinalizeEnvironment)(env);
   path base = _folder / u8path(wasm).stem();
@@ -58,6 +68,8 @@ void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
   out.replace_extension(IN_LIBRARY_EXTENSION);
 
   err = (*_exports.Compile)(env, out.u8string().c_str());
+  (*_exports.DestroyEnvironment)(env);
+
   if(err < 0)
     return 0;
 
@@ -70,7 +82,6 @@ void* Benchmarks::LoadWASM(const char* wasm, int flags, int optimize)
   _garbage.push_back(base);
 #endif
   void* m = (*_exports.LoadAssembly)(out.u8string().c_str());
-  (*_exports.DestroyEnvironment)(env);
 
   return m;
 }

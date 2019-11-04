@@ -27,6 +27,10 @@ namespace innative {
   void* LoadAssembly(const char* file);
   void FreeAssembly(void* assembly);
   void DumpModule(std::ostream& stream, Module& mod);
+  const char* GetTypeEncodingString(int type_encoding);
+  const char* GetErrorString(int error_code);
+  int CompileScript(const uint8_t* data, size_t sz, Environment* env, bool always_compile, const char* output);
+  int SerializeModule(Environment* env, size_t m, const char* out, size_t* len);
 }
 
 #endif
