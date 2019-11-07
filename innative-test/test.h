@@ -33,6 +33,7 @@ public:
   void test_util();
   void test_parallel_parsing();
   void test_serializer();
+  void test_whitelist();
   void test_malloc();
   int CompileWASM(const path& file);
 

@@ -353,6 +353,13 @@ namespace innative {
 #endif
     }
 
+    int AddCImport(const Environment& env, const char* id)
+    {
+      int r;
+      kh_put_cimport(env.cimports, Identifier((uint8_t*)id, (varuint32)strlen(id)), &r);
+      return r;
+    }
+
 #ifdef IN_PLATFORM_WIN32
     void* LoadDLL(const path& path) { return LoadLibraryW(path.c_str()); }
     void* LoadDLLFunction(void* dll, const char* name) { return GetProcAddress((HMODULE)dll, name); }
