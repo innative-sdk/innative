@@ -15,6 +15,7 @@ void innative_runtime(IRExports* exports)
   exports->AddWhitelist          = &AddWhitelist;
   exports->AddEmbedding          = &AddEmbedding;
   exports->FinalizeEnvironment   = &FinalizeEnvironment;
+  exports->Validate              = &Validate;
   exports->Compile               = &Compile;
   exports->LoadFunction          = &LoadFunction;
   exports->LoadTable             = &LoadTable;

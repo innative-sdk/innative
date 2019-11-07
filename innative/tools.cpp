@@ -169,11 +169,11 @@ IN_ERROR innative::AddWhitelist(Environment* env, const char* module_name, const
   if(!export_name)
     return ERR_PARSE_INVALID_NAME;
 
-  char* whitelist = tmalloc<char>(*env, CanonWhitelist(module_name, export_name, nullptr));
+  char* whitelist = tmalloc<char>(*env, CanonWhitelist(module_name, export_name, env->system, nullptr));
   if(!whitelist)
     return ERR_FATAL_OUT_OF_MEMORY;
 
-  CanonWhitelist(module_name, export_name, whitelist);
+  CanonWhitelist(module_name, export_name, env->system, whitelist);
 
   int r;
   auto iter = kh_put_modulepair(env->whitelist, whitelist, &r);
@@ -291,12 +291,13 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
   return ERR_SUCCESS;
 }
 
-IN_ERROR innative::Compile(Environment* env, const char* file)
+IN_ERROR innative::Validate(Environment* env)
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;
 
   // Before validating, add all modules to the modulemap. We must do this outside of LoadModule for multithreading reasons.
+  //kh_clear_modules(env->modulemap);
   for(size_t i = 0; i < env->n_modules; ++i)
   {
     int r;
@@ -312,6 +313,18 @@ IN_ERROR innative::Compile(Environment* env, const char* file)
     internal::ReverseErrorList(env->errors); // Reverse error list so it appears in chronological order
     return ERR_VALIDATION_ERROR;
   }
+
+  return ERR_SUCCESS;
+}
+
+IN_ERROR innative::Compile(Environment* env, const char* file)
+{
+  if(!env)
+    return ERR_FATAL_NULL_POINTER;
+
+  IN_ERROR err = Validate(env);
+  if(err != ERR_SUCCESS)
+    return err;
 
   return CompileEnvironment(env, file);
 }

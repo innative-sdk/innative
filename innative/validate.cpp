@@ -10,7 +10,7 @@
 #include <atomic>
 #include <limits>
 
-#define str_pair_hash_equal(a, b) (strcmp(a, b) == 0) && (strcmp(strchr(a, 0) + 1, strchr(a, 0) + 1) == 0)
+#define str_pair_hash_equal(a, b) ((strcmp(a, b) == 0) && (strcmp(strchr(a, 0) + 1, strchr(b, 0) + 1) == 0))
 
 __KHASH_IMPL(modulepair, , kh_cstr_t, FunctionType, 1, innative::internal::__ac_X31_hash_string_pair, str_pair_hash_equal);
 __KHASH_IMPL(cimport, , Identifier, char, 0, innative::internal::__ac_X31_hash_bytearray, kh_int_hash_equal);
@@ -188,12 +188,12 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
         {
           khiter_t itermodule =
             kh_get_modulepair(env.whitelist,
-                              CanonWhitelist(imp.module_name.str(), "").c_str()); // Check for a wildcard match first
+            CanonWhitelist(imp.module_name.str(), "", env.system).c_str()); // Check for a wildcard match first
           if(!kh_exist2(env.whitelist, itermodule))
           {
             khiter_t iterexport = kh_get_modulepair(
               env.whitelist,
-              CanonWhitelist(imp.module_name.str(), imp.export_name.str())
+              CanonWhitelist(imp.module_name.str(), imp.export_name.str(), env.system)
                 .c_str()); // We already canonized the whitelist imports to eliminate unnecessary !C specifiers
             if(!kh_exist2(env.whitelist, iterexport))
               return AppendError(env, env.errors, m, ERR_ILLEGAL_C_IMPORT,

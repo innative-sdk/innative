@@ -7,7 +7,6 @@
 #include <map>
 
 using namespace innative;
-using namespace utility;
 
 static const int WASM_PAGE = (1 << 16);
 static const int MAX_PAGES = 32;

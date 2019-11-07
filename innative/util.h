@@ -223,7 +223,7 @@ namespace innative {
     void FreeDLL(void* dll);
     int Install(const char* arg0, bool full);
     int Uninstall();
-    bool RestoreStackGuard(void* lpPage);
+    IN_COMPILER_DLLEXPORT int AddCImport(const Environment& env, const char* id);
     const char* AllocString(Environment& env, const char* s, size_t n);
     IN_FORCEINLINE const char* AllocString(Environment& env, const char* s) { return AllocString(env, s, strlen(s)); }
     IN_FORCEINLINE const char* AllocString(Environment& env, const std::string& s)
@@ -294,9 +294,9 @@ namespace innative {
     }
 
     // Generates a whitelist string for a module and export name, which includes calling convention information
-    inline size_t CanonWhitelist(const void* module_name, const void* export_name, char* out)
+    inline size_t CanonWhitelist(const void* module_name, const void* export_name, const char* system, char* out)
     {
-      if(!module_name)
+      if(!module_name || !strcmp((const char*)module_name, system)) // system name is normalized to an empty module name
         module_name = "";
       size_t module_len = strlen((const char*)module_name);
       const char* call  = strchr((const char*)module_name, '!');
@@ -312,11 +312,11 @@ namespace innative {
       }
       return module_len + export_len + 1;
     }
-    IN_FORCEINLINE std::string CanonWhitelist(const void* module_name, const void* export_name)
+    IN_FORCEINLINE std::string CanonWhitelist(const void* module_name, const void* export_name, const char* system)
     {
       std::string s;
-      s.resize(CanonWhitelist(module_name, export_name, nullptr));
-      CanonWhitelist(module_name, export_name, const_cast<char*>(s.data()));
+      s.resize(CanonWhitelist(module_name, export_name, system, nullptr));
+      CanonWhitelist(module_name, export_name, system, const_cast<char*>(s.data()));
       return s;
     }
 

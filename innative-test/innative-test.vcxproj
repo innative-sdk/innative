@@ -348,6 +348,7 @@
     <ClCompile Include="test_stack.cpp" />
     <ClCompile Include="test_stream.cpp" />
     <ClCompile Include="test_util.cpp" />
+    <ClCompile Include="test_whitelist.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="benchmark.h" />

@@ -20,6 +20,7 @@ namespace innative {
   enum IN_ERROR AddWhitelist(struct IN_WASM_ENVIRONMENT* env, const char* module_name, const char* export_name);
   enum IN_ERROR AddEmbedding(struct IN_WASM_ENVIRONMENT* env, int tag, const void* data, uint64_t size);
   enum IN_ERROR FinalizeEnvironment(struct IN_WASM_ENVIRONMENT* env);
+  enum IN_ERROR Validate(struct IN_WASM_ENVIRONMENT* env);
   enum IN_ERROR Compile(struct IN_WASM_ENVIRONMENT* env, const char* file);
   IN_Entrypoint LoadFunction(void* assembly, const char* module_name, const char* function);
   IN_Entrypoint LoadTable(void* assembly, const char* module_name, const char* table, varuint32 index);

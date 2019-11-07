@@ -7,7 +7,6 @@
 #include <algorithm>
 
 using namespace innative;
-using namespace utility;
 
 void TestHarness::test_allocator()
 {

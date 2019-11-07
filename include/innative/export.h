@@ -96,9 +96,13 @@ typedef struct IN__EXPORTS
   /// \param env The environment to finalize
   enum IN_ERROR (*FinalizeEnvironment)(Environment* env);
 
-  /// Compiles all the modules in the environment using the current configuration and any cached results into a binary file.
-  /// \param env The environment to compile.
-  /// \param file The path of the output file that is produced.
+  /// Validates all the modules in the environment using the current configuration.
+  /// \param env The environment to verify.
+  enum IN_ERROR (*Validate)(Environment* env);
+
+  /// Compiles and verifies all the modules in the environment using the current configuration and any cached results into a
+  /// binary file.
+  /// \param env The environment to compile. \param file The path of the output file that is produced.
   enum IN_ERROR (*Compile)(Environment* env, const char* file);
 
   /// Loads a webassembly binary (usually a dynamic library) produced by Compile into memory, allowing you to load functions

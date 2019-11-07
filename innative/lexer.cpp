@@ -42,7 +42,7 @@ namespace innative {
       return h;
     }
 
-    static const char* tokenlist[]      = { "[NONE]",
+    static const char* tokenlist[] = { "[NONE]",
                                        "(",
                                        ")",
                                        "module",
@@ -90,14 +90,16 @@ namespace innative {
                                        "script",
                                        "input",
                                        "output" };
+
     static const kh_tokens_t* tokenhash = GenTokenHash(tokenlist, { { "anyfunc", WatTokens::FUNCREF } });
 
-    template<int LEN> inline const char* IN_getTokenString(WatTokens token, const char* (&list)[LEN])
+    const char* GetTokenString(WatTokens token)
     {
-      return ((token != WatTokens::NONE) && ((int)token < LEN)) ? list[(int)token] : 0;
+      constexpr int len = sizeof(tokenlist) / sizeof(decltype(tokenlist[0]));
+      return ((token != WatTokens::NONE) && ((int)token < len)) ?
+               tokenlist[(int)token] :
+               0;
     }
-
-    const char* GetTokenString(WatTokens token) { return IN_getTokenString(token, tokenlist); }
 
     const char* CheckTokenINF(const char* s, const char* end, std::string* target)
     {
