@@ -25,7 +25,8 @@ size_t TestHarness::Run(FILE* out)
     { "queue.h", &TestHarness::test_queue },        { "stack.h", &TestHarness::test_stack },
     { "stream.h", &TestHarness::test_stream },      { "util.h", &TestHarness::test_util },
     { "allocator", &TestHarness::test_allocator },  { "parallel parsing", &TestHarness::test_parallel_parsing },
-    { "whitelist", &TestHarness::test_whitelist },  { "serializer", &TestHarness::test_serializer }
+    { "whitelist", &TestHarness::test_whitelist },  { "serializer", &TestHarness::test_serializer },
+    { "embedding", &TestHarness::test_embedding }
   };
 
   static const size_t NUMTESTS    = sizeof(tests) / sizeof(decltype(tests[0]));

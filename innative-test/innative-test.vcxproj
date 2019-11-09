@@ -339,6 +339,7 @@
     <ClCompile Include="benchmark_n-body.cpp" />
     <ClCompile Include="test.cpp" />
     <ClCompile Include="test_allocator.cpp" />
+    <ClCompile Include="test_embedding.cpp" />
     <ClCompile Include="test_environment.cpp" />
     <ClCompile Include="test_harness.cpp" />
     <ClCompile Include="test_malloc.cpp" />

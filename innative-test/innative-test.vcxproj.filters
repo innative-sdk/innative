@@ -66,6 +66,9 @@
     <ClCompile Include="test_whitelist.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="test_embedding.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="benchmark.h">

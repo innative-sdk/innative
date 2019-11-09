@@ -41,11 +41,14 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "innative-test", "innative-t
 	ProjectSection(ProjectDependencies) = postProject
 		{54E92032-38A6-4069-8189-2B27995700E0} = {54E92032-38A6-4069-8189-2B27995700E0}
 		{8B15928A-757D-4280-B90F-4D4E90D37F60} = {8B15928A-757D-4280-B90F-4D4E90D37F60}
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC} = {D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}
 	EndProjectSection
 EndProject
 Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "innative-sdk-setup", "innative-sdk-setup\innative-sdk-setup.wixproj", "{3F0D37F9-9902-4766-9D2C-0F4BC94CE86A}"
 EndProject
 Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "innative-runtime-setup", "innative-runtime-setup\innative-runtime-setup.wixproj", "{1D10E371-391D-4147-8DEC-28250ADB318A}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "innative-test-embedding", "innative-test-embedding\innative-test-embedding.vcxproj", "{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -179,6 +182,22 @@ Global
 		{1D10E371-391D-4147-8DEC-28250ADB318A}.Release Static|x86.ActiveCfg = Release|x86
 		{1D10E371-391D-4147-8DEC-28250ADB318A}.Release|x64.ActiveCfg = Release|x64
 		{1D10E371-391D-4147-8DEC-28250ADB318A}.Release|x86.ActiveCfg = Release|x86
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Debug Static|x64.ActiveCfg = Debug|x64
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Debug Static|x64.Build.0 = Debug|x64
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Debug Static|x86.ActiveCfg = Debug|Win32
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Debug Static|x86.Build.0 = Debug|Win32
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Debug|x64.ActiveCfg = Debug|x64
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Debug|x64.Build.0 = Debug|x64
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Debug|x86.ActiveCfg = Debug|Win32
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Debug|x86.Build.0 = Debug|Win32
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Release Static|x64.ActiveCfg = Release|x64
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Release Static|x64.Build.0 = Release|x64
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Release Static|x86.ActiveCfg = Release|Win32
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Release Static|x86.Build.0 = Release|Win32
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Release|x64.ActiveCfg = Release|x64
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Release|x64.Build.0 = Release|x64
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Release|x86.ActiveCfg = Release|Win32
+		{D5EB5F8C-1ABB-45FA-85D0-0E29D47E30BC}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
