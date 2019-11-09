@@ -19,7 +19,7 @@ limitations under the License.
 
 #define INNATIVE_VERSION_MAJOR 0
 #define INNATIVE_VERSION_MINOR 1
-#define INNATIVE_VERSION_REVISION 2
+#define INNATIVE_VERSION_REVISION 3
 #define INNATIVE_VERSION(v, m, r, b) (((v | 0ULL) << 48) | ((m | 0ULL) << 32) | ((r | 0ULL) << 16) | (b | 0ULL))
 #define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
 

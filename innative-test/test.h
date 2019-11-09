@@ -35,6 +35,7 @@ public:
   void test_serializer();
   void test_whitelist();
   void test_malloc();
+  void test_embedding();
   int CompileWASM(const path& file);
 
   inline std::pair<uint32_t, uint32_t> Results()

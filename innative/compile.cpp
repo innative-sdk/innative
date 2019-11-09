@@ -2644,8 +2644,9 @@ int CallLinker(const Environment* env, vector<const char*>& linkargs, LLD_FORMAT
 
     if(!result)
     {
+      llvm_stream.flush(); // In certain error cases, the stream will not have been flushed properly
       if(env->loglevel < LOG_NOTICE)
-        fputs(outbuf.c_str(), env->log);
+        fwrite(outbuf.data(), 1, outbuf.size(), env->log);
       err = ERR_FATAL_LINK_ERROR;
     }
   }
@@ -2715,8 +2716,8 @@ namespace innative {
   void DeleteCache(const Environment& env, Module& m)
   {
     // Certain error conditions can result in us clearing the cache of an invalid module.
-    if(m.name.size() > 0) // Prevent an error from happening if the name is invalid.
-      std::remove(GetLinkerObjectPath(env, m).u8string().c_str()); // Always remove the file if it exists
+    if(m.name.size() > 0)                  // Prevent an error from happening if the name is invalid.
+      remove(GetLinkerObjectPath(env, m)); // Always remove the file if it exists
 
     if(m.cache != nullptr)
     {
