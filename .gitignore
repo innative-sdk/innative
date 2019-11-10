@@ -16,7 +16,7 @@
 *.pdb
 *.zip
 /bin/
-/bin32/
+/bin-Win32/
 /innative/x64/
 /innative-env/x64/
 /innative-cmd/x64/
