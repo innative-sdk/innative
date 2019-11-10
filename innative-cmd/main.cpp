@@ -105,13 +105,13 @@ void usage()
     << std::endl;
 }
 
-void printerr(IRExports& exports, FILE* f, const char* prefix, int err)
+void printerr(IRExports& exports, FILE* f, const char* prefix, const char* postfix, int err)
 {
   const char* errstring = (*exports.GetErrorString)(err);
   if(errstring)
-    fprintf(f, "%s: %s\n", prefix, errstring);
+    fprintf(f, "%s%s: %s\n", prefix, postfix, errstring);
   else
-    fprintf(f, "%s: %i\n", prefix, err);
+    fprintf(f, "%s%s: %i\n", prefix, postfix, err);
 }
 
 void dump_validation_errors(IRExports& exports, Environment* env)
@@ -126,15 +126,15 @@ void dump_validation_errors(IRExports& exports, Environment* env)
   }
 }
 
-template<typename F> void checkarg(int i, int argc, char* argv[], int& err, F&& f)
+bool checkarg(int i, int argc, char* argv[], int& err)
 {
   if(i >= argc)
   {
     std::cout << "Missing command line argument parameter for " << argv[i - 1] << std::endl;
     err = ERR_MISSING_COMMAND_LINE_PARAMETER;
+    return false;
   }
-  else
-    f();
+  return true;
 }
 
 int main(int argc, char* argv[])
@@ -213,13 +213,16 @@ int main(int argc, char* argv[])
           --i; // We must decrement after we hit another parameter so it gets processed correctly
           break;
         case 'l': // lib
-          checkarg(++i, argc, argv, err, [&]() { embeddings.push_back({ argv[i], IN_TAG_ANY }); });
+          if(checkarg(++i, argc, argv, err))
+            embeddings.push_back({ argv[i], IN_TAG_ANY });
           break;
         case 'L': // shared lib
-          checkarg(++i, argc, argv, err, [&]() { embeddings.push_back({ argv[i], IN_TAG_DYNAMIC }); });
+          if(checkarg(++i, argc, argv, err))
+            embeddings.push_back({ argv[i], IN_TAG_DYNAMIC });
           break;
         case 'o': // out
-          checkarg(++i, argc, argv, err, [&]() { out = u8path(argv[i]); });
+          if(checkarg(++i, argc, argv, err))
+             out = u8path(argv[i]);
           break;
         case 's': // serialize
           serialize = (i + 1 < argc && argv[i + 1][0] != '-') ? argv[++i] : "";
@@ -233,19 +236,24 @@ int main(int argc, char* argv[])
           verbose = true;
           break;
         case 'w': // whitelist
-          checkarg(++i, argc, argv, err, [&]() { whitelist.push_back(argv[i]); });
+          if(checkarg(++i, argc, argv, err))
+            whitelist.push_back(argv[i]);
           break;
         case 'e': // environment/system module
-          checkarg(++i, argc, argv, err, [&]() { system = argv[i]; });
+          if(checkarg(++i, argc, argv, err))
+            system = argv[i];
           break;
         case 'a': // alternative linker
-          checkarg(++i, argc, argv, err, [&]() { linker = argv[i]; });
+          if(checkarg(++i, argc, argv, err))
+            linker = argv[i];
           break;
         case 'd': // Specify library directory
-          checkarg(++i, argc, argv, err, [&]() { libpath = argv[i]; });
+          if(checkarg(++i, argc, argv, err))
+            libpath = argv[i];
           break;
         case 'j': // Specify intermediate directory
-          checkarg(++i, argc, argv, err, [&]() { objpath = argv[i]; });
+          if(checkarg(++i, argc, argv, err))
+            objpath = argv[i];
           break;
         case 'i': // install
           std::cout << "Installing inNative Runtime..." << std::endl;
@@ -460,47 +468,50 @@ int main(int argc, char* argv[])
     char* second = STRTOK(NULL, ":", &ctx);
 
     if(!second)
-      (*exports.AddWhitelist)(env, nullptr, first);
+      err = (*exports.AddWhitelist)(env, nullptr, first);
     else
-      (*exports.AddWhitelist)(env, first, second);
-  }
-
-  // Load all modules
-  for(size_t i = 0; i < inputs.size(); ++i)
-    (*exports.AddModule)(env, inputs[i], 0, u8path(inputs[i]).stem().u8string().c_str(), &err);
-
-  if(err < 0)
-  {
-    if(env->loglevel >= LOG_FATAL)
-    {
-      printerr(exports, env->log, "Error loading modules", err);
-      dump_validation_errors(exports, env);
-    }
-
-    (*exports.DestroyEnvironment)(env);
-    return err;
+      err = (*exports.AddWhitelist)(env, first, second);
+    if(err < 0)
+      printerr(exports, env->log, "Error adding whitelist ", item, err);
   }
 
   // Add all embedding environments, plus the default environment
   embeddings.push_back({ INNATIVE_DEFAULT_ENVIRONMENT, 0 });
 
   for(size_t i = 0; i < embeddings.size(); ++i)
-    if((*exports.AddEmbedding)(env, embeddings[i].second, embeddings[i].first, 0) == ERR_FATAL_FILE_ERROR)
+  {
+    err = (*exports.AddEmbedding)(env, embeddings[i].second, embeddings[i].first, 0);
+    if(err < 0)
     {
-      fprintf(env->log, "Error loading file: %s\n", embeddings[i].first);
+      printerr(exports, env->log, "Error loading embedding ", embeddings[i].first, err);
       (*exports.DestroyEnvironment)(env);
       return ERR_FATAL_FILE_ERROR;
     }
+  }
+
+  // Load all modules
+  std::unique_ptr<int[]> errs(new int[inputs.size()]);
+  for(size_t i = 0; i < inputs.size(); ++i)
+    (*exports.AddModule)(env, inputs[i], 0, u8path(inputs[i]).stem().u8string().c_str(), &errs[i]);
 
   // Ensure all modules are loaded, in case we have multithreading enabled
-  if(err >= 0)
-    err = (*exports.FinalizeEnvironment)(env);
+  err = (*exports.FinalizeEnvironment)(env);
+
+  for(size_t i = 0; i < inputs.size(); ++i)
+  {
+    if(errs[i] < 0)
+    {
+      printerr(exports, env->log, "Error loading module ", inputs[i], errs[i]);
+      if(err >= 0)
+        err = ERR_FATAL_INVALID_MODULE;
+    }
+  }
 
   if(err < 0)
   {
     if(env->loglevel >= LOG_FATAL)
     {
-      printerr(exports, env->log, "Error loading environment", err);
+      printerr(exports, env->log, "Error loading environment", "", err);
       dump_validation_errors(exports, env);
     }
 
@@ -543,7 +554,7 @@ int main(int argc, char* argv[])
   {
     if(env->loglevel >= LOG_ERROR)
     {
-      printerr(exports, env->log, "Compile error", err);
+      printerr(exports, env->log, "Compile error", "", err);
       dump_validation_errors(exports, env);
     }
 

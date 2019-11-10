@@ -27,10 +27,10 @@ else
 CPPFLAGS += -DNDEBUG -O3
 endif
 
-debug: innative-env innative innative-cmd innative-test innative-stub
-all: innative-env innative innative-cmd innative-test innative-stub
+debug: innative-env innative-test-embedding innative innative-cmd innative-test innative-stub
+all: innative-env innative-test-embedding innative innative-cmd innative-test innative-stub
 
-clean: innative-env-clean innative-clean innative-cmd-clean innative-test-clean innative-stub-clean
+clean: innative-env-clean innative-test-embedding-clean innative-clean innative-cmd-clean innative-test-clean innative-stub-clean
 	#$(RM) -r $(LIBDIR)
 	#$(RM) -r $(BINDIR)
 	$(RM) -r $(OBJDIR)
@@ -45,6 +45,7 @@ dist: all
 	mkdir -p innative-posix-runtime-x64/
 	cp bin/innative.a innative-posix-runtime-x64/
 	cp bin/libinnative.so innative-posix-runtime-x64/
+	cp bin/innative-test-embedding.a innative-posix-runtime-x64/
 	cp bin/innative-env.a innative-posix-runtime-x64/
 	cp bin/innative-env-d.a innative-posix-runtime-x64/
 	cp bin/innative-cmd innative-posix-runtime-x64/
@@ -80,3 +81,4 @@ include innative/Makefile
 include innative-cmd/Makefile
 include innative-test/Makefile
 include innative-stub/Makefile
+include innative-test-embedding/Makefile

@@ -36,6 +36,15 @@ void TestHarness::test_whitelist()
     (*_exports.AddModule)(env, out.data(), out.size(), "whitelist", &err);
     TEST(err == 0);
     (*_exports.FinalizeEnvironment)(env);
+#if defined(IN_PLATFORM_WIN32) && defined(IN_CPU_x86)
+    AddCImport(*env, "_asdf");
+    AddCImport(*env, "_asdf2");
+    AddCImport(*env, "_a");
+    AddCImport(*env, "_A");
+    AddCImport(*env, "_AB");
+    AddCImport(*env, "_yz");
+    AddCImport(*env, "_[fake]");
+#else
     AddCImport(*env, "asdf");
     AddCImport(*env, "asdf2");
     AddCImport(*env, "a");
@@ -43,7 +52,7 @@ void TestHarness::test_whitelist()
     AddCImport(*env, "AB");
     AddCImport(*env, "yz");
     AddCImport(*env, "[fake]");
-
+#endif
     err = (*_exports.Validate)(env);
     if(err != ERR_SUCCESS)
       err = env->errors->code;

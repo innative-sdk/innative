@@ -180,7 +180,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   {
     if(env.cimports)
     {
-      std::string name    = CanonImportName(imp, env.system);
+      std::string name    = ABIMangle(CanonImportName(imp, env.system), CURRENT_ABI, GetCallingConvention(imp), !m ? 0 : GetParameterBytes(*m, imp));
       khiter_t iterimport = kh_get_cimport(env.cimports, Identifier((uint8_t*)name.c_str(), (varuint32)name.size()));
       if(kh_exist2(env.cimports, iterimport))
       {
