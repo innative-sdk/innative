@@ -10,12 +10,12 @@ void TestHarness::test_embedding()
 {
   int i                            = 4;
   int j                            = 2;
-  constexpr const char dll_path[]  = "broken_module.dll";
-  constexpr const char wasm_path[] = "../scripts/broken_module.wasm";
+  constexpr const char dll_path[]  = "embedded.dll";
+  constexpr const char wasm_path[] = "../scripts/embedded.wat";
 
   Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);
-  env->flags |= ENV_LIBRARY;
-  env->system   = "env";
+  env->flags |= ENV_LIBRARY | ENV_ENABLE_WAT;
+  env->system = "env";
 
   int err = (*_exports.AddWhitelist)(env, "env", "my_factorial");
   TEST(!err);
@@ -28,7 +28,7 @@ void TestHarness::test_embedding()
   err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
   TEST(!err);
 
-  (*_exports.AddModule)(env, wasm_path, 0, "module", &err);
+  (*_exports.AddModule)(env, wasm_path, 0, "embedded", &err);
   TEST(!err);
   err = (*_exports.FinalizeEnvironment)(env);
   TEST(!err);
@@ -39,8 +39,11 @@ void TestHarness::test_embedding()
   (*_exports.DestroyEnvironment)(env);
 
   void* assembly        = (*_exports.LoadAssembly)(dll_path);
-  int (*test)(int, int) = (int (*)(int, int))(*_exports.LoadFunction)(assembly, "module", "test");
+  int (*test)(int, int) = (int (*)(int, int))(*_exports.LoadFunction)(assembly, "embedded", "test");
+  TEST(test != nullptr);
 
-  TEST((*test)(i, j) == 26);
+  if(test)
+    TEST((*test)(i, j) == 26);
+
   (*_exports.FreeAssembly)(assembly);
 }

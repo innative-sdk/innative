@@ -201,8 +201,7 @@ IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, uin
 
 IN_ERROR innative::FinalizeEnvironment(Environment* env)
 {
-  // If we have an empty whitelist defined, all C function imports are illegal, so don't bother dumping symbols
-  if(env->cimports && (!(env->flags & ENV_WHITELIST) || kh_size(env->whitelist) > 0))
+  if(env->cimports)
   {
     for(Embedding* embed = env->embeddings; embed != nullptr; embed = embed->next)
     {
@@ -297,7 +296,7 @@ IN_ERROR innative::Validate(Environment* env)
     return ERR_FATAL_NULL_POINTER;
 
   // Before validating, add all modules to the modulemap. We must do this outside of LoadModule for multithreading reasons.
-  //kh_clear_modules(env->modulemap);
+  // kh_clear_modules(env->modulemap);
   for(size_t i = 0; i < env->n_modules; ++i)
   {
     int r;
@@ -330,9 +329,10 @@ IN_ERROR innative::Compile(Environment* env, const char* file)
 }
 IN_Entrypoint innative::LoadFunction(void* assembly, const char* module_name, const char* function)
 {
-  return (IN_Entrypoint)LoadDLLFunction(
-    assembly,
-    !function ? IN_INIT_FUNCTION : utility::CanonicalName(StringRef::From(module_name), StringRef::From(function)).c_str());
+  // All exported WASM functions use __cdecl, which allows us to figure out the proper mangling
+  auto canonical = utility::CanonicalName(StringRef::From(module_name), StringRef::From(function));
+  return (IN_Entrypoint)LoadDLLFunction(assembly, !function ? IN_INIT_FUNCTION :
+                                                              innative::ABIMangle(canonical, CURRENT_ABI, 0, 0).c_str());
 }
 
 struct IN_TABLE

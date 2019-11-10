@@ -1938,7 +1938,7 @@ uint64_t GetTotalSize(llvmTy* t)
   return t->getArrayNumElements() * (t->getArrayElementType()->getPrimitiveSizeInBits() / 8);
 }
 
-int GetCallingConvention(Import& imp)
+int innative::GetCallingConvention(const Import& imp)
 {
   const char* str = !imp.module_name.str() ? nullptr : strrchr(imp.module_name.str(), '!');
   if(!str)
@@ -1948,6 +1948,10 @@ int GetCallingConvention(Import& imp)
     return llvm::CallingConv::C;
   if(!STRICMP(str, "STD"))
     return llvm::CallingConv::X86_StdCall;
+  if(!STRICMP(str, "FAST"))
+    return llvm::CallingConv::X86_FastCall;
+  if(!STRICMP(str, "THIS"))
+    return llvm::CallingConv::X86_ThisCall;
   if(!STRICMP(str, "JS"))
     return llvm::CallingConv::WebKit_JS;
   if(!STRICMP(str, "GHC"))
@@ -1957,6 +1961,49 @@ int GetCallingConvention(Import& imp)
   if(!STRICMP(str, "HiPE"))
     return llvm::CallingConv::HiPE;
   return llvm::CallingConv::C;
+}
+
+int innative::GetParameterBytes(const IN_WASM_MODULE& m, const Import& imp)
+{
+  int total = 0;
+  if(imp.kind == WASM_KIND_FUNCTION && imp.func_desc.type_index < m.type.n_functions)
+  {
+    auto& sig = m.type.functions[imp.func_desc.type_index];
+    for(varuint32 i = 0; i < sig.n_params; ++i)
+    {
+      switch(sig.params[i])
+      {
+      case TE_f32:
+      case TE_i32: total += 4; break;
+      case TE_i64:
+      case TE_f64: total += 8; break;
+      case TE_funcref:
+      case TE_cref:
+#ifdef IN_32BIT
+        total += 4;
+#else
+        total += 8;
+#endif
+        break;
+      }
+    }
+  }
+  return total;
+}
+
+std::string innative::ABIMangle(const std::string& src, ABI abi, int convention, int bytes)
+{
+  if(abi == ABI::Win32)
+  {
+    switch(convention)
+    {
+    case llvm::CallingConv::C: return "_" + src;
+    case llvm::CallingConv::X86_StdCall: return "_" + src + "@" + std::to_string(bytes);
+    case llvm::CallingConv::X86_FastCall: return "@" + src + "@" + std::to_string(bytes);
+    }
+  }
+
+  return src;
 }
 
 code::Intrinsic* GetIntrinsic(Import& imp, code::Context& context)
@@ -2542,14 +2589,16 @@ void ResolveModuleExports(const Environment* env, Module* root, llvm::LLVMContex
     case WASM_KIND_FUNCTION:
       if(!ctx->functions[e->index].exported)
       {
+        ABI abi = CURRENT_ABI;
+
         if(ctx->dbuilder)
           ctx->builder.SetCurrentDebugLocation(
             llvm::DILocation::get(context, ctx->init->getSubprogram()->getLine(), 0, ctx->init->getSubprogram()));
 
-        ctx->functions[e->index].exported = (*wrapperfn)(ctx->functions[e->index].imported ?
-                                                           ctx->functions[e->index].imported :
-                                                           ctx->functions[e->index].internal,
-                                                         canonical, *ctx, Func::ExternalLinkage, llvm::CallingConv::C);
+        ctx->functions[e->index].exported = (*wrapperfn)(
+          ctx->functions[e->index].imported ? ctx->functions[e->index].imported : ctx->functions[e->index].internal,
+          ABIMangle(canonical, abi, llvm::CallingConv::C, 0), *ctx, Func::ExternalLinkage, llvm::CallingConv::C);
+
         ctx->functions[e->index].exported->setDLLStorageClass(
           llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
       }
@@ -2589,8 +2638,8 @@ int CallLinker(const Environment* env, vector<const char*>& linkargs, LLD_FORMAT
     const char* quote = "";
 #endif
     std::string cmd;
-    cmd += quote; // for windows we have to double quote the entire bloody command because system() actually calls "cmd /c
-                  // <string>"
+    cmd += quote; // for windows we have to double quote the entire bloody command because system() actually calls "cmd
+                  // /c <string>"
     cmd += quote;
     cmd += env->linker;
     cmd += quote;
@@ -2810,7 +2859,7 @@ namespace innative {
       arch->createTargetMachine(triple, llvm::sys::getHostCPUName(), subtarget_features.getString(), opt, RM, llvm::None);
 
     if(!env->n_modules)
-      return ERR_FATAL_INVALID_MODULE;
+      return ERR_FATAL_NO_MODULES;
 
     if(env->optimize & ENV_OPTIMIZE_FAST_MATH)
     {
@@ -2856,7 +2905,7 @@ namespace innative {
       AddMemLocalCaching(*m->cache);
 
     if((!has_start || env->flags & ENV_NO_INIT) && !(env->flags & ENV_LIBRARY))
-      return ERR_FATAL_INVALID_MODULE; // We can't compile an EXE without at least one start function
+      return ERR_FATAL_NO_START_FUNCTION; // We can't compile an EXE without at least one start function
 
     // Create cleanup function
     code::Context& mainctx = *env->modules[0].cache;
