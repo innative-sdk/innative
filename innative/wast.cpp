@@ -138,7 +138,20 @@ namespace innative {
       if(!entry)
         return ERR_RUNTIME_INIT_ERROR;
 
+#ifdef IN_COMPILER_MSC
+      // On windows, signals can sometimes get promoted to SEH exceptions across DLL bounderies.
+      __try
+      {
+        (*entry)();
+      }
+      __except(GetExceptionCode() == EXCEPTION_ILLEGAL_INSTRUCTION) // Only catch an illegal instruction
+      {
+        return ERR_RUNTIME_TRAP;
+      }
+#else
       (*entry)();
+#endif
+
       return ERR_SUCCESS;
     }
 

@@ -102,7 +102,8 @@ typedef struct IN__EXPORTS
 
   /// Compiles and verifies all the modules in the environment using the current configuration and any cached results into a
   /// binary file.
-  /// \param env The environment to compile. \param file The path of the output file that is produced.
+  /// \param env The environment to compile.
+  /// \param file The path of the output file that is produced.
   enum IN_ERROR (*Compile)(Environment* env, const char* file);
 
   /// Loads a webassembly binary (usually a dynamic library) produced by Compile into memory, allowing you to load functions
@@ -118,8 +119,7 @@ typedef struct IN__EXPORTS
   /// signature, you must cast it manually to the correct function type.
   /// \param assembly A pointer to a webassembly binary loaded by LoadAssembly.
   /// \param module_name The name of the module the function is exported from.
-  /// \param function The
-  /// name of the function.
+  /// \param function The name of the function.
   IN_Entrypoint (*LoadFunction)(void* assembly, const char* module_name,
                                 const char* function); // if function is null, loads the entrypoint function
 
@@ -205,8 +205,7 @@ IN_COMPILER_DLLEXPORT extern int innative_uninstall();
 /// \param flags Environment flags to compile with. This is mostly used to set the ENV_LIBRARY flag in case this should be a
 /// shared library.
 /// \param out The output file that will store the compilation result.
-/// \param log A C FILE* stream that
-/// should be used for logging errors or warnings.
+/// \param log A C FILE* stream that should be used for logging errors or warnings.
 IN_COMPILER_DLLEXPORT extern int innative_compile_llvm(const char** files, size_t n, int flags, const char* out, FILE* log);
 
 #ifdef __cplusplus
