@@ -20,14 +20,18 @@ TestHarness::~TestHarness()
 }
 size_t TestHarness::Run(FILE* out)
 {
-  std::pair<const char*, void (TestHarness::*)()> tests[] = {
-    { "wasm_malloc.c", &TestHarness::test_malloc }, { "internal.c", &TestHarness::test_environment },
-    { "queue.h", &TestHarness::test_queue },        { "stack.h", &TestHarness::test_stack },
-    { "stream.h", &TestHarness::test_stream },      { "util.h", &TestHarness::test_util },
-    { "allocator", &TestHarness::test_allocator },  { "parallel parsing", &TestHarness::test_parallel_parsing },
-    { "whitelist", &TestHarness::test_whitelist },  { "serializer", &TestHarness::test_serializer },
-    { "embedding", &TestHarness::test_embedding },  { "errors", &TestHarness::test_errors }
-  };
+  std::pair<const char*, void (TestHarness::*)()> tests[] = { { "wasm_malloc.c", &TestHarness::test_malloc },
+                                                              { "internal.c", &TestHarness::test_environment },
+                                                              { "queue.h", &TestHarness::test_queue },
+                                                              { "stack.h", &TestHarness::test_stack },
+                                                              { "stream.h", &TestHarness::test_stream },
+                                                              { "util.h", &TestHarness::test_util },
+                                                              { "embedding", &TestHarness::test_embedding },
+                                                              { "allocator", &TestHarness::test_allocator },
+                                                              { "parallel parsing", &TestHarness::test_parallel_parsing },
+                                                              { "whitelist", &TestHarness::test_whitelist },
+                                                              { "serializer", &TestHarness::test_serializer },
+                                                              { "errors", &TestHarness::test_errors } };
 
   static const size_t NUMTESTS    = sizeof(tests) / sizeof(decltype(tests[0]));
   static constexpr int COLUMNS[3] = { 24, 11, 8 };
@@ -50,14 +54,14 @@ size_t TestHarness::Run(FILE* out)
 
   {
     TEST(CompileWASM("../scripts/test-h.wat") == ERR_SUCCESS);
-    #ifdef IN_PLATFORM_WIN32
-    #ifdef IN_32BIT
+#ifdef IN_PLATFORM_WIN32
+#ifdef IN_32BIT
     TEST(CompileWASM("../scripts/test-win32-cref.wat") == ERR_SUCCESS);
-    #else
+#else
     TEST(CompileWASM("../scripts/test-win64.wat") == ERR_SUCCESS);
     TEST(CompileWASM("../scripts/test-win64-cref.wat") == ERR_SUCCESS);
-    #endif
-    #endif
+#endif
+#endif
 
     char buf[COLUMNS[1] + 1] = { 0 };
     auto results             = Results();

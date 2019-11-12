@@ -2,48 +2,60 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "test.h"
-#define TEST_EMBEDDING "innative-test-embedding"
+#include "../innative/util.h"
 
 using namespace innative;
 
+#ifdef IN_DEBUG
+#define TEST_EMBEDDING "innative-test-embedding-d" IN_STATIC_EXTENSION
+#else
+#define TEST_EMBEDDING "innative-test-embedding" IN_STATIC_EXTENSION
+#endif
+
 void TestHarness::test_embedding()
 {
-  int i                            = 4;
-  int j                            = 2;
-  constexpr const char dll_path[]  = "embedded.dll";
-  constexpr const char wasm_path[] = "../scripts/embedded.wat";
+  auto fn = [this](const char* embed, size_t sz) {
+    constexpr int i                  = 4;
+    constexpr int j                  = 2;
+    constexpr const char dll_path[]  = "embedded.dll";
+    constexpr const char wasm_path[] = "../scripts/embedded.wat";
 
-  Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);
-  env->flags |= ENV_LIBRARY | ENV_ENABLE_WAT;
-  env->system = "env";
+    Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);
+    env->flags |= ENV_LIBRARY | ENV_ENABLE_WAT;
+    env->system = "env";
 
-  int err = (*_exports.AddWhitelist)(env, "env", "my_factorial");
-  TEST(!err);
-#ifdef IN_DEBUG
-  err = (*_exports.AddEmbedding)(env, 0, TEST_EMBEDDING "-d" IN_STATIC_EXTENSION, 0);
-#else
-  err = (*_exports.AddEmbedding)(env, 0, TEST_EMBEDDING IN_STATIC_EXTENSION, 0);
-#endif
-  TEST(!err);
-  err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
-  TEST(!err);
+    int err = (*_exports.AddWhitelist)(env, "env", "my_factorial");
+    TEST(!err);
 
-  (*_exports.AddModule)(env, wasm_path, 0, "embedded", &err);
-  TEST(!err);
-  err = (*_exports.FinalizeEnvironment)(env);
-  TEST(!err);
+    err = (*_exports.AddEmbedding)(env, 0, embed, sz);
+    TEST(!err);
+    err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
+    TEST(!err);
 
-  err = (*_exports.Compile)(env, dll_path);
-  TEST(!err);
+    (*_exports.AddModule)(env, wasm_path, 0, "embedded", &err);
+    TEST(!err);
+    err = (*_exports.FinalizeEnvironment)(env);
+    TEST(!err);
 
-  (*_exports.DestroyEnvironment)(env);
+    err = (*_exports.Compile)(env, dll_path);
+    TEST(!err);
 
-  void* assembly        = (*_exports.LoadAssembly)(dll_path);
-  int (*test)(int, int) = (int (*)(int, int))(*_exports.LoadFunction)(assembly, "embedded", "test");
-  TEST(test != nullptr);
+    (*_exports.DestroyEnvironment)(env);
 
-  if(test)
-    TEST((*test)(i, j) == 26);
+    void* assembly        = (*_exports.LoadAssembly)(dll_path);
+    int (*test)(int, int) = (int (*)(int, int))(*_exports.LoadFunction)(assembly, "embedded", "test");
+    TEST(test != nullptr);
 
-  (*_exports.FreeAssembly)(assembly);
+    if(test)
+      TEST((*test)(i, j) == 26);
+
+    (*_exports.FreeAssembly)(assembly);
+  };
+
+  fn(TEST_EMBEDDING, 0);
+
+  long embedsz;
+  auto embedfile = utility::LoadFile(TEST_EMBEDDING, embedsz);
+
+  fn((const char*)embedfile.get(), embedsz);
 }

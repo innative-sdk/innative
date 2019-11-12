@@ -3173,23 +3173,33 @@ namespace innative {
     return ERR_SUCCESS;
   }
 
-  std::vector<std::string> GetSymbols(const char* file, FILE* log, LLD_FORMAT format)
+  std::vector<std::string> GetSymbols(const char* file, size_t size, FILE* log, LLD_FORMAT format)
   {
     std::string outbuf;
     llvm::raw_string_ostream sso(outbuf);
 
+    uint8_t kind = 0;
     std::vector<std::string> symbols;
     switch(format)
     {
     case LLD_FORMAT::COFF:
       lld::coff::iterateSymbols(
-        file, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); },
+        file, size, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); },
         &symbols, sso);
       break;
     case LLD_FORMAT::ELF:
+      switch(CURRENT_ARCH_BITS | (CURRENT_LITTLE_ENDIAN << 15))
+      {
+      case 32 | (1 << 15): kind = 1; break;
+      case 32 | (0 << 15): kind = 2; break;
+      case 64 | (1 << 15): kind = 3; break;
+      case 64 | (0 << 15): kind = 4; break;
+      default: fputs("ERROR: unknown arch bits or endian!\n", log); return symbols;
+      }
+
       lld::elf::iterateSymbols(
-        file, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); },
-        &symbols, sso);
+        file, size, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); },
+        &symbols, { kind, (uint16_t)CURRENT_ARCH, (CURRENT_ABI == ABI::FreeBSD) ? (uint8_t)CURRENT_ABI : 0 }, sso);
       break;
     }
 
