@@ -222,7 +222,7 @@ int main(int argc, char* argv[])
           break;
         case 'o': // out
           if(checkarg(++i, argc, argv, err))
-             out = u8path(argv[i]);
+            out = u8path(argv[i]);
           break;
         case 's': // serialize
           serialize = (i + 1 < argc && argv[i + 1][0] != '-') ? argv[++i] : "";

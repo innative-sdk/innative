@@ -205,24 +205,20 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
   {
     for(Embedding* embed = env->embeddings; embed != nullptr; embed = embed->next)
     {
-      path envpath(env->libpath);
-      std::string tmp;
-      path src((const char*)embed->data);
+      std::vector<std::string> symbols;
+
+#ifdef IN_PLATFORM_WIN32
+      LLD_FORMAT format = LLD_FORMAT::COFF;
+#else
+      LLD_FORMAT format = LLD_FORMAT::ELF;
+#endif
 
       if(embed->size)
+        symbols = GetSymbols((const char*)embed->data, embed->size, env->log, format);
+      else
       {
-        // TODO: Allow GetSymbols to take a raw memory pointer to avoid this
-        tmp = std::to_string((size_t)embed->data) + ".tmp";
-        src = tmp.c_str();
-        FILE* f;
-        FOPEN(f, src.c_str(), "wb");
-        if(!f)
-          return ERR_FATAL_FILE_ERROR;
-        fwrite(embed->data, 1, embed->size, f);
-        fclose(f);
-      }
-
-      {
+        path envpath(env->libpath);
+        path src((const char*)embed->data);
         envpath /= src;
 
         FILE* f;
@@ -251,17 +247,9 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
           return ERR_FATAL_FILE_ERROR;
         }
         fclose(f);
+
+        symbols = GetSymbols(envpath.u8string().c_str(), 0, env->log, format);
       }
-
-#ifdef IN_PLATFORM_WIN32
-      LLD_FORMAT format = LLD_FORMAT::COFF;
-#else
-      LLD_FORMAT format = LLD_FORMAT::ELF;
-#endif
-
-      auto symbols = GetSymbols(envpath.u8string().c_str(), env->log, format);
-      if(!tmp.empty())
-        std::remove(tmp.c_str());
 
       int r;
       for(auto symbol : symbols)

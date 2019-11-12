@@ -96,9 +96,7 @@ namespace innative {
     const char* GetTokenString(WatTokens token)
     {
       constexpr int len = sizeof(tokenlist) / sizeof(decltype(tokenlist[0]));
-      return ((token != WatTokens::NONE) && ((int)token < len)) ?
-               tokenlist[(int)token] :
-               0;
+      return ((token != WatTokens::NONE) && ((int)token < len)) ? tokenlist[(int)token] : 0;
     }
 
     const char* CheckTokenINF(const char* s, const char* end, std::string* target)

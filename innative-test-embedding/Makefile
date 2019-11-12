@@ -22,4 +22,4 @@ $(LIBDIR)/innative-test-embedding.a: $(INNATIVE_TEST_EMBEDDING_OBJS)
 
 $(INNATIVE_TEST_EMBEDDING_OBJDIR)/%.o: innative-test-embedding/%.c
 	@mkdir -p $(INNATIVE_TEST_EMBEDDING_OBJDIR)
-	$(CXX) $(INNATIVE_TEST_EMBEDDING_CPPFLAGS) -MMD -c $< -o $@ -ldl
+	$(CC) $(INNATIVE_TEST_EMBEDDING_CPPFLAGS) -MMD -c $< -o $@ -ldl
