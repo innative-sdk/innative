@@ -1,0 +1,24 @@
+language: cpp
+sudo: required
+dist: xenial
+os:
+  - linux
+compiler:
+  - gcc
+  - clang
+env:
+  matrix:
+  - CHECK_CLANG_FORMAT=1
+  - LLVM_CONFIG=llvm-config-9 CLANG=clang-9
+  - LLVM_CONFIG=llvm-config-9 CLANG=clang-9
+
+matrix:
+  exclude:
+    # Only need one copy of this test.
+    - os: linux
+      compiler: clang
+      env: CHECK_CLANG_FORMAT=1
+
+script:
+  - ./travis.sh
+
