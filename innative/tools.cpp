@@ -89,7 +89,7 @@ void innative::DestroyEnvironment(Environment* env)
 void innative::LoadModule(Environment* env, size_t index, const void* data, uint64_t size, const char* name,
                           const char* file, int* err)
 {
-  Stream s = { (uint8_t*)data, size, 0 };
+  Stream s = { (uint8_t*)data, (size_t)size, 0 };
   std::string fallback;
   if(!name)
   {
@@ -100,7 +100,7 @@ void innative::LoadModule(Environment* env, size_t index, const void* data, uint
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
   {
     env->modules[index] = { 0 };
-    *err = innative::ParseWatModule(*env, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
+    *err = innative::ParseWatModule(*env, env->modules[index], s.data, (size_t)size, StringRef{ name, strlen(name) });
   }
   else
     *err = ParseModule(s, *env, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
@@ -214,7 +214,7 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
 #endif
 
       if(embed->size)
-        symbols = GetSymbols((const char*)embed->data, embed->size, env->log, format);
+        symbols = GetSymbols((const char*)embed->data, (size_t)embed->size, env->log, format);
       else
       {
         auto testpath = [](FILE* f, const path& file, path& out) -> FILE* {

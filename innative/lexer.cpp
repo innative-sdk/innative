@@ -166,7 +166,7 @@ namespace innative {
                            Args... args)
     {
       numbuf.clear();
-      int length             = token.len;
+      size_t length             = token.len;
       int (*digitcheck)(int) = (token.len > 2 && token.pos[0] == '0' && token.pos[1] == 'x') ? &isxdigit : &isdigit;
       for(size_t i = 0; i < token.len; ++i)
       {
@@ -233,7 +233,7 @@ namespace innative {
         {
           uint32_t i;
           float f;
-        } u = { 0x7F800000U | mantissa };
+        } u = { 0x7F800000U | (uint32_t)mantissa };
         if(token.pos[0] == '-')
           u.i |= 0x80000000U;
 
@@ -497,7 +497,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
         if(last >= end || !isxdigit(last[0]))
         {
           tokens.Push(WatToken{ WatTokens::NONE, s, line, column, last - s });
-          column += last - s;
+          column += (uint32_t)(last - s);
           s = last;
           break;
         }
@@ -505,7 +505,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
           ++last;
       }
       tokens.Push(WatToken{ WatTokens::NUMBER, s, line, column, last - s });
-      column += last - s;
+      column += (uint32_t)(last - s);
       s = last;
       break;
     }
@@ -515,7 +515,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
       if((begin = CheckTokenNAN(s, end, 0)) != 0 || (begin = CheckTokenINF(s, end, 0)) != 0) // Check if this is an NaN
       {
         tokens.Push(WatToken{ WatTokens::NUMBER, s, line, column, begin - s });
-        column += begin - s;
+        column += (uint32_t)(begin - s);
         s = begin;
       }
       else

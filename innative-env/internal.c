@@ -145,7 +145,7 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
     if(max > 0 && i > max)
       return 0;
 #ifdef IN_PLATFORM_WIN32
-    info = HeapReAlloc(heap, HEAP_ZERO_MEMORY, info - 1, i + sizeof(uint64_t));
+    info = HeapReAlloc(heap, HEAP_ZERO_MEMORY, info - 1, (SIZE_T)i + sizeof(uint64_t));
 #elif defined(IN_PLATFORM_POSIX)
     info =
       _innative_syscall(SYSCALL_MREMAP, info - 1, info[-1] + sizeof(uint64_t), i + sizeof(uint64_t), MREMAP_MAYMOVE, 0, 0);
@@ -159,9 +159,11 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
   {
 #ifdef IN_PLATFORM_WIN32
     if(!heap)
-      heap = HeapCreate(0, i, 0);
+      heap = HeapCreate(0, (SIZE_T)i, 0);
+    if(!heap)
+      return 0;
     ++heapcount;
-    info = HeapAlloc(heap, HEAP_ZERO_MEMORY, i + sizeof(uint64_t));
+    info = HeapAlloc(heap, HEAP_ZERO_MEMORY, (SIZE_T)i + sizeof(uint64_t));
 #elif defined(IN_PLATFORM_POSIX)
     info = _innative_syscall(SYSCALL_MMAP, NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
                              -1, 0);
@@ -225,7 +227,7 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned 
       buf[j * 2]     = lookup[(mem[i] & 0xF0) >> 4];
       buf[j * 2 + 1] = lookup[mem[i] & 0x0F];
     }
-    _innative_internal_write_out(buf, j * 2);
+    _innative_internal_write_out(buf, (SIZE_T)j * 2);
   }
   _innative_internal_write_out("\n", 1);
 }
