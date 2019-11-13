@@ -227,7 +227,7 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned 
       buf[j * 2]     = lookup[(mem[i] & 0xF0) >> 4];
       buf[j * 2 + 1] = lookup[mem[i] & 0x0F];
     }
-    _innative_internal_write_out(buf, (SIZE_T)j * 2);
+    _innative_internal_write_out(buf, (size_t)j * 2);
   }
   _innative_internal_write_out("\n", 1);
 }
