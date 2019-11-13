@@ -2595,9 +2595,10 @@ void ResolveModuleExports(const Environment* env, Module* root, llvm::LLVMContex
           ctx->builder.SetCurrentDebugLocation(
             llvm::DILocation::get(context, ctx->init->getSubprogram()->getLine(), 0, ctx->init->getSubprogram()));
 
-        ctx->functions[e->index].exported = (*wrapperfn)(
-          ctx->functions[e->index].imported ? ctx->functions[e->index].imported : ctx->functions[e->index].internal,
-          ABIMangle(canonical, abi, llvm::CallingConv::C, 0), *ctx, Func::ExternalLinkage, llvm::CallingConv::C);
+        ctx->functions[e->index].exported = (*wrapperfn)(ctx->functions[e->index].imported ?
+                                                           ctx->functions[e->index].imported :
+                                                           ctx->functions[e->index].internal,
+                                                         canonical, *ctx, Func::ExternalLinkage, llvm::CallingConv::C);
 
         ctx->functions[e->index].exported->setDLLStorageClass(
           llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
@@ -2625,9 +2626,6 @@ void ResolveModuleExports(const Environment* env, Module* root, llvm::LLVMContex
 int CallLinker(const Environment* env, vector<const char*>& linkargs, LLD_FORMAT format)
 {
   int err = ERR_SUCCESS;
-
-  // const_cast<Environment*>(env)->linker = "C:\\Program Files (x86)\\Microsoft Visual
-  // Studio\\2019\\Community\\VC\\Tools\\MSVC\\14.23.28105\\bin\\Hostx64\\x64\\link.exe";
 
   // Link object code
   if(env->linker != 0)

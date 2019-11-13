@@ -11,12 +11,12 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <OutputName>innative-windows-sdk-x86-d</OutputName>
-    <OutputPath>$(SolutionDir)bin32\</OutputPath>
+    <OutputPath>$(SolutionDir)bin-Win32\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
     <OutputName>innative-windows-sdk-x86</OutputName>
-    <OutputPath>$(SolutionDir)bin32\</OutputPath>
+    <OutputPath>$(SolutionDir)bin-Win32\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
