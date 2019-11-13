@@ -14,14 +14,7 @@
 #include <memory>
 #include <atomic>
 #include <vector>
-
-#if defined(IN_COMPILER_GCC) && __GNUC__ < 8
-#include <experimental/filesystem>
-using namespace std::experimental::filesystem;
-#else
-#include <filesystem>
-using namespace std::filesystem;
-#endif
+#include "../innative/filesys.h"
 
 struct IN_WASM_ALLOCATOR
 {
