@@ -1884,7 +1884,8 @@ void GenGlobalDebugInfo(llvm::GlobalVariable* v, code::Context& context, size_t 
   {
     auto expr = context.dbuilder->createExpression(llvm::SmallVector<uint64_t, 1>{ llvm::dwarf::DW_OP_deref });
 
-    v->addDebugInfo(context.dbuilder->createGlobalVariableExpression(context.dcu, v->getName(), "", context.dunit, line,
+    v->addDebugInfo(context.dbuilder->createGlobalVariableExpression(context.dcu, v->getName(), "", context.dunit,
+                                                                     (unsigned int)line,
                                                                      CreateDebugType(v->getType(), context),
                                                                      !v->hasValidDeclarationLinkage(), expr));
   }
@@ -3149,7 +3150,7 @@ namespace innative {
           if(!f)
             return ERR_FATAL_FILE_ERROR;
 
-          fwrite(cur->data, 1, cur->size, f);
+          fwrite(cur->data, 1, (size_t)cur->size, f);
           fclose(f);
           garbage.emplace_back(embed);
         }

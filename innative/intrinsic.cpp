@@ -51,8 +51,8 @@ IN_ERROR innative::code::IN_Intrinsic_FuncPtr(code::Context& context, llvm::Valu
   uint64_t index = v->getValue().getLimitedValue();
   if(index >= context.functions.size())
     return ERR_INVALID_ARGUMENT_TYPE;
-  llvm::Function* fn = (!context.functions[index].imported) ? (context.functions[index].internal) :
-                                                              context.functions[index].imported;
+  llvm::Function* fn = (!context.functions[(size_t)index].imported) ? (context.functions[(size_t)index].internal) :
+                                                                      context.functions[(size_t)index].imported;
   out = context.builder.CreatePtrToInt(fn, context.builder.getInt64Ty());
   return ERR_SUCCESS;
 }
