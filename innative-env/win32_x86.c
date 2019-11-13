@@ -132,7 +132,7 @@ __declspec(naked) void _alldiv()
       sbb     edx, 0
 
       ;
-    ; Restore the saved registersand return.
+      ; Restore the saved registers and return.
       ;
 
   L8:
@@ -864,14 +864,14 @@ __declspec(naked) void _aullrem()
 
       ;
     ; do long compare here between original dividendand the result of the
-      ; multiply in edx : eax.If original is larger or equal, we're ok, otherwise
+      ; multiply in edx : eax.If original is larger or equal, we are ok, otherwise
       ; subtract the original divisor from the result.
       ;
     cmp     edx, CRT_HIWORD(DVND); compare hi words of resultand original
       ja      short L4; if result > original, do subtract
-      jb      short L5; if result < original, we're ok
+      jb      short L5; if result < original, we are ok
       cmp     eax, CRT_LOWORD(DVND); hi words are equal, compare lo words
-      jbe     short L5; if less or equal we're ok, else subtract
+      jbe     short L5; if less or equal we are ok, else subtract
       L4:
     sub     eax, CRT_LOWORD(DVSR); subtract divisor from result
       sbb     edx, CRT_HIWORD(DVSR)

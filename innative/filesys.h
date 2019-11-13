@@ -29,7 +29,7 @@
 #elif __has_include(<experimental/filesystem>)
 #define INCLUDE_STD_FILESYSTEM_EXPERIMENTAL 1
 #else
-#error Can't determine if filesystem is experimental or not
+#error Cant determine if filesystem is experimental or not
 #endif
 
 #if INCLUDE_STD_FILESYSTEM_EXPERIMENTAL
