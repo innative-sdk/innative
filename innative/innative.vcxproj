@@ -412,6 +412,7 @@
     <ClInclude Include="..\include\innative\schema.h" />
     <ClInclude Include="compile.h" />
     <ClInclude Include="constants.h" />
+    <ClInclude Include="filesys.h" />
     <ClInclude Include="intrinsic.h" />
     <ClInclude Include="lexer.h" />
     <ClInclude Include="llvm.h" />
