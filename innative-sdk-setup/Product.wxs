@@ -10,7 +10,7 @@
   <?error Unknown value for Platform variable ?>
   <?endif ?>
 
-  <?define Version="0.1.1" ?>
+  <?define Version="0.1.3" ?>
   <Product 
     Id="25A4AE98-4F30-4735-B29B-37B6EDC5A9E9"
     Name="inNative SDK v$(var.Version)" 
@@ -62,7 +62,7 @@
         <File Id="innative.cmd.d.exe" Name="innative-cmd-d.exe" Source="$(var.innative.TargetDir)innative-cmd-d.exe" Checksum="yes"/>
         <File Id="innative.loader.exe" Name="innative-loader.exe" Source="$(var.innative.TargetDir)innative-loader.exe" Checksum="yes"/>
         <File Id="innative.loader.d.exe" Name="innative-loader-d.exe" Source="$(var.innative.TargetDir)innative-loader-d.exe" Checksum="yes"/>
-        <File Id="innative.test.s.exe" Name="innative-test-s.exe" Source="$(var.innative.TargetDir)innative-test-s.exe" Checksum="yes"/>
+        <File Id="innative.test.exe" Name="innative-test.exe" Source="$(var.innative.TargetDir)innative-test.exe" Checksum="yes"/>
         <File Id="innative.d.dll" Name="innative-d.dll" Source="$(var.innative.TargetDir)innative-d.dll"/>
         <File Id="innative.d.exp" Name="innative-d.exp" Source="$(var.innative.TargetDir)innative-d.exp"/>
         <File Id="innative.d.lib" Name="innative-d.lib" Source="$(var.innative.TargetDir)innative-d.lib"/>
@@ -71,6 +71,8 @@
         <File Id="innative.env.d.pdb" Name="innative-env-d.pdb" Source="$(var.innative.TargetDir)innative-env-d.pdb"/>
         <File Id="innative.env.lib" Name="innative-env.lib" Source="$(var.innative.TargetDir)innative-env.lib"/>
         <File Id="innative.env.pdb" Name="innative-env.pdb" Source="$(var.innative.TargetDir)innative-env.pdb"/>
+        <File Id="innative.test.embedding.lib" Name="innative-test-embedding.lib" Source="$(var.innative.TargetDir)innative-test-embedding.lib"/>
+        <File Id="innative.test.embedding.d.lib" Name="innative-test-embedding-d.lib" Source="$(var.innative.TargetDir)innative-test-embedding-d.lib"/>
         <File Id="innative.s.d.lib" Name="innative-s-d.lib" Source="$(var.innative.TargetDir)innative-s-d.lib"/>
         <File Id="innative.s.d.pdb" Name="innative-s-d.pdb" Source="$(var.innative.TargetDir)innative-s-d.pdb"/>
         <File Id="innative.s.lib" Name="innative-s.lib" Source="$(var.innative.TargetDir)innative-s.lib"/>

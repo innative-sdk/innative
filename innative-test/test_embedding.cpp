@@ -17,7 +17,7 @@ void TestHarness::test_embedding()
   auto fn = [this](const char* embed, size_t sz) {
     constexpr int i                  = 4;
     constexpr int j                  = 2;
-    constexpr const char dll_path[]  = "embedded.dll";
+    path dll_path                    = temp_directory_path() / "embedded" IN_LIBRARY_EXTENSION;
     constexpr const char wasm_path[] = "../scripts/embedded.wat";
 
     Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);
@@ -37,19 +37,24 @@ void TestHarness::test_embedding()
     err = (*_exports.FinalizeEnvironment)(env);
     TEST(!err);
 
-    err = (*_exports.Compile)(env, dll_path);
+    err = (*_exports.Compile)(env, dll_path.u8string().c_str());
     TEST(!err);
 
     (*_exports.DestroyEnvironment)(env);
 
-    void* assembly        = (*_exports.LoadAssembly)(dll_path);
-    int (*test)(int, int) = (int (*)(int, int))(*_exports.LoadFunction)(assembly, "embedded", "test");
-    TEST(test != nullptr);
+    void* assembly = (*_exports.LoadAssembly)(dll_path.u8string().c_str());
+    if(assembly)
+    {
+      int (*test)(int, int) = (int (*)(int, int))(*_exports.LoadFunction)(assembly, "embedded", "test");
+      TEST(test != nullptr);
 
-    if(test)
-      TEST((*test)(i, j) == 26);
+      if(test)
+        TEST((*test)(i, j) == 26);
 
-    (*_exports.FreeAssembly)(assembly);
+      (*_exports.FreeAssembly)(assembly);
+    }
+
+    remove(dll_path);
   };
 
   fn(TEST_EMBEDDING, 0);
