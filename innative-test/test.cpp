@@ -121,7 +121,7 @@ int main(int argc, char* argv[])
         return -1;
       }
 
-      env->flags = ENV_LIBRARY | ENV_DEBUG | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS;
+      env->flags = ENV_LIBRARY | ENV_DEBUG | ENV_STRICT;
 #ifdef IN_DEBUG
       env->optimize = ENV_OPTIMIZE_O0;
 #else

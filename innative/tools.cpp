@@ -217,38 +217,59 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
         symbols = GetSymbols((const char*)embed->data, embed->size, env->log, format);
       else
       {
-        path envpath(env->libpath);
-        path src((const char*)embed->data);
-        envpath /= src;
+        auto testpath = [](FILE* f, const path& file, path& out) -> FILE* {
+          if(!f)
+          {
+            out = file;
+            FOPEN(f, out.c_str(), "rb");
+          }
+          return f;
+        };
 
-        FILE* f;
-        FOPEN(f, envpath.c_str(), "rb");
-        if(!f)
-          envpath = src;
+        path envpath(u8path(env->libpath));
+        path src(u8path((const char*)embed->data));
+        path out;
+        FILE* f = 0;
 
-        FOPEN(f, envpath.c_str(), "rb");
+        f = testpath(f, envpath / src, out);
+        f = testpath(f, src, out);
+
 #ifdef IN_PLATFORM_POSIX
+        f = testpath(f, path("/usr/lib/") / src, out);
+
         if(!f)
         {
-          std::string buf = std::string("/usr/lib/") + (const char*)embed->data;
-          envpath         = u8path(buf);
-          char* tmp       = tmalloc<char>(*env, buf.size() + 1);
-          if(!tmp)
-            return ERR_FATAL_OUT_OF_MEMORY;
-          tmemcpy<char>(tmp, buf.size() + 1, buf.c_str(), buf.size() + 1);
-          embed->data = tmp;
+          std::string ldpath = getenv("LD_LIBRARY_PATH"); // Users shouldn't rely on this, but we handle this case anyway
+          std::string::size_type pos, last = 0;
+          while(!f && last <= ldpath.size())
+          {
+            pos = ldpath.find_first_of(':', last);
+            if(pos == std::string::npos)
+              pos = ldpath.size();
+            if(pos != last)
+              f = testpath(f, path(ldpath.begin() + last, ldpath.begin() + (pos - last)) / src, out);
+
+            last = pos + 1;
+          }
         }
 
         FOPEN(f, envpath.c_str(), "rb");
 #endif
         if(!f)
         {
-          fprintf(env->log, "Error loading file: %s\n", envpath.u8string().c_str());
+          fprintf(env->log, "Error loading file: %s\n", src.u8string().c_str());
           return ERR_FATAL_FILE_ERROR;
         }
         fclose(f);
 
-        symbols = GetSymbols(envpath.u8string().c_str(), 0, env->log, format);
+        std::string buf = out.u8string();
+        char* tmp       = tmalloc<char>(*env, buf.size() + 1);
+        if(!tmp)
+          return ERR_FATAL_OUT_OF_MEMORY;
+        tmemcpy<char>(tmp, buf.size() + 1, buf.c_str(), buf.size() + 1);
+        embed->data = tmp;
+
+        symbols = GetSymbols(out.u8string().c_str(), 0, env->log, format);
       }
 
       int r;
@@ -317,10 +338,8 @@ IN_ERROR innative::Compile(Environment* env, const char* file)
 }
 IN_Entrypoint innative::LoadFunction(void* assembly, const char* module_name, const char* function)
 {
-  // All exported WASM functions use __cdecl, which allows us to figure out the proper mangling
   auto canonical = utility::CanonicalName(StringRef::From(module_name), StringRef::From(function));
-  return (IN_Entrypoint)LoadDLLFunction(assembly, !function ? IN_INIT_FUNCTION :
-                                                              innative::ABIMangle(canonical, CURRENT_ABI, 0, 0).c_str());
+  return (IN_Entrypoint)LoadDLLFunction(assembly, !function ? IN_INIT_FUNCTION : canonical.c_str());
 }
 
 struct IN_TABLE

@@ -15,6 +15,7 @@
 *.exe
 *.pdb
 *.zip
+*.tar.gz
 /bin/
 /bin-Win32/
 /innative/x64/

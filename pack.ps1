@@ -1,77 +1,43 @@
-New-Item -Force "innative-windows-sdk-x64\bin\" -Type Directory
-New-Item -Force "innative-windows-sdk-x64\scripts\" -Type Directory
-New-Item -Force "innative-windows-sdk-x64\include\innative\" -Type Directory
-New-Item -Force "innative-windows-sdk-x64\spec\test\core\" -Type Directory
-Copy-Item "bin\innative.dll" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative.exp" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative.lib" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative.pdb" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-d.dll" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-d.exp" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-d.lib" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-d.pdb" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-s.lib" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-s.pdb" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-s-d.lib" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-s-d.pdb" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-stub.lib" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-stub.pdb" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-stub-d.lib" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-stub-d.pdb" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-env.lib" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-env.pdb" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-env-d.lib" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-env-d.pdb" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-test-s.exe" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-cmd.exe" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-cmd-d.exe" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-loader.exe" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "bin\innative-loader-d.exe" -Destination "innative-windows-sdk-x64\bin\"
-Copy-Item "include\innative\*" -Destination "innative-windows-sdk-x64\include\innative\"
-Copy-Item "scripts\*.wat" -Destination "innative-windows-sdk-x64\scripts\" 
-Copy-Item "scripts\*.wasm" -Destination "innative-windows-sdk-x64\scripts\" 
-Copy-Item "spec\test\core\*.wast" -Destination "innative-windows-sdk-x64\spec\test\core\" 
+param([string]$arch="x64", [switch]$runtime)
 
-Compress-Archive -Force -Path "innative-windows-sdk-x64" -CompressionLevel Optimal -DestinationPath "innative-windows-sdk-x64.zip"
-Remove-Item 'innative-windows-sdk-x64' -Recurse
+switch ($arch) {
+  "x86-64" {$bin = "bin"}
+  "x64" {$bin = "bin"}
+  "x86" {$bin = "bin-Win32"}
+  "arm" {$bin = "bin-ARM"}
+}
+$mode = "sdk"
+if ($runtime) {
+  $mode = "runtime"
+}
+$target = "innative-windows-$mode-$arch"
 
-New-Item -Force "innative-windows-sdk-x86\bin\" -Type Directory
-New-Item -Force "innative-windows-sdk-x86\scripts\" -Type Directory
-New-Item -Force "innative-windows-sdk-x86\include\innative\" -Type Directory
-New-Item -Force "innative-windows-sdk-x86\spec\test\core\" -Type Directory
-Copy-Item "bin-Win32\innative.dll" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative.exp" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative.lib" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative.pdb" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-d.dll" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-d.exp" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-d.lib" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-d.pdb" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-s.lib" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-s.pdb" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-s-d.lib" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-s-d.pdb" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-stub.lib" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-stub.pdb" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-stub-d.lib" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-stub-d.pdb" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-env.lib" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-env.pdb" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-env-d.lib" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-env-d.pdb" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-test-s.exe" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-cmd.exe" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-cmd-d.exe" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-loader.exe" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "bin-Win32\innative-loader-d.exe" -Destination "innative-windows-sdk-x86\bin\"
-Copy-Item "include\innative\*" -Destination "innative-windows-sdk-x86\include\innative\"
-Copy-Item "scripts\*.wat" -Destination "innative-windows-sdk-x86\scripts\" 
-Copy-Item "scripts\*.wasm" -Destination "innative-windows-sdk-x86\scripts\" 
-Copy-Item "spec\test\core\*.wast" -Destination "innative-windows-sdk-x86\spec\test\core\" 
+if ($runtime) {
+Compress-Archive -Force -Path "$bin\innative.dll","$bin\innative-d.dll","$bin\innative-s.lib","$bin\innative-s-d.lib","$bin\innative-env.lib","$bin\innative-env-d.lib","$bin\innative-cmd.exe","$bin\innative-cmd-d.exe" -CompressionLevel Optimal -DestinationPath "$target.zip"
+} else {
+New-Item -Force "$target\bin\" -Type Directory
+New-Item -Force "$target\scripts\" -Type Directory
+New-Item -Force "$target\include\innative\" -Type Directory
+New-Item -Force "$target\spec\test\core\" -Type Directory
 
-Compress-Archive -Force -Path "innative-windows-sdk-x86" -CompressionLevel Optimal -DestinationPath "innative-windows-sdk-x86.zip"
-Remove-Item 'innative-windows-sdk-x86' -Recurse
+$libs = @("innative", "innative-d", "innative-s", "innative-s-d", "innative-stub", "innative-stub-d", "innative-env", "innative-env-d", "innative-test-embedding", "innative-test-embedding-d")
+foreach ($element in $libs) {
+Copy-Item "$bin\$element.dll" -Destination "$target\bin\" -ErrorAction SilentlyContinue
+Copy-Item "$bin\$element.exp" -Destination "$target\bin\" -ErrorAction SilentlyContinue
+Copy-Item "$bin\$element.lib" -Destination "$target\bin\"
+Copy-Item "$bin\$element.pdb" -Destination "$target\bin\" -ErrorAction SilentlyContinue
+}
 
-Compress-Archive -Force -Path "bin\innative.dll","bin\innative-d.dll","bin\innative-s.lib","bin\innative-s-d.lib","bin\innative-env.lib","bin\innative-env-d.lib","bin\innative-cmd.exe","bin\innative-cmd-d.exe" -CompressionLevel Optimal -DestinationPath "innative-windows-runtime-x64.zip"
+Copy-Item "$bin\innative-test.exe" -Destination "$target\bin\"
+Copy-Item "$bin\innative-cmd.exe" -Destination "$target\bin\"
+Copy-Item "$bin\innative-cmd-d.exe" -Destination "$target\bin\"
+Copy-Item "$bin\innative-loader.exe" -Destination "$target\bin\"
+Copy-Item "$bin\innative-loader-d.exe" -Destination "$target\bin\"
+Copy-Item "include\innative\*" -Destination "$target\include\innative\"
+Copy-Item "scripts\*.wat" -Destination "$target\scripts\" 
+Copy-Item "scripts\*.wasm" -Destination "$target\scripts\" 
+Copy-Item "spec\test\core\*.wast" -Destination "$target\spec\test\core\" 
 
-Compress-Archive -Force -Path "bin-Win32\innative.dll","bin-Win32\innative-d.dll","bin-Win32\innative-s.lib","bin-Win32\innative-s-d.lib","bin-Win32\innative-env.lib","bin-Win32\innative-env-d.lib","bin-Win32\innative-cmd.exe","bin-Win32\innative-cmd-d.exe" -CompressionLevel Optimal -DestinationPath "innative-windows-runtime-x86.zip"
+Compress-Archive -Force -Path "$target" -CompressionLevel Optimal -DestinationPath "$target.zip"
+Remove-Item "$target" -Recurse
+}
