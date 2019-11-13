@@ -3197,7 +3197,9 @@ namespace innative {
 
       lld::elf::iterateSymbols(
         file, size, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); },
-        &symbols, { kind, (uint16_t)CURRENT_ARCH, (CURRENT_ABI == ABI::FreeBSD) ? (uint8_t)CURRENT_ABI : 0 }, sso);
+        &symbols,
+        std::make_tuple(kind, (uint16_t)CURRENT_ARCH, (CURRENT_ABI == ABI::FreeBSD) ? (uint8_t)CURRENT_ABI : (uint8_t)0),
+        sso);
       break;
     }
 

@@ -252,8 +252,6 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
             last = pos + 1;
           }
         }
-
-        FOPEN(f, envpath.c_str(), "rb");
 #endif
         if(!f)
         {
