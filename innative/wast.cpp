@@ -743,7 +743,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       {
         env.optimize = 0; // If we need to catch stack overflows, we must disable optimizations
         InvalidateCache(cache, cachepath);
-        DeleteContext(env);
+        DeleteContext(env, false);
       }
     case WatTokens::ASSERT_TRAP:
     {

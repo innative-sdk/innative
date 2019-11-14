@@ -47,9 +47,14 @@ IN_ERROR OutputObjectFile(code::Context& context, const path& out)
   return ERR_SUCCESS;
 }
 
-path GetLinkerObjectPath(const Environment& env, Module& m)
+path innative::GetLinkerObjectPath(const Environment& env, Module& m, const path& outfile)
 {
-  path objpath = utility::GetPath(env.objpath);
+  if(m.cache != nullptr && !m.cache->objfile.empty())
+    return m.cache->objfile;
+  if(!m.name.size())
+    return path();
+
+  path objpath = !env.objpath ? (outfile.empty() ? "" : outfile.parent_path()) : utility::GetPath(env.objpath);
 
   // The default module name must be an entire path to gaurantee uniqueness, but we need to write it in the objpath
   // directory
@@ -73,16 +78,16 @@ IN_ERROR innative::GenerateLinkerObjects(const Environment& env, std::vector<std
   {
     assert(env.modules[i].cache != 0);
     assert(env.modules[i].name.get() != nullptr);
-    path objpath = GetLinkerObjectPath(env, env.modules[i]);
-    cache.emplace_back(objpath.u8string());
+    path objfile = GetLinkerObjectPath(env, env.modules[i], path());
+    cache.emplace_back(objfile.u8string());
 
     FILE* f;
-    FOPEN(f, objpath.c_str(), "rb");
+    FOPEN(f, objfile.c_str(), "rb");
     if(f)
       fclose(f);
     else
     {
-      IN_ERROR err = OutputObjectFile(*env.modules[i].cache, objpath);
+      IN_ERROR err = OutputObjectFile(*env.modules[i].cache, objfile);
       if(err < 0)
         return err;
     }
@@ -186,8 +191,8 @@ int innative::CallLinker(const Environment* env, std::vector<const char*>& linka
 void innative::DeleteCache(const Environment& env, Module& m)
 {
   // Certain error conditions can result in us clearing the cache of an invalid module.
-  if(m.name.size() > 0)                  // Prevent an error from happening if the name is invalid.
-    remove(GetLinkerObjectPath(env, m)); // Always remove the file if it exists
+  if(m.name.size() > 0)                           // Prevent an error from happening if the name is invalid.
+    remove(GetLinkerObjectPath(env, m, path())); // Always remove the file if it exists
 
   if(m.cache != nullptr)
   {
@@ -301,27 +306,11 @@ std::string innative::ABIMangle(const std::string& src, ABI abi, int convention,
   return src;
 }
 
-IN_ERROR innative::LinkEnvironment(const Environment* env, const char* outfile)
+IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
 {
-  if(!outfile || !outfile[0])
-    return ERR_FATAL_NO_OUTPUT_FILE;
-
-  path file    = utility::GetPath(outfile);
   path workdir = utility::GetWorkingDir();
   path libpath = utility::GetPath(env->libpath);
-  if(!env->objpath)
-  {
-    const_cast<Environment*>(env)->objpath =
-      utility::AllocString(*const_cast<Environment*>(env), file.parent_path().u8string());
-
-    if(!env->objpath)
-      return ERR_FATAL_OUT_OF_MEMORY;
-  }
-
-  path objpath = utility::GetPath(env->objpath);
-
-  if(!file.is_absolute())
-    file = workdir / file;
+  path objpath = !env->objpath ? file.parent_path() : utility::GetPath(env->objpath);
 
   // Finalize all modules
   for(varuint32 i = 0; i < env->n_modules; ++i)
@@ -385,9 +374,9 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const char* outfile)
       linkargs.push_back("/OPT:ICF");
 
     std::vector<std::string> cache = { std::string("/OUT:") + file.u8string(), "/LIBPATH:" + libpath.u8string(),
-                             "/LIBPATH:" + workdir.u8string() };
+                                       "/LIBPATH:" + workdir.u8string() };
 #elif defined(IN_PLATFORM_POSIX)
-    LLD_FORMAT format            = LLD_FORMAT::ELF;
+    LLD_FORMAT format                 = LLD_FORMAT::ELF;
     std::vector<const char*> linkargs = {};
 
     if(env->flags & ENV_LIBRARY)
@@ -395,8 +384,8 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const char* outfile)
     if(!(env->flags & ENV_DEBUG))
       linkargs.push_back("--strip-debug");
 
-    std::vector<std::string> cache = { string("--output=") + file.u8string(), "-L" + libpath.u8string(),
-                                  "-L" + workdir.u8string() };
+    std::vector<std::string> cache = { std::string("--output=") + file.u8string(), "-L" + libpath.u8string(),
+                                       "-L" + workdir.u8string() };
 #else
 #error unknown platform
 #endif
