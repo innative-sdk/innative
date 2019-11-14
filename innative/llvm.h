@@ -6,6 +6,7 @@
 
 #include "innative/schema.h"
 #include "stack.h"
+#include "filesys.h"
 #pragma warning(push)
 #pragma warning(disable : 4146 4267 4141 4244 4624)
 #define _SCL_SECURE_NO_WARNINGS
@@ -63,6 +64,7 @@ namespace innative {
       llvm::IRBuilder<>& builder;
       llvm::TargetMachine* machine;
       kh_importhash_t* importhash;
+      path objfile; // If this module has been compiled to a .obj file, stores the path so we can reliably delete it.
       llvm::IntegerType* intptrty;
       llvm::DIBuilder* dbuilder;
       llvm::DIType* diF32;

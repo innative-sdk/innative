@@ -64,8 +64,8 @@ void innative::ClearEnvironmentCache(Environment* env, Module* m)
   if(m)
     DeleteCache(*env, *m);
   else
-    DeleteContext(*env, false); // We can't actually shutdown LLVM here because that permanently shuts it down and there is
-                                // no way to restore it.
+    DeleteContext(*env, false); // We can't actually shutdown LLVM here because that permanently shuts it down and
+                                // there is no way to restore it.
 }
 
 void innative::DestroyEnvironment(Environment* env)
@@ -203,6 +203,8 @@ IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, uin
 
 IN_ERROR innative::FinalizeEnvironment(Environment* env)
 {
+  ClearEnvironmentCache(env, 0); // This ensures old build caches do not interfere
+
   if(env->cimports)
   {
     for(Embedding* embed = env->embeddings; embed != nullptr; embed = embed->next)
@@ -228,16 +230,16 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
           return f;
         };
 
-        path envpath(u8path(env->libpath));
-        path rootpath(u8path(env->rootpath));
-        path src(u8path((const char*)embed->data));
+        path envpath(utility::GetPath(env->libpath));
+        path rootpath(utility::GetPath(env->rootpath));
+        path src(utility::GetPath((const char*)embed->data));
         path out;
         FILE* f = 0;
 
         f = testpath(f, envpath / src, out);
         f = testpath(f, src, out);
         f = testpath(f, rootpath / src, out);
-        
+
 #ifdef IN_PLATFORM_POSIX
         if(CURRENT_ARCH_BITS == 64)
           f = testpath(f, rootpath.parent_path() / "lib64", out);

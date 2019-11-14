@@ -271,7 +271,7 @@ namespace innative {
       char result[PATH_MAX];
       if(readlink("/proc/self/exe", result, PATH_MAX) == -1)
         return path(std::move(GetAbsolutePath(GetPath(arg0))));
-      return u8path(result);
+      return utility::GetPath(result);
 #endif
     }
 

@@ -106,10 +106,9 @@ llvm::DISubroutineType* CreateFunctionDebugType(llvm::FunctionType* fn, llvm::Ca
   for(unsigned int i = 0; i < fn->getNumParams(); ++i)
     dwarfTys.push_back(CreateDebugType(fn->getParamType(i), context));
 
-  return context.dbuilder->createSubroutineType(context.dbuilder->getOrCreateTypeArray(dwarfTys),
-                                                        llvm::DINode::FlagZero,
-                                                        (callconv == llvm::CallingConv::C) ? llvm::dwarf::DW_CC_normal :
-                                                                                             llvm::dwarf::DW_CC_nocall);
+  return context.dbuilder->createSubroutineType(context.dbuilder->getOrCreateTypeArray(dwarfTys), llvm::DINode::FlagZero,
+                                                (callconv == llvm::CallingConv::C) ? llvm::dwarf::DW_CC_normal :
+                                                                                     llvm::dwarf::DW_CC_nocall);
 }
 
 llvm::DIType* CreateDebugType(llvmTy* t, code::Context& context)
@@ -2672,6 +2671,14 @@ void ResolveModuleExports(const Environment* env, Module* root, llvm::LLVMContex
 
 IN_ERROR innative::CompileEnvironment(const Environment* env, const char* outfile)
 {
+  if(!outfile || !outfile[0])
+    return ERR_FATAL_NO_OUTPUT_FILE;
+
+  path file = utility::GetPath(outfile);
+
+  if(!file.is_absolute())
+    file = utility::GetWorkingDir() / file;
+
   // Construct the LLVM environment and current working directories
   if(!env->context)
     const_cast<Environment*>(env)->context = new llvm::LLVMContext();
@@ -2747,9 +2754,19 @@ IN_ERROR innative::CompileEnvironment(const Environment* env, const char* outfil
   {
     if(!i || !env->modules[i].cache) // Always recompile the 0th module because it stores the main entry point.
     {
-      DeleteCache(*env, env->modules[i]);
-      env->modules[i].cache =
-        new code::Context{ *env, env->modules[i], *env->context, 0, builder, machine, code::kh_init_importhash() };
+      if(env->modules[i].cache)
+        DeleteCache(*env, env->modules[i]);
+      env->modules[i].cache = new code::Context{ *env,
+                                                 env->modules[i],
+                                                 *env->context,
+                                                 0,
+                                                 builder,
+                                                 machine,
+                                                 code::kh_init_importhash(),
+                                                 GetLinkerObjectPath(*env, env->modules[i], file) };
+      if(!env->modules[i].cache->objfile.empty())
+        remove(env->modules[i].cache->objfile);
+
       if((err = CompileModule(env, *env->modules[i].cache)) < 0)
         return err;
       new_modules.push_back(env->modules + i);
