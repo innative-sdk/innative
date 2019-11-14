@@ -67,9 +67,10 @@ namespace innative {
       llvm::DIBuilder* dbuilder;
       llvm::DIType* diF32;
       llvm::DIType* diF64;
+      llvm::DIType* diI1;
+      llvm::DIType* diI8;
       llvm::DIType* diI32;
       llvm::DIType* diI64;
-      llvm::DIType* diI1;
       llvm::DIType* diVoid;
       llvm::DICompileUnit* dcu;
       llvm::DIFile* dunit;

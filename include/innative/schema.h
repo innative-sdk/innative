@@ -96,7 +96,7 @@ typedef struct IN_WASM_BYTE_ARRAY
   IN_WASM_BYTE_ARRAY(uint8_t* b, varuint32 n) : bytes(b), n_bytes(n) {}
   inline uint8_t* get() { return bytes; }
   inline const uint8_t* get() const { return bytes; }
-  inline const char* str() const { return (char*)bytes; }
+  inline const char* str() const { return !bytes ? "" : (char*)bytes; }
   inline varuint32 size() const { return n_bytes; }
   void resize(varuint32 sz, bool terminator, const struct IN_WASM_ENVIRONMENT& env);
   void discard(varuint32 sz, bool terminator);
@@ -430,6 +430,7 @@ typedef struct IN_WASM_ENVIRONMENT
   uint64_t features;       // WASM_FEATURE_FLAGS
   uint64_t optimize;       // WASM_OPTIMIZE_FLAGS
   unsigned int maxthreads; // Max number of threads for any multithreaded action. If 0, there is no limit.
+  const char* rootpath; // Internal buffer for storing the root directory of the EXE to help with directory searches
   const char* libpath;     // Path to look for default environment libraries
   const char* objpath; // Path to store intermediate results. If NULL, intermediate results are stored in the output folder
   const char* linker;  // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker

@@ -389,6 +389,7 @@
     <ClCompile Include="export.cpp" />
     <ClCompile Include="intrinsic.cpp" />
     <ClCompile Include="lexer.cpp" />
+    <ClCompile Include="link.cpp" />
     <ClCompile Include="reverse.cpp" />
     <ClCompile Include="optimize.cpp" />
     <ClCompile Include="parse.cpp" />
@@ -415,6 +416,7 @@
     <ClInclude Include="filesys.h" />
     <ClInclude Include="intrinsic.h" />
     <ClInclude Include="lexer.h" />
+    <ClInclude Include="link.h" />
     <ClInclude Include="llvm.h" />
     <ClInclude Include="optimize.h" />
     <ClInclude Include="parse.h" />
