@@ -5,6 +5,7 @@
 #include "util.h"
 #include "stack.h"
 #include "compile.h"
+#include "link.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <atomic>

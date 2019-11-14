@@ -268,7 +268,10 @@ namespace innative {
       buf.resize(GetModuleFileNameW(NULL, const_cast<wchar_t*>(buf.data()), (DWORD)buf.capacity()));
       return path(std::move(buf));
 #else
-      return path(std::move(GetAbsolutePath(GetPath(arg0))));
+      char result[PATH_MAX];
+      if(readlink("/proc/self/exe", result, PATH_MAX) == -1)
+        return path(std::move(GetAbsolutePath(GetPath(arg0))));
+      return u8path(result);
 #endif
     }
 

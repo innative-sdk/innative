@@ -69,6 +69,9 @@
     <ClCompile Include="reverse.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="link.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\innative\innative.h">
@@ -144,6 +147,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="filesys.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="link.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

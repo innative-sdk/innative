@@ -19,6 +19,13 @@
 KHASH_DECLARE(mapenum, int, const char*);
 
 namespace innative {
+  enum class LLD_FORMAT : uint8_t
+  {
+    COFF,
+    ELF,
+    WASM,
+  };
+
   enum class ABI : uint8_t
   {
     NONE    = 0,

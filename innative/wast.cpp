@@ -4,6 +4,7 @@
 #include "wast.h"
 #include "validate.h"
 #include "compile.h"
+#include "link.h"
 #include "tools.h"
 #include "queue.h"
 #include "parse.h"

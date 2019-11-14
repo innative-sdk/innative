@@ -1561,7 +1561,7 @@ int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens,
   }
 
   m.exports = kh_init_exports();
-  assert(m.name.str());
+  assert(m.name.get());
   return ParseExportFixup(m, env.errors, env);
 }
 

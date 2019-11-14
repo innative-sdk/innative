@@ -4,6 +4,7 @@
 #include "parse.h"
 #include "validate.h"
 #include "compile.h"
+#include "link.h"
 #include "tools.h"
 #include "wast.h"
 #include "serialize.h"
@@ -41,7 +42,8 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
     env->linker     = 0;
     env->log        = stdout;
     env->loglevel   = LOG_WARNING;
-    env->libpath    = utility::AllocString(*env, GetProgramPath(arg0).parent_path().u8string());
+    env->rootpath   = utility::AllocString(*env, GetProgramPath(arg0).parent_path().u8string());
+    env->libpath    = env->rootpath;
     if(!env->libpath) // Out of memory
     {
       free(env);
@@ -227,31 +229,23 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
         };
 
         path envpath(u8path(env->libpath));
+        path rootpath(u8path(env->rootpath));
         path src(u8path((const char*)embed->data));
         path out;
         FILE* f = 0;
 
         f = testpath(f, envpath / src, out);
         f = testpath(f, src, out);
-
+        f = testpath(f, rootpath / src, out);
+        
 #ifdef IN_PLATFORM_POSIX
+        if(CURRENT_ARCH_BITS == 64)
+          f = testpath(f, rootpath.parent_path() / "lib64", out);
+        f = testpath(f, rootpath.parent_path() / "lib", out);
+
+        if(CURRENT_ARCH_BITS == 64)
+          f = testpath(f, path("/usr/lib64/") / src, out);
         f = testpath(f, path("/usr/lib/") / src, out);
-
-        if(!f)
-        {
-          std::string ldpath = getenv("LD_LIBRARY_PATH"); // Users shouldn't rely on this, but we handle this case anyway
-          std::string::size_type pos, last = 0;
-          while(!f && last <= ldpath.size())
-          {
-            pos = ldpath.find_first_of(':', last);
-            if(pos == std::string::npos)
-              pos = ldpath.size();
-            if(pos != last)
-              f = testpath(f, path(ldpath.begin() + last, ldpath.begin() + (pos - last)) / src, out);
-
-            last = pos + 1;
-          }
-        }
 #endif
         if(!f)
         {
