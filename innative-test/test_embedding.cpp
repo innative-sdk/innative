@@ -17,7 +17,7 @@ void TestHarness::test_embedding()
   auto fn = [this](const char* embed, size_t sz) {
     constexpr int i                  = 4;
     constexpr int j                  = 2;
-    path dll_path                    = temp_directory_path() / "embedded" IN_LIBRARY_EXTENSION;
+    path dll_path                    = _folder / "embedded" IN_LIBRARY_EXTENSION;
     constexpr const char wasm_path[] = "../scripts/embedded.wat";
 
     Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);

@@ -359,6 +359,13 @@
   <ItemGroup>
     <ResourceCompile Include="innative-test.rc" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\scripts\test-h.wat" />
+    <None Include="..\scripts\test-no-op.wat" />
+    <None Include="..\scripts\test-win32-cref.wat" />
+    <None Include="..\scripts\test-win64-cref.wat" />
+    <None Include="..\scripts\test-win64.wat" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

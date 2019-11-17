@@ -357,6 +357,7 @@ typedef struct IN_WASM_MODULE
   } exportsection;
 
   varuint32 start;
+  int start_line; // The start function line is used to represent the entry point function to make debugging easier
 
   struct ElementSection
   {
@@ -430,7 +431,7 @@ typedef struct IN_WASM_ENVIRONMENT
   uint64_t features;       // WASM_FEATURE_FLAGS
   uint64_t optimize;       // WASM_OPTIMIZE_FLAGS
   unsigned int maxthreads; // Max number of threads for any multithreaded action. If 0, there is no limit.
-  const char* rootpath; // Internal buffer for storing the root directory of the EXE to help with directory searches
+  const char* rootpath;    // Internal buffer for storing the root directory of the EXE to help with directory searches
   const char* libpath;     // Path to look for default environment libraries
   const char* objpath; // Path to store intermediate results. If NULL, intermediate results are stored in the output folder
   const char* linker;  // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
