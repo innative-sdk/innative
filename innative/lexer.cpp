@@ -336,7 +336,7 @@ namespace innative {
 
 void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* end)
 {
-  unsigned int line   = 0;
+  unsigned int line   = 1;
   unsigned int column = 0;
   while(s < end)
   {

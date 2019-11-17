@@ -8,7 +8,7 @@ switch ($arch) {
 }
 
 # Update all submodules
-git submodule update --init --recursive
+git submodule update --init llvm-project
 
 # make directories
 if(!(Test-Path -path "./$bin/llvm"))

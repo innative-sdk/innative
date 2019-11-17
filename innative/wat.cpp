@@ -1507,6 +1507,7 @@ int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens,
       m.knownsections |= (1 << WASM_SECTION_START);
       if(tokens[0].id != WatTokens::NUMBER && tokens[0].id != WatTokens::NAME)
         return ERR_WAT_EXPECTED_VAR;
+      m.start_line = tokens[0].line;
       m.start = state.GetFromHash(state.funchash, tokens.Pop());
       if(m.start == (varuint32)~0)
         return ERR_WAT_INVALID_VAR;

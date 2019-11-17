@@ -39,19 +39,6 @@ size_t TestHarness::Run(FILE* out)
   fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], "Internal Tests", COLUMNS[1], "Subtests", COLUMNS[2], "Pass/Fail");
   fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], "--------------", COLUMNS[1], "--------", COLUMNS[2], "---------");
 
-  size_t failures = 0;
-  for(size_t i = 0; i < NUMTESTS; ++i)
-  {
-    (this->*tests[i].second)();
-    auto results = Results();
-    failures += results.second - results.first;
-
-    char buf[COLUMNS[1] + 1] = { 0 };
-    snprintf(buf, COLUMNS[1] + 1, "%u/%u", results.first, results.second);
-    fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], tests[i].first, COLUMNS[1], buf, COLUMNS[2],
-            (results.first == results.second) ? "PASS" : "FAIL");
-  }
-
   {
     TEST(CompileWASM("../scripts/test-h.wat") == ERR_SUCCESS);
 #ifdef IN_PLATFORM_WIN32
@@ -70,6 +57,20 @@ size_t TestHarness::Run(FILE* out)
             (results.first == results.second) ? "PASS" : "FAIL");
   }
 
+  size_t failures = 0;
+  for(size_t i = 0; i < NUMTESTS; ++i)
+  {
+    (this->*tests[i].second)();
+    auto results = Results();
+    failures += results.second - results.first;
+
+    char buf[COLUMNS[1] + 1] = { 0 };
+    snprintf(buf, COLUMNS[1] + 1, "%u/%u", results.first, results.second);
+    fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], tests[i].first, COLUMNS[1], buf, COLUMNS[2],
+            (results.first == results.second) ? "PASS" : "FAIL");
+  }
+
+
   // Test compiling EXE
   // Test compiling DLL with entry point that gets called in the init function
 
@@ -86,6 +87,10 @@ int TestHarness::CompileWASM(const path& file)
   env->log         = stdout;
   env->loglevel    = _loglevel;
 
+#ifdef IN_DEBUG
+  env->flags |= ENV_DEBUG;
+  env->optimize = ENV_OPTIMIZE_O0;
+#endif
   int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
   if(err < 0)
   {

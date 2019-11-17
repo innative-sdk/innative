@@ -107,7 +107,7 @@ void innative::LoadModule(Environment* env, size_t index, const void* data, uint
   else
     *err = ParseModule(s, *env, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
 
-  env->modules[index].path = file;
+  env->modules[index].path = utility::AllocString(*env, file);
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
 }
 
@@ -203,8 +203,6 @@ IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, uin
 
 IN_ERROR innative::FinalizeEnvironment(Environment* env)
 {
-  ClearEnvironmentCache(env, 0); // This ensures old build caches do not interfere
-
   if(env->cimports)
   {
     for(Embedding* embed = env->embeddings; embed != nullptr; embed = embed->next)
@@ -382,12 +380,9 @@ int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bo
 {
   int err = ERR_SUCCESS;
   char buf[40];
-#ifdef IN_PLATFORM_WIN32
-  snprintf(buf, 40, "memory--%p", data);
-#else
-  snprintf(buf, 40, "/memory--%p", data);
-#endif
+  snprintf(buf, 40, "memory%p", data);
   const char* target = buf;
+  std::string dumpfile;
 
   // Load the module
   std::unique_ptr<uint8_t[]> data_module;
@@ -401,11 +396,19 @@ int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bo
     data = data_module.get();
     sz   = len;
   }
+  else if(env->flags & ENV_DEBUG)
+  {
+    path out = u8path(output) / buf;
+    if(!DumpFile(out, data, sz))
+      return ERR_FATAL_FILE_ERROR;
+    dumpfile = out.u8string();
+    target   = dumpfile.c_str();
+  }
 
   if(!env)
   {
     fputs("Environment cannot be null.\n", stderr);
-    return -1;
+    return ERR_FATAL_NULL_POINTER;
   }
 
   if(err < 0)

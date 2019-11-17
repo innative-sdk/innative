@@ -65,6 +65,7 @@ namespace innative {
         if(!r)
           return ERR_FATAL_OUT_OF_MEMORY;
 
+        memset(r, 0, sizeof(T) * size);
         for(varuint32 i = 0; i < size && err >= 0; ++i)
           err = PARSE(s, r[i], args...);
         ptr = r;
@@ -114,8 +115,8 @@ IN_ERROR innative::ParseByteArray(Stream& s, ByteArray& section, bool terminator
 
 IN_ERROR innative::ParseIdentifier(Stream& s, ByteArray& section, const Environment& env)
 {
-  return ParseByteArray(s, section, true,
-                        env); // For identifiers, we allocate one extra null terminator byte that isn't included in the size
+  // For identifiers, we allocate one extra null terminator byte that isn't included in the size
+  return ParseByteArray(s, section, true, env);
 }
 
 IN_ERROR innative::ParseInitializer(Stream& s, Instruction& ins, const Environment& env)
@@ -244,6 +245,8 @@ IN_ERROR innative::ParseExport(Stream& s, Export& e, const Environment& env)
 
 IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environment& env)
 {
+  ins.line     = 0;
+  ins.column   = 0;
   IN_ERROR err = ParseByte(s, ins.opcode);
   if(err < 0)
     return err;

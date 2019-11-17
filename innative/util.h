@@ -52,6 +52,8 @@ namespace innative {
       {
         if(len != r.len)
           return false;
+        if(!len)
+          return true;
         return !memcmp(s, r.s, len);
       }
     };
@@ -218,7 +220,7 @@ namespace innative {
     int Uninstall();
     IN_COMPILER_DLLEXPORT int AddCImport(const Environment& env, const char* id);
     const char* AllocString(Environment& env, const char* s, size_t n);
-    IN_FORCEINLINE const char* AllocString(Environment& env, const char* s) { return AllocString(env, s, strlen(s)); }
+    IN_FORCEINLINE const char* AllocString(Environment& env, const char* s) { return !s ? nullptr : AllocString(env, s, strlen(s)); }
     IN_FORCEINLINE const char* AllocString(Environment& env, const std::string& s)
     {
       return AllocString(env, s.data(), s.size());
@@ -326,6 +328,17 @@ namespace innative {
       sz = (long)fread(data.get(), 1, sz, f);
       fclose(f);
       return data;
+    }
+
+    inline bool DumpFile(const path& file, const void* data, long sz)
+    {
+      FILE* f = nullptr;
+      FOPEN(f, file.c_str(), "wb");
+      if(!f)
+        return false;
+      if(fwrite(data, 1, sz, f) != sz)
+        return false;
+      return !fclose(f);
     }
   }
 }

@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="scripts">
+      <UniqueIdentifier>{ed35b016-89ec-400e-8b17-65f1e479f245}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="test.cpp">
@@ -85,5 +88,22 @@
     <ResourceCompile Include="innative-test.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\scripts\test-h.wat">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="..\scripts\test-no-op.wat">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="..\scripts\test-win32-cref.wat">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="..\scripts\test-win64.wat">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="..\scripts\test-win64-cref.wat">
+      <Filter>scripts</Filter>
+    </None>
   </ItemGroup>
 </Project>
