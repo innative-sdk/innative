@@ -240,8 +240,8 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
 
 #ifdef IN_PLATFORM_POSIX
         if(CURRENT_ARCH_BITS == 64)
-          f = testpath(f, rootpath.parent_path() / "lib64", out);
-        f = testpath(f, rootpath.parent_path() / "lib", out);
+          f = testpath(f, rootpath.parent_path() / "lib64" / src, out);
+        f = testpath(f, rootpath.parent_path() / "lib" / src, out);
 
         if(CURRENT_ARCH_BITS == 64)
           f = testpath(f, path("/usr/lib64/") / src, out);
