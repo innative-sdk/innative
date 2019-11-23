@@ -94,8 +94,8 @@ struct IN_WASM_ENVIRONMENT;
 typedef struct IN_WASM_BYTE_ARRAY
 {
 #ifdef __cplusplus
-  IN_WASM_BYTE_ARRAY() : bytes(nullptr), n_bytes(0) {}
-  IN_WASM_BYTE_ARRAY(uint8_t* b, varuint32 n) : bytes(b), n_bytes(n) {}
+  IN_WASM_BYTE_ARRAY() : n_bytes(0), bytes(nullptr) {}
+  IN_WASM_BYTE_ARRAY(uint8_t* b, varuint32 n) : n_bytes(n), bytes(b) {}
   inline uint8_t* get() { return bytes; }
   inline const uint8_t* get() const { return bytes; }
   inline const char* str() const { return !bytes ? "" : (char*)bytes; }
