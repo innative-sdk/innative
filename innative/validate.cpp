@@ -174,21 +174,24 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   if(!ValidateIdentifier(imp.export_name))
     AppendError(env, env.errors, m, ERR_INVALID_UTF8_ENCODING, "Identifier not valid UTF8: %s", imp.export_name.str());
 
-  khint_t iter = kh_get_modules(
+  const_cast<Import&>(imp).alternate = false;
+  khint_t iter                       = kh_get_modules(
     env.modulemap,
     imp.module_name); // WASM modules do not understand !CALL convention appendings, so we use the full name no matter what
   if(iter == kh_end(env.modulemap))
   {
     if(env.cimports)
     {
-      std::string name    = ABIMangle(CanonImportName(imp, env.system), CURRENT_ABI, GetCallingConvention(imp), !m ? 0 : GetParameterBytes(*m, imp));
+    RESTART_IMPORT_CHECK:
+      std::string name    = ABIMangle(CanonImportName(imp, env.system), CURRENT_ABI, GetCallingConvention(imp),
+                                   !m ? 0 : GetParameterBytes(*m, imp));
       khiter_t iterimport = kh_get_cimport(env.cimports, Identifier((uint8_t*)name.c_str(), (varuint32)name.size()));
       if(kh_exist2(env.cimports, iterimport))
       {
         if(env.flags & ENV_WHITELIST)
         {
-          khiter_t itermodule =
-            kh_get_modulepair(env.whitelist,
+          khiter_t itermodule = kh_get_modulepair(
+            env.whitelist,
             CanonWhitelist(imp.module_name.str(), "", env.system).c_str()); // Check for a wildcard match first
           if(!kh_exist2(env.whitelist, itermodule))
           {
@@ -207,6 +210,12 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
           }
         }
         return; // This is valid
+      }
+      else if(!imp.alternate)
+      {
+        const_cast<Import&>(imp).alternate = true;
+        // We use goto here because the return keywords prevent us from wrapping the whitelist check in a function
+        goto RESTART_IMPORT_CHECK;
       }
 
       if(IsSystemImport(imp.module_name, env.system))

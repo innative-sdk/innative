@@ -1,7 +1,7 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#include "innative/export.h"
+#include "internal.h"
 
 #ifdef IN_PLATFORM_WIN32
 #include "../innative/win32.h"
@@ -36,48 +36,166 @@ IN_COMPILER_DLLEXPORT extern IN_COMPILER_NAKED void* _innative_syscall(size_t sy
                  "movq 8(%rsp), %r9\n\t"
                  "syscall\n\t"
                  "ret");
-}
 #elif defined(IN_CPU_x86)
-#error unsupported architecture!
+__asm volatile(".cfi_startproc\n"
+               "pushl %ebp\n\t"
+               ".cfi_adjust_cfa_offset 4\n\t"
+               ".cfi_rel_offset %ebp, 0\n\t"
+               "pushl %edi\n\t"
+               ".cfi_adjust_cfa_offset 4\n\t"
+               ".cfi_rel_offset %edi, 0\n\t"
+               "pushl %esi\n\t"
+               ".cfi_adjust_cfa_offset 4\n\t"
+               ".cfi_rel_offset %esi, 0\n\t"
+               "pushl %ebx\n\t"
+               ".cfi_adjust_cfa_offset 4\n\t"
+               ".cfi_rel_offset %ebx, 0\n\t"
+               "movl 44(%esp), %ebp\n\t"
+               "movl 40(%esp), %edi\n\t"
+               "movl 36(%esp), %esi\n\t"
+               "movl 32(%esp), %edx\n\t"
+               "movl 28(%esp), %ecx\n\t"
+               "movl 24(%esp), %ebx\n\t"
+               "movl 20(%esp), %eax\n\t"
+               "int $0x80\n\t"
+               "popl %ebx\n\t"
+               ".cfi_adjust_cfa_offset -4\n\t"
+               ".cfi_restore %ebx\n\t"
+               "popl %esi\n\t"
+               ".cfi_adjust_cfa_offset -4\n\t"
+               ".cfi_restore %esi\n\t"
+               "popl %edi\n\t"
+               ".cfi_adjust_cfa_offset -4\n\t"
+               ".cfi_restore %edi\n\t"
+               "popl %ebp\n\t"
+               ".cfi_adjust_cfa_offset -4\n\t"
+               ".cfi_restore %ebp\n\t"
+               "ret\n\t"
+               ".cfi_endproc");
 #elif defined(IN_CPU_ARM)
-IN_COMPILER_DLLEXPORT extern IN_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2,
-                                                                       size_t p3, size_t p4, size_t p5, size_t p6)
-{
-  __asm volatile("mov	ip, sp\n\t"
-                 "push{ r4, r5, r6, r7 }\n\t"
-                 "cfi_adjust_cfa_offset(16)\n\t"
-                 "cfi_rel_offset(r4, 0)\n\t"
-                 "cfi_rel_offset(r5, 4)\n\t"
-                 "cfi_rel_offset(r6, 8)\n\t"
-                 "cfi_rel_offset(r7, 12)\n\t"
-                 "mov	r7, r0\n\t"
-                 "mov	r0, r1\n\t"
-                 "mov	r1, r2\n\t"
-                 "mov	r2, r3\n\t"
-                 "ldmfd	ip, { r3, r4, r5, r6 }\n\t"
-                 "swi	0x0\n\t"
-                 "pop{ r4, r5, r6, r7 }\n\t"
-                 "cfi_adjust_cfa_offset(-16)\n\t"
-                 "cfi_restore(r4)\n\t"
-                 "cfi_restore(r5)\n\t"
-                 "cfi_restore(r6)\n\t"
-                 "cfi_restore(r7)\n\t"
-                 "cmn	r0, #4096\n\t"
-                 "it	cc\n\t"
+__asm volatile("mov	ip, sp\n\t"
+               "push{ r4, r5, r6, r7 }\n\t"
+               "cfi_adjust_cfa_offset(16)\n\t"
+               "cfi_rel_offset(r4, 0)\n\t"
+               "cfi_rel_offset(r5, 4)\n\t"
+               "cfi_rel_offset(r6, 8)\n\t"
+               "cfi_rel_offset(r7, 12)\n\t"
+               "mov	r7, r0\n\t"
+               "mov	r0, r1\n\t"
+               "mov	r1, r2\n\t"
+               "mov	r2, r3\n\t"
+               "ldmfd	ip, { r3, r4, r5, r6 }\n\t"
+               "swi	0x0\n\t"
+               "pop{ r4, r5, r6, r7 }\n\t"
+               "cfi_adjust_cfa_offset(-16)\n\t"
+               "cfi_restore(r4)\n\t"
+               "cfi_restore(r5)\n\t"
+               "cfi_restore(r6)\n\t"
+               "cfi_restore(r7)\n\t"
+               "cmn	r0, #4096\n\t"
+               "it	cc\n\t"
 #ifdef ARCH_HAS_BX
-                 "bxcc lr\n\t"
+               "bxcc lr\n\t"
 #else
-                 "movcc pc, lr\n\t"
+               "movcc pc, lr\n\t"
 #endif
-  );
-}
+);
+#elif defined(IN_CPU_ARM64)
+__asm volatile("uxtw        x8, w0\n\t"
+               "mov        x0, x1\n\t"
+               "mov        x1, x2\n\t"
+               "mov        x2, x3\n\t"
+               "mov        x3, x4\n\t"
+               "mov        x4, x5\n\t"
+               "mov        x5, x6\n\t"
+               "mov        x6, x7\n\t"
+               "svc        0x0\n\t"
+               "cmn        x0, #4095\n\t"
+               "RET");
+#elif defined(IN_CPU_POWERPC) || defined(IN_CPU_POWERPC64)
+__asm volatile("mr   r0,r3\n\t"
+               "mr   r3,r4\n\t"
+               "mr   r4,r5\n\t"
+               "mr   r5,r6\n\t"
+               "mr   r6,r7\n\t"
+               "mr   r7,r8\n\t"
+               "mr   r8,r9\n\t"
+               "sc\n\t"
+               "bnslr+\n\t");
+#elif defined(IN_CPU_MIPS64)
+
+#if _MIPS_SIM == _ABI64 || _MIPS_SIM == _ABIN32
+#define SZREG 8
 #else
-#error unsupported architecture!
-#endif
+#define SZREG 4
 #endif
 
+#if(_MIPS_SIM == _ABIO32 && _MIPS_SZPTR == 32)
+#define PTR_ADDIU addiu
+#endif
+#if _MIPS_SIM == _ABIN32
+#if !defined __mips_isa_rev || __mips_isa_rev < 6
+#define PTR_ADDIU addi /* no u */
+#else
+#define PTR_ADDIU addiu
+#endif
+#endif
+#if(_MIPS_SIM == _ABIO32 && _MIPS_SZPTR == 64 /* o64??? */) || _MIPS_SIM == _ABI64
+#define PTR_ADDIU daddiu
+#endif
+
+#if(SZREG == 4)
+#define REG_S sw
+#define REG_L lw
+#else
+#define REG_S sd
+#define REG_L ld
+#endif
+
+__asm volatile(".mask 0x00010000, -SZREG"
+               ".fmask 0x00000000, 0"
+               "PTR_ADDIU sp, -SZREG"
+               "cfi_adjust_cfa_offset (SZREG)"
+               "REG_S s0, (sp)"
+               "cfi_rel_offset (s0, 0)"
+               "move s0, a0"
+               "move a0, a1"
+               "move a1, a2"
+               "move a2, a3"
+               "move a3, a4"
+               "move a4, a5"
+               "move a5, a6"
+               "move v0, s0"
+               "syscall"
+               "REG_L s0, (sp)"
+               "cfi_restore (s0)"
+               "PTR_ADDIU sp, SZREG"
+               "cfi_adjust_cfa_offset (-SZREG)"
+               "ret");
+#else
+#error unsupported architecture!
+#endif
+}
+#endif
+
+IN_COMPILER_DLLEXPORT extern void _innative_internal_abort()
+{
+#ifdef IN_COMPILER_MSC
+#if defined(IN_CPU_x86_64) || defined(IN_CPU_x86)
+  __ud2();
+#elif defined(IN_CPU_ARM)
+  __trap(-1);
+#elif defined(IN_CPU_ARM64)
+  __break(-1);
+#endif
+  __fastfail(FAST_FAIL_FATAL_APP_EXIT);
+#else
+  __builtin_trap();
+#endif
+}
+
 // Writes a buffer to the standard output using system calls
-void _innative_internal_write_out(const void* buf, size_t num)
+IN_COMPILER_DLLEXPORT extern void _innative_internal_write_out(const void* buf, size_t num)
 {
 #ifdef IN_PLATFORM_WIN32
   DWORD out;
@@ -175,7 +293,7 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
   }
 
   if((size_t)info % sizeof(uint64_t))
-    i = i / 0; // Force error (we have no standard library so we can't abort)
+    _innative_internal_abort();
 
   if(!info)
     return 0;

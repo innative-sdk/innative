@@ -71,7 +71,7 @@ int main(int argc, char* argv[])
       stages = TEST_WASM_CORE;
   }
 
-  IRExports exports;
+  INExports exports;
   innative_runtime(&exports);
 
   if(stages & TEST_INTERNAL)

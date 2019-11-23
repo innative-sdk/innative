@@ -15,7 +15,7 @@
 class TestHarness
 {
 public:
-  TestHarness(const IRExports& exports, const char* arg0, int loglevel, FILE* out, const path& folder);
+  TestHarness(const INExports& exports, const char* arg0, int loglevel, FILE* out, const path& folder);
   ~TestHarness();
   size_t Run(FILE* out);
   void test_allocator();
@@ -24,6 +24,8 @@ public:
   void test_stack();
   void test_stream();
   void test_util();
+  void test_manual();
+  void test_assemblyscript();
   void test_parallel_parsing();
   void test_serializer();
   void test_whitelist();
@@ -58,7 +60,7 @@ protected:
 
   std::pair<uint32_t, uint32_t> _testdata;
   FILE* _target;
-  const IRExports& _exports;
+  const INExports& _exports;
   const char* _arg0;
   int _loglevel;
   std::vector<path> _garbage;

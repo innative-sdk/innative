@@ -49,7 +49,25 @@ typedef union IN__GLOBAL_TYPE
   float f32;
   double f64;
   void* memory; // The additional indirection for memory is important here, becuase the global is a pointer to a pointer
-} IRGlobal;
+} INGlobal;
+
+typedef struct IN__TABLE_ENTRY
+{
+  IN_Entrypoint func;
+  varuint32 type;
+} INTableEntry;
+
+// Stores metadata about a webassembly module compiled into the binary
+typedef struct IN__MODULE_METADATA
+{
+  const char* name;
+  varuint32 n_tables;
+  INTableEntry** tables;
+  varuint32 n_memories;
+  void*** memories;
+  varuint32 n_globals;
+  INGlobal** globals;
+} INModuleMetadata;
 
 // Contains pointers to the actual runtime functions
 typedef struct IN__EXPORTS
@@ -63,15 +81,21 @@ typedef struct IN__EXPORTS
   /// Adds a module to an environment. This could happen asyncronously if multithreading is enabled, in which case
   // 'err' won't be valid until FinalizeEnvironment() is called to resolve all pending module loads.
   /// \param env The environment to modify.
-  /// \param data Either a pointer to the module in memory, or a UTF8 encoded null-terminated string pointing to a file that
-  /// contains the module.
+  /// \param data Either a pointer to the module in memory, if size is non-zero, or a UTF8 encoded null-terminated string
+  /// pointing to a file that contains the module.
   /// \param size The length of the memory that the data pointer points to, or zero if the data pointer is actually a UTF8
   /// encoded null terminated string.
   /// \param name A name to use for the module. If the module data does not contain a name, this will be used.
   /// \param err A pointer to an integer that recieves an error code should the function fail. Not valid until
   /// FinalizeEnvironment() is called.
-  void (*AddModule)(Environment* env, const void* data, uint64_t size, const char* name,
-                    int* err); // If size is 0, data points to a null terminated UTF8 file path
+  void (*AddModule)(Environment* env, const void* data, uint64_t size, const char* name, int* err);
+
+  /// Adds a prebuilt module object to the environment. This happens syncronously, regardless of multithreading flags.
+  /// \param env The environment to modify.
+  /// \param m The module to add to the environment. This must be a valid Module object or the validation step will fail.
+  /// The module will be copied into the environment - further modifications to the given module pointer won't affect the
+  /// environment's internal copy.
+  int (*AddModuleObject)(Environment* env, const Module* m);
 
   /// Adds a whitelist entry to the environment. This will only be used if the whitelist is enabled via the flags.
   /// \param env The environment to modify.
@@ -137,7 +161,7 @@ typedef struct IN__EXPORTS
   /// \param assembly A pointer to a webassembly binary loaded by LoadAssembly.
   /// \param module_name The name of the module the global is exported from.
   /// \param export_name The name of the global that has been exported.
-  IRGlobal* (*LoadGlobal)(void* assembly, const char* module_name, const char* export_name);
+  INGlobal* (*LoadGlobal)(void* assembly, const char* module_name, const char* export_name);
 
   /// Clears the environment's cached compilation of a given module, or clears the entire cache if the module is a null
   /// pointer.
@@ -153,6 +177,10 @@ typedef struct IN__EXPORTS
   /// Returns the string representation of an IN_ERROR enumeration, or NULL if the lookup fails. Useful for debuggers.
   /// \param error_code The IN_ERROR code to get the string representation of.
   const char* (*GetErrorString)(int error_code);
+
+  /// Destroys an environment and safely deconstructs all it's caches and memory allocations.
+  /// \param env The environment to destroy.
+  void (*DestroyEnvironment)(Environment* env);
 
   /// Compiles and executes a .wast script using the given environment. This execution will modify the environment and add
   /// all modules referenced in the script according to the registration rules.
@@ -176,14 +204,107 @@ typedef struct IN__EXPORTS
   /// /param len If 'len' is nonzero and out is not null, then this should be the length of the buffer pointed to by out
   int (*SerializeModule)(Environment* env, size_t m, const char* out, size_t* len);
 
-  /// Destroys an environment and safely deconstructs all it's caches and memory allocations.
-  /// \param env The environment to destroy.
-  void (*DestroyEnvironment)(Environment* env);
-} IRExports;
+  /// Loads a source map from the given path or memory location into the module at index 'm'
+  /// \param env The environment that contains the module the sourcemap will be attached to.
+  /// \param m the index of the module to attache the sourcemap to.
+  /// \param path if len is zero, a null-terminated UTF8 string containing the path of the sourcemap. Otherwise, a pointer
+  /// to a memory location.
+  /// \param len if zero, path points to a string. Otherwise, this contains the size of the memory location holding the
+  /// sourcemap.
+  int (*LoadSourceMap)(Environment* env, unsigned int m, const char* path, size_t len);
+
+  /// Inserts a new, zero'd element into the given module section at the specified index. It is up to the caller to
+  /// initialize the new element with a valid state.
+  /// \param env The environment associated with the given module.
+  /// \param m A pointer to a module associated with the given environment that the section should be inserted into.
+  /// \param section A enumeration value signifying what section of the module to insert a new element into.
+  /// \param index The index, relative to the section being modified, where the new element should be inserted. This index
+  /// cannot be greater than the size of the section being modified, but it can be equal to the current size of the section,
+  /// which will simply append the new item to the end.
+  int (*InsertModuleSection)(Environment* env, Module* m, enum WASM_MODULE_SECTIONS section, varuint32 index);
+
+  /// Deletes an element from the given module section at the specified index and moves the other elements in the array.
+  /// \param env The environment associated with the given module.
+  /// \param m A pointer to a module associated with the given environment that the section should be removed from.
+  /// \param section A enumeration value signifying what section of the module to remove an element from.
+  /// \param index The index, relative to the section being modified, of the element that will be removed.
+  int (*DeleteModuleSection)(Environment* env, Module* m, enum WASM_MODULE_SECTIONS section, varuint32 index);
+
+  /// Resizes a ByteArray to the size of the provided memory buffer and copies the entire memory section into it's internal
+  /// buffer.
+  /// \param env The environment associated with the given bytearray.
+  /// \param bytearray The ByteArray object whose internal buffer will recieve the data.
+  /// \param data A pointer to a location in memory which will be copied to the ByteArray's internal buffer.
+  /// \param size The size of the memory location to copy into the ByteArray's internal buffer.
+  int (*SetByteArray)(Environment* env, ByteArray* bytearray, const void* data, varuint32 size);
+
+  /// Copies the given null-terminated string into the internal buffer of the target identifier, preserving the
+  /// null-terminator.
+  /// \param env The environment associated with the given identifier.
+  /// \param identifier The identifier whose buffer will be set to the given string.
+  /// \param str A null-terminated string to be copied into the identifier.
+  int (*SetIdentifier)(Environment* env, Identifier* identifier, const char* str);
+
+  /// Inserts a local into the given function body at the provided index and initializes it with a type, and an optional
+  /// debuginfo value.
+  /// \param env The environment associated with the given function.
+  /// \param func The FunctionBody object to insert the local definition into.
+  /// \param index The index where the new local will be inserted.
+  /// \param local The local that will be inserted.
+  /// \param info An optional pointer to debug information describing the local.
+  int (*InsertModuleLocal)(Environment* env, FunctionBody* body, varuint32 index, varsint7 local, DebugInfo* info);
+
+  // Removes a local definition from the given function body at the provided index.
+  /// \param env The environment associated with the given function.
+  /// \param func The FunctionBody object to remove the local definition from.
+  /// \param index The index of the local that will be removed.
+  int (*RemoveModuleLocal)(Environment* env, FunctionBody* body, varuint32 index);
+
+  /// Inserts an instruction into the given function body at the provided index and initializes it with an initial value.
+  /// \param env The environment associated with the given function.
+  /// \param func The FunctionBody object to insert the instruction into.
+  /// \param index The index where the new instruction will be inserted.
+  /// \param ins The instruction that will be inserted.
+  int (*InsertModuleInstruction)(Environment* env, FunctionBody* body, varuint32 index, Instruction* ins);
+
+  /// Removes an instruction from the given function body at the provided index.
+  /// \param env The environment associated with the given function.
+  /// \param func The FunctionBody object to remove the instruction from.
+  /// \param index The index of the instruction that will be removed.
+  int (*RemoveModuleInstruction)(Environment* env, FunctionBody* body, varuint32 index);
+
+  /// Inserts a parameter into the given function type at the provided index and initializes it. If both the corresponding
+  /// function body and a DebugInfo object are provided, also inserts and initializes the appropriate debug information.
+  /// \param env The environment associated with the given function.
+  /// \param func The FunctionType object to insert the parameter into.
+  /// \param param The parameter that will be inserted.
+  /// \param info An optional pointer to debug information describing the parameter.
+  int (*InsertModuleParam)(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index, varsint7 param,
+                           DebugInfo* info);
+
+  /// Removes a parameter from the given function type at the provided index. If the corresponding function body is
+  /// provided, also removes the corresponding DebugInfo object from the body, if it exists.
+  /// \param env The environment associated with the given function.
+  /// \param func The FunctionType object to remove the parameter from.
+  /// \param index The index of the parameter that will be removed.
+  int (*RemoveModuleParam)(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index);
+
+  /// Inserts and initializes a return value into the given function type at the provided index.
+  /// \param env The environment associated with the given function.
+  /// \param func The FunctionType object to insert the result value into.
+  /// \param result The result that will be inserted.
+  int (*InsertModuleReturn)(Environment* env, FunctionType* func, varuint32 index, varsint7 result);
+
+  /// Removes a return value from the given function type at the provided index.
+  /// \param env The environment associated with the given function.
+  /// \param func The FunctionType object to remove the result value from.
+  /// \param index The index of the result value that will be removed.
+  int (*RemoveModuleReturn)(Environment* env, FunctionType* func, varuint32 index);
+} INExports;
 
 /// Statically linked function that loads the runtime stub, which then loads the actual runtime functions into exports.
-/// \param exports Pointer to an existing IRExports structure that will be filled with function pointers.
-IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports);
+/// \param exports Pointer to an existing INExports structure that will be filled with function pointers.
+IN_COMPILER_DLLEXPORT extern void innative_runtime(INExports* exports);
 
 // --- Tooling functions that exist for command line utilities that always statically link to the runtime ---
 

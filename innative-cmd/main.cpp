@@ -98,7 +98,7 @@ void usage()
     << std::endl;
 }
 
-void printerr(IRExports& exports, FILE* f, const char* prefix, const char* postfix, int err)
+void printerr(INExports& exports, FILE* f, const char* prefix, const char* postfix, int err)
 {
   const char* errstring = (*exports.GetErrorString)(err);
   if(errstring)
@@ -107,7 +107,7 @@ void printerr(IRExports& exports, FILE* f, const char* prefix, const char* postf
     fprintf(f, "%s%s: %i\n", prefix, postfix, err);
 }
 
-void dump_validation_errors(IRExports& exports, Environment* env)
+void dump_validation_errors(INExports& exports, Environment* env)
 {
   for(ValidationError* error = env->errors; error != nullptr; error = error->next)
   {
@@ -314,7 +314,7 @@ int main(int argc, char* argv[])
   if(reverse) // If we're compiling LLVM IR instead of webassembly, we divert to another code path
     return innative_compile_llvm(inputs.data(), inputs.size(), flags, out.u8string().c_str(), stdout);
 
-  IRExports exports = { 0 };
+  INExports exports = { 0 };
 
   // If we are generating a loader, we replace all of the normal functions to reroute the resources into the EXE file
   if(generate)

@@ -335,7 +335,19 @@ EXPORT void FREE(void* ptr)
   size_t index = _find_indice(ptr, heap, capacity, &size);
 
   if(index == (size_t)~0)
-    index /= 0;
+  {
+#ifdef _MSC_VER
+#ifdef _M_ARM64
+    __break(-1);
+#elif defined(_M_ARM)
+    __trap(-1);
+#else
+    __ud2();
+#endif
+#else
+    __builtin_trap();
+#endif
+  }
 
   // Set this node as free, and recalculate it's parent free size
   heap[index] = size;

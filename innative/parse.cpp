@@ -164,10 +164,15 @@ IN_ERROR innative::ParseResizableLimits(Stream& s, ResizableLimits& limits)
 
   return err;
 }
-IN_ERROR innative::ParseMemoryDesc(Stream& s, MemoryDesc& mem) { return ParseResizableLimits(s, mem.limits); }
+IN_ERROR innative::ParseMemoryDesc(Stream& s, MemoryDesc& mem)
+{
+  mem.debug = { 1, (unsigned int)s.pos };
+  return ParseResizableLimits(s, mem.limits);
+}
 
 IN_ERROR innative::ParseTableDesc(Stream& s, TableDesc& t)
 {
+  t.debug      = { 1, (unsigned int)s.pos };
   IN_ERROR err = ParseVarSInt7(s, t.element_type);
 
   if(err >= 0)
@@ -178,6 +183,7 @@ IN_ERROR innative::ParseTableDesc(Stream& s, TableDesc& t)
 
 IN_ERROR innative::ParseGlobalDesc(Stream& s, GlobalDesc& g)
 {
+  g.debug      = { 1, (unsigned int)s.pos };
   IN_ERROR err = ParseVarSInt7(s, g.type);
 
   if(err >= 0 && (err = ParseVarUInt1(s, g.mutability)))
@@ -218,7 +224,7 @@ IN_ERROR innative::ParseImport(Stream& s, Import& i, const Environment& env)
   switch(i.kind)
   {
   case WASM_KIND_FUNCTION:
-    i.func_desc.debug       = { 0 };
+    i.func_desc.debug       = { 1, (unsigned int)s.pos };
     i.func_desc.param_names = 0;
     return ParseVarUInt32(s, i.func_desc.type_index);
   case WASM_KIND_TABLE: return ParseTableDesc(s, i.table_desc);
@@ -245,8 +251,8 @@ IN_ERROR innative::ParseExport(Stream& s, Export& e, const Environment& env)
 
 IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environment& env)
 {
-  ins.line     = 0;
-  ins.column   = 0;
+  ins.line     = 1;
+  ins.column   = (unsigned int)s.pos;
   IN_ERROR err = ParseByte(s, ins.opcode);
   if(err < 0)
     return err;
@@ -483,6 +489,7 @@ IN_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const E
 
 IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, const Environment& env)
 {
+  f.debug      = { 1, (unsigned int)s.pos };
   IN_ERROR err = ParseVarUInt32(s, f.body_size);
   size_t end   = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
 
@@ -523,7 +530,6 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, const Environme
   }
   f.local_names = 0;
   f.param_names = 0;
-  f.debug       = { 0 };
 
   return err;
 }
@@ -644,7 +650,8 @@ IN_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Envi
   return err;
 }
 
-IN_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, ByteArray name, ValidationError*& errors)
+IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& env, Module& m, ByteArray name,
+                               ValidationError*& errors)
 {
   m = { 0 };
 
@@ -684,9 +691,10 @@ IN_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, Byt
   if(s.pos != s.size)
     return ERR_PARSE_INVALID_FILE_LENGTH;
 
-  s.pos            = begin;
   size_t curcustom = 0;
+  s.pos            = begin;
   m.exports        = kh_init_exports();
+  m.filepath       = utility::AllocString(const_cast<Environment&>(env), file);
 
   if(m.n_custom > 0)
   {
@@ -788,6 +796,20 @@ IN_ERROR innative::ParseModule(Stream& s, const Environment& env, Module& m, Byt
           return ERR_INVALID_UTF8_ENCODING; // An invalid UTF8 encoding for the name is an actual parse error for some reason
         if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), "name"))
           ParseNameSection(s, custom, m, env);
+        if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), "sourceMappingURL"))
+        {
+          Identifier sourceMappingURL;
+          ParseIdentifier(s, sourceMappingURL, env);
+          m.sourcemap = tmalloc<SourceMap>(env, 1);
+          err         = ParseSourceMap(&env, m.sourcemap, sourceMappingURL.str(), 0);
+
+          if(err == ERR_FATAL_FILE_ERROR && m.filepath != nullptr)
+            err = ParseSourceMap(&env, m.sourcemap,
+                                 (GetPath(m.filepath).parent_path() / sourceMappingURL.str()).u8string().c_str(), 0);
+          if(err)
+            return err;
+        }
+
         else
           s.pos = custom; // Skip over the custom payload, minus the name
         break;

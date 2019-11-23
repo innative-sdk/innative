@@ -20,6 +20,8 @@ limitations under the License.
 #define INNATIVE_VERSION_MAJOR 0
 #define INNATIVE_VERSION_MINOR 1
 #define INNATIVE_VERSION_REVISION 3
+#define INNATIVE_WASM_MAGIC_COOKIE 0x6d736100
+#define INNATIVE_WASM_MAGIC_VERSION 0x01
 #define INNATIVE_VERSION(v, m, r, b) (((v | 0ULL) << 48) | ((m | 0ULL) << 32) | ((r | 0ULL) << 16) | (b | 0ULL))
 #define _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
 
@@ -114,6 +116,7 @@ limitations under the License.
 #define IN_COMPILER_DLLEXPORT __declspec(dllexport)
 #define IN_COMPILER_DLLIMPORT __declspec(dllimport)
 #define IN_COMPILER_FASTCALL __fastcall
+#define IN_COMPILER_NAKED __declspec(naked)
 #define IN_FORCEINLINE __forceinline
 #define IN_RESTRICT __restrict
 #define IN_ALIGN(n) __declspec(align(n))
@@ -199,12 +202,14 @@ limitations under the License.
 #define STRTOK(str, delim, context) strtok_s(str, delim, context)
 #define FPRINTF(f, ...) fprintf_s(f, __VA_ARGS__)
 #define SPRINTF(b, c, f, ...) sprintf_s(b, c, f, __VA_ARGS__)
+#define STRNICMP(a, b, n) _strnicmp(a, b, n)
 #else
 #define FOPEN(f, path, mode) f = fopen(path, mode)
 #define STRICMP(a, b) strcasecmp(a, b)
 #define STRTOK(str, delim, context) strtok_r(str, delim, context)
 #define FPRINTF(f, ...) fprintf(f, __VA_ARGS__)
 #define SPRINTF(b, c, f, ...) sprintf(b, f, __VA_ARGS__)
+#define STRNICMP(a, b, n) strnicmp(a, b, n)
 #endif
 
 #endif

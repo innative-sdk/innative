@@ -1384,7 +1384,8 @@ void innative::WatSkipSection(Queue<WatToken>& tokens, ptrdiff_t count)
   }
 }
 
-int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens, StringRef name, WatToken& internalname)
+int WatParser::ParseModule(Environment& env, Module& m, const char* file, Queue<WatToken>& tokens, StringRef name,
+                           WatToken& internalname)
 {
   int err;
   m = { WASM_MAGIC_COOKIE, WASM_MAGIC_VERSION, 0 };
@@ -1508,7 +1509,7 @@ int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens,
       if(tokens[0].id != WatTokens::NUMBER && tokens[0].id != WatTokens::NAME)
         return ERR_WAT_EXPECTED_VAR;
       m.start_line = tokens[0].line;
-      m.start = state.GetFromHash(state.funchash, tokens.Pop());
+      m.start      = state.GetFromHash(state.funchash, tokens.Pop());
       if(m.start == (varuint32)~0)
         return ERR_WAT_INVALID_VAR;
       break;
@@ -1561,12 +1562,13 @@ int WatParser::ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens,
     state.deferred.Pop();
   }
 
-  m.exports = kh_init_exports();
+  m.filepath = utility::AllocString(env, file);
+  m.exports  = kh_init_exports();
   assert(m.name.get());
   return ParseExportFixup(m, env.errors, env);
 }
 
-int innative::ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, StringRef name)
+int innative::ParseWatModule(Environment& env, const char* file, Module& m, uint8_t* data, size_t sz, StringRef name)
 {
   Queue<WatToken> tokens;
   TokenizeWAT(tokens, (char*)data, (char*)data + sz);
@@ -1581,14 +1583,14 @@ int innative::ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t 
 
   // If we don't detect "(module", just assume it's an inline module
   if(tokens[0].id != WatTokens::OPEN || tokens[1].id != WatTokens::MODULE)
-    err = WatParser::ParseModule(env, m, tokens, name, nametoken);
+    err = WatParser::ParseModule(env, m, file, tokens, name, nametoken);
   else
   {
     if(tokens.Size() == 0 || tokens.Pop().id != WatTokens::OPEN)
       err = ERR_WAT_EXPECTED_OPEN;
     else if(tokens.Size() == 0 || tokens.Pop().id != WatTokens::MODULE)
       err = ERR_WAT_EXPECTED_MODULE;
-    else if(!(err = WatParser::ParseModule(env, m, tokens, name, nametoken)))
+    else if(!(err = WatParser::ParseModule(env, m, file, tokens, name, nametoken)))
     {
       if(tokens.Size() == 0 || tokens.Pop().id != WatTokens::CLOSE)
         err = ERR_WAT_EXPECTED_CLOSE;

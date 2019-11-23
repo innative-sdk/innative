@@ -69,11 +69,18 @@ uninstall:
 	$(RM) -r $(DESTDIR)$(PREFIX)/include/innative
 	$(RM) $(DESTDIR)$(PREFIX)/lib/libinnative.so
 
-benchmarks:
-	$(CXX) innative-test/benchmark_n-body.cpp wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 --output /scripts/benchmark_n-body.wasm -Xlinker --no-entry -Xlinker --export-dynamic
-	$(CXX) innative-test/benchmark_fac.cpp wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 --output /scripts/benchmark_fac.wasm -Xlinker --no-entry -Xlinker --export-dynamic
-	$(CXX) innative-test/benchmark_fannkuch-redux.cpp wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 --output /scripts/benchmark_fannkuch-redux.wasm -Xlinker --no-entry -Xlinker --export-dynamic
+benchmarks: benchmark_n-body.wasm benchmark_fac.wasm benchmark_fannkuch-redux.wasm
 
+%.wasm.full: %.cpp
+	$(CXX) $< -g -o $@
+
+%.wasm.dwarf: %.wasm.full
+	/bin/llvm/bin/llvm-dwarfdump $< > $@
+
+%.wasm: %.wasm.full %.wasm.dwarf
+	wasm-sourcemap.py $< -w $@ -p $(CURDIR) -s -u ./$(@:.wasm=.wasm.map) -o $(@:.wasm=.wasm.map) --dwarfdump-output=$(@:.wasm=.wasm.dwarf)
+	$(CXX) innative-test/%.cpp wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 --output /scripts/%.wasm -Xlinker --no-entry -Xlinker --export-dynamic
+  
 .PHONY: all clean install uninstall benchmarks debug
 
 include innative-env/Makefile

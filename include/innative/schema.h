@@ -9,6 +9,8 @@
 #include "innative/errors.h"
 #include "innative/opcodes.h"
 #include "innative/flags.h"
+#include "innative/module.h"
+#include "innative/sourcemap.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -83,7 +85,7 @@ enum WASM_KIND
   WASM_KIND_FUNCTION = 0,
   WASM_KIND_TABLE    = 1,
   WASM_KIND_MEMORY   = 2,
-  WASM_KIND_GLOBAL   = 3
+  WASM_KIND_GLOBAL   = 3,
 };
 
 struct IN_WASM_ENVIRONMENT;
@@ -226,7 +228,8 @@ typedef struct IN_WASM_IMPORT
 {
   Identifier module_name;
   Identifier export_name;
-  varuint7 kind; // WASM_KIND
+  varuint7 kind;  // WASM_KIND
+  bool alternate; // Internal flag - if true, this import's canonical name always includes the module name
   union
   {
     FunctionDesc func_desc;
@@ -379,9 +382,10 @@ typedef struct IN_WASM_MODULE
 
   size_t n_custom;
   CustomSection* custom;
+  SourceMap* sourcemap;
 
   struct kh_exports_s* exports;
-  const char* path;       // For debugging purposes, store path to source .wat file, if it exists.
+  const char* filepath;   // For debugging purposes, store path to the original file, if it exists
   IN_CODE_CONTEXT* cache; // If non-zero, points to a cached compilation of this module
 } Module;
 
@@ -404,7 +408,7 @@ typedef struct IN_WASM_EMBEDDING
   struct IN_WASM_EMBEDDING* next;
 } Embedding;
 
-enum WASM_LOG_LEVEL
+enum IN_LOG_LEVEL
 {
   LOG_NONE  = -1, // Suppress all log output no matter what
   LOG_FATAL = 0,
@@ -438,7 +442,7 @@ typedef struct IN_WASM_ENVIRONMENT
   const char* system;  // prefix for the "system" module, which simply attempts to link the function name as a C function.
                        // Defaults to a blank string.
   struct IN_WASM_ALLOCATOR* alloc; // Stores a pointer to the internal allocator
-  int loglevel;                    // WASM_LOG_LEVEL
+  int loglevel;                    // IN_LOG_LEVEL
   FILE* log;                       // Output stream for log messages
   void (*wasthook)(void*);         // Optional hook for WAST debugging cases
 

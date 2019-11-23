@@ -26,7 +26,7 @@ void TestHarness::test_serializer()
     env->features    = ENV_FEATURE_ALL;
     env->loglevel    = LOG_FATAL;
 
-    int err;
+    int err = 0;
     (*_exports.AddModule)(env, MODULE, sizeof(MODULE), "reverse", &err);
     (*_exports.FinalizeEnvironment)(env);
 
@@ -42,7 +42,7 @@ void TestHarness::test_serializer()
     env->features    = ENV_FEATURE_ALL;
     env->loglevel    = LOG_FATAL;
 
-    int err;
+    int err = 0;
     (*_exports.AddModule)(env, iter1.get(), len1, "reverse", &err);
     (*_exports.FinalizeEnvironment)(env);
 

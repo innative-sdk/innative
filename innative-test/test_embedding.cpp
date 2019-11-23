@@ -23,6 +23,10 @@ void TestHarness::test_embedding()
     Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);
     env->flags |= ENV_LIBRARY | ENV_ENABLE_WAT;
     env->system = "env";
+#ifdef IN_DEBUG
+    env->optimize = ENV_OPTIMIZE_O0;
+    env->flags |= ENV_DEBUG;
+#endif
 
     int err = (*_exports.AddWhitelist)(env, "env", "my_factorial");
     TEST(!err);

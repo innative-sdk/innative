@@ -102,17 +102,46 @@ void innative::LoadModule(Environment* env, size_t index, const void* data, uint
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
   {
     env->modules[index] = { 0 };
-    *err = innative::ParseWatModule(*env, env->modules[index], s.data, (size_t)size, StringRef{ name, strlen(name) });
+    *err = innative::ParseWatModule(*env, file, env->modules[index], s.data, (size_t)size, StringRef{ name, strlen(name) });
   }
   else
-    *err = ParseModule(s, *env, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
+    *err = ParseModule(s, file, *env, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
 
-  env->modules[index].path = utility::AllocString(*env, file);
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
+}
+
+size_t ReserveModule(Environment* env, int* err)
+{
+  if((env->flags & ENV_MULTITHREADED) != 0 && env->maxthreads > 0)
+  {
+    while(((std::atomic<size_t>&)env->size).load(std::memory_order_relaxed) -
+            ((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed) >=
+          env->maxthreads)
+      std::this_thread::sleep_for(std::chrono::milliseconds(
+        2)); // If we're using maxthreads, block until one finishes (we must block up here or we risk a deadlock)
+  }
+
+  size_t index = ((std::atomic<size_t>&)env->size).fetch_add(1, std::memory_order_acq_rel);
+  if(index >= ((std::atomic<size_t>&)env->capacity).load(std::memory_order_acquire))
+  {
+    while(((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed) != index)
+      std::this_thread::sleep_for(
+        std::chrono::milliseconds(5)); // If we've exceeded our capacity, block until all other threads have finished
+
+    env->modules = trealloc<Module>(env->modules, index * 2);
+    if(!env->modules)
+    {
+      *err = ERR_FATAL_OUT_OF_MEMORY;
+      return (size_t)~0;
+    }
+    ((std::atomic<size_t>&)env->capacity).store(index * 2, std::memory_order_release);
+  }
+  return index;
 }
 
 void innative::AddModule(Environment* env, const void* data, uint64_t size, const char* name, int* err)
 {
+  *err = ERR_SUCCESS;
   if(!env || !err)
   {
     *err = ERR_FATAL_NULL_POINTER;
@@ -135,35 +164,30 @@ void innative::AddModule(Environment* env, const void* data, uint64_t size, cons
     data = data_module.get();
   }
 
-  if((env->flags & ENV_MULTITHREADED) != 0 && env->maxthreads > 0)
-  {
-    while(((std::atomic<size_t>&)env->size).load(std::memory_order_relaxed) -
-            ((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed) >=
-          env->maxthreads)
-      std::this_thread::sleep_for(std::chrono::milliseconds(
-        2)); // If we're using maxthreads, block until one finishes (we must block up here or we risk a deadlock)
-  }
-
-  size_t index = ((std::atomic<size_t>&)env->size).fetch_add(1, std::memory_order_acq_rel);
-  if(index >= ((std::atomic<size_t>&)env->capacity).load(std::memory_order_acquire))
-  {
-    while(((std::atomic<size_t>&)env->n_modules).load(std::memory_order_relaxed) != index)
-      std::this_thread::sleep_for(
-        std::chrono::milliseconds(5)); // If we've exceeded our capacity, block until all other threads have finished
-
-    env->modules = trealloc<Module>(env->modules, index * 2);
-    if(!env->modules)
-    {
-      *err = ERR_FATAL_OUT_OF_MEMORY;
-      return;
-    }
-    ((std::atomic<size_t>&)env->capacity).store(index * 2, std::memory_order_release);
-  }
+  size_t index = ReserveModule(env, err);
+  if(*err < 0)
+    return;
 
   if(env->flags & ENV_MULTITHREADED)
     std::thread(LoadModule, env, index, data, size, name, file, err).detach();
   else
     LoadModule(env, index, data, size, name, file, err);
+}
+
+int innative::AddModuleObject(Environment* env, const Module* m)
+{
+  if(!env || !m)
+    return ERR_FATAL_NULL_POINTER;
+
+  int err      = 0;
+  size_t index = ReserveModule(env, &err);
+  if(err < 0)
+    return err;
+
+  env->modules[index] = *m;
+
+  ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
+  return ERR_SUCCESS;
 }
 
 IN_ERROR innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name)
@@ -334,23 +358,17 @@ IN_Entrypoint innative::LoadFunction(void* assembly, const char* module_name, co
   return (IN_Entrypoint)LoadDLLFunction(assembly, !function ? IN_INIT_FUNCTION : canonical.c_str());
 }
 
-struct IN_TABLE
-{
-  IN_Entrypoint func;
-  varuint32 type;
-};
-
 IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const char* table, varuint32 index)
 {
-  IN_TABLE* ref =
-    (IN_TABLE*)LoadDLLFunction(assembly,
-                               utility::CanonicalName(StringRef::From(module_name), StringRef::From(table)).c_str());
+  INTableEntry* ref =
+    (INTableEntry*)LoadDLLFunction(assembly,
+                                   utility::CanonicalName(StringRef::From(module_name), StringRef::From(table)).c_str());
   return !ref ? nullptr : ref[index].func;
 }
 
-IRGlobal* innative::LoadGlobal(void* assembly, const char* module_name, const char* export_name)
+INGlobal* innative::LoadGlobal(void* assembly, const char* module_name, const char* export_name)
 {
-  return (IRGlobal*)LoadDLLFunction(
+  return (INGlobal*)LoadDLLFunction(
     assembly, utility::CanonicalName(StringRef::From(module_name), StringRef::From(export_name)).c_str());
 }
 
@@ -479,4 +497,257 @@ int innative::SerializeModule(Environment* env, size_t m, const char* out, size_
 
   wat::WriteTokens(tokens, f);
   return ERR_SUCCESS;
+}
+int innative::LoadSourceMap(Environment* env, unsigned int m, const char* path, size_t len)
+{
+  if(!env)
+    return ERR_FATAL_NULL_POINTER;
+  if(m >= env->n_modules)
+    return ERR_UNKNOWN_MODULE;
+  env->modules[m].sourcemap = tmalloc<SourceMap>(*env, 1);
+  int r                     = ParseSourceMap(env, env->modules[m].sourcemap, path, len);
+  if(r < 0)
+    env->modules[m].sourcemap = 0;
+  return r;
+}
+
+template<class T, typename INT> int InsertModuleType(Environment* env, T*& root, INT& sz, INT index, const T& init)
+{
+  if(!env)
+    return ERR_FATAL_NULL_POINTER;
+  if(index > sz)
+    return ERR_FATAL_INVALID_INDEX;
+
+  INT n = sz + 1;
+  T* p  = tmalloc<T>(*env, n);
+  if(!p)
+    return ERR_FATAL_OUT_OF_MEMORY;
+
+  if(root)
+  {
+    if(index == sz)
+      tmemcpy<T>(p, n, root, sz);
+    else if(!index)
+      tmemcpy<T>(p + 1, n - 1, root, sz);
+    else
+    {
+      tmemcpy<T>(p, n, root, index);
+      tmemcpy<T>(p + index + 1, n - index - 1, root + index, sz - index);
+    }
+    // memset(p + index, 0, sizeof(T));
+  }
+  else
+    memset(p, 0, sizeof(T) * n);
+
+  p[index] = init;
+  sz       = n;
+  root     = p;
+  return ERR_SUCCESS;
+}
+
+int innative::InsertModuleSection(Environment* env, Module* m, enum WASM_MODULE_SECTIONS field, varuint32 index)
+{
+  if(!env || !m)
+    return ERR_FATAL_NULL_POINTER;
+
+  switch(field)
+  {
+  case WASM_MODULE_IMPORT_TABLE: index += m->importsection.functions; break;
+  case WASM_MODULE_IMPORT_MEMORY: index += m->importsection.tables; break;
+  case WASM_MODULE_IMPORT_GLOBAL: index += m->importsection.memories; break;
+  }
+
+  switch(field)
+  {
+  case WASM_MODULE_TYPE:
+    m->knownsections |= (1 << WASM_SECTION_TYPE);
+    return InsertModuleType<FunctionType>(env, m->type.functions, m->type.n_functions, index, { 0 });
+  case WASM_MODULE_IMPORT_FUNCTION: ++m->importsection.functions;
+  case WASM_MODULE_IMPORT_TABLE: ++m->importsection.tables;
+  case WASM_MODULE_IMPORT_MEMORY: ++m->importsection.memories;
+  case WASM_MODULE_IMPORT_GLOBAL:
+    m->knownsections |= (1 << WASM_SECTION_IMPORT);
+    return InsertModuleType(env, m->importsection.imports, m->importsection.n_import, index, Import{});
+  case WASM_MODULE_FUNCTION:
+    m->knownsections |= (1 << WASM_SECTION_FUNCTION);
+    return InsertModuleType<varuint32>(env, m->function.funcdecl, m->function.n_funcdecl, index, { 0 });
+  case WASM_MODULE_TABLE:
+    m->knownsections |= (1 << WASM_SECTION_TABLE);
+    return InsertModuleType<TableDesc>(env, m->table.tables, m->table.n_tables, index, { 0 });
+  case WASM_MODULE_MEMORY:
+    m->knownsections |= (1 << WASM_SECTION_MEMORY);
+    return InsertModuleType<MemoryDesc>(env, m->memory.memories, m->memory.n_memories, index, { 0 });
+  case WASM_MODULE_GLOBAL:
+    m->knownsections |= (1 << WASM_SECTION_GLOBAL);
+    return InsertModuleType<GlobalDecl>(env, m->global.globals, m->global.n_globals, index, { 0 });
+  case WASM_MODULE_EXPORT:
+    m->knownsections |= (1 << WASM_SECTION_EXPORT);
+    return InsertModuleType(env, m->exportsection.exports, m->exportsection.n_exports, index, Export{});
+  case WASM_MODULE_ELEMENT:
+    m->knownsections |= (1 << WASM_SECTION_ELEMENT);
+    return InsertModuleType<TableInit>(env, m->element.elements, m->element.n_elements, index, { 0 });
+  case WASM_MODULE_CODE:
+    m->knownsections |= (1 << WASM_SECTION_CODE);
+    return InsertModuleType<FunctionBody>(env, m->code.funcbody, m->code.n_funcbody, index, { 0 });
+  case WASM_MODULE_DATA:
+    m->knownsections |= (1 << WASM_SECTION_DATA);
+    return InsertModuleType<DataInit>(env, m->data.data, m->data.n_data, index, { 0 });
+  case WASM_MODULE_CUSTOM: return InsertModuleType<CustomSection>(env, m->custom, m->n_custom, (size_t)index, { 0 });
+  }
+
+  return ERR_FATAL_INVALID_MODULE;
+}
+
+template<class T, typename INT> int DeleteModuleType(Environment* env, T*& root, INT& sz, INT index)
+{
+  if(!env)
+    return ERR_FATAL_NULL_POINTER;
+  if(!sz)
+    return ERR_FATAL_INVALID_INDEX;
+
+  --sz;
+  if(index > sz)
+    return ERR_FATAL_INVALID_INDEX;
+
+  if(index < sz)
+    memmove(root + index, root + index + 1, sizeof(T) * (sz - index));
+
+  return ERR_SUCCESS;
+}
+
+int innative::DeleteModuleSection(Environment* env, Module* m, enum WASM_MODULE_SECTIONS field, varuint32 index)
+{
+  if(!env || !m)
+    return ERR_FATAL_NULL_POINTER;
+
+  switch(field)
+  {
+  case WASM_MODULE_IMPORT_TABLE: index += m->importsection.functions; break;
+  case WASM_MODULE_IMPORT_MEMORY: index += m->importsection.tables; break;
+  case WASM_MODULE_IMPORT_GLOBAL: index += m->importsection.memories; break;
+  }
+
+  switch(field)
+  {
+  case WASM_MODULE_TYPE: return DeleteModuleType<FunctionType>(env, m->type.functions, m->type.n_functions, index);
+  case WASM_MODULE_IMPORT_FUNCTION: --m->importsection.functions;
+  case WASM_MODULE_IMPORT_TABLE: --m->importsection.tables;
+  case WASM_MODULE_IMPORT_MEMORY: --m->importsection.memories;
+  case WASM_MODULE_IMPORT_GLOBAL: return DeleteModuleType(env, m->importsection.imports, m->importsection.n_import, index);
+  case WASM_MODULE_FUNCTION: return DeleteModuleType<varuint32>(env, m->function.funcdecl, m->function.n_funcdecl, index);
+  case WASM_MODULE_TABLE: return DeleteModuleType<TableDesc>(env, m->table.tables, m->table.n_tables, index);
+  case WASM_MODULE_MEMORY: return DeleteModuleType<MemoryDesc>(env, m->memory.memories, m->memory.n_memories, index);
+  case WASM_MODULE_GLOBAL: return DeleteModuleType<GlobalDecl>(env, m->global.globals, m->global.n_globals, index);
+  case WASM_MODULE_EXPORT: return DeleteModuleType(env, m->exportsection.exports, m->exportsection.n_exports, index);
+  case WASM_MODULE_ELEMENT: return DeleteModuleType<TableInit>(env, m->element.elements, m->element.n_elements, index);
+  case WASM_MODULE_CODE: return DeleteModuleType<FunctionBody>(env, m->code.funcbody, m->code.n_funcbody, index);
+  case WASM_MODULE_DATA: return DeleteModuleType<DataInit>(env, m->data.data, m->data.n_data, index);
+  case WASM_MODULE_CUSTOM: return DeleteModuleType<CustomSection>(env, m->custom, m->n_custom, (size_t)index);
+  }
+
+  return ERR_FATAL_INVALID_MODULE;
+}
+
+int innative::SetByteArray(Environment* env, ByteArray* bytearray, const void* data, varuint32 size)
+{
+  if(!env || !bytearray)
+    return ERR_FATAL_NULL_POINTER;
+  bytearray->resize(size, false, *env);
+  tmemcpy<uint8_t>(bytearray->get(), bytearray->size(), (const uint8_t*)data, size);
+  return ERR_SUCCESS;
+}
+
+int innative::SetIdentifier(Environment* env, Identifier* identifier, const char* str)
+{
+  if(!env || !identifier)
+    return ERR_FATAL_NULL_POINTER;
+  size_t len = strlen(str);
+  identifier->resize(len, true, *env);
+  tmemcpy<char>((char*)identifier->get(), identifier->size(), str, len);
+  return ERR_SUCCESS;
+}
+
+int innative::InsertModuleLocal(Environment* env, FunctionBody* body, varuint32 index, varsint7 local, DebugInfo* info)
+{
+  if(!body)
+    return ERR_FATAL_NULL_POINTER;
+  if(info || body->local_names)
+  {
+    varuint32 n = body->n_locals;
+    int err     = InsertModuleType(env, body->local_names, n, index, !info ? DebugInfo{ 0 } : *info);
+    if(err < 0)
+      return err;
+  }
+  return InsertModuleType(env, body->locals, body->n_locals, index, local);
+}
+
+int innative::RemoveModuleLocal(Environment* env, FunctionBody* body, varuint32 index)
+{
+  if(!body)
+    return ERR_FATAL_NULL_POINTER;
+  if(body->local_names)
+  {
+    varuint32 n = body->n_locals;
+    int err     = DeleteModuleType(env, body->local_names, n, index);
+    if(err < 0)
+      return err;
+  }
+  return DeleteModuleType(env, body->locals, body->n_locals, index);
+}
+
+int innative::InsertModuleInstruction(Environment* env, FunctionBody* body, varuint32 index, Instruction* ins)
+{
+  if(!body || !ins)
+    return ERR_FATAL_NULL_POINTER;
+  return InsertModuleType(env, body->body, body->n_body, index, *ins);
+}
+
+int innative::RemoveModuleInstruction(Environment* env, FunctionBody* body, varuint32 index)
+{
+  if(!body)
+    return ERR_FATAL_NULL_POINTER;
+  return DeleteModuleType(env, body->body, body->n_body, index);
+}
+
+int innative::InsertModuleParam(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index, varsint7 param,
+                                DebugInfo* name)
+{
+  if(!func)
+    return ERR_FATAL_NULL_POINTER;
+  if(body && (name || body->param_names))
+  {
+    varuint32 n = func->n_params;
+    int err     = InsertModuleType(env, body->param_names, n, index, !name ? DebugInfo{ 0 } : *name);
+    if(err < 0)
+      return err;
+  }
+  return InsertModuleType(env, func->params, func->n_params, index, param);
+}
+
+int innative::RemoveModuleParam(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index)
+{
+  if(!func)
+    return ERR_FATAL_NULL_POINTER;
+  if(body && body->param_names)
+  {
+    varuint32 n = func->n_params;
+    int err     = DeleteModuleType(env, body->param_names, n, index);
+    if(err < 0)
+      return err;
+  }
+  return DeleteModuleType(env, func->params, func->n_params, index);
+}
+
+int innative::InsertModuleReturn(Environment* env, FunctionType* func, varuint32 index, varsint7 result)
+{
+  if(!func)
+    return ERR_FATAL_NULL_POINTER;
+  return InsertModuleType(env, func->returns, func->n_returns, index, result);
+}
+
+int innative::RemoveModuleReturn(Environment* env, FunctionType* func, varuint32 index)
+{
+  if(!func)
+    return ERR_FATAL_NULL_POINTER;
+  return DeleteModuleType(env, func->returns, func->n_returns, index);
 }

@@ -85,7 +85,7 @@ bool EnumKeyValue(HKEY hive, const wchar_t* key, uint16_t* version)
 
 // This is a stub loader for the runtime. It looks for an existing installation
 // of the runtime on the OS that is equal to or newer than the compiled version.
-IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
+IN_COMPILER_DLLEXPORT extern void innative_runtime(INExports* exports)
 {
 #ifdef IN_PLATFORM_WIN32
   // On windows, we use the registry to store versions, with a key set to the DLL path of the runtime.
@@ -135,7 +135,7 @@ IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
     HMODULE dll = LoadLibraryW(runtime);
     if(dll != NULL)
     {
-      void (*hook)(IRExports*) = (void (*)(IRExports*))GetProcAddress((HMODULE)dll, "innative_runtime");
+      void (*hook)(INExports*) = (void (*)(INExports*))GetProcAddress((HMODULE)dll, "innative_runtime");
       if(hook)
         (*hook)(exports);
       else
@@ -160,7 +160,7 @@ IN_COMPILER_DLLEXPORT extern void innative_runtime(IRExports* exports)
 
   if(lib != NULL)
   {
-    void (*hook)(IRExports*) = (void (*)(IRExports*))dlsym(lib, "innative_runtime");
+    void (*hook)(INExports*) = (void (*)(INExports*))dlsym(lib, "innative_runtime");
     if(hook)
       (*hook)(exports);
     else
