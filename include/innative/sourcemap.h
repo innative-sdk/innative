@@ -4,6 +4,11 @@
 #ifndef IN__SOURCE_MAP_H
 #define IN__SOURCE_MAP_H
 
+#include <stddef.h>
+#include "innative/errors.h"
+
+struct IN_WASM_ENVIRONMENT;
+
 typedef struct IN_SOURCE_SEGMENT
 {
   size_t column;

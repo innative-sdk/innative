@@ -209,7 +209,7 @@ limitations under the License.
 #define STRTOK(str, delim, context) strtok_r(str, delim, context)
 #define FPRINTF(f, ...) fprintf(f, __VA_ARGS__)
 #define SPRINTF(b, c, f, ...) sprintf(b, f, __VA_ARGS__)
-#define STRNICMP(a, b, n) strnicmp(a, b, n)
+#define STRNICMP(a, b, n) strncasecmp(a, b, n)
 #endif
 
 #endif
