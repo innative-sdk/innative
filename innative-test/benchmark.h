@@ -19,7 +19,7 @@ class Benchmarks
   };
 
 public:
-  Benchmarks(const IRExports& exports, const char* arg0, int loglevel, const path& folder);
+  Benchmarks(const INExports& exports, const char* arg0, int loglevel, const path& folder);
   ~Benchmarks();
   void Run(FILE* out);
   static int64_t fac(int64_t n);
@@ -78,7 +78,7 @@ protected:
   std::chrono::high_resolution_clock::time_point start();
   int64_t end(std::chrono::high_resolution_clock::time_point start);
 
-  const IRExports& _exports;
+  const INExports& _exports;
   const char* _arg0;
   int _loglevel;
   std::vector<path> _garbage;

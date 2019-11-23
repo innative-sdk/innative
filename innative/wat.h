@@ -58,7 +58,7 @@ namespace innative {
                            Import** out);
 
     static int ParseBlockType(Queue<WatToken>& tokens, varsint7& out);
-    static int ParseModule(Environment& env, Module& m, Queue<WatToken>& tokens, utility::StringRef name,
+    static int ParseModule(Environment& env, Module& m, const char* file, Queue<WatToken>& tokens, utility::StringRef name,
                            WatToken& internalname);
     static int ParseName(const Environment& env, ByteArray& name, const WatToken& t);
     static int AddWatValType(const Environment& env, WatTokens id, varsint7*& a, varuint32& n);
@@ -142,7 +142,7 @@ namespace innative {
   if((t).Size() == 0 || (t).Pop().id != (e)) \
   return (err)
 
-  int ParseWatModule(Environment& env, Module& m, uint8_t* data, size_t sz, utility::StringRef name);
+  int ParseWatModule(Environment& env, const char* file, Module& m, uint8_t* data, size_t sz, utility::StringRef name);
   void WatSkipSection(Queue<WatToken>& tokens, ptrdiff_t count = 1);
   size_t WatLineNumber(const char* start, const char* pos);
 }

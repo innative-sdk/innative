@@ -4,7 +4,7 @@
 #include "benchmark.h"
 #include <chrono>
 
-Benchmarks::Benchmarks(const IRExports& exports, const char* arg0, int loglevel, const path& folder) :
+Benchmarks::Benchmarks(const INExports& exports, const char* arg0, int loglevel, const path& folder) :
   _exports(exports),
   _arg0(arg0),
   _loglevel(loglevel),

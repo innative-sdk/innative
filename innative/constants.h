@@ -112,11 +112,21 @@ namespace innative {
     constexpr char IN_MEMORY_GROW_METADATA[] = "__IN_MEMORY_GROW_METADATA";
     constexpr char IN_FUNCTION_TRAVERSED[]   = "__IN_FUNCTION_TRAVERSED";
     constexpr char IN_TEMP_PREFIX[]          = "wast_m";
+    constexpr char IN_BASE64[]               = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    constexpr uint8_t BASE64['z' + 1] = { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+                                          255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+                                          255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 62,  255, 255, 255, 63,
+                                          52,  53,  54,  55,  56,  57,  58,  59,  60,  61,  255, 255, 255, 32,  255, 255,
+                                          255, 0,   1,   2,   3,   4,   5,   6,   7,   8,   9,   10,  11,  12,  13,  14,
+                                          15,  16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  255, 255, 255, 255, 255,
+                                          255, 26,  27,  28,  29,  30,  31,  32,  33,  34,  35,  36,  37,  38,  39,  40,
+                                          41,  42,  43,  44,  45,  46,  47,  48,  49,  50,  51 };
 
     extern const std::array<const char*, OP_CODE_COUNT> OPNAMES;
 
-    static const unsigned int WASM_MAGIC_COOKIE  = 0x6d736100;
-    static const unsigned int WASM_MAGIC_VERSION = 0x01;
+    static const unsigned int WASM_MAGIC_COOKIE  = INNATIVE_WASM_MAGIC_COOKIE;
+    static const unsigned int WASM_MAGIC_VERSION = INNATIVE_WASM_MAGIC_VERSION;
+    static const size_t VLQ_CONTINUATION_BIT     = 0b100000;
 
     extern const kh_mapenum_s* ERR_ENUM_MAP;
     extern const kh_mapenum_s* TYPE_ENCODING_MAP;

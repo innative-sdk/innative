@@ -10,6 +10,9 @@ using namespace utility;
 
 void TestHarness::test_util()
 {
+  for(int i = 0; i < sizeof(IN_BASE64) - 1; ++i)
+    TEST(BASE64[IN_BASE64[i]] == i);
+
   {
     StringRef a = { nullptr, 0 };
     StringRef b = { "asdf", 4 };

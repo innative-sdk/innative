@@ -40,7 +40,7 @@ namespace innative {
       size_t limit;             // Limit of value stack
       varsint7 sig;             // Block signature
       uint8_t op;               // instruction that pushed this label
-      llvm::DIScope* scope;     // Debug lexical scope for this block
+      llvm::DILocalScope* scope; // Debug lexical scope for this block
       BlockResult* results;     // Holds alternative branch results targeting this block
     };
 
@@ -75,10 +75,12 @@ namespace innative {
       llvm::DIType* diI64;
       llvm::DIType* diVoid;
       llvm::DICompileUnit* dcu;
-      llvm::DIFile* dunit;
+      llvm::DIFile* dunit; // Source WASM or WAT file
+      std::vector<llvm::DIFile*> dfiles; // sourcemap files
       Stack<llvm::Value*> values; // Tracks the current value stack
       Stack<Block> control;       // Control flow stack
       std::vector<llvm::AllocaInst*> locals;
+      std::vector<llvm::DISubprogram*> subprograms; // Seperate subprograms for when functions are split across files
       llvm::AllocaInst* memlocal;
       std::vector<llvm::GlobalVariable*> memories;
       std::vector<llvm::GlobalVariable*> tables;

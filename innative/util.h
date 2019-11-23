@@ -220,7 +220,10 @@ namespace innative {
     int Uninstall();
     IN_COMPILER_DLLEXPORT int AddCImport(const Environment& env, const char* id);
     const char* AllocString(Environment& env, const char* s, size_t n);
-    IN_FORCEINLINE const char* AllocString(Environment& env, const char* s) { return !s ? nullptr : AllocString(env, s, strlen(s)); }
+    IN_FORCEINLINE const char* AllocString(Environment& env, const char* s)
+    {
+      return !s ? nullptr : AllocString(env, s, strlen(s));
+    }
     IN_FORCEINLINE const char* AllocString(Environment& env, const std::string& s)
     {
       return AllocString(env, s.data(), s.size());
@@ -283,7 +286,7 @@ namespace innative {
     // Generates the correct mangled C function name
     inline std::string CanonImportName(const Import& imp, const char* system)
     {
-      if(IsSystemImport(imp.module_name, system)) // system module imports are always raw function names
+      if(IsSystemImport(imp.module_name, system) && !imp.alternate) // system module imports are always raw function names
         return CanonicalName(StringRef{ 0, 0 }, StringRef::From(imp.export_name));
       return CanonicalName(StringRef::From(imp.module_name), StringRef::From(imp.export_name));
     }

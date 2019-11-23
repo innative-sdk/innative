@@ -72,6 +72,9 @@
     <ClCompile Include="link.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="sourcemap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\innative\innative.h">
@@ -151,6 +154,12 @@
     </ClInclude>
     <ClInclude Include="link.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\innative\sourcemap.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\innative\module.h">
+      <Filter>include</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

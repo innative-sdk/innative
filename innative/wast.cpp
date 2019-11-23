@@ -43,27 +43,8 @@ namespace innative {
   } // namespace internal
 
   namespace wat {
-    path GenUniquePath(const path& src, int& counter)
-    {
-      auto cur = src;
-      cur += std::to_string(counter++);
-      cur += IN_LIBRARY_EXTENSION;
-      return cur;
-    }
-
-    kh_stringmap_t* GenWastStringMap(std::initializer_list<std::pair<const char*, const char*>> map)
-    {
-      kh_stringmap_t* h = kh_init_stringmap();
-
-      int r;
-      for(auto& m : map)
-      {
-        auto iter       = kh_put_stringmap(h, m.first, &r);
-        kh_val(h, iter) = m.second;
-      }
-
-      return h;
-    }
+    path GenUniquePath(const path& src, int& counter);
+    kh_stringmap_t* GenWastStringMap(std::initializer_list<std::pair<const char*, const char*>> map);
 
     static kh_stringmap_t* assertmap = GenWastStringMap({
       { "unknown function 0", "unknown function" },
@@ -78,11 +59,7 @@ namespace innative {
       { "result before parameter", "unexpected token" },
     });
 
-    size_t GetWastMapping(kh_indexname_t* mapping, const WatToken& t)
-    {
-      khiter_t iter = kh_get_indexname(mapping, StringRef{ t.pos, t.len });
-      return kh_exist2(mapping, iter) ? kh_val(mapping, iter) : (size_t)~0;
-    }
+    size_t GetWastMapping(kh_indexname_t* mapping, const WatToken& t);
 
     struct WastResult
     {
@@ -99,166 +76,11 @@ namespace innative {
     jmp_buf jump_location;
 
     void WastCrashHandler(int sig) { LONGJMP(jump_location, 1); }
-
-    void InvalidateCache(void*& cache, path cachepath)
-    {
-      if(cache)
-      {
-        auto exit = LoadFunction(cache, 0, IN_EXIT_FUNCTION);
-
-        if(exit)
-          (*exit)();
-        else
-          assert(false);
-
-        FreeDLL(cache);
-        remove(cachepath);
-        cachepath.replace_extension(IN_STATIC_EXTENSION);
-        remove(cachepath);
-        cachepath.replace_extension(".pdb");
-        remove(cachepath);
-      }
-      cache = nullptr;
-    }
-
-    // longjmp and exceptions don't always play well with destructors, so we isolate this call
-    int IsolateInitCall(Environment& env, void*& cache, const char* out)
-    {
-      if(SETJMP(jump_location) != 0)
-        return ERR_RUNTIME_TRAP;
-
-      cache = LoadDLL(out);
-      if(!cache)
-        return ERR_RUNTIME_INIT_ERROR;
-
-      if(env.wasthook != nullptr)
-        (*env.wasthook)(cache);
-
-      auto entry = LoadFunction(cache, 0, IN_INIT_FUNCTION);
-
-      if(!entry)
-        return ERR_RUNTIME_INIT_ERROR;
-
-#ifdef IN_COMPILER_MSC
-      // On windows, signals can sometimes get promoted to SEH exceptions across DLL bounderies.
-      __try
-      {
-        (*entry)();
-      }
-      __except(GetExceptionCode() == EXCEPTION_ILLEGAL_INSTRUCTION) // Only catch an illegal instruction
-      {
-        return ERR_RUNTIME_TRAP;
-      }
-#else
-      (*entry)();
-#endif
-
-      return ERR_SUCCESS;
-    }
-
-    int CompileWast(Environment& env, const path& out, void*& cache, path& cachepath)
-    {
-      InvalidateCache(cache, cachepath);
-
-      int err;
-      ValidateEnvironment(env);
-      if(env.errors)
-        return ERR_VALIDATION_ERROR;
-      if(err = CompileEnvironment(&env, out.u8string().c_str()))
-        return err;
-
-      cachepath = out;
-      signal(SIGILL, WastCrashHandler);
-      signal(SIGFPE, WastCrashHandler);
-
-      err = IsolateInitCall(env, cache, out.u8string().c_str());
-
-      signal(SIGILL, SIG_DFL);
-      signal(SIGFPE, SIG_DFL);
-      return err;
-    }
-
-    int SetTempName(Environment& env, Module& m)
-    {
-      static std::atomic_size_t modcount(1); // We can't use n_modules in case a module is malformed
-
-      auto buf =
-        std::string(IN_TEMP_PREFIX) + std::to_string(modcount.fetch_add(1, std::memory_order::memory_order_relaxed));
-      m.name.resize((varuint32)buf.size(), true, env);
-      if(!m.name.get())
-        return ERR_FATAL_OUT_OF_MEMORY;
-
-      tmemcpy((char*)m.name.get(), m.name.size(), buf.data(), buf.size());
-      return ERR_SUCCESS;
-    }
-
-    int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module& m, const path& file)
-    {
-      EXPECTED(tokens, WatTokens::MODULE, ERR_WAT_EXPECTED_MODULE);
-      int err;
-      WatToken name = { WatTokens::NONE };
-      m             = { 0 }; // We have to ensure this is zeroed, because an error could occur before ParseModule is called
-      std::string tempname(IN_TEMP_PREFIX);
-      tempname += std::to_string(env.n_modules);
-
-      if(tokens[0].id == WatTokens::BINARY || (tokens.Size() > 1 && tokens[1].id == WatTokens::BINARY))
-      {
-        name = WatParser::GetWatNameToken(tokens);
-        if(!name.pos)
-        {
-          name.pos = tempname.data();
-          name.len = tempname.size();
-        }
-
-        EXPECTED(tokens, WatTokens::BINARY, ERR_WAT_EXPECTED_BINARY);
-        ByteArray binary;
-        while(tokens.Peek().id == WatTokens::STRING)
-          if(err = WatParser::WatString(env, binary, tokens.Pop()))
-            return err;
-        Stream s = { binary.get(), binary.size(), 0 };
-        if(err = ParseModule(s, env, m, ByteArray((uint8_t*)name.pos, (varuint32)name.len), env.errors))
-          return err;
-        if(name.id == WatTokens::NAME) // Override name if it exists
-          if(err = WatParser::ParseName(env, m.name, name))
-            return err;
-      }
-      else if(tokens[0].id == WatTokens::QUOTE || (tokens.Size() > 1 && tokens[1].id == WatTokens::QUOTE))
-      {
-        name = WatParser::GetWatNameToken(tokens);
-        if(!name.pos)
-        {
-          name.pos = tempname.data();
-          name.len = tempname.size();
-        }
-
-        EXPECTED(tokens, WatTokens::QUOTE, ERR_WAT_EXPECTED_QUOTE);
-        ByteArray quote;
-        while(tokens.Peek().id == WatTokens::STRING)
-          if(err = WatParser::WatString(env, quote, tokens.Pop()))
-            return err;
-        if(err = ParseWatModule(env, m, quote.get(), quote.size(), StringRef{ name.pos, name.len }))
-          return err;
-        if(name.id == WatTokens::NAME) // Override name if it exists
-          if(err = WatParser::ParseName(env, m.name, name))
-            return err;
-      }
-      else if(err = WatParser::ParseModule(env, m, tokens, StringRef{ tempname.data(), tempname.size() }, name))
-        return err;
-      m.path = AllocString(env, file.u8string());
-
-      if(name.id == WatTokens::NAME) // Only add this to our name mapping if an actual name token was specified, regardless
-                                     // of whether the module has a name.
-      {
-        int r;
-        khiter_t iter = kh_put_indexname(mapping, { name.pos, name.len }, &r);
-        if(!r)
-          return ERR_FATAL_DUPLICATE_MODULE_NAME;
-        kh_val(mapping, iter) = (varuint32)env.n_modules - 1;
-      }
-      else // If the module has no name, we must assign a temporary one
-        return SetTempName(env, m);
-      return ERR_SUCCESS;
-    }
+    void InvalidateCache(void*& cache, path cachepath);
+    int IsolateInitCall(Environment& env, void*& cache, const char* out);
+    int CompileWast(Environment& env, const path& out, void*& cache, path& cachepath);
+    int SetTempName(Environment& env, Module& m);
+    int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module& m, const path& file);
 
     template<int I, typename... Args> struct GenWastFunction
     {
@@ -299,19 +121,7 @@ namespace innative {
       }
     };
 
-    int64_t Homogenize(const Instruction& i)
-    {
-      switch(i.opcode)
-      {
-      case OP_i32_const: return i.immediates[0]._varsint32;
-      case OP_i64_const: return i.immediates[0]._varsint64;
-      case OP_f32_const: return i.immediates[0]._varsint32;
-      case OP_f64_const: return i.immediates[0]._varsint64;
-      }
-
-      assert(false);
-      return 0;
-    }
+    int64_t Homogenize(const Instruction& i);
 
     template<typename... Args> void GenWastFunctionCall(void* f, WastResult& result, Args... params)
     {
@@ -329,322 +139,534 @@ namespace innative {
 
     // SEH exceptions and destructors don't mix, so we isolate all this signal and exception handling in this function.
     int IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, WastResult& result,
-                            std::vector<Instruction>& params)
-    {
-      if(SETJMP(jump_location) != 0)
-      {
-        return ERR_RUNTIME_TRAP;
-      }
+                            std::vector<Instruction>& params);
+    int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache,
+                        path& cachepath, int& counter, const path& file, WastResult& result);
+    bool WastIsNaN(float f, bool canonical);
+    bool WastIsNaN(double f, bool canonical);
+    inline string GetAssertionString(int code);
+    inline const char* MapAssertionString(const char* s);
+  } // namespace wat
+} // namespace innative
+
+path wat::GenUniquePath(const path& src, int& counter)
+{
+  auto cur = src;
+  cur += std::to_string(counter++);
+  cur += IN_LIBRARY_EXTENSION;
+  return cur;
+}
+
+kh_stringmap_t* wat::GenWastStringMap(std::initializer_list<std::pair<const char*, const char*>> map)
+{
+  kh_stringmap_t* h = kh_init_stringmap();
+
+  int r;
+  for(auto& m : map)
+  {
+    auto iter       = kh_put_stringmap(h, m.first, &r);
+    kh_val(h, iter) = m.second;
+  }
+
+  return h;
+}
+
+size_t wat::GetWastMapping(kh_indexname_t* mapping, const WatToken& t)
+{
+  khiter_t iter = kh_get_indexname(mapping, StringRef{ t.pos, t.len });
+  return kh_exist2(mapping, iter) ? kh_val(mapping, iter) : (size_t)~0;
+}
+
+void wat::InvalidateCache(void*& cache, path cachepath)
+{
+  if(cache)
+  {
+    auto exit = LoadFunction(cache, 0, IN_EXIT_FUNCTION);
+
+    if(exit)
+      (*exit)();
+    else
+      assert(false);
+
+    FreeDLL(cache);
+    remove(cachepath);
+    cachepath.replace_extension(IN_STATIC_EXTENSION);
+    remove(cachepath);
+    cachepath.replace_extension(".pdb");
+    remove(cachepath);
+  }
+  cache = nullptr;
+}
+
+// longjmp and exceptions don't always play well with destructors, so we isolate this call
+int wat::IsolateInitCall(Environment& env, void*& cache, const char* out)
+{
+  if(SETJMP(jump_location) != 0)
+    return ERR_RUNTIME_TRAP;
+
+  cache = LoadDLL(out);
+  if(!cache)
+    return ERR_RUNTIME_INIT_ERROR;
+
+  if(env.wasthook != nullptr)
+    (*env.wasthook)(cache);
+
+  auto entry = LoadFunction(cache, 0, IN_INIT_FUNCTION);
+
+  if(!entry)
+    return ERR_RUNTIME_INIT_ERROR;
 
 #ifdef IN_COMPILER_MSC
-      __try // this catches division by zero on windows
-      {
+  // On windows, signals can sometimes get promoted to SEH exceptions across DLL bounderies.
+  __try
+  {
+    (*entry)();
+  }
+  __except(GetExceptionCode() == EXCEPTION_ILLEGAL_INSTRUCTION) // Only catch an illegal instruction
+  {
+    return ERR_RUNTIME_TRAP;
+  }
+#else
+  (*entry)();
 #endif
-        if(env.flags & ENV_HOMOGENIZE_FUNCTIONS)
-        {
-          switch(n_params)
-          {
-          case 0: GenWastFunctionCall(f, result); break;
-          case 1: GenWastFunctionCall(f, result, params[0]); break;
-          case 2: GenWastFunctionCall(f, result, params[0], params[1]); break;
-          case 3: GenWastFunctionCall(f, result, params[0], params[1], params[2]); break;
-          case 4: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3]); break;
-          case 5: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4]); break;
-          case 6: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5]); break;
-          case 7:
-            GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6]);
-            break;
-          case 8:
-            GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6],
-                                params[7]);
-            break;
-          case 9:
-            GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6],
-                                params[7], params[8]);
-            break;
-          default: assert(false); return ERR_FATAL_UNKNOWN_KIND;
-          }
-        }
-        else
-        {
-          switch(n_params)
-          {
-          case 0: GenWastFunction<0>::Call(f, result, params.data()); break;
-          case 1: GenWastFunction<1>::Call(f, result, params.data()); break;
-          case 2: GenWastFunction<2>::Call(f, result, params.data()); break;
-          case 3: GenWastFunction<3>::Call(f, result, params.data()); break;
-          default: assert(false); return ERR_FATAL_UNKNOWN_KIND;
-          }
-        }
+
+  return ERR_SUCCESS;
+}
+
+int wat::CompileWast(Environment& env, const path& out, void*& cache, path& cachepath)
+{
+  InvalidateCache(cache, cachepath);
+
+  int err;
+  ValidateEnvironment(env);
+  if(env.errors)
+    return ERR_VALIDATION_ERROR;
+  if(err = CompileEnvironment(&env, out.u8string().c_str()))
+    return err;
+
+  cachepath = out;
+  signal(SIGILL, WastCrashHandler);
+  signal(SIGFPE, WastCrashHandler);
+
+  err = IsolateInitCall(env, cache, out.u8string().c_str());
+
+  signal(SIGILL, SIG_DFL);
+  signal(SIGFPE, SIG_DFL);
+  return err;
+}
+
+int wat::SetTempName(Environment& env, Module& m)
+{
+  static std::atomic_size_t modcount(1); // We can't use n_modules in case a module is malformed
+
+  auto buf = std::string(IN_TEMP_PREFIX) + std::to_string(modcount.fetch_add(1, std::memory_order::memory_order_relaxed));
+  m.name.resize((varuint32)buf.size(), true, env);
+  if(!m.name.get())
+    return ERR_FATAL_OUT_OF_MEMORY;
+
+  tmemcpy((char*)m.name.get(), m.name.size(), buf.data(), buf.size());
+  return ERR_SUCCESS;
+}
+
+int wat::ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module& m, const path& file)
+{
+  EXPECTED(tokens, WatTokens::MODULE, ERR_WAT_EXPECTED_MODULE);
+  int err;
+  WatToken name = { WatTokens::NONE };
+  m             = { 0 }; // We have to ensure this is zeroed, because an error could occur before ParseModule is called
+  std::string tempname(IN_TEMP_PREFIX);
+  tempname += std::to_string(env.n_modules);
+
+  if(tokens[0].id == WatTokens::BINARY || (tokens.Size() > 1 && tokens[1].id == WatTokens::BINARY))
+  {
+    name = WatParser::GetWatNameToken(tokens);
+    if(!name.pos)
+    {
+      name.pos = tempname.data();
+      name.len = tempname.size();
+    }
+
+    EXPECTED(tokens, WatTokens::BINARY, ERR_WAT_EXPECTED_BINARY);
+    ByteArray binary;
+    while(tokens.Peek().id == WatTokens::STRING)
+      if(err = WatParser::WatString(env, binary, tokens.Pop()))
+        return err;
+    Stream s = { binary.get(), binary.size(), 0 };
+    if(err =
+         ParseModule(s, file.u8string().c_str(), env, m, ByteArray((uint8_t*)name.pos, (varuint32)name.len), env.errors))
+      return err;
+    if(name.id == WatTokens::NAME) // Override name if it exists
+      if(err = WatParser::ParseName(env, m.name, name))
+        return err;
+  }
+  else if(tokens[0].id == WatTokens::QUOTE || (tokens.Size() > 1 && tokens[1].id == WatTokens::QUOTE))
+  {
+    name = WatParser::GetWatNameToken(tokens);
+    if(!name.pos)
+    {
+      name.pos = tempname.data();
+      name.len = tempname.size();
+    }
+
+    EXPECTED(tokens, WatTokens::QUOTE, ERR_WAT_EXPECTED_QUOTE);
+    ByteArray quote;
+    while(tokens.Peek().id == WatTokens::STRING)
+      if(err = WatParser::WatString(env, quote, tokens.Pop()))
+        return err;
+    if(err = ParseWatModule(env, file.u8string().c_str(), m, quote.get(), quote.size(), StringRef{ name.pos, name.len }))
+      return err;
+    if(name.id == WatTokens::NAME) // Override name if it exists
+      if(err = WatParser::ParseName(env, m.name, name))
+        return err;
+  }
+  else if(err = WatParser::ParseModule(env, m, file.u8string().c_str(), tokens,
+                                       StringRef{ tempname.data(), tempname.size() }, name))
+    return err;
+
+  if(name.id == WatTokens::NAME) // Only add this to our name mapping if an actual name token was specified, regardless
+                                 // of whether the module has a name.
+  {
+    int r;
+    khiter_t iter = kh_put_indexname(mapping, { name.pos, name.len }, &r);
+    if(!r)
+      return ERR_FATAL_DUPLICATE_MODULE_NAME;
+    kh_val(mapping, iter) = (varuint32)env.n_modules - 1;
+  }
+  else // If the module has no name, we must assign a temporary one
+    return SetTempName(env, m);
+  return ERR_SUCCESS;
+}
+
+int64_t wat::Homogenize(const Instruction& i)
+{
+  switch(i.opcode)
+  {
+  case OP_i32_const: return i.immediates[0]._varsint32;
+  case OP_i64_const: return i.immediates[0]._varsint64;
+  case OP_f32_const: return i.immediates[0]._varsint32;
+  case OP_f64_const: return i.immediates[0]._varsint64;
+  }
+
+  assert(false);
+  return 0;
+}
+
+// SEH exceptions and destructors don't mix, so we isolate all this signal and exception handling in this function.
+int wat::IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, WastResult& result,
+                             std::vector<Instruction>& params)
+{
+  if(SETJMP(jump_location) != 0)
+  {
+    return ERR_RUNTIME_TRAP;
+  }
+
 #ifdef IN_COMPILER_MSC
-      }
-      __except(1)
+  __try // this catches division by zero on windows
+  {
+#endif
+    if(env.flags & ENV_HOMOGENIZE_FUNCTIONS)
+    {
+      switch(n_params)
       {
-        // This uses unholy black magic to restore the stack guard page in the event of a stack overflow
-        if(GetExceptionCode() == EXCEPTION_STACK_OVERFLOW)
-        {
-          void* lpPage;
+      case 0: GenWastFunctionCall(f, result); break;
+      case 1: GenWastFunctionCall(f, result, params[0]); break;
+      case 2: GenWastFunctionCall(f, result, params[0], params[1]); break;
+      case 3: GenWastFunctionCall(f, result, params[0], params[1], params[2]); break;
+      case 4: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3]); break;
+      case 5: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4]); break;
+      case 6: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5]); break;
+      case 7:
+        GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6]);
+        break;
+      case 8:
+        GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6],
+                            params[7]);
+        break;
+      case 9:
+        GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6],
+                            params[7], params[8]);
+        break;
+      default: assert(false); return ERR_FATAL_UNKNOWN_KIND;
+      }
+    }
+    else
+    {
+      switch(n_params)
+      {
+      case 0: GenWastFunction<0>::Call(f, result, params.data()); break;
+      case 1: GenWastFunction<1>::Call(f, result, params.data()); break;
+      case 2: GenWastFunction<2>::Call(f, result, params.data()); break;
+      case 3: GenWastFunction<3>::Call(f, result, params.data()); break;
+      default: assert(false); return ERR_FATAL_UNKNOWN_KIND;
+      }
+    }
+#ifdef IN_COMPILER_MSC
+  }
+  __except(1)
+  {
+    // This uses unholy black magic to restore the stack guard page in the event of a stack overflow
+    if(GetExceptionCode() == EXCEPTION_STACK_OVERFLOW)
+    {
+      void* lpPage;
 #ifdef IN_CPU_x86
-          __asm mov lpPage, esp;
+      __asm mov lpPage, esp;
 #elif defined(IN_CPU_x86_64)
-          lpPage = (void*)GetRSPValue();
+      lpPage = (void*)GetRSPValue();
 #else
 #error unsupported CPU architecture
 #endif
-          // Get page size of system
-          SYSTEM_INFO si;
-          GetSystemInfo(&si);
+      // Get page size of system
+      SYSTEM_INFO si;
+      GetSystemInfo(&si);
 
-          // Get allocation base of stack
-          MEMORY_BASIC_INFORMATION mi;
-          VirtualQuery(lpPage, &mi, sizeof(mi));
+      // Get allocation base of stack
+      MEMORY_BASIC_INFORMATION mi;
+      VirtualQuery(lpPage, &mi, sizeof(mi));
 
-          // Go to page beyond current page
-          lpPage = (LPBYTE)(mi.BaseAddress) - si.dwPageSize;
+      // Go to page beyond current page
+      lpPage = (LPBYTE)(mi.BaseAddress) - si.dwPageSize;
 
-          // Free portion of stack just abandoned
-          if(!VirtualFree(mi.AllocationBase, (LPBYTE)lpPage - (LPBYTE)mi.AllocationBase, MEM_DECOMMIT))
-            return ERR_FATAL_UNKNOWN_KIND;
+      // Free portion of stack just abandoned
+      if(!VirtualFree(mi.AllocationBase, (LPBYTE)lpPage - (LPBYTE)mi.AllocationBase, MEM_DECOMMIT))
+        return ERR_FATAL_UNKNOWN_KIND;
 
-          // Reintroduce the guard page
-          DWORD dwOldProtect;
-          if(!VirtualProtect(lpPage, si.dwPageSize, PAGE_GUARD | PAGE_READWRITE, &dwOldProtect))
-            return ERR_FATAL_UNKNOWN_KIND;
-        }
-
-        return ERR_RUNTIME_TRAP;
-      }
-#endif
-
-      return ERR_SUCCESS;
+      // Reintroduce the guard page
+      DWORD dwOldProtect;
+      if(!VirtualProtect(lpPage, si.dwPageSize, PAGE_GUARD | PAGE_READWRITE, &dwOldProtect))
+        return ERR_FATAL_UNKNOWN_KIND;
     }
 
-    int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache,
-                        path& cachepath, int& counter, const path& file, WastResult& result)
+    return ERR_RUNTIME_TRAP;
+  }
+#endif
+
+  return ERR_SUCCESS;
+}
+
+int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache,
+                         path& cachepath, int& counter, const path& file, WastResult& result)
+{
+  int err;
+  int cache_err = 0;
+  if(!cache) // If cache is null we need to recompile the current environment, but we can't bail on error messages yet
+             // or we'll corrupt the parse
+    cache_err = CompileWast(env, GenUniquePath(file, counter), cache, cachepath);
+
+  switch(tokens.Pop().id)
+  {
+  case WatTokens::INVOKE:
+  {
+    WatToken name = WatParser::GetWatNameToken(tokens);
+    Module* m     = last;
+    if(name.id == WatTokens::NAME)
     {
-      int err;
-      int cache_err = 0;
-      if(!cache) // If cache is null we need to recompile the current environment, but we can't bail on error messages yet
-                 // or we'll corrupt the parse
-        cache_err = CompileWast(env, GenUniquePath(file, counter), cache, cachepath);
+      size_t i = GetWastMapping(mapping, name);
+      if(i >= env.n_modules)
+        return ERR_PARSE_INVALID_NAME;
+      m = env.modules + i;
+    }
+    if(!m)
+      return ERR_FATAL_INVALID_MODULE;
 
-      switch(tokens.Pop().id)
+    ByteArray func;
+    if(err = WatParser::WatString(env, func, tokens.Pop()))
+      return err;
+
+    khiter_t iter = kh_get_exports(m->exports, func);
+    if(!kh_exist2(m->exports, iter))
+      return ERR_INVALID_FUNCTION_INDEX;
+    Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
+
+    // Dig up the exported function signature from the module and assemble a C function pointer from it
+    FunctionType* ftype = (e.kind != WASM_KIND_FUNCTION) ? nullptr : ModuleFunction(*m, e.index);
+    if(!ftype)
+      return ERR_INVALID_FUNCTION_INDEX;
+
+    std::vector<Instruction> params;
+    while(tokens.Peek().id == WatTokens::OPEN)
+    {
+      WatParser st(env, *m);
+      params.emplace_back();
+      EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+      if(err = st.ParseInitializer(tokens, params.back()))
+        return err;
+      EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    }
+
+    if(params.size() != ftype->n_params)
+      return ERR_SIGNATURE_MISMATCH;
+    for(varuint32 i = 0; i < ftype->n_params; ++i)
+    {
+      varsint7 ty = TE_NONE;
+      switch(params[i].opcode)
       {
-      case WatTokens::INVOKE:
-      {
-        WatToken name = WatParser::GetWatNameToken(tokens);
-        Module* m     = last;
-        if(name.id == WatTokens::NAME)
-        {
-          size_t i = GetWastMapping(mapping, name);
-          if(i >= env.n_modules)
-            return ERR_PARSE_INVALID_NAME;
-          m = env.modules + i;
-        }
-        if(!m)
-          return ERR_FATAL_INVALID_MODULE;
+      case OP_i32_const: ty = TE_i32; break;
+      case OP_i64_const: ty = TE_i64; break;
+      case OP_f32_const: ty = TE_f32; break;
+      case OP_f64_const: ty = TE_f64; break;
+      }
 
-        ByteArray func;
-        if(err = WatParser::WatString(env, func, tokens.Pop()))
-          return err;
+      if(ftype->params[i] != ty)
+        return ERR_INVALID_TYPE;
+    }
 
-        khiter_t iter = kh_get_exports(m->exports, func);
-        if(!kh_exist2(m->exports, iter))
-          return ERR_INVALID_FUNCTION_INDEX;
-        Export& e = m->exportsection.exports[kh_val(m->exports, iter)];
+    if(cache_err != 0)
+      return cache_err;
+    assert(cache);
+    void* f = reinterpret_cast<void*>(
+      LoadDLLFunction(cache, utility::CanonicalName(StringRef::From(m->name), StringRef::From(func)).c_str()));
+    if(!f)
+      return ERR_INVALID_FUNCTION_INDEX;
 
-        // Dig up the exported function signature from the module and assemble a C function pointer from it
-        FunctionType* ftype = (e.kind != WASM_KIND_FUNCTION) ? nullptr : ModuleFunction(*m, e.index);
-        if(!ftype)
-          return ERR_INVALID_FUNCTION_INDEX;
+    if(!ftype->n_returns)
+      result.type = TE_void;
+    else
+      result.type = (WASM_TYPE_ENCODING)ftype->returns[0];
 
-        std::vector<Instruction> params;
-        while(tokens.Peek().id == WatTokens::OPEN)
-        {
-          WatParser st(env, *m);
-          params.emplace_back();
-          EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
-          if(err = st.ParseInitializer(tokens, params.back()))
-            return err;
-          EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
-        }
-
-        if(params.size() != ftype->n_params)
-          return ERR_SIGNATURE_MISMATCH;
-        for(varuint32 i = 0; i < ftype->n_params; ++i)
-        {
-          varsint7 ty = TE_NONE;
-          switch(params[i].opcode)
-          {
-          case OP_i32_const: ty = TE_i32; break;
-          case OP_i64_const: ty = TE_i64; break;
-          case OP_f32_const: ty = TE_f32; break;
-          case OP_f64_const: ty = TE_f64; break;
-          }
-
-          if(ftype->params[i] != ty)
-            return ERR_INVALID_TYPE;
-        }
-
-        if(cache_err != 0)
-          return cache_err;
-        assert(cache);
-        void* f = reinterpret_cast<void*>(
-          LoadDLLFunction(cache, utility::CanonicalName(StringRef::From(m->name), StringRef::From(func)).c_str()));
-        if(!f)
-          return ERR_INVALID_FUNCTION_INDEX;
-
-        if(!ftype->n_returns)
-          result.type = TE_void;
-        else
-          result.type = (WASM_TYPE_ENCODING)ftype->returns[0];
-
-        // Call the function and set the correct result.
-        signal(SIGILL, WastCrashHandler);
-        signal(SIGFPE, WastCrashHandler); // This catches division by zero on linux
-        signal(SIGSEGV, WastCrashHandler);
+    // Call the function and set the correct result.
+    signal(SIGILL, WastCrashHandler);
+    signal(SIGFPE, WastCrashHandler); // This catches division by zero on linux
+    signal(SIGSEGV, WastCrashHandler);
 
 #ifdef IN_PLATFORM_POSIX
-        // Catch stack overflow on linux
-        struct sigaction sa;
-        stack_t ss;
+    // Catch stack overflow on linux
+    struct sigaction sa;
+    stack_t ss;
 
-        // Don't need much stack space, we immediately longjmp()
-        // back out of the signal handler
-        ss.ss_sp    = alloca(MINSIGSTKSZ);
-        ss.ss_size  = MINSIGSTKSZ;
-        ss.ss_flags = 0;
+    // Don't need much stack space, we immediately longjmp()
+    // back out of the signal handler
+    ss.ss_sp    = alloca(MINSIGSTKSZ);
+    ss.ss_size  = MINSIGSTKSZ;
+    ss.ss_flags = 0;
 
-        sigaltstack(&ss, NULL);
-        sa.sa_flags   = SA_ONSTACK;
-        sa.sa_handler = WastCrashHandler;
-        sigemptyset(&sa.sa_mask);
-        sigaction(SIGSEGV, &sa, NULL);
+    sigaltstack(&ss, NULL);
+    sa.sa_flags   = SA_ONSTACK;
+    sa.sa_handler = WastCrashHandler;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGSEGV, &sa, NULL);
 #endif
 
-        err = IsolateFunctionCall(env, ftype->n_params, f, result, params);
+    err = IsolateFunctionCall(env, ftype->n_params, f, result, params);
 
-        signal(SIGILL, SIG_DFL);
-        signal(SIGFPE, SIG_DFL);
-        signal(SIGSEGV, SIG_DFL);
+    signal(SIGILL, SIG_DFL);
+    signal(SIGFPE, SIG_DFL);
+    signal(SIGSEGV, SIG_DFL);
 
-        if(err != ERR_SUCCESS)
-          return err;
-        break;
-      }
-      case WatTokens::GET:
-      {
-        WatToken name = WatParser::GetWatNameToken(tokens);
-        Module* m     = last;
-        if(name.id == WatTokens::NAME)
-        {
-          size_t i = GetWastMapping(mapping, name);
-          if(i >= env.n_modules)
-            return ERR_PARSE_INVALID_NAME;
-          m = env.modules + i;
-        }
-        if(!m)
-          return ERR_FATAL_INVALID_MODULE;
-
-        ByteArray global;
-        if(err = WatParser::WatString(env, global, tokens.Pop()))
-          return err;
-
-        khiter_t iter = kh_get_exports(m->exports, global);
-        if(!kh_exist2(m->exports, iter))
-          return ERR_INVALID_GLOBAL_INDEX;
-        Export& e     = m->exportsection.exports[kh_val(m->exports, iter)];
-        GlobalDesc* g = nullptr;
-        if(e.kind != WASM_KIND_GLOBAL || !(g = ModuleGlobal(*m, e.index)))
-          return ERR_INVALID_GLOBAL_INDEX;
-
-        if(cache_err != 0)
-          return cache_err;
-        assert(cache);
-        void* f = LoadGlobal(cache, m->name.str(), global.str());
-        if(!f)
-          return ERR_INVALID_GLOBAL_INDEX;
-
-        switch(g->type)
-        {
-        case TE_i32:
-          result.i32  = *(int32_t*)f;
-          result.type = TE_i32;
-          break;
-        case TE_i64:
-          result.i64  = *(int64_t*)f;
-          result.type = TE_i64;
-          break;
-        case TE_f32:
-          result.f32  = *(float*)f;
-          result.type = TE_f32;
-          break;
-        case TE_f64:
-          result.f64  = *(double*)f;
-          result.type = TE_f64;
-          break;
-        default: return ERR_INVALID_TYPE;
-        }
-
-        break;
-      }
-      default: return ERR_WAT_EXPECTED_TOKEN;
-      }
-
-      return ERR_SUCCESS;
-    }
-
-    bool WastIsNaN(float f, bool canonical)
+    if(err != ERR_SUCCESS)
+      return err;
+    break;
+  }
+  case WatTokens::GET:
+  {
+    WatToken name = WatParser::GetWatNameToken(tokens);
+    Module* m     = last;
+    if(name.id == WatTokens::NAME)
     {
-      if(!isnan(f))
-        return false;
-      if(!canonical)
-        return true; // Due to webassembly's NaN requirements not mapping to hardware, we ignore this subcase right now.
-      union
-      {
-        float f;
-        uint32_t i;
-      } u = { f };
-      return ((u.i & 0x200000U) != 0) != canonical;
+      size_t i = GetWastMapping(mapping, name);
+      if(i >= env.n_modules)
+        return ERR_PARSE_INVALID_NAME;
+      m = env.modules + i;
+    }
+    if(!m)
+      return ERR_FATAL_INVALID_MODULE;
+
+    ByteArray global;
+    if(err = WatParser::WatString(env, global, tokens.Pop()))
+      return err;
+
+    khiter_t iter = kh_get_exports(m->exports, global);
+    if(!kh_exist2(m->exports, iter))
+      return ERR_INVALID_GLOBAL_INDEX;
+    Export& e     = m->exportsection.exports[kh_val(m->exports, iter)];
+    GlobalDesc* g = nullptr;
+    if(e.kind != WASM_KIND_GLOBAL || !(g = ModuleGlobal(*m, e.index)))
+      return ERR_INVALID_GLOBAL_INDEX;
+
+    if(cache_err != 0)
+      return cache_err;
+    assert(cache);
+    void* f = LoadGlobal(cache, m->name.str(), global.str());
+    if(!f)
+      return ERR_INVALID_GLOBAL_INDEX;
+
+    switch(g->type)
+    {
+    case TE_i32:
+      result.i32  = *(int32_t*)f;
+      result.type = TE_i32;
+      break;
+    case TE_i64:
+      result.i64  = *(int64_t*)f;
+      result.type = TE_i64;
+      break;
+    case TE_f32:
+      result.f32  = *(float*)f;
+      result.type = TE_f32;
+      break;
+    case TE_f64:
+      result.f64  = *(double*)f;
+      result.type = TE_f64;
+      break;
+    default: return ERR_INVALID_TYPE;
     }
 
-    bool WastIsNaN(double f, bool canonical)
-    {
-      if(!isnan(f))
-        return false;
-      if(!canonical)
-        return true; // Due to webassembly's NaN requirements not mapping to hardware, we ignore this subcase right now.
-      union
-      {
-        double f;
-        uint64_t i;
-      } u = { f };
-      return ((u.i & 0x4000000000000ULL) != 0) != canonical;
-    }
+    break;
+  }
+  default: return ERR_WAT_EXPECTED_TOKEN;
+  }
 
-    inline string GetAssertionString(int code)
-    {
-      string assertcode = "[SUCCESS]";
-      if(code < 0)
-      {
-        khiter_t iter = kh_get_mapenum(WAST_ASSERTION_MAP, code);
-        if(!kh_exist2(WAST_ASSERTION_MAP, iter))
-          assertcode = "[unknown error code " + std::to_string(code) + "]";
-        else
-          assertcode = kh_val(WAST_ASSERTION_MAP, iter);
-      }
-      return assertcode;
-    }
+  return ERR_SUCCESS;
+}
 
-    inline const char* MapAssertionString(const char* s)
-    {
-      khiter_t i = kh_get_stringmap(assertmap, s);
-      if(kh_exist2(assertmap, i))
-        return kh_val(assertmap, i);
-      return s;
-    }
-  } // namespace wat
-} // namespace innative
+bool wat::WastIsNaN(float f, bool canonical)
+{
+  if(!isnan(f))
+    return false;
+  if(!canonical)
+    return true; // Due to webassembly's NaN requirements not mapping to hardware, we ignore this subcase right now.
+  union
+  {
+    float f;
+    uint32_t i;
+  } u = { f };
+  return ((u.i & 0x200000U) != 0) != canonical;
+}
+
+bool wat::WastIsNaN(double f, bool canonical)
+{
+  if(!isnan(f))
+    return false;
+  if(!canonical)
+    return true; // Due to webassembly's NaN requirements not mapping to hardware, we ignore this subcase right now.
+  union
+  {
+    double f;
+    uint64_t i;
+  } u = { f };
+  return ((u.i & 0x4000000000000ULL) != 0) != canonical;
+}
+
+inline string wat::GetAssertionString(int code)
+{
+  string assertcode = "[SUCCESS]";
+  if(code < 0)
+  {
+    khiter_t iter = kh_get_mapenum(WAST_ASSERTION_MAP, code);
+    if(!kh_exist2(WAST_ASSERTION_MAP, iter))
+      assertcode = "[unknown error code " + std::to_string(code) + "]";
+    else
+      assertcode = kh_val(WAST_ASSERTION_MAP, iter);
+  }
+  return assertcode;
+}
+
+inline const char* wat::MapAssertionString(const char* s)
+{
+  khiter_t i = kh_get_stringmap(assertmap, s);
+  if(kh_exist2(assertmap, i))
+    return kh_val(assertmap, i);
+  return s;
+}
 
 // This parses an entire extended WAT testing script into an environment
 int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const path& file, bool always_compile,
@@ -970,10 +992,10 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       last = &env.modules[env.n_modules - 1];
       tokens.SetPosition(tokens.GetPosition() - 1); // Recover the '('
 
-      if(err = WatParser::ParseModule(env, *last, tokens, StringRef{ name.data(), name.size() }, t))
+      if(err =
+           WatParser::ParseModule(env, *last, file.u8string().c_str(), tokens, StringRef{ name.data(), name.size() }, t))
         return err;
 
-      last->path = AllocString(env, file.u8string());
       tokens.SetPosition(tokens.GetPosition() - 1); // Recover the ')'
       break;
     }
