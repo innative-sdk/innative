@@ -8,39 +8,10 @@
 #include <unordered_map>
 #include <functional>
 #include <algorithm>
-#include <optional>
 #include "../innative/filesys.h"
 
 #ifdef IN_PLATFORM_WIN32
 #include "../innative/win32.h"
-
-KHASH_INIT(flags, const char*, unsigned int, 1, kh_str_hash_funcins, kh_str_hash_insequal);
-
-kh_flags_t* env_flags    = kh_init_flags();
-kh_flags_t* env_optimize = kh_init_flags();
-
-constexpr std::initializer_list<std::pair<const char*, unsigned int>> FLAG_MAP = {
-  { "strict", ENV_STRICT },
-  { "sandbox", ENV_SANDBOX },
-  { "whitelist", ENV_WHITELIST },
-  { "multithreaded", ENV_MULTITHREADED },
-  { "debug", ENV_DEBUG },
-  { "library", ENV_LIBRARY },
-  { "llvm", ENV_EMIT_LLVM },
-  { "homogenize", ENV_HOMOGENIZE_FUNCTIONS },
-  { "noinit", ENV_NO_INIT },
-  { "check_stack_overflow", ENV_CHECK_STACK_OVERFLOW },
-  { "check_float_trunc", ENV_CHECK_FLOAT_TRUNC },
-  { "check_memory_access", ENV_CHECK_MEMORY_ACCESS },
-  { "check_indirect_call", ENV_CHECK_INDIRECT_CALL },
-  { "check_int_division", ENV_CHECK_INT_DIVISION },
-  { "disable_tail_call", ENV_DISABLE_TAIL_CALL },
-};
-
-constexpr std::initializer_list<std::pair<const char*, unsigned int>> OPTIMIZE_MAP = {
-  { "o0", ENV_OPTIMIZE_O0 }, { "o1", ENV_OPTIMIZE_O1 }, { "o2", ENV_OPTIMIZE_O2 },
-  { "o3", ENV_OPTIMIZE_O3 }, { "os", ENV_OPTIMIZE_Os }, { "fastmath", ENV_OPTIMIZE_FAST_MATH },
-};
 
 inline std::unique_ptr<uint8_t[]> LoadFile(const path& file, long& sz)
 {
@@ -65,8 +36,35 @@ inline path GetProgramPath()
   programpath.resize(wcsrchr(programpath.data(), '\\') - programpath.data());
   return path(programpath);
 }
-
 #endif
+
+KHASH_INIT(flags, const char*, unsigned int, 1, kh_str_hash_funcins, kh_str_hash_insequal);
+
+static kh_flags_t* env_flags    = kh_init_flags();
+static kh_flags_t* env_optimize = kh_init_flags();
+
+constexpr std::initializer_list<std::pair<const char*, unsigned int>> FLAG_MAP = {
+  { "strict", ENV_STRICT },
+  { "sandbox", ENV_SANDBOX },
+  { "whitelist", ENV_WHITELIST },
+  { "multithreaded", ENV_MULTITHREADED },
+  { "debug", ENV_DEBUG },
+  { "library", ENV_LIBRARY },
+  { "llvm", ENV_EMIT_LLVM },
+  { "homogenize", ENV_HOMOGENIZE_FUNCTIONS },
+  { "noinit", ENV_NO_INIT },
+  { "check_stack_overflow", ENV_CHECK_STACK_OVERFLOW },
+  { "check_float_trunc", ENV_CHECK_FLOAT_TRUNC },
+  { "check_memory_access", ENV_CHECK_MEMORY_ACCESS },
+  { "check_indirect_call", ENV_CHECK_INDIRECT_CALL },
+  { "check_int_division", ENV_CHECK_INT_DIVISION },
+  { "disable_tail_call", ENV_DISABLE_TAIL_CALL },
+};
+
+constexpr std::initializer_list<std::pair<const char*, unsigned int>> OPTIMIZE_MAP = {
+  { "o0", ENV_OPTIMIZE_O0 }, { "o1", ENV_OPTIMIZE_O1 }, { "o2", ENV_OPTIMIZE_O2 },
+  { "o3", ENV_OPTIMIZE_O3 }, { "os", ENV_OPTIMIZE_Os }, { "fastmath", ENV_OPTIMIZE_FAST_MATH },
+};
 
 struct OptBase
 {
@@ -121,7 +119,9 @@ template<> struct Opt<path> : OptValue<path, &PATH_ASSIGN>
   Opt(const char* desc, const char* param = 0) : OptValue(desc, param) {}
 };
 
-template<class T> struct Opt<std::optional<T>> : Opt<T>
+template<class T> struct optional // fake optional class so we don't need to rely on C++17 std::optional
+{};
+template<class T> struct Opt<optional<T>> : Opt<T>
 {
   Opt(const char* desc, const char* param = 0) : Opt<T>(desc, param), set(false), has_value(false) {}
   virtual std::string Param() override { return "[" + Opt<T>::Param() + "]"; }
@@ -385,14 +385,14 @@ struct CommandLine
   Opt<std::vector<std::string>> libs;
   Opt<std::vector<std::string>> shared_libs;
   Opt<path> output_file;
-  Opt<std::optional<std::string>> serialize;
+  Opt<optional<std::string>> serialize;
   Opt<bool> generate_loader;
   Opt<bool> verbose;
   Opt<bool> build_sourcemap;
   Opt<std::vector<std::string>> whitelist;
   Opt<std::string> system;
   Opt<std::string> linker;
-  Opt<std::optional<std::string>> install;
+  Opt<optional<std::string>> install;
   Opt<bool> uninstall;
   Opt<std::string> library_dir;
   Opt<std::string> object_dir;
@@ -438,8 +438,8 @@ int main(int argc, char* argv[])
   }
   for(auto& f : OPTIMIZE_MAP)
   {
-    khiter_t iter                = kh_put_flags(env_optimize, f.first, &err);
-    kh_value(env_optimize, iter) = f.second;
+    khiter_t iter                  = kh_put_flags(::env_optimize, f.first, &err);
+    kh_value(::env_optimize, iter) = f.second;
   }
 
   CommandLine commandline;
