@@ -16,7 +16,7 @@ void TestHarness::test_manual()
   env->optimize = ENV_OPTIMIZE_O0;
   env->flags |= ENV_DEBUG;
 #endif
-  path dll_path = "manual" IN_LIBRARY_EXTENSION;
+  path dll_path = _folder / "manual" IN_LIBRARY_EXTENSION;
 
   // We can safely manipulate modules ourselves, but anything involving a pointer usually needs to use inNative's special
   // handling functions, which ensure the resulting module is in a valid state.

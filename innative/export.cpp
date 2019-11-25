@@ -30,6 +30,7 @@ void innative_runtime(INExports* exports)
   exports->CompileScript           = &CompileScript;
   exports->SerializeModule         = &SerializeModule;
   exports->LoadSourceMap           = &LoadSourceMap;
+  exports->SerializeSourceMap      = &SerializeSourceMap;
   exports->InsertModuleSection     = &InsertModuleSection;
   exports->DeleteModuleSection     = &DeleteModuleSection;
   exports->SetByteArray            = &SetByteArray;
