@@ -74,7 +74,7 @@ EXPORT void* memcpy(void* pdest, const void* psrc, size_t sz)
 EXPORT void* memset(void* ptr, int value, size_t num)
 {
   uint64_t v = (value & 0xFF) * 0x0101010101010101ULL;
-  uint8_t* p = ptr;
+  uint8_t* p = (uint8_t*)ptr;
 
   // Align pointer
   for(; ((size_t)p % sizeof(uint64_t)) != 0 && num != 0; num -= 1)
