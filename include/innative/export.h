@@ -213,6 +213,11 @@ typedef struct IN__EXPORTS
   /// sourcemap.
   int (*LoadSourceMap)(Environment* env, unsigned int m, const char* path, size_t len);
 
+  /// Serializes the given source map to JSON and saves it at path.
+  /// \param map A pointer to the source map that should be serialized.
+  /// \param path A null-terminated UTF8 string pointing to the file location where the source map should be saved
+  enum IN_ERROR (*SerializeSourceMap)(const SourceMap* map, const char* path);
+
   /// Inserts a new, zero'd element into the given module section at the specified index. It is up to the caller to
   /// initialize the new element with a valid state.
   /// \param env The environment associated with the given module.

@@ -10,7 +10,7 @@ namespace innative {
     typedef IN_ERROR (*fnParseObject)(const Environment& env, SourceMap* map, const char* keybegin, const char* keyend,
                                       const char*& data, const char* end);
 
-    int32_t VLQ(const char*& data);
+    int32_t DecodeVLQ(const char*& data);
     void SkipWhitespace(const char*& data, const char* end);
     const char* ParseKey(const char* data, const char*& end);
     int64_t ParseNumber(const char*& data, const char* end);
@@ -26,12 +26,17 @@ namespace innative {
                         IN_ERROR (*f)(const Environment& env, const char*& data, const char* end, T& result));
     IN_ERROR ParseArrayString(const Environment& env, const char*& data, const char* end, const char*& result);
     IN_ERROR ParseMapping(const Environment& env, SourceMap* map, const char*& data, const char* end);
+
+    template<class T> void Serialize(T t, FILE* f);
+    template<class T> void SerializeKeyValue(const char* key, T value, FILE* f);
+    void EncodeVLQ(int32_t i, FILE* f);
+    void SerializeMapping(const SourceMap* map, FILE* f);
   }
 }
 
 using namespace innative;
 
-int32_t sourcemap::VLQ(const char*& data)
+int32_t sourcemap::DecodeVLQ(const char*& data)
 {
   uint32_t value = 0; // must be unsigned so we get the correct bitshift behavior
   uint8_t digit;
@@ -302,14 +307,12 @@ IN_ERROR sourcemap::ParseMapping(const Environment& env, SourceMap* map, const c
   {
     if(map->mappings[n].segments)
     {
-      last_valid                                 = map->mappings[n].segments;
-      map->mappings[n].segments[i].column        = last_column += VLQ(data);
-      map->mappings[n].segments[i].source_index  = last_source_index += VLQ(data);
-      map->mappings[n].segments[i].original_line = last_original_line += VLQ(data);
-      map->mappings[n].segments[i].original_column = last_original_column += VLQ(data);
-      map->mappings[n].segments[i].name_index = last_name_index += VLQ(data);
-      if(map->mappings[n].segments[i].name_index > 2)
-        last_name_index = last_name_index;
+      last_valid                                   = map->mappings[n].segments;
+      map->mappings[n].segments[i].column          = last_column += DecodeVLQ(data);
+      map->mappings[n].segments[i].source_index    = last_source_index += DecodeVLQ(data);
+      map->mappings[n].segments[i].original_line   = last_original_line += DecodeVLQ(data);
+      map->mappings[n].segments[i].original_column = last_original_column += DecodeVLQ(data);
+      map->mappings[n].segments[i].name_index      = last_name_index += DecodeVLQ(data);
     }
     else // we map empty lines to the last valid line
     {
@@ -423,4 +426,172 @@ const SourceMapSegment* GetSourceMapSegment(SourceMap* map, size_t line, size_t 
   }
 
   return &map->mappings[line].segments[first];
+}
+
+template<> void sourcemap::Serialize<size_t>(size_t s, FILE* f) { fprintf(f, "%zu", s); }
+template<> void sourcemap::Serialize<const char*>(const char* s, FILE* f)
+{
+  fputc('"', f);
+  const char* cur = s;
+  while(*cur)
+  {
+    char inject = 0;
+    switch(*cur)
+    {
+    case '\b': inject = 'b'; break;
+    case '\f': inject = 'f'; break;
+    case '\n': inject = 'n'; break;
+    case '\r': inject = 'r'; break;
+    case '\t': inject = 't'; break;
+    case '\"': inject = '"'; break;
+    case '\'': inject = '\''; break;
+    case '\\': inject = '\\'; break;
+    }
+
+    if(inject)
+    {
+      if(cur > s)
+        fwrite(s, 1, cur - s, f);
+      s = cur + 1;
+      fputc('\\', f);
+      fputc(inject, f);
+    }
+
+    ++cur;
+  }
+
+  if(cur > s)
+    fwrite(s, 1, cur - s, f);
+  fputc('"', f);
+}
+
+template<> void sourcemap::Serialize<std::pair<const char**, size_t>>(std::pair<const char**, size_t> s, FILE* f)
+{
+  fputc('[', f);
+
+  for(size_t i = 0; i < s.second; ++i)
+  {
+    if(i > 0)
+      fputc(',', f);
+    Serialize(s.first[i], f);
+  }
+
+  fputc(']', f);
+}
+
+template<class T> void sourcemap::SerializeKeyValue(const char* key, T value, FILE* f)
+{
+  Serialize(key, f);
+  fputc(':', f);
+  Serialize<T>(value, f);
+}
+
+void sourcemap::EncodeVLQ(int32_t i, FILE* f)
+{
+  char negative      = i < 0;
+  uint32_t remaining = abs(i);
+
+  // First byte contains the sign bit and must be done seperately
+  char value = negative | ((remaining & 0b1111) << 1);
+  remaining &= ~0b1111;
+
+  uint32_t offset = 4;
+  while(remaining)
+  {
+    value |= utility::VLQ_CONTINUATION_BIT;
+    fputc(utility::IN_BASE64[value], f);
+
+    uint32_t mask = (0b11111 << offset);
+    value         = (remaining & mask) >> offset;
+    remaining &= ~mask;
+    offset += 5;
+  }
+
+  fputc(utility::IN_BASE64[value], f);
+}
+
+void sourcemap::SerializeMapping(const SourceMap* map, FILE* f)
+{
+  sourcemap::Serialize("mappings", f);
+  fputc(':', f);
+  fputc('"', f);
+  size_t last_column          = 0;
+  size_t last_source_index    = 0;
+  size_t last_original_line   = 0;
+  size_t last_original_column = 0;
+  size_t last_name_index      = 0;
+
+  for(size_t i = 0; i < map->n_mappings; ++i)
+  {
+    last_column = 0;
+    if(i > 0)
+      fputc(';', f);
+    for(size_t j = 0; j < map->mappings[i].n_segments; ++j)
+    {
+      if(j > 0)
+        fputc(',', f);
+      int32_t diff_column          = map->mappings[i].segments[j].column - last_column;
+      int32_t diff_source_index    = map->mappings[i].segments[j].source_index - last_source_index;
+      int32_t diff_original_line   = map->mappings[i].segments[j].original_line - last_original_line;
+      int32_t diff_original_column = map->mappings[i].segments[j].original_column - last_original_column;
+      int32_t diff_name_index      = map->mappings[i].segments[j].name_index - last_name_index;
+      last_column                  = map->mappings[i].segments[j].column;
+      last_source_index            = map->mappings[i].segments[j].source_index;
+      last_original_line           = map->mappings[i].segments[j].original_line;
+      last_original_column         = map->mappings[i].segments[j].original_column;
+      last_name_index              = map->mappings[i].segments[j].name_index;
+
+      EncodeVLQ(diff_column, f);
+      EncodeVLQ(diff_source_index, f);
+      EncodeVLQ(diff_original_line, f);
+      EncodeVLQ(diff_original_column, f);
+
+      if(diff_name_index)
+        EncodeVLQ(diff_name_index, f);
+    }
+  }
+  fputc('"', f);
+}
+
+enum IN_ERROR SerializeSourceMap(const SourceMap* map, const char* out)
+{
+  if(!map || !out)
+    return ERR_FATAL_NULL_POINTER;
+  path file = u8path(out);
+  FILE* f;
+  FOPEN(f, file.c_str(), "wb");
+  if(!f)
+    return ERR_FATAL_FILE_ERROR;
+
+  fputc('{', f);
+  sourcemap::SerializeKeyValue<size_t>("version", map->version, f);
+  fputc(',', f);
+  sourcemap::SerializeKeyValue("sources", std::pair<const char**, size_t>{ map->sources, map->n_sources }, f);
+  fputc(',', f);
+  sourcemap::SerializeKeyValue("names", std::pair<const char**, size_t>{ map->names, map->n_names }, f);
+  fputc(',', f);
+  sourcemap::SerializeMapping(map, f);
+  fputc(',', f);
+  sourcemap::SerializeKeyValue("sourceRoot", map->sourceRoot, f);
+  fputc(',', f);
+  sourcemap::SerializeKeyValue("sourcesContent",
+                               std::pair<const char**, size_t>{ map->sourcesContent, map->n_sourcesContent }, f);
+
+  if(map->file && map->file[0])
+  {
+    fputc(',', f);
+    sourcemap::SerializeKeyValue("file", map->file, f);
+  }
+
+  if(map->x_google_linecount)
+  {
+    fputc(',', f);
+    sourcemap::SerializeKeyValue<size_t>("x_google_linecount", map->x_google_linecount, f);
+  }
+
+  fputc('}', f);
+
+  if(fclose(f) != 0)
+    return ERR_FATAL_FILE_ERROR;
+  return ERR_SUCCESS;
 }
