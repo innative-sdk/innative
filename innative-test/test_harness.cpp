@@ -96,7 +96,7 @@ int TestHarness::CompileWASM(const path& file)
     return err;
   }
 
-  (*_exports.AddModule)(env, file.u8string().c_str(), 0, file.u8string().c_str(), &err);
+  (*_exports.AddModule)(env, file.u8string().c_str(), 0, file.filename().u8string().c_str(), &err);
   if(err < 0)
   {
     (*_exports.DestroyEnvironment)(env);

@@ -386,6 +386,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug Static|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="constants.cpp" />
+    <ClCompile Include="dwarfsourcemap.cpp" />
     <ClCompile Include="export.cpp" />
     <ClCompile Include="intrinsic.cpp" />
     <ClCompile Include="lexer.cpp" />

@@ -5,6 +5,7 @@
 #define IN__SOURCE_MAP_H
 
 #include <stddef.h>
+#include "innative/innative.h"
 #include "innative/errors.h"
 
 struct IN_WASM_ENVIRONMENT;
@@ -40,8 +41,9 @@ typedef struct IN_SOURCE_MAP
   size_t x_google_linecount;
 } SourceMap;
 
+extern IN_COMPILER_DLLEXPORT enum IN_ERROR DWARFSourceMap(struct IN_WASM_ENVIRONMENT* env, SourceMap* map, const char* obj,
+                                                          size_t len);
 enum IN_ERROR ParseSourceMap(const struct IN_WASM_ENVIRONMENT* env, SourceMap* map, const char* data, size_t len);
-enum IN_ERROR DWARFSourceMap(const struct IN_WASM_ENVIRONMENT* env, SourceMap* map, const char* obj, size_t len);
 enum IN_ERROR SerializeSourceMap(const SourceMap* map, const char* out);
 const SourceMapSegment* GetSourceMapSegment(SourceMap* map, size_t line, size_t column);
 

@@ -43,7 +43,7 @@ KHASH_INIT(flags, const char*, unsigned int, 1, kh_str_hash_funcins, kh_str_hash
 static kh_flags_t* env_flags    = kh_init_flags();
 static kh_flags_t* env_optimize = kh_init_flags();
 
-constexpr std::initializer_list<std::pair<const char*, unsigned int>> FLAG_MAP = {
+const static std::initializer_list<std::pair<const char*, unsigned int>> FLAG_MAP = {
   { "strict", ENV_STRICT },
   { "sandbox", ENV_SANDBOX },
   { "whitelist", ENV_WHITELIST },
@@ -61,7 +61,7 @@ constexpr std::initializer_list<std::pair<const char*, unsigned int>> FLAG_MAP =
   { "disable_tail_call", ENV_DISABLE_TAIL_CALL },
 };
 
-constexpr std::initializer_list<std::pair<const char*, unsigned int>> OPTIMIZE_MAP = {
+const static std::initializer_list<std::pair<const char*, unsigned int>> OPTIMIZE_MAP = {
   { "o0", ENV_OPTIMIZE_O0 }, { "o1", ENV_OPTIMIZE_O1 }, { "o2", ENV_OPTIMIZE_O2 },
   { "o3", ENV_OPTIMIZE_O3 }, { "os", ENV_OPTIMIZE_Os }, { "fastmath", ENV_OPTIMIZE_FAST_MATH },
 };
@@ -488,7 +488,8 @@ int main(int argc, char* argv[])
 
   commandline.ResolveOutput();
 
-  if(commandline.compile_llvm.value) // If we're compiling LLVM IR instead of webassembly, we divert to another code path
+  // If we're compiling LLVM IR instead of webassembly, we divert to another code path
+  if(commandline.compile_llvm.value)
     return innative_compile_llvm(commandline.inputs.data(), commandline.inputs.size(), commandline.flags.value,
                                  commandline.output_file.value.u8string().c_str(), stdout);
 
@@ -606,6 +607,22 @@ int main(int argc, char* argv[])
   {
     fprintf(stderr, "Unknown error creating environment.\n");
     return ERR_UNKNOWN_ENVIRONMENT_ERROR;
+  }
+
+  // If we're dumping DWARF to source map information, divert to another code path
+  if(commandline.build_sourcemap.value)
+  {
+    SourceMap map = { 0 };
+    for(auto& input : commandline.inputs)
+    {
+      err = DWARFSourceMap(env, &map, commandline.inputs[0], 0);
+      if(err < 0)
+        printerr(exports, stderr, "Error parsing file ", commandline.inputs[0], err);
+    }
+    err = (*exports.SerializeSourceMap)(&map, commandline.output_file.value.u8string().c_str());
+    if(err < 0)
+      printerr(exports, stderr, "Error saving file ", commandline.output_file.value.u8string().c_str(), err);
+    return err;
   }
 
 #ifdef IN_PLATFORM_WIN32

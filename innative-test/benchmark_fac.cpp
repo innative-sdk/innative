@@ -6,7 +6,7 @@
 
 int64_t Benchmarks::fac(int64_t n)
 #else
-extern "C" __attribute__((visibility("default"))) unsigned long long fac(unsigned long long n)
+extern "C" __attribute__((visibility("default"))) long long fac(long long n)
 #endif
 {
   if(n < 0)
