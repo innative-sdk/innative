@@ -505,6 +505,8 @@ int innative::LoadSourceMap(Environment* env, unsigned int m, const char* path, 
   if(m >= env->n_modules)
     return ERR_UNKNOWN_MODULE;
   env->modules[m].sourcemap = tmalloc<SourceMap>(*env, 1);
+  if(!env->modules[m].sourcemap)
+    return ERR_FATAL_OUT_OF_MEMORY;
   int r                     = ParseSourceMap(env, env->modules[m].sourcemap, path, len);
   if(r < 0)
     env->modules[m].sourcemap = 0;

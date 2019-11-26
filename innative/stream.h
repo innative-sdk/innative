@@ -10,7 +10,7 @@
 
 namespace innative {
   namespace utility {
-    // We just read the entire payload into memory, so this re-implements trivial stream operations without C++ stream
+    // We read the entire payload into memory, so this re-implements trivial stream operations without C++ stream
     // overhead
     struct Stream
     {

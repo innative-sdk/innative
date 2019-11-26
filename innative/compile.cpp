@@ -129,15 +129,15 @@ llvm::DILocation* GetMappedLocation(code::Context& context, unsigned int line, u
       if(!context.subprograms[segment->source_index])
       {
         auto original = scope->getSubprogram();
-        auto sub      = context.subprograms[segment->source_index] =
-          context.dbuilder->createFunction(context.dfiles[segment->source_index], scope->getFile()->getName(),
-                                           original->getName(), context.dfiles[segment->source_index],
-                                           segment->original_line, original->getType(), segment->original_line,
-                                           original->getFlags(), original->getSPFlags());
+        auto sub = context.subprograms[segment->source_index] = context.dbuilder->createFunction(
+          original->getScope(), scope->getFile()->getName(), original->getName(), context.dfiles[segment->source_index],
+          segment->original_line, original->getType(), segment->original_line,
+          original->getFlags() | llvm::DISubprogram::FlagArtificial, original->getSPFlags());
       }
 
       return llvm::DILocation::get(context.context, segment->original_line, segment->original_column,
-                                   context.subprograms[segment->source_index]);
+                                   context.subprograms[segment->source_index],
+                                   llvm::DILocation::get(context.context, line, column, scope));
     }
   }
   return llvm::DILocation::get(context.context, line, column, scope);

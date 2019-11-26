@@ -75,6 +75,9 @@
     <ClCompile Include="sourcemap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="dwarfsourcemap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\innative\innative.h">

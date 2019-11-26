@@ -103,6 +103,8 @@ const char* sourcemap::ParseString(const Environment& env, const char*& data, co
   ptrdiff_t len = cur - data;
   ptrdiff_t i   = 0;
   char* s       = utility::tmalloc<char>(env, len + 1);
+  if(!s)
+    return nullptr;
 
   for(; data < cur; ++i)
   {
@@ -136,6 +138,7 @@ template<class T>
 IN_ERROR sourcemap::ParseArrayInner(const Environment& env, const char*& data, const char* end, T*& out, size_t& count,
                                     IN_ERROR (*f)(const Environment& env, const char*& data, const char* end, T& result))
 {
+  IN_ERROR err = ERR_SUCCESS;
   if(data < end && *data != ']')
   {
     ++data;
@@ -155,9 +158,9 @@ IN_ERROR sourcemap::ParseArrayInner(const Environment& env, const char*& data, c
     if(err == ERR_SUCCESS)
       out[i] = result;
   }
-  else
-    out = utility::tmalloc<T>(env, count);
-  return ERR_SUCCESS;
+  else if(!(out = utility::tmalloc<T>(env, count)))
+    err = ERR_FATAL_OUT_OF_MEMORY;
+  return err;
 }
 
 template<class T>
@@ -259,8 +262,11 @@ IN_ERROR sourcemap::ParseMapping(const Environment& env, SourceMap* map, const c
   if(cur >= end || *cur != '"')
     return ERR_MAP_EXPECTED_QUOTE;
 
-  map->n_mappings               = n;
-  map->mappings                 = utility::tmalloc<SourceMapGroup>(env, map->n_mappings);
+  map->n_mappings = n;
+  map->mappings   = utility::tmalloc<SourceMapGroup>(env, map->n_mappings);
+  if(!map->mappings)
+    return ERR_FATAL_OUT_OF_MEMORY;
+
   map->mappings[--n].n_segments = 1;
 
   // Then we iterate backwards, counting commas and allocating subarrays
@@ -274,6 +280,9 @@ IN_ERROR sourcemap::ParseMapping(const Environment& env, SourceMap* map, const c
       if(map->mappings[n].n_segments > 0)
       {
         map->mappings[n].segments = utility::tmalloc<SourceMapSegment>(env, map->mappings[n].n_segments);
+        if(!map->mappings[n].segments)
+          return ERR_FATAL_OUT_OF_MEMORY;
+
         memset(map->mappings[n].segments, 0, sizeof(SourceMapSegment) * map->mappings[n].n_segments);
       }
       else
@@ -329,10 +338,12 @@ IN_ERROR sourcemap::ParseMapping(const Environment& env, SourceMap* map, const c
     }
     else if(*data == ';')
     {
-      i           = 0;
+      std::sort(map->mappings[n].segments, map->mappings[n].segments + map->mappings[n].n_segments,
+                [](SourceMapSegment& a, SourceMapSegment& b) { return a.column < b.column; });
       last_column = 0;
       ++n;
       ++data;
+      i = 0;
     }
     else if(*data != '"')
       return ERR_MAP_UNEXPECTED_BASE64;
@@ -432,36 +443,39 @@ template<> void sourcemap::Serialize<size_t>(size_t s, FILE* f) { fprintf(f, "%z
 template<> void sourcemap::Serialize<const char*>(const char* s, FILE* f)
 {
   fputc('"', f);
-  const char* cur = s;
-  while(*cur)
+  if(s)
   {
-    char inject = 0;
-    switch(*cur)
+    const char* cur = s;
+    while(*cur)
     {
-    case '\b': inject = 'b'; break;
-    case '\f': inject = 'f'; break;
-    case '\n': inject = 'n'; break;
-    case '\r': inject = 'r'; break;
-    case '\t': inject = 't'; break;
-    case '\"': inject = '"'; break;
-    case '\'': inject = '\''; break;
-    case '\\': inject = '\\'; break;
+      char inject = 0;
+      switch(*cur)
+      {
+      case '\b': inject = 'b'; break;
+      case '\f': inject = 'f'; break;
+      case '\n': inject = 'n'; break;
+      case '\r': inject = 'r'; break;
+      case '\t': inject = 't'; break;
+      case '\"': inject = '"'; break;
+      case '\'': inject = '\''; break;
+      case '\\': inject = '\\'; break;
+      }
+
+      if(inject)
+      {
+        if(cur > s)
+          fwrite(s, 1, cur - s, f);
+        s = cur + 1;
+        fputc('\\', f);
+        fputc(inject, f);
+      }
+
+      ++cur;
     }
 
-    if(inject)
-    {
-      if(cur > s)
-        fwrite(s, 1, cur - s, f);
-      s = cur + 1;
-      fputc('\\', f);
-      fputc(inject, f);
-    }
-
-    ++cur;
+    if(cur > s)
+      fwrite(s, 1, cur - s, f);
   }
-
-  if(cur > s)
-    fwrite(s, 1, cur - s, f);
   fputc('"', f);
 }
 

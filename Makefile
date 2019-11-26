@@ -71,15 +71,8 @@ uninstall:
 
 benchmarks: benchmark_n-body.wasm benchmark_fac.wasm benchmark_fannkuch-redux.wasm
 
-%.wasm.full: %.cpp
-	$(CXX) $< -g -o $@
-
-%.wasm.dwarf: %.wasm.full
-	/bin/llvm/bin/llvm-dwarfdump $< > $@
-
-%.wasm: %.wasm.full %.wasm.dwarf
-	wasm-sourcemap.py $< -w $@ -p $(CURDIR) -s -u ./$(@:.wasm=.wasm.map) -o $(@:.wasm=.wasm.map) --dwarfdump-output=$(@:.wasm=.wasm.dwarf)
-	$(CXX) innative-test/%.cpp wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 --output /scripts/%.wasm -Xlinker --no-entry -Xlinker --export-dynamic
+%.wasm: innative-test/%.cpp
+	$(CC) $< -g -o scripts/$@ wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 -Xlinker --no-entry -Xlinker --export-dynamic
   
 .PHONY: all clean install uninstall benchmarks debug
 

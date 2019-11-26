@@ -796,11 +796,13 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
           return ERR_INVALID_UTF8_ENCODING; // An invalid UTF8 encoding for the name is an actual parse error for some reason
         if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), "name"))
           ParseNameSection(s, custom, m, env);
-        if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), "sourceMappingURL"))
+        else if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), "sourceMappingURL"))
         {
           Identifier sourceMappingURL;
           ParseIdentifier(s, sourceMappingURL, env);
           m.sourcemap = tmalloc<SourceMap>(env, 1);
+          if(!m.sourcemap)
+            return ERR_FATAL_OUT_OF_MEMORY;
           err         = ParseSourceMap(&env, m.sourcemap, sourceMappingURL.str(), 0);
 
           if(err == ERR_FATAL_FILE_ERROR && m.filepath != nullptr)
@@ -809,7 +811,19 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
           if(err)
             return err;
         }
-
+        else if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), ".debug_line"))
+        {
+          m.sourcemap = tmalloc<SourceMap>(env, 1);
+          if(!m.sourcemap)
+            return ERR_FATAL_OUT_OF_MEMORY;
+          *m.sourcemap = { 0 };
+          err          = DWARFSourceMap(const_cast<Environment*>(&env), m.sourcemap, (char*)s.data, s.size);
+          if(m.filepath)
+            m.sourcemap->file = m.filepath;
+          if(err)
+            return err;
+          s.pos = custom;
+        }
         else
           s.pos = custom; // Skip over the custom payload, minus the name
         break;
