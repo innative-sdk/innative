@@ -21,6 +21,10 @@ void innative_runtime(INExports* exports)
   exports->LoadFunction            = &LoadFunction;
   exports->LoadTable               = &LoadTable;
   exports->LoadGlobal              = &LoadGlobal;
+  exports->GetModuleMetadata       = &GetModuleMetadata;
+  exports->LoadMemoryIndex         = &LoadMemoryIndex;
+  exports->LoadTableIndex          = &LoadTableIndex;
+  exports->LoadGlobalIndex         = &LoadGlobalIndex;
   exports->LoadAssembly            = &LoadAssembly;
   exports->FreeAssembly            = &FreeAssembly;
   exports->ClearEnvironmentCache   = &ClearEnvironmentCache;

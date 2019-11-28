@@ -360,10 +360,12 @@ IN_Entrypoint innative::LoadFunction(void* assembly, const char* module_name, co
 
 IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const char* table, varuint32 index)
 {
-  INTableEntry* ref =
-    (INTableEntry*)LoadDLLFunction(assembly,
+  INGlobal* ref =
+    (INGlobal*)LoadDLLFunction(assembly,
                                    utility::CanonicalName(StringRef::From(module_name), StringRef::From(table)).c_str());
-  return !ref ? nullptr : ref[index].func;
+  if(ref != nullptr && index < (reinterpret_cast<uint64_t*>(ref->table)[-1] / sizeof(INTableEntry)))
+    return ref->table[index].func;
+  return nullptr;
 }
 
 INGlobal* innative::LoadGlobal(void* assembly, const char* module_name, const char* export_name)
@@ -507,7 +509,7 @@ int innative::LoadSourceMap(Environment* env, unsigned int m, const char* path, 
   env->modules[m].sourcemap = tmalloc<SourceMap>(*env, 1);
   if(!env->modules[m].sourcemap)
     return ERR_FATAL_OUT_OF_MEMORY;
-  int r                     = ParseSourceMap(env, env->modules[m].sourcemap, path, len);
+  int r = ParseSourceMap(env, env->modules[m].sourcemap, path, len);
   if(r < 0)
     env->modules[m].sourcemap = 0;
   return r;
@@ -669,28 +671,28 @@ int innative::SetIdentifier(Environment* env, Identifier* identifier, const char
   return ERR_SUCCESS;
 }
 
-int innative::InsertModuleLocal(Environment* env, FunctionBody* body, varuint32 index, varsint7 local, DebugInfo* info)
+int innative::InsertModuleLocal(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index, varsint7 local,
+                                DebugInfo* info)
 {
   if(!body)
     return ERR_FATAL_NULL_POINTER;
-  if(info || body->local_names)
+  if(info || body->local_debug)
   {
-    varuint32 n = body->n_locals;
-    int err     = InsertModuleType(env, body->local_names, n, index, !info ? DebugInfo{ 0 } : *info);
+    int err =
+      InsertModuleType(env, body->local_debug, body->n_local_debug, func->n_params + index, !info ? DebugInfo{ 0 } : *info);
     if(err < 0)
       return err;
   }
   return InsertModuleType(env, body->locals, body->n_locals, index, local);
 }
 
-int innative::RemoveModuleLocal(Environment* env, FunctionBody* body, varuint32 index)
+int innative::RemoveModuleLocal(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index)
 {
   if(!body)
     return ERR_FATAL_NULL_POINTER;
-  if(body->local_names)
+  if(body->n_local_debug)
   {
-    varuint32 n = body->n_locals;
-    int err     = DeleteModuleType(env, body->local_names, n, index);
+    int err = DeleteModuleType(env, body->local_debug, body->n_local_debug, func->n_params + index);
     if(err < 0)
       return err;
   }
@@ -716,10 +718,9 @@ int innative::InsertModuleParam(Environment* env, FunctionType* func, FunctionBo
 {
   if(!func)
     return ERR_FATAL_NULL_POINTER;
-  if(body && (name || body->param_names))
+  if(body && (name || body->local_debug))
   {
-    varuint32 n = func->n_params;
-    int err     = InsertModuleType(env, body->param_names, n, index, !name ? DebugInfo{ 0 } : *name);
+    int err = InsertModuleType(env, body->local_debug, body->n_local_debug, index, !name ? DebugInfo{ 0 } : *name);
     if(err < 0)
       return err;
   }
@@ -730,10 +731,9 @@ int innative::RemoveModuleParam(Environment* env, FunctionType* func, FunctionBo
 {
   if(!func)
     return ERR_FATAL_NULL_POINTER;
-  if(body && body->param_names)
+  if(body && body->local_debug)
   {
-    varuint32 n = func->n_params;
-    int err     = DeleteModuleType(env, body->param_names, n, index);
+    int err = DeleteModuleType(env, body->local_debug, body->n_local_debug, index);
     if(err < 0)
       return err;
   }
@@ -752,4 +752,35 @@ int innative::RemoveModuleReturn(Environment* env, FunctionType* func, varuint32
   if(!func)
     return ERR_FATAL_NULL_POINTER;
   return DeleteModuleType(env, func->returns, func->n_returns, index);
+}
+
+INModuleMetadata* innative::GetModuleMetadata(void* assembly, uint32_t module_index)
+{
+  return (INModuleMetadata*)LoadDLLFunction(
+    assembly, utility::CanonicalName(StringRef(), StringRef::From(IN_METADATA_PREFIX), module_index).c_str());
+}
+IN_Entrypoint innative::LoadTableIndex(void* assembly, uint32_t module_index, uint32_t table_index,
+                                       varuint32 function_index)
+{
+  auto metadata = GetModuleMetadata(assembly, module_index);
+  if(!metadata || table_index >= metadata->n_tables)
+    return nullptr;
+  INGlobal* table = (INGlobal*)metadata->tables[table_index];
+  if(function_index < (reinterpret_cast<uint64_t*>(table->table)[-1] / sizeof(INTableEntry)))
+    return table->table[function_index].func;
+  return nullptr;
+}
+INGlobal* innative::LoadGlobalIndex(void* assembly, uint32_t module_index, uint32_t global_index)
+{
+  auto metadata = GetModuleMetadata(assembly, module_index);
+  if(!metadata || global_index >= metadata->n_globals)
+    return nullptr;
+  return metadata->globals[global_index];
+}
+INGlobal* innative::LoadMemoryIndex(void* assembly, uint32_t module_index, uint32_t memory_index)
+{
+  auto metadata = GetModuleMetadata(assembly, module_index);
+  if(!metadata || memory_index >= metadata->n_memories)
+    return nullptr;
+  return (INGlobal*)metadata->memories[memory_index];
 }

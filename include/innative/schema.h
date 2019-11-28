@@ -220,7 +220,7 @@ typedef struct IN_WASM_FUNCTION_DESC
 {
   varuint32 type_index;
   DebugInfo debug;
-  DebugInfo* param_names; // Always the size of n_params from the signature
+  DebugInfo* param_debug; // Always the size of n_params from the signature
 } FunctionDesc;
 
 // Represents a single webassembly import definition
@@ -262,10 +262,10 @@ typedef struct IN_WASM_FUNCTION_BODY
   varuint32 body_size;
   varuint32 n_locals;
   varsint7* locals;
+  DebugInfo* local_debug; // INTERNAL: debug names of locals, always the size of n_locals + n_params or NULL if it doesn't exist
+  varuint32 n_local_debug;
   Instruction* body;
   varuint32 n_body;       // INTERNAL: track actual number of instructions
-  DebugInfo* local_names; // INTERNAL: debug names of locals, always the size of n_locals or NULL if it doesn't exist
-  DebugInfo* param_names; // INTERNAL: debug names of parameters, always the size of n_params or NULL if it doesn't exist
   DebugInfo debug;
 } FunctionBody;
 

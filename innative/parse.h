@@ -20,7 +20,7 @@ namespace innative {
   IN_ERROR ParseExport(utility::Stream& s, Export& e, const Environment& env);
   IN_ERROR ParseInstruction(utility::Stream& s, Instruction& ins, const Environment& env);
   IN_ERROR ParseTableInit(utility::Stream& s, TableInit& init, Module& m, const Environment& env);
-  IN_ERROR ParseFunctionBody(utility::Stream& s, FunctionBody& f, const Environment& env);
+  IN_ERROR ParseFunctionBody(utility::Stream& s, FunctionBody& f, Module& m, const Environment& env);
   IN_ERROR ParseDataInit(utility::Stream& s, DataInit& data, const Environment& env);
   IN_ERROR ParseNameSectionLocal(utility::Stream& s, size_t num, DebugInfo*& target, const Environment& env);
   IN_ERROR ParseNameSection(utility::Stream& s, size_t end, Module& m, const Environment& env);

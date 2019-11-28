@@ -299,7 +299,7 @@ IN_ERROR sourcemap::ParseMapping(const Environment& env, SourceMap* map, const c
   n                            = 0;
   size_t last_column           = 0;
   size_t last_source_index     = 0;
-  size_t last_original_line    = 0;
+  size_t last_original_line    = 1;
   size_t last_original_column  = 0;
   size_t last_name_index       = 0;
   SourceMapSegment* last_valid = 0;
@@ -546,12 +546,12 @@ void sourcemap::SerializeMapping(const SourceMap* map, FILE* f)
         fputc(',', f);
       int32_t diff_column          = map->mappings[i].segments[j].column - last_column;
       int32_t diff_source_index    = map->mappings[i].segments[j].source_index - last_source_index;
-      int32_t diff_original_line   = map->mappings[i].segments[j].original_line - last_original_line;
+      int32_t diff_original_line   = map->mappings[i].segments[j].original_line - 1 - last_original_line;
       int32_t diff_original_column = map->mappings[i].segments[j].original_column - last_original_column;
       int32_t diff_name_index      = map->mappings[i].segments[j].name_index - last_name_index;
       last_column                  = map->mappings[i].segments[j].column;
       last_source_index            = map->mappings[i].segments[j].source_index;
-      last_original_line           = map->mappings[i].segments[j].original_line;
+      last_original_line           = map->mappings[i].segments[j].original_line - 1;
       last_original_column         = map->mappings[i].segments[j].original_column;
       last_name_index              = map->mappings[i].segments[j].name_index;
 

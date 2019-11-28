@@ -4,13 +4,13 @@
 #ifdef TESTING_WASM
 #include "benchmark.h"
 
-int64_t Benchmarks::fac(int64_t n)
+int64_t Benchmarks::fib(int64_t n)
 #else
-extern "C" __attribute__((visibility("default"))) long long fac(long long n)
+extern "C" __attribute__((visibility("default"))) long long fib(long long n)
 #endif
 {
   if(n < 0)
     return 0;
 
-  return n + fac(n - 1) + fac(n - 2);
+  return n + fib(n - 1) + fib(n - 2);
 }

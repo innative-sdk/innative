@@ -45,9 +45,6 @@
     <ClCompile Include="benchmark.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="benchmark_fac.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="benchmark_fannkuch-redux.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -79,6 +76,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="test_manual.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="benchmark_fib.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

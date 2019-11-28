@@ -129,10 +129,11 @@ llvm::DILocation* GetMappedLocation(code::Context& context, unsigned int line, u
       if(!context.subprograms[segment->source_index])
       {
         auto original = scope->getSubprogram();
-        auto sub = context.subprograms[segment->source_index] = context.dbuilder->createFunction(
-          original->getScope(), scope->getFile()->getName(), original->getName(), context.dfiles[segment->source_index],
-          segment->original_line, original->getType(), segment->original_line,
-          original->getFlags() | llvm::DISubprogram::FlagArtificial, original->getSPFlags());
+        context.subprograms[segment->source_index] =
+          context.dbuilder->createFunction(original->getScope(), scope->getFile()->getName(), original->getName(),
+                                           context.dfiles[segment->source_index], segment->original_line,
+                                           original->getType(), segment->original_line, original->getFlags(),
+                                           original->getSPFlags());
       }
 
       return llvm::DILocation::get(context.context, segment->original_line, segment->original_column,
@@ -1907,53 +1908,61 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
   // We allocate parameters first, followed by local variables
   for(auto& arg : fn->args())
   {
+    std::string name = "$p" + std::to_string(index + 1);
+    if(index < body.n_local_debug && body.local_debug[index].name.size())
+      name = body.local_debug[index].name.str();
+
     assert(index < sig.n_params);
     auto ty = GetLLVMType(sig.params[index], context);
     assert(ty == arg.getType());
-    context.locals.push_back(context.builder.CreateAlloca(ty, nullptr,
-                                                          (body.param_names && body.param_names[index].name.size()) ?
-                                                            body.param_names[index].name.str() :
-                                                            ("$p" + std::to_string(index + 1)).c_str()));
-    context.builder.CreateStore(&arg, context.locals.back()); // Store parameter (we can't use the parameter directly
-                                                              // because wasm lets you store to parameters)
+    context.locals.push_back(context.builder.CreateAlloca(ty, nullptr, name));
 
     if(context.dbuilder)
     {
-      llvm::DILocalVariable* dparam =
-        context.dbuilder->createParameterVariable(fn->getSubprogram(), context.locals.back()->getName(),
-                                                  index + 1, // the arg index starts at 1
-                                                  fn->getSubprogram()->getFile(), fn->getSubprogram()->getLine(),
-                                                  CreateDebugType(context.locals.back()->getAllocatedType(), context),
-                                                  true);
+      llvm::DILocation* loc = context.builder.getCurrentDebugLocation();
+      if(index < body.n_local_debug && body.local_debug[index].line > 0)
+        loc = GetMappedLocation(context, body.local_debug[index].line, body.local_debug[index].column, fn->getSubprogram());
 
-      context.dbuilder->insertDeclare(context.locals.back(), dparam, context.dbuilder->createExpression(),
-                                      llvm::DebugLoc::get(body.debug.line, body.debug.column, fn->getSubprogram()),
+      llvm::DILocalVariable* dparam = context.dbuilder->createParameterVariable(
+        fn->getSubprogram(), context.locals.back()->getName(),
+        index + 1, // the arg index starts at 1
+        loc->getFile(), loc->getLine(), CreateDebugType(context.locals.back()->getAllocatedType(), context), true);
+
+      context.dbuilder->insertDeclare(context.locals.back(), dparam, context.dbuilder->createExpression(), loc,
                                       context.builder.GetInsertBlock());
     }
 
     ++index;
+    context.builder.CreateStore(&arg, context.locals.back()); // Store parameter (we can't use the parameter directly
+                                                              // because wasm lets you store to parameters)
   }
 
   for(varuint32 i = 0; i < body.n_locals; ++i)
   {
+    std::string name = "$l" + std::to_string(i + 1);
+    if(index + i < body.n_local_debug && body.local_debug[index + i].name.size())
+      name = body.local_debug[index + i].name.str();
+
     auto ty = GetLLVMType(body.locals[i], context);
-    context.locals.push_back(context.builder.CreateAlloca(ty, nullptr,
-                                                          (body.local_names && body.local_names[i].name.size()) ?
-                                                            body.local_names[i].name.str() :
-                                                            ("$l" + std::to_string(i + 1)).c_str()));
-    context.builder.CreateStore(llvm::Constant::getNullValue(ty), context.locals.back());
+    context.locals.push_back(context.builder.CreateAlloca(ty, nullptr, name));
 
     if(context.dbuilder)
     {
+      llvm::DILocation* loc = context.builder.getCurrentDebugLocation();
+      if(index + i < body.n_local_debug && body.local_debug[index + i].line > 0)
+        loc = GetMappedLocation(context, body.local_debug[index + i].line, body.local_debug[index + i].column,
+                                fn->getSubprogram());
+
       llvm::DILocalVariable* dparam =
-        context.dbuilder->createAutoVariable(fn->getSubprogram(), context.locals.back()->getName(),
-                                             fn->getSubprogram()->getFile(), fn->getSubprogram()->getLine(),
+        context.dbuilder->createAutoVariable(fn->getSubprogram(), context.locals.back()->getName(), loc->getFile(),
+                                             loc->getLine(),
                                              CreateDebugType(context.locals.back()->getAllocatedType(), context), true);
 
-      context.dbuilder->insertDeclare(context.locals.back(), dparam, context.dbuilder->createExpression(),
-                                      llvm::DebugLoc::get(body.debug.line, body.debug.column, fn->getSubprogram()),
+      context.dbuilder->insertDeclare(context.locals.back(), dparam, context.dbuilder->createExpression(), loc,
                                       context.builder.GetInsertBlock());
     }
+
+    context.builder.CreateStore(llvm::Constant::getNullValue(ty), context.locals.back());
   }
 
   unsigned int stacksize = 0;
@@ -2240,7 +2249,7 @@ void EvaluateSourceMap(Environment& env, const char* filepath, SourceMap* map)
   }
 }
 
-IN_ERROR CompileModule(const Environment* env, code::Context& context)
+IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32 m_idx)
 {
   context.llvm = new llvm::Module(context.m.name.str(), context.context);
   context.llvm->setTargetTriple(context.machine->getTargetTriple().getTriple());
@@ -2680,6 +2689,60 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context)
     context.start = context.functions[context.m.start].internal;
   }
 
+  {
+    auto ptrTy                        = context.builder.getInt8PtrTy(0);
+    std::array<llvm::Type*, 8> fields = {
+      ptrTy,
+      context.builder.getInt32Ty(),
+      context.builder.getInt32Ty(),
+      ptrTy->getPointerTo(),
+      context.builder.getInt32Ty(),
+      ptrTy->getPointerTo(),
+      context.builder.getInt32Ty(),
+      ptrTy->getPointerTo(),
+    };
+    auto MetadataTy = llvm::StructType::get(context.context, fields);
+
+    std::vector<llvm::Constant*> tables;
+    std::vector<llvm::Constant*> memories;
+    std::vector<llvm::Constant*> globals;
+
+    std::transform(context.tables.begin(), context.tables.end(), std::back_inserter(tables),
+                   [ptrTy](llvm::GlobalVariable* v) { return llvm::ConstantExpr::getBitCast(v, ptrTy); });
+    std::transform(context.memories.begin(), context.memories.end(), std::back_inserter(memories),
+                   [ptrTy](llvm::GlobalVariable* v) { return llvm::ConstantExpr::getBitCast(v, ptrTy); });
+    std::transform(context.globals.begin(), context.globals.end(), std::back_inserter(globals),
+                   [ptrTy](llvm::GlobalVariable* v) { return llvm::ConstantExpr::getBitCast(v, ptrTy); });
+
+    auto gname =
+      llvm::ConstantDataArray::getString(context.context, llvm::StringRef(context.m.name.str(), context.m.name.size()));
+    auto gtables   = llvm::ConstantArray::get(llvm::ArrayType::get(ptrTy, context.tables.size()), tables);
+    auto gmemories = llvm::ConstantArray::get(llvm::ArrayType::get(ptrTy, context.memories.size()), memories);
+    auto gglobals  = llvm::ConstantArray::get(llvm::ArrayType::get(ptrTy, context.globals.size()), globals);
+    std::array<llvm::Constant*, 8> values = {
+      llvm::ConstantExpr::getPointerCast(
+        new llvm::GlobalVariable(*context.llvm, gname->getType(), true, llvm::GlobalValue::PrivateLinkage, gname), ptrTy),
+      context.builder.getInt32(context.m.version),
+      context.builder.getInt32(context.tables.size()),
+      llvm::ConstantExpr::getPointerCast(new llvm::GlobalVariable(*context.llvm, gtables->getType(), true,
+                                                                  llvm::GlobalValue::PrivateLinkage, gtables),
+                                         ptrTy->getPointerTo()),
+      context.builder.getInt32(context.memories.size()),
+      llvm::ConstantExpr::getPointerCast(new llvm::GlobalVariable(*context.llvm, gmemories->getType(), true,
+                                                                  llvm::GlobalValue::PrivateLinkage, gmemories),
+                                         ptrTy->getPointerTo()),
+      context.builder.getInt32(context.globals.size()),
+      llvm::ConstantExpr::getPointerCast(new llvm::GlobalVariable(*context.llvm, gglobals->getType(), true,
+                                                                  llvm::GlobalValue::PrivateLinkage, gglobals),
+                                         ptrTy->getPointerTo()),
+    };
+    auto metadata = llvm::ConstantStruct::getAnon(values);
+    auto v = new llvm::GlobalVariable(*context.llvm, metadata->getType(), true,
+                             llvm::GlobalValue::LinkageTypes::ExternalLinkage, metadata,
+                             CanonicalName(StringRef(), StringRef::From(IN_METADATA_PREFIX), m_idx));
+    v->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+  }
+
   return ERR_SUCCESS;
 }
 
@@ -2929,7 +2992,7 @@ IN_ERROR innative::CompileEnvironment(const Environment* env, const char* outfil
       if(!env->modules[i].cache->objfile.empty())
         remove(env->modules[i].cache->objfile);
 
-      if((err = CompileModule(env, *env->modules[i].cache)) < 0)
+      if((err = CompileModule(env, *env->modules[i].cache, i)) < 0)
         return err;
       new_modules.push_back(env->modules + i);
     }
