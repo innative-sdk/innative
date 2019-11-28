@@ -20,10 +20,38 @@ void TestHarness::test_manual()
 
   // We can safely manipulate modules ourselves, but anything involving a pointer usually needs to use inNative's special
   // handling functions, which ensure the resulting module is in a valid state.
-  Module m = { INNATIVE_WASM_MAGIC_COOKIE, INNATIVE_WASM_MAGIC_VERSION };
+  Module m   = { INNATIVE_WASM_MAGIC_COOKIE, INNATIVE_WASM_MAGIC_VERSION };
   m.filepath = "manual.wasm.fake"; // This must be set if we want to emit debug information
-  int err  = (*_exports.SetIdentifier)(env, &m.name, "manual");
+  int err    = (*_exports.SetIdentifier)(env, &m.name, "manual");
   TEST(!err);
+
+  err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_MEMORY, 0);
+  TEST(!err);
+  m.memory.memories[0].limits.minimum = 1;
+
+  err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_TABLE, 0);
+  TEST(!err);
+  m.table.tables[0].element_type      = TE_funcref;
+  m.table.tables[0].resizable.minimum = 1;
+
+  err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_ELEMENT, 0);
+  TEST(!err);
+  m.element.elements[0].n_elements = 1;
+  varuint32 elems[]                = { 0 };
+  m.element.elements[0].elements   = elems;
+  m.element.elements[0].offset.opcode = OP_i32_const;
+
+  err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_GLOBAL, 0);
+  TEST(!err);
+  m.global.globals[0].desc.type                     = TE_i64;
+  m.global.globals[0].init.opcode                   = OP_i64_const;
+  m.global.globals[0].init.immediates[0]._varuint64 = 15;
+
+  err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_GLOBAL, 1);
+  TEST(!err);
+  m.global.globals[1].desc.type                   = TE_f32;
+  m.global.globals[1].init.opcode                 = OP_f32_const;
+  m.global.globals[1].init.immediates[0]._float32 = 3.6f;
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_TYPE, 0);
   TEST(!err);
@@ -41,8 +69,8 @@ void TestHarness::test_manual()
   TEST(!err);
   Instruction get_a = { OP_local_get, { 0 } };
   Instruction get_b = { OP_local_get, { 1 } };
-  Instruction add = { OP_i32_add };
-  Instruction end = { OP_end };
+  Instruction add   = { OP_i32_add };
+  Instruction end   = { OP_end };
 
   err = (*_exports.InsertModuleInstruction)(env, &m.code.funcbody[0], 0, &get_a);
   TEST(!err);
@@ -68,10 +96,16 @@ void TestHarness::test_manual()
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_EXPORT, 0);
   TEST(!err);
-
   err = (*_exports.SetIdentifier)(env, &m.exportsection.exports[0].name, "add");
   TEST(!err);
   m.exportsection.exports[0].kind  = WASM_KIND_FUNCTION;
+  m.exportsection.exports[0].index = 0;
+
+  err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_EXPORT, 0);
+  TEST(!err);
+  err = (*_exports.SetIdentifier)(env, &m.exportsection.exports[0].name, "table_test");
+  TEST(!err);
+  m.exportsection.exports[0].kind  = WASM_KIND_TABLE;
   m.exportsection.exports[0].index = 0;
 
   err = (*_exports.AddModuleObject)(env, &m);
@@ -97,6 +131,52 @@ void TestHarness::test_manual()
 
     if(func)
       TEST(func(2, 2) == 4);
+
+    INModuleMetadata* metadata = (*_exports.GetModuleMetadata)(assembly, 0);
+    TEST(metadata);
+    if(metadata)
+    {
+      TEST(metadata->version == 1);
+      TEST(!STRICMP(metadata->name, "manual"));
+    }
+
+    auto mem = (*_exports.LoadMemoryIndex)(assembly, 0, 0);
+    TEST(mem);
+    if(mem)
+    {
+      TEST(mem->memory);
+      if(mem->memory)
+        TEST(reinterpret_cast<uint64_t*>(mem->memory)[-1] == (1 << 16));
+    }
+
+    auto tablefunc = (varsint32(*)(varsint32, varsint32))(*_exports.LoadTableIndex)(assembly, 0, 0, 0);
+    TEST(tablefunc);
+    if(tablefunc)
+      TEST(tablefunc != nullptr); // Note: This is the internal fastcc call, not the __cdecl exported wrapper, so it is not safe to call
+
+    auto tablefunc2 = (varsint32(*)(varsint32, varsint32))(*_exports.LoadTable)(assembly, "manual", "table_test", 0);
+    TEST(tablefunc2);
+    if(tablefunc2)
+      TEST(tablefunc2 == tablefunc);
+
+    auto glob1 = (*_exports.LoadGlobalIndex)(assembly, 0, 0);
+    TEST(glob1);
+    if(glob1)
+      TEST(glob1->i64 == 15);
+
+    auto glob2 = (*_exports.LoadGlobalIndex)(assembly, 0, 1);
+    TEST(glob2);
+    if(glob2)
+      TEST(glob2->f32 == 3.6f);
+
+    TEST(!(*_exports.LoadGlobalIndex)(assembly, 0, 2));
+    TEST(!(*_exports.LoadMemoryIndex)(assembly, 0, 1));
+    TEST(!(*_exports.LoadTableIndex)(assembly, 0, 1, 0));
+    TEST(!(*_exports.LoadGlobalIndex)(assembly, 1, 0));
+    TEST(!(*_exports.LoadMemoryIndex)(assembly, 1, 0));
+    TEST(!(*_exports.LoadTableIndex)(assembly, 1, 0, 0));
+    TEST(!(*_exports.GetModuleMetadata)(assembly, 1));
+    TEST(!(*_exports.LoadTable)(assembly, "manual", "table_test", 1));
 
     (*_exports.FreeAssembly)(assembly);
   }

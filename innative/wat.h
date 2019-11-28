@@ -28,10 +28,10 @@ namespace innative {
     int ParseInitializer(Queue<WatToken>& tokens, Instruction& op);
     int ParseFunctionType(Queue<WatToken>& tokens, varuint32* index);
     static int ParseFunctionTypeInner(const Environment& env, Queue<WatToken>& tokens, FunctionType& sig, DebugInfo** info,
-                                      bool anonymous);
+                                      varuint32* n_info, bool anonymous);
     varuint32 GetFromHash(wat::kh_indexname_t* hash, const WatToken& t);
     int MergeFunctionType(const FunctionType& ftype, varuint32& out);
-    int ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo** info, bool anonymous);
+    int ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo** info, varuint32* n_info, bool anonymous);
     varuint32 GetLocal(FunctionBody& f, FunctionType& sig, const WatToken& t);
     int ParseConstantOperator(Queue<WatToken>& tokens, Instruction& op);
     int ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionBody& f, FunctionType& sig, DeferWatAction& defer);

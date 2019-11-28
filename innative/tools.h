@@ -24,6 +24,10 @@ namespace innative {
   IN_Entrypoint LoadFunction(void* assembly, const char* module_name, const char* function);
   IN_Entrypoint LoadTable(void* assembly, const char* module_name, const char* table, varuint32 index);
   INGlobal* LoadGlobal(void* assembly, const char* module_name, const char* export_name);
+  INModuleMetadata* GetModuleMetadata(void* assembly, uint32_t module_index);
+  IN_Entrypoint LoadTableIndex(void* assembly, uint32_t module_index, uint32_t table_index, varuint32 function_index);
+  INGlobal* LoadGlobalIndex(void* assembly, uint32_t module_index, uint32_t global_index);
+  INGlobal* LoadMemoryIndex(void* assembly, uint32_t module_index, uint32_t memory_index);
   void* LoadAssembly(const char* file);
   void FreeAssembly(void* assembly);
   const char* GetTypeEncodingString(int type_encoding);
@@ -35,8 +39,9 @@ namespace innative {
   int DeleteModuleSection(Environment* env, Module* m, enum WASM_MODULE_SECTIONS field, varuint32 index);
   int SetByteArray(Environment* env, ByteArray* bytearray, const void* data, varuint32 size);
   int SetIdentifier(Environment* env, Identifier* identifier, const char* str);
-  int InsertModuleLocal(Environment* env, FunctionBody* body, varuint32 index, varsint7 local, DebugInfo* info);
-  int RemoveModuleLocal(Environment* env, FunctionBody* body, varuint32 index);
+  int InsertModuleLocal(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index, varsint7 local,
+                        DebugInfo* info);
+  int RemoveModuleLocal(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index);
   int InsertModuleInstruction(Environment* env, FunctionBody* body, varuint32 index, Instruction* ins);
   int RemoveModuleInstruction(Environment* env, FunctionBody* body, varuint32 index);
   int InsertModuleParam(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index, varsint7 param,

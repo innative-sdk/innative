@@ -195,10 +195,13 @@ int WatParser::AddWatValType(const Environment& env, WatTokens id, varsint7*& a,
 }
 
 int WatParser::ParseFunctionTypeInner(const Environment& env, Queue<WatToken>& tokens, FunctionType& sig, DebugInfo** info,
-                                      bool anonymous)
+                                      varuint32* n_info, bool anonymous)
 {
   sig.form = TE_func;
   int err;
+  varuint32 sz = sig.n_params;
+  if(!n_info)
+    n_info = &sz;
   while(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::PARAM)
   {
     WatToken src = tokens[1];
@@ -216,8 +219,11 @@ int WatParser::ParseFunctionTypeInner(const Environment& env, Queue<WatToken>& t
         DebugInfo debug = { src.line, src.column };
         ParseName(env, debug.name, tokens.Peek());
 
-        varuint32 sz = sig.n_params;
-        if(err = AppendArray<DebugInfo>(env, debug, *info, sz))
+        while(*n_info < sig.n_params)
+          if(err = AppendArray<DebugInfo>(env, { 0 }, *info, *n_info))
+            return err;
+
+        if(err = AppendArray<DebugInfo>(env, debug, *info, *n_info))
           return err;
       }
       tokens.Pop();
@@ -230,8 +236,10 @@ int WatParser::ParseFunctionTypeInner(const Environment& env, Queue<WatToken>& t
       {
         if(info)
         {
-          varuint32 sz = sig.n_params;
-          if(err = AppendArray<DebugInfo>(env, DebugInfo{ src.line, src.column }, *info, sz))
+          while(*n_info < sig.n_params)
+            if(err = AppendArray<DebugInfo>(env, { 0 }, *info, *n_info))
+              return err;
+          if(err = AppendArray<DebugInfo>(env, DebugInfo{ src.line, src.column }, *info, *n_info))
             return err;
         }
         if(err = AddWatValType(env, tokens.Pop().id, sig.params, sig.n_params))
@@ -266,7 +274,7 @@ int WatParser::ParseFunctionType(Queue<WatToken>& tokens, varuint32* index)
   EXPECTED(tokens, WatTokens::FUNC, ERR_WAT_EXPECTED_FUNC);
 
   FunctionType sig = { 0 };
-  int err          = ParseFunctionTypeInner(env, tokens, sig, 0, false);
+  int err          = ParseFunctionTypeInner(env, tokens, sig, 0, 0, false);
   if(err != 0)
     return err;
   *index = m.type.n_functions;
@@ -357,7 +365,7 @@ int WatParser::MergeFunctionType(const FunctionType& ftype, varuint32& out)
   return AppendArray<FunctionType>(env, ftype, m.type.functions, m.type.n_functions);
 }
 
-int WatParser::ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo** info, bool anonymous)
+int WatParser::ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo** info, varuint32* n_info, bool anonymous)
 {
   sig = (varuint32)~0;
   if(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::TYPE)
@@ -382,7 +390,7 @@ int WatParser::ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo**
     // Create a type to match this function signature
     FunctionType func = { 0 };
 
-    int err = ParseFunctionTypeInner(env, tokens, func, info, anonymous);
+    int err = ParseFunctionTypeInner(env, tokens, func, info, n_info, anonymous);
     if(err)
       return err;
 
@@ -414,13 +422,9 @@ varuint32 WatParser::GetLocal(FunctionBody& f, FunctionType& sig, const WatToken
   {
     ByteArray n((uint8_t*)t.pos, (varuint32)t.len);
 
-    for(varuint32 i = 0; i < sig.n_params; ++i)
-      if(n == f.param_names[i].name)
+    for(varuint32 i = 0; i < f.n_local_debug; ++i)
+      if(n == f.local_debug[i].name)
         return i;
-
-    for(varuint32 i = 0; i < f.n_locals; ++i)
-      if(n == f.local_names[i].name)
-        return i + sig.n_params;
   }
 
   return (varuint32)~0;
@@ -506,7 +510,7 @@ int WatParser::ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionB
       op.immediates[0].table[--op.immediates[0].n_table]; // Remove last jump from table and make it the default
     break;
   case OP_call_indirect:
-    if(err = ParseTypeUse(tokens, op.immediates[0]._varuint32, 0, true))
+    if(err = ParseTypeUse(tokens, op.immediates[0]._varuint32, 0, 0, true))
       return err;
     break;
   case OP_i32_load:
@@ -926,10 +930,10 @@ int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringRe
     return err;
 
   if(i) // If this is an import, assemble the aux information and abort.
-    return ParseTypeUse(tokens, i->func_desc.type_index, &i->func_desc.param_names, false);
+    return ParseTypeUse(tokens, i->func_desc.type_index, &i->func_desc.param_debug, 0, false);
 
   varuint32 sig;
-  if(err = ParseTypeUse(tokens, sig, &body.param_names, false))
+  if(err = ParseTypeUse(tokens, sig, &body.local_debug, &body.n_local_debug, false))
     return err;
 
   FunctionType& desc = m.type.functions[sig];
@@ -951,8 +955,7 @@ int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringRe
       DebugInfo debug = { src.line, src.column };
       ParseName(env, debug.name, tokens.Pop());
 
-      varuint32 sz = body.n_locals; // n_locals is the count, but we don't want to increment it yet
-      if(err = AppendArray<DebugInfo>(env, debug, body.local_names, sz))
+      if(err = AppendArray<DebugInfo>(env, debug, body.local_debug, body.n_local_debug))
         return err;
 
       if(err = ParseLocalAppend(env, body, tokens)) // Must have exactly one val_type to associate with the name
@@ -962,8 +965,7 @@ int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringRe
     {
       while(tokens[0].id != WatTokens::CLOSE)
       {
-        varuint32 sz = body.n_locals; // n_locals is the count, but we don't want to increment it yet
-        if(err = AppendArray<DebugInfo>(env, DebugInfo{ src.line, src.column }, body.local_names, sz))
+        if(err = AppendArray<DebugInfo>(env, DebugInfo{ src.line, src.column }, body.local_debug, body.n_local_debug))
           return err;
         if(err = ParseLocalAppend(env, body, tokens))
           return err;
@@ -1239,7 +1241,7 @@ int WatParser::ParseImport(Queue<WatToken>& tokens)
     i.kind = WASM_KIND_FUNCTION;
     if(name.id == WatTokens::NAME && (err = ParseName(env, i.func_desc.debug.name, name)))
       return err;
-    if(err = ParseTypeUse(tokens, i.func_desc.type_index, &i.func_desc.param_names, false))
+    if(err = ParseTypeUse(tokens, i.func_desc.type_index, &i.func_desc.param_debug, 0, false))
       return err;
     hash = funchash;
     break;

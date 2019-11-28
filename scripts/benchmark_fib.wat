@@ -2,7 +2,7 @@
  (table 0 anyfunc)
  (memory $0 1)
  (export "memory" (memory $0))
- (export "fac" (func $_Z10vectorloopx))
+ (export "fib" (func $_Z10vectorloopx))
  (func $_Z10vectorloopx (; 0 ;) (param $0 i64) (result i64)
   (local $1 i64)
   (local $2 i64)

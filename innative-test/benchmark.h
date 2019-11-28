@@ -22,7 +22,7 @@ public:
   Benchmarks(const INExports& exports, const char* arg0, int loglevel, const path& folder);
   ~Benchmarks();
   void Run(FILE* out);
-  static int64_t fac(int64_t n);
+  static int64_t fib(int64_t n);
   static int nbody(int n);
   static int fannkuch_redux(int n);
   static int minimum(int n);
