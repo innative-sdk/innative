@@ -69,6 +69,8 @@ typedef struct IN__MODULE_METADATA
   void*** memories;
   varuint32 n_globals;
   INGlobal** globals;
+  varuint32 n_functions;
+  IN_Entrypoint* functions;
 } INModuleMetadata;
 
 // Contains pointers to the actual runtime functions
@@ -116,6 +118,11 @@ typedef struct IN__EXPORTS
   /// \param size The length of the memory that the
   /// data pointer points to. If size is 0, the data pointer is actually a null terminated UTF8 encoded file path.
   enum IN_ERROR (*AddEmbedding)(Environment* env, int tag, const void* data, uint64_t size);
+
+  /// Tells the linker to export the given symbol from the resulting binary.
+  /// \param env The environment to modify.
+  /// \param symbol The null-terminated name of the symbol to export.
+  enum IN_ERROR (*AddCustomExport)(Environment* env, const char* symbol);
 
   /// Finalizes the environment, blocking until all modules have finished loading (in case of any asyncronous loads) and
   /// ensures all configuration data is loaded.

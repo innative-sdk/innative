@@ -1304,8 +1304,7 @@ void innative::ValidateModule(Environment& env, Module& m)
 // Performs all post-load validation that couldn't be done during parsing
 void innative::ValidateEnvironment(Environment& env)
 {
-  if(!(env.flags & ENV_CHECK_MEMORY_ACCESS))
-    AppendIntrinsics(env);
+  AppendIntrinsics(env);
 
   for(size_t i = 0; i < env.n_modules; ++i)
     ValidateModule(env, env.modules[i]);

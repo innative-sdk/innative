@@ -74,6 +74,8 @@ void TestHarness::test_whitelist()
   TEST(fn({ { "sys", "asdf" } }, [](Environment* e, const INExports&) { e->system = "sys"; }) == ERR_ILLEGAL_C_IMPORT);
   TEST(fn({ { "asdf", "asdf" } }, [](Environment* e, const INExports&) {}) == ERR_UNKNOWN_MODULE);
   TEST(fn({ { "", "asdf" } }, [](Environment* e, const INExports&) {}) == ERR_ILLEGAL_C_IMPORT);
+  TEST(fn({ { "", "_innative_to_c" } }, [](Environment* e, const INExports&) {}) == ERR_ILLEGAL_C_IMPORT);
+  TEST(fn({ { "", "_innative_from_c" } }, [](Environment* e, const INExports&) {}) == ERR_ILLEGAL_C_IMPORT);
 
   TEST(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) { (*exp.AddWhitelist)(e, "", "asdf"); }) ==
        ERR_SUCCESS);
