@@ -4,7 +4,7 @@
 #include "innative/sourcemap.h"
 #include "constants.h"
 #include "util.h"
-#include <optional>
+#include <algorithm>
 
 namespace innative {
   namespace sourcemap {
