@@ -15,6 +15,7 @@ void innative_runtime(INExports* exports)
   exports->AddModuleObject         = &AddModuleObject;
   exports->AddWhitelist            = &AddWhitelist;
   exports->AddEmbedding            = &AddEmbedding;
+  exports->AddCustomExport         = &AddCustomExport;
   exports->FinalizeEnvironment     = &FinalizeEnvironment;
   exports->Validate                = &Validate;
   exports->Compile                 = &Compile;

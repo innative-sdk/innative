@@ -293,7 +293,7 @@ int WatParser::AppendImport(Module& m, const Import& i, varuint32* index)
                                          // fail.
 
   *index = 0;
-  if(ReallocArray(env, m.importsection.imports, m.importsection.n_import) != ERR_SUCCESS)
+  if(utility::ReallocArray(env, m.importsection.imports, m.importsection.n_import) != ERR_SUCCESS)
     return ERR_FATAL_OUT_OF_MEMORY;
 
   // Find the correct index to insert into

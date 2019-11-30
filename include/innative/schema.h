@@ -262,10 +262,11 @@ typedef struct IN_WASM_FUNCTION_BODY
   varuint32 body_size;
   varuint32 n_locals;
   varsint7* locals;
-  DebugInfo* local_debug; // INTERNAL: debug names of locals, always the size of n_locals + n_params or NULL if it doesn't exist
+  DebugInfo*
+    local_debug; // INTERNAL: debug names of locals, always the size of n_locals + n_params or NULL if it doesn't exist
   varuint32 n_local_debug;
   Instruction* body;
-  varuint32 n_body;       // INTERNAL: track actual number of instructions
+  varuint32 n_body; // INTERNAL: track actual number of instructions
   DebugInfo debug;
 } FunctionBody;
 
@@ -445,6 +446,8 @@ typedef struct IN_WASM_ENVIRONMENT
   int loglevel;                    // IN_LOG_LEVEL
   FILE* log;                       // Output stream for log messages
   void (*wasthook)(void*);         // Optional hook for WAST debugging cases
+  const char** exports; // Use AddCustomExport() to manage this list
+  varuint32 n_exports;
 
   struct kh_modules_s* modulemap;
   struct kh_modulepair_s* whitelist;

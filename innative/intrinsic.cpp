@@ -45,14 +45,17 @@ IN_ERROR innative::code::IN_Intrinsic_FuncPtr(code::Context& context, llvm::Valu
 {
   if(!params[0]->getType()->isIntegerTy())
     return ERR_INVALID_ARGUMENT_TYPE;
-  auto v = llvm::dyn_cast<llvm::ConstantInt, llvm::Value>(params[0]);
-  if(!v)
-    return ERR_INVALID_ARGUMENT_TYPE;
-  uint64_t index = v->getValue().getLimitedValue();
-  if(index >= context.functions.size())
-    return ERR_INVALID_ARGUMENT_TYPE;
-  llvm::Function* fn = (!context.functions[(size_t)index].imported) ? (context.functions[(size_t)index].internal) :
-                                                                      context.functions[(size_t)index].imported;
-  out = context.builder.CreatePtrToInt(fn, context.builder.getInt64Ty());
+
+  InsertConditionalTrap(
+    context.builder.CreateICmpUGE(context.builder.CreateIntCast(params[0], context.builder.getInt64Ty(), false),
+                                  context.builder.getInt64(context.exported_functions->getType()->getElementType()->getArrayNumElements())),
+    context);
+
+  // Deference global variable to get the actual array of function pointers, index into them, then dereference that array
+  // index to get the actual function pointer
+  llvm::Value* funcptr = context.builder.CreateLoad(
+    context.builder.CreateInBoundsGEP(context.exported_functions, { context.builder.getInt32(0), params[0] }));
+
+  out = context.builder.CreatePtrToInt(funcptr, context.builder.getInt64Ty());
   return ERR_SUCCESS;
 }

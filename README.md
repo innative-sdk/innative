@@ -18,31 +18,52 @@ For those building from source, prebuilt binaries for inNative's LLVM fork are [
 ### Command Line Utility
 The inNative SDK comes with a command line utility with many useful features for webassembly developers.
 
-    Usage: innative-cmd [-r] [-c] [-i [lite]] [-u] [-v] [-f FLAG...] [-l FILE] [-L FILE] [-o FILE] [-a FILE] [-d PATH] [-j PATH] [-s [FILE]] [-w [MODULE:]FUNCTION] FILE...
-      -r : Run the compiled result immediately and display output. Requires a start function.
-      -f <FLAG>: Set a supported flag to true. Flags:
-             sandbox, homogenize, llvm, strict, whitelist, multithreaded, library, noinit, debug, check_stack_overflow, check_float_trunc, check_memory_access, check_indirect_call, check_int_division, disable_tail_call
-             o0, o1, o2, os, o3, fastmath
-      -l <FILE> : Links the input files against <FILE>, which must be a static library.
-      -L <FILE> : Links the input files against <FILE>, which must be an ELF shared library.
-      -o <FILE> : Sets the output path for the resulting executable or library.
-      -a <FILE> : Specifies an alternative linker to use instead of LLD.
-      -d <PATH> : Sets the directory that contains the SDK library and data files.
-      -j <PATH> : Sets the directory for temporary object files and intermediate compilation results.
-      -e <MODULE> : Sets the environment/system module name. Any functions with the module name will have the module name stripped when linking with C functions.
-      -s [<FILE>] : Serializes all modules to .wat files. <FILE> can specify the output if only one module is present.
-      -w <[MODULE:]FUNCTION> : whitelists a given C import, does name-mangling if the module is specified.
-      -g : Instead of compiling immediately, creates a loader embedded with all the modules, environments, and settings, which compiles the modules on-demand when run.
-      -c : Assumes the input files are actually LLVM IR files and compiles them into a single webassembly module.
-      -i [lite]: Installs this SDK to the host operating system. On Windows, also updates file associations unless 'lite' is specified.
-      -u : Uninstalls and deregisters this SDK from the host operating system.
-      -v : Turns on verbose logging.
+    Usage: innative-cmd [-r] [-f <FLAG>] [-l <FILE> ... ] [-shared-lib <FILE> ... ] [-o <FILE>] [-serialize [<FILE>]] [-generate-loader] [-v] [-build-sourcemap] [-w <[MODULE:]FUNCTION> ... ] [-sys <MODULE>] [-linker] [-i [lite]] [-u] [-sdk <DIR>] [-obj <DIR>] [-compile-llvm]
+      -r -run: Run the compiled result immediately and display output. Requires a start function.
+      -f -flag -flags <FLAG>: Set a supported flag to true. Flags:
+        strict
+        sandbox
+        whitelist
+        multithreaded
+        debug
+        library
+        llvm
+        homogenize
+        noinit
+        check_stack_overflow
+        check_float_trunc
+        check_memory_access
+        check_indirect_call
+        check_int_division
+        disable_tail_call
+        o0
+        o1
+        o2
+        o3
+        os
+        fastmath
+
+      -l -lib -libs -library <FILE> ... : Links the input files against <FILE>, which must be a static library.
+      -shared-lib -shared-libs -shared-library <FILE> ... : Links the input files against <FILE>, which must be an ELF shared library.
+      -o -out -output <FILE>: Sets the output path for the resulting executable or library.
+      -serialize [<FILE>]: Serializes all modules to .wat files in addition to compiling them. <FILE> can specify the output if only one module is present.
+      -generate-loader: Instead of compiling immediately, creates a loader embedded with all the modules, environments, and settings, which compiles the modules on-demand when run.
+      -v -verbose: Turns on verbose logging.
+      -build-sourcemap: Assumes input files are ELF object files or binaries that contain DWARF debugging information, and creates a source map from them.
+      -w -whitelist <[MODULE:]FUNCTION> ... : whitelists a given C import, does name-mangling if the module is specified.
+      -sys -system <MODULE>: Sets the environment/system module name. Any functions with the module name will have the module name stripped when linking with C functions
+      -linker: Specifies an alternative linker executable to use instead of LLD.
+      -i -install [lite]: Installs this SDK to the host operating system. On Windows, also updates file associations unless 'lite' is specified.
+      -u -uninstall: Uninstalls and deregisters this SDK from the host operating system.
+      -sdk -library-dir <DIR>: Sets the directory that contains the SDK library and data files.
+      -obj -obj-dir -object-dir -intermediate-dir <DIR>: Sets the directory for temporary object files and intermediate compilation results.
+      -compile-llvm
 
 Example usage:
 
     innative-cmd your-module.wasm
     innative-cmd -r your-module.wasm
-    innative-cmd yourfile.wat -f debug o3 -r
+    innative-cmd yourfile.wat -flag debug o3 -run
     innative-cmd your-library.wasm -f library
     
 ## Building
@@ -67,8 +88,15 @@ A `Dockerfile` is included in the source that uses a two-stage build process to 
 A prebuilt version of this image is [available here](https://cloud.docker.com/u/blackhole12/repository/docker/blackhole12/innative)
     
 ## Targeting inNative
- 
-No compiler fully supports inNative, because current WebAssembly compilers target *web embeddings* and make assumptions about which functions are available. For now, try building webassembly modules that have no dependencies, as these can always be run on any webassembly implementation. True C interop is provided via two special compiler functions, `_innative_to_c` and `_innative_from_c`. These can be used to acquire C pointers to WebAssembly memory to pass to other functions, and to convert C pointers into a form that can be manipulated by WebAssembly. **However**, it is not possible to safely manipulate outside memory pointers, so `_innative_` pointers can only be accessed when not in strict mode. inNative also provides a [custom `cref` extension](https://github.com/innative-sdk/innative/wiki/inNative-cref-Extension) that automatically converts WebAssembly indexes into C pointers for external C functions.
+To build a shared library that does not rely on WASI, you can use `wasm_malloc.c` and clang:
+
+    clang your_program.c wasm_malloc.c -o your_program.wasm --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 -Xlinker --no-entry -Xlinker --export-dynamic
+
+inNative supports sourcemaps and, if present, will generate debug info for the original language that was compiled to WebAssembly. With C++, inNative can automatically extract the debug information generated by clang: simply add `-g` (and remove optimizations), and the resulting wasm module will have the necessary debug information embedded inside of it. Compile this webassembly module with the DEBUG flag enabled and inNative will automatically generate debugging information from it.
+
+    clang your_program.c wasm_malloc.c -g -o your_program.wasm --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=0 -Xlinker --no-entry -Xlinker --export-dynamic
+
+No compiler fully supports inNative, because current WebAssembly compilers target *web embeddings* and make assumptions about which functions are available. For now, try building webassembly modules that have no dependencies, as these can always be run on any webassembly implementation. True C interop is provided via two special compiler functions, `_innative_to_c` and `_innative_from_c`. These can be used to acquire C pointers to WebAssembly memory to pass to other functions, and to convert C pointers into a form that can be manipulated by WebAssembly. **However**, it is not possible to safely manipulate outside memory pointers, so using these intrinsics can invalidate the sandbox, and by default you must enable them explicitly using the C Import whitelist. inNative also provides a [custom `cref` extension](https://github.com/innative-sdk/innative/wiki/inNative-cref-Extension) that automatically converts WebAssembly indexes into C pointers for external C functions.
  
 The [WebIDL bindings proposal](https://github.com/WebAssembly/webidl-bindings) will make it easier to target native C environments, and hopefully compilers will make it easier to target non-web embeddings of WebAssembly.
  
@@ -77,7 +105,7 @@ The [WebIDL bindings proposal](https://github.com/WebAssembly/webidl-bindings) w
 inNative is compiled as either a dynamic or static library, and can be integrated into any project as a scripting or plugin engine. While the caveats of C interop still apply, you can still use inNative to run simple webassembly scripts inside your program. How much you trust those webassembly scripts is up to you - if you want proper sandboxing, use the **whitelist** functionality to limit what C functions they can call. After linking the inNative library to your project, use the steps below to compile and call a webassembly module.
  
     // Create the environment, setting the dynamic library flag
-    IRExports exports;
+    INExports exports;
     innative_runtime(&exports);
     Environment* env = (*exports.CreateEnvironment)(1, 0, (!argc ? 0 : argv[0]));
     env->flags |= ENV_LIBRARY; // Add ENV_NO_INIT if you want to manually initialize and cleanup the DLL.

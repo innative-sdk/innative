@@ -80,26 +80,10 @@ namespace innative {
       return (tokens.Peek().id == WatTokens::NAME) ? tokens.Pop() : WatToken{ WatTokens::NONE };
     }
 
-    template<class T> inline static int ReallocArray(const Environment& env, T*& a, varuint32& n)
-    {
-      // We only allocate power of two chunks from our greedy allocator
-      varuint32 i = utility::NextPow2(n++);
-      if(n <= 2 || n == i)
-      {
-        T* old = a;
-        if(!(a = utility::tmalloc<T>(env, n * 2)))
-          return ERR_FATAL_OUT_OF_MEMORY;
-        if(old != nullptr)
-          utility::tmemcpy<T>(a, n * 2, old, n - 1); // Don't free old because it was from a greedy allocator.
-      }
-
-      return ERR_SUCCESS;
-    }
-
     template<class T> inline static int AppendArray(const Environment& env, T item, T*& a, varuint32& n)
     {
       int err;
-      if((err = ReallocArray(env, a, n)) != ERR_SUCCESS)
+      if((err = utility::ReallocArray(env, a, n)) != ERR_SUCCESS)
         return err;
       a[n - 1] = item;
       return ERR_SUCCESS;

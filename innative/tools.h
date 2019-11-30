@@ -18,6 +18,7 @@ namespace innative {
   int AddModuleObject(Environment* env, const Module* m);
   enum IN_ERROR AddWhitelist(Environment* env, const char* module_name, const char* export_name);
   enum IN_ERROR AddEmbedding(Environment* env, int tag, const void* data, uint64_t size);
+  enum IN_ERROR AddCustomExport(Environment* env, const char* symbol);
   enum IN_ERROR FinalizeEnvironment(Environment* env);
   enum IN_ERROR Validate(Environment* env);
   enum IN_ERROR Compile(Environment* env, const char* file);

@@ -343,6 +343,22 @@ namespace innative {
         return false;
       return !fclose(f);
     }
+
+    template<class T> inline static IN_ERROR ReallocArray(const Environment& env, T*& a, varuint32& n)
+    {
+      // We only allocate power of two chunks from our greedy allocator
+      varuint32 i = NextPow2(n++);
+      if(n <= 2 || n == i)
+      {
+        T* old = a;
+        if(!(a = tmalloc<T>(env, n * 2)))
+          return ERR_FATAL_OUT_OF_MEMORY;
+        if(old != nullptr)
+          tmemcpy<T>(a, n * 2, old, n - 1); // Don't free old because it was from a greedy allocator.
+      }
+
+      return ERR_SUCCESS;
+    }
   }
 }
 

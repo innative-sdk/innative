@@ -792,7 +792,7 @@ void CompileTrap(code::Context& context)
   context.builder.CreateUnreachable();
 }
 
-IN_ERROR InsertConditionalTrap(llvmVal* cond, code::Context& context)
+IN_ERROR code::InsertConditionalTrap(llvmVal* cond, code::Context& context)
 {
   // Define a failure block that all errors jump to via a conditional branch which simply traps
   auto trapblock = BB::Create(context.context, "trap_block", context.builder.GetInsertBlock()->getParent());
@@ -2094,6 +2094,23 @@ Func* TopLevelFunction(llvm::LLVMContext& context, llvm::IRBuilder<>& builder, c
   return fn;
 }
 
+void ExportFunction(code::FunctionSet& fn,
+                    Func* (*wrapper)(Func* fn, llvm::StringRef name, const Twine& canonical, code::Context& context,
+                                     llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv),
+                    code::Context* ctx, llvm::StringRef name, const Twine& canonical, llvm::LLVMContext& context)
+{
+  if(!fn.exported)
+  {
+    ABI abi = CURRENT_ABI;
+
+    if(ctx->dbuilder)
+      ctx->builder.SetCurrentDebugLocation(
+        llvm::DILocation::get(context, ctx->init->getSubprogram()->getLine(), 0, ctx->init->getSubprogram()));
+
+    fn.exported = (*wrapper)(fn.imported ? fn.imported : fn.internal, name, canonical, *ctx, Func::ExternalLinkage,
+                             llvm::CallingConv::C);
+  }
+}
 std::string GenFlagString(const Environment& env)
 {
   std::string f = env.flags ? "-flag" : "";
@@ -2485,6 +2502,26 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
                       std::string(!debugname.size() ? "func" : debugname.str()) + "#" +
                         std::to_string(context.functions.size()) + "|" + context.m.name.str(),
                       context);
+
+    auto name      = context.functions.back().internal->getName() + "|#external";
+    auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &HomogenizeFunction : &WrapFunction;
+    ExportFunction(context.functions.back(), wrapperfn, &context, name.str(), name, context.context);
+  }
+
+  {
+    auto ptrTy = context.builder.getInt8PtrTy(0);
+    std::vector<llvm::Constant*> exported;
+
+    std::transform(context.functions.begin(), context.functions.end(), std::back_inserter(exported),
+                   [ptrTy](code::FunctionSet& v) {
+                     return v.exported ? llvm::ConstantExpr::getBitCast(v.exported, ptrTy) :
+                                         llvm::ConstantPointerNull::get(ptrTy);
+                   });
+
+    auto gexported = llvm::ConstantArray::get(llvm::ArrayType::get(ptrTy, context.functions.size()), exported);
+
+    context.exported_functions =
+      new llvm::GlobalVariable(*context.llvm, gexported->getType(), true, llvm::GlobalValue::PrivateLinkage, gexported);
   }
 
   if(context.dbuilder)
@@ -2690,18 +2727,7 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
   }
 
   {
-    auto ptrTy                        = context.builder.getInt8PtrTy(0);
-    std::array<llvm::Type*, 8> fields = {
-      ptrTy,
-      context.builder.getInt32Ty(),
-      context.builder.getInt32Ty(),
-      ptrTy->getPointerTo(),
-      context.builder.getInt32Ty(),
-      ptrTy->getPointerTo(),
-      context.builder.getInt32Ty(),
-      ptrTy->getPointerTo(),
-    };
-    auto MetadataTy = llvm::StructType::get(context.context, fields);
+    auto ptrTy = context.builder.getInt8PtrTy(0);
 
     std::vector<llvm::Constant*> tables;
     std::vector<llvm::Constant*> memories;
@@ -2719,27 +2745,22 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
     auto gtables   = llvm::ConstantArray::get(llvm::ArrayType::get(ptrTy, context.tables.size()), tables);
     auto gmemories = llvm::ConstantArray::get(llvm::ArrayType::get(ptrTy, context.memories.size()), memories);
     auto gglobals  = llvm::ConstantArray::get(llvm::ArrayType::get(ptrTy, context.globals.size()), globals);
-    std::array<llvm::Constant*, 8> values = {
-      llvm::ConstantExpr::getPointerCast(
-        new llvm::GlobalVariable(*context.llvm, gname->getType(), true, llvm::GlobalValue::PrivateLinkage, gname), ptrTy),
+    std::array<llvm::Constant*, 10> values = {
+      new llvm::GlobalVariable(*context.llvm, gname->getType(), true, llvm::GlobalValue::PrivateLinkage, gname),
       context.builder.getInt32(context.m.version),
       context.builder.getInt32(context.tables.size()),
-      llvm::ConstantExpr::getPointerCast(new llvm::GlobalVariable(*context.llvm, gtables->getType(), true,
-                                                                  llvm::GlobalValue::PrivateLinkage, gtables),
-                                         ptrTy->getPointerTo()),
+      new llvm::GlobalVariable(*context.llvm, gtables->getType(), true, llvm::GlobalValue::PrivateLinkage, gtables),
       context.builder.getInt32(context.memories.size()),
-      llvm::ConstantExpr::getPointerCast(new llvm::GlobalVariable(*context.llvm, gmemories->getType(), true,
-                                                                  llvm::GlobalValue::PrivateLinkage, gmemories),
-                                         ptrTy->getPointerTo()),
+      new llvm::GlobalVariable(*context.llvm, gmemories->getType(), true, llvm::GlobalValue::PrivateLinkage, gmemories),
       context.builder.getInt32(context.globals.size()),
-      llvm::ConstantExpr::getPointerCast(new llvm::GlobalVariable(*context.llvm, gglobals->getType(), true,
-                                                                  llvm::GlobalValue::PrivateLinkage, gglobals),
-                                         ptrTy->getPointerTo()),
+      new llvm::GlobalVariable(*context.llvm, gglobals->getType(), true, llvm::GlobalValue::PrivateLinkage, gglobals),
+      context.builder.getInt32(context.functions.size()),
+      context.exported_functions,
     };
     auto metadata = llvm::ConstantStruct::getAnon(values);
-    auto v = new llvm::GlobalVariable(*context.llvm, metadata->getType(), true,
-                             llvm::GlobalValue::LinkageTypes::ExternalLinkage, metadata,
-                             CanonicalName(StringRef(), StringRef::From(IN_METADATA_PREFIX), m_idx));
+    auto v        = new llvm::GlobalVariable(*context.llvm, metadata->getType(), true,
+                                      llvm::GlobalValue::LinkageTypes::ExternalLinkage, metadata,
+                                      CanonicalName(StringRef(), StringRef::From(IN_METADATA_PREFIX), m_idx));
     v->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
   }
 
@@ -2859,18 +2880,8 @@ void ResolveModuleExports(const Environment* env, Module* root, llvm::LLVMContex
     case WASM_KIND_FUNCTION:
       if(!ctx->functions[e->index].exported)
       {
-        ABI abi = CURRENT_ABI;
-
-        if(ctx->dbuilder)
-          ctx->builder.SetCurrentDebugLocation(
-            llvm::DILocation::get(context, ctx->init->getSubprogram()->getLine(), 0, ctx->init->getSubprogram()));
-
         auto name = std::string(e->name.str()) + "|" + m->name.str();
-        ctx->functions[e->index].exported =
-          (*wrapperfn)(ctx->functions[e->index].imported ? ctx->functions[e->index].imported :
-                                                           ctx->functions[e->index].internal,
-                       name, canonical, *ctx, Func::ExternalLinkage, llvm::CallingConv::C);
-
+        ExportFunction(ctx->functions[e->index], wrapperfn, ctx, name, canonical, context);
         ctx->functions[e->index].exported->setDLLStorageClass(
           llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
       }
@@ -3057,13 +3068,20 @@ IN_ERROR innative::CompileEnvironment(const Environment* env, const char* outfil
   {
     if(env->modules[i].cache->start != nullptr)
     {
-      Func* stub =
-        mainctx.llvm->getFunction(env->modules[i].cache->start->getName()); // Catch the case where an import from this
-                                                                            // module is being called from another module
+      auto check = env->modules[i].cache->start->getName();
+
+      // Catch the case where an import from this module is being called from another module
+      Func* stub = mainctx.llvm->getFunction(env->modules[i].cache->start->getName());
       if(!stub)
-        stub = Func::Create(env->modules[i].cache->start->getFunctionType(), env->modules[i].cache->start->getLinkage(),
-                            env->modules[i].cache->start->getName(),
-                            mainctx.llvm); // Create function prototype in main module
+      {
+        auto alias = mainctx.llvm->getNamedAlias(env->modules[i].cache->start->getName());
+        if(alias)
+          stub = llvm::cast<Func>(alias->getAliasee());
+        else
+          stub = Func::Create(env->modules[i].cache->start->getFunctionType(), env->modules[i].cache->start->getLinkage(),
+                              env->modules[i].cache->start->getName(),
+                              mainctx.llvm); // Create function prototype in main module
+      }
       builder.CreateCall(stub, {})->setCallingConv(stub->getCallingConv());
     }
   }

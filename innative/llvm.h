@@ -35,16 +35,16 @@ namespace innative {
 
     struct Block
     {
-      llvm::BasicBlock* block;  // Label
-      llvm::BasicBlock* ifelse; // Label for else statement
-      size_t limit;             // Limit of value stack
-      varsint7 sig;             // Block signature
-      uint8_t op;               // instruction that pushed this label
+      llvm::BasicBlock* block;   // Label
+      llvm::BasicBlock* ifelse;  // Label for else statement
+      size_t limit;              // Limit of value stack
+      varsint7 sig;              // Block signature
+      uint8_t op;                // instruction that pushed this label
       llvm::DILocalScope* scope; // Debug lexical scope for this block
-      BlockResult* results;     // Holds alternative branch results targeting this block
+      BlockResult* results;      // Holds alternative branch results targeting this block
     };
 
-    struct Function
+    struct FunctionSet
     {
       llvm::Function* internal;
       llvm::Function* exported;
@@ -75,22 +75,25 @@ namespace innative {
       llvm::DIType* diI64;
       llvm::DIType* diVoid;
       llvm::DICompileUnit* dcu;
-      llvm::DIFile* dunit; // Source WASM or WAT file
+      llvm::DIFile* dunit;               // Source WASM or WAT file
       std::vector<llvm::DIFile*> dfiles; // sourcemap files
-      Stack<llvm::Value*> values; // Tracks the current value stack
-      Stack<Block> control;       // Control flow stack
+      Stack<llvm::Value*> values;        // Tracks the current value stack
+      Stack<Block> control;              // Control flow stack
       std::vector<llvm::AllocaInst*> locals;
       std::vector<llvm::DISubprogram*> subprograms; // Seperate subprograms for when functions are split across files
       llvm::AllocaInst* memlocal;
       std::vector<llvm::GlobalVariable*> memories;
       std::vector<llvm::GlobalVariable*> tables;
       std::vector<llvm::GlobalVariable*> globals;
-      std::vector<Function> functions;
+      llvm::GlobalVariable* exported_functions;
+      std::vector<FunctionSet> functions;
       llvm::Function* init;
       llvm::Function* exit;
       llvm::Function* start;
       llvm::Function* memgrow;
     };
+
+    IN_ERROR InsertConditionalTrap(llvm::Value* cond, Context& context);
   }
 }
 

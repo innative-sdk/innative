@@ -375,6 +375,10 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
 
     std::vector<std::string> cache = { std::string("/OUT:") + file.u8string(), "/LIBPATH:" + libpath.u8string(),
                                        "/LIBPATH:" + workdir.u8string() };
+
+    for(varuint32 i = 0; i < env->n_exports; ++i)
+      cache.push_back(std::string("/EXPORT:") + env->exports[i]);
+
 #elif defined(IN_PLATFORM_POSIX)
     LLD_FORMAT format                 = LLD_FORMAT::ELF;
     std::vector<const char*> linkargs = {};

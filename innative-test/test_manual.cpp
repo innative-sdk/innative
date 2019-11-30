@@ -18,12 +18,18 @@ void TestHarness::test_manual()
 #endif
   path dll_path = _folder / "manual" IN_LIBRARY_EXTENSION;
 
+  (*_exports.AddWhitelist)(env, "", "_innative_funcptr");
+
   // We can safely manipulate modules ourselves, but anything involving a pointer usually needs to use inNative's special
   // handling functions, which ensure the resulting module is in a valid state.
   Module m   = { INNATIVE_WASM_MAGIC_COOKIE, INNATIVE_WASM_MAGIC_VERSION };
   m.filepath = "manual.wasm.fake"; // This must be set if we want to emit debug information
   int err    = (*_exports.SetIdentifier)(env, &m.name, "manual");
   TEST(!err);
+  err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_IMPORT_FUNCTION, 0);
+  err = (*_exports.SetIdentifier)(env, &m.importsection.imports[0].export_name, "_innative_funcptr");
+  m.importsection.imports[0].kind = WASM_KIND_FUNCTION;
+  m.importsection.imports[0].func_desc.type_index = 1;
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_MEMORY, 0);
   TEST(!err);
@@ -37,7 +43,7 @@ void TestHarness::test_manual()
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_ELEMENT, 0);
   TEST(!err);
   m.element.elements[0].n_elements = 1;
-  varuint32 elems[]                = { 0 };
+  varuint32 elems[]                = { 1 };
   m.element.elements[0].elements   = elems;
   m.element.elements[0].offset.opcode = OP_i32_const;
 
@@ -61,9 +67,22 @@ void TestHarness::test_manual()
   err = (*_exports.InsertModuleReturn)(env, &m.type.functions[0], 0, TE_i32);
   TEST(!err);
 
+  err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_TYPE, 1);
+  TEST(!err);
+  m.type.functions[1].form = TE_func; // Set our function form
+
+  err = (*_exports.InsertModuleReturn)(env, &m.type.functions[1], 0, TE_i64);
+  TEST(!err);
+  err = (*_exports.InsertModuleParam)(env, &m.type.functions[1], 0, 0, TE_i32, 0);
+  TEST(!err);
+
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_FUNCTION, 0);
   TEST(!err);
   m.function.funcdecl[0] = 0; // Refer to our 0th type for this function
+
+  err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_FUNCTION, 1);
+  TEST(!err);
+  m.function.funcdecl[1] = 1; // This is a wrapper around the imported intrinsic
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_CODE, 0);
   TEST(!err);
@@ -94,12 +113,30 @@ void TestHarness::test_manual()
   err = (*_exports.InsertModuleParam)(env, &m.type.functions[0], &m.code.funcbody[0], 1, TE_i32, &info_b);
   TEST(!err);
 
+  err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_CODE, 1);
+  TEST(!err);
+  Instruction call_0 = { OP_call, { 0 } };
+
+  err = (*_exports.InsertModuleInstruction)(env, &m.code.funcbody[1], 0, &get_a);
+  TEST(!err);
+  err = (*_exports.InsertModuleInstruction)(env, &m.code.funcbody[1], 1, &call_0);
+  TEST(!err);
+  err = (*_exports.InsertModuleInstruction)(env, &m.code.funcbody[1], 2, &end);
+  TEST(!err);
+
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_EXPORT, 0);
   TEST(!err);
   err = (*_exports.SetIdentifier)(env, &m.exportsection.exports[0].name, "add");
   TEST(!err);
   m.exportsection.exports[0].kind  = WASM_KIND_FUNCTION;
-  m.exportsection.exports[0].index = 0;
+  m.exportsection.exports[0].index = 1;
+
+  err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_EXPORT, 0);
+  TEST(!err);
+  err = (*_exports.SetIdentifier)(env, &m.exportsection.exports[0].name, "funcptr");
+  TEST(!err);
+  m.exportsection.exports[0].kind  = WASM_KIND_FUNCTION;
+  m.exportsection.exports[0].index = 2;
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_EXPORT, 0);
   TEST(!err);
@@ -132,12 +169,20 @@ void TestHarness::test_manual()
     if(func)
       TEST(func(2, 2) == 4);
 
+    auto funcptr = (decltype(func)(*)(varsint32))(*_exports.LoadFunction(assembly, "manual", "funcptr"));
+    TEST(funcptr);
+    if(funcptr)
+      TEST(funcptr(1) == func);
+
     INModuleMetadata* metadata = (*_exports.GetModuleMetadata)(assembly, 0);
     TEST(metadata);
     if(metadata)
     {
       TEST(metadata->version == 1);
       TEST(!STRICMP(metadata->name, "manual"));
+      TEST(metadata->n_functions > 1);
+      if(metadata->n_functions > 1 && metadata->functions)
+        TEST(metadata->functions[1] == (IN_Entrypoint)func);
     }
 
     auto mem = (*_exports.LoadMemoryIndex)(assembly, 0, 0);

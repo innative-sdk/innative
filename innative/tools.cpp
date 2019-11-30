@@ -225,6 +225,21 @@ IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, uin
   return ERR_SUCCESS;
 }
 
+IN_ERROR innative::AddCustomExport(Environment* env, const char* symbol)
+{
+  if(!env || !symbol)
+    return ERR_FATAL_NULL_POINTER;
+
+  IN_ERROR err = utility::ReallocArray(*env, env->exports, env->n_exports);
+  if(err < 0)
+    return err;
+
+  env->exports[env->n_exports - 1] = AllocString(*env, symbol);
+  if(!env->exports[env->n_exports - 1])
+    return ERR_FATAL_OUT_OF_MEMORY;
+  return ERR_SUCCESS;
+}
+
 IN_ERROR innative::FinalizeEnvironment(Environment* env)
 {
   if(env->cimports)
@@ -362,7 +377,7 @@ IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const
 {
   INGlobal* ref =
     (INGlobal*)LoadDLLFunction(assembly,
-                                   utility::CanonicalName(StringRef::From(module_name), StringRef::From(table)).c_str());
+                               utility::CanonicalName(StringRef::From(module_name), StringRef::From(table)).c_str());
   if(ref != nullptr && index < (reinterpret_cast<uint64_t*>(ref->table)[-1] / sizeof(INTableEntry)))
     return ref->table[index].func;
   return nullptr;
