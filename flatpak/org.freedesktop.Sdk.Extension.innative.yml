@@ -31,7 +31,6 @@ modules:
                   - type: git
                     url: https://github.com/innative-sdk/innative
                     commit: 99760fc9c0f08e940f0888122bb44e0ec5321d82
-                    # commit: 3ba651ebde1bdd735a5ffd52de50cbfd2348980e
                   - type: archive
                     url: https://github.com/innative-sdk/llvm-project/releases/download/v9.0.0-innative/llvm-9.0.0-x86-64-linux-ubuntu-18.tar.gz
                     sha1: 3b6ec7d39f02b0e15c70c717e53a2b3513720fe4 
