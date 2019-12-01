@@ -79,6 +79,15 @@ Due to changes in LLVM 9.x, inNative currently requires C++17 to build, and only
 ### Linux
 Once you've installed the LLVM/LLD binaries or built it from source, run `make` from the top level source directory to build all inNative projects. Use `make clean` to wipe the results, which may sometimes be necessary if `make` does not recognize a dependency changed.
 
+Any Linux system configured with [flatpak](https://flatpak.org/setup/) can build a standalone SDK bundle and install it to their system for development inside containers:
+
+    cd flatpak
+    ./build-flatpak-bundle.sh
+    flatpak --user --assumeyes install org.freedesktop.Sdk.Extension.innative.flatpak
+    flatpak run --command=sh --devel $APP
+    . /usr/lib/sdk/innative/enable.sh
+    innative-cmd
+
 ### Build benchmarks
 The benchmarks are already compiled to webassembly, but if you want to recompile them yourself, you can run `make benchmarks` from the root directory, assuming you have a webassembly-enabled compiler available. If you are on windows, it is recommended you simply use WSL to build the benchmarks.
 

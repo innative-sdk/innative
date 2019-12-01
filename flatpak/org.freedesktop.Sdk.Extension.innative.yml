@@ -1,0 +1,49 @@
+id: org.freedesktop.Sdk.Extension.innative
+branch: '19.08'
+runtime: org.freedesktop.Sdk
+runtime-version: '19.08'
+build-extension: true
+sdk: org.freedesktop.Sdk
+appstream-compose: false
+modules:
+        - name: innative
+          buildsystem: simple
+          build-commands:
+                  - mkdir -p llvm
+                  - mv bin lib include llvm
+                  - mkdir bin
+                  - mv llvm bin
+                  - sed -i "s@c++1.@c++17@g" innative{,-cmd}/Makefile 
+                  - sed -i "s@-lstdc++fs@@" innative-{cmd,test}/Makefile
+                  - make
+                  - install -d /usr/lib/sdk/innative/bin
+                  - install -d /usr/lib/sdk/innative/lib
+                  - install -d /usr/lib/sdk/innative/spec/test
+                  - cp -r spec /usr/lib/sdk/innative/spec
+                  - cp bin/{innative-cmd,innative-test} /usr/lib/sdk/innative/bin
+                  - cp bin/{innative-env.a,innative-env-d.a,innative-test-embedding.a} /usr/lib/sdk/innative/lib
+                  - cp bin/libinnative.so /usr/lib/sdk/innative/lib/libinnative.so.0.1.3
+                  - cp -r innative-test /usr/lib/sdk/innative/innative-test
+                  - cp -r scripts /usr/lib/sdk/innative/scripts
+                  - cp -r innative /usr/lib/sdk/innative/innative
+                  - ln -s libinnative.so.0.1.3 /usr/lib/sdk/innative/lib/libinnative.so
+          sources:
+                  - type: git
+                    url: https://github.com/innative-sdk/innative
+                    commit: 99760fc9c0f08e940f0888122bb44e0ec5321d82
+                  - type: archive
+                    url: https://github.com/innative-sdk/llvm-project/releases/download/v9.0.0-innative/llvm-9.0.0-x86-64-linux-ubuntu-18.tar.gz
+                    sha1: 3b6ec7d39f02b0e15c70c717e53a2b3513720fe4 
+                  - type: archive
+                    url: https://github.com/innative-sdk/llvm-project/releases/download/v9.0.0-innative/lld-9.0.0-x86-64-linux-ubuntu-18.tar.gz
+                    sha1: f759b1973dbe51ecd6d8bac315b93dbb142331e9
+        - name: scripts
+          sources:
+                  - type: script
+                    commands:
+                    - export INNATIVEROOT=/usr/lib/sdk/innative
+                    - export PATH=${PATH}:${INNATIVEROOT}/bin
+                    dest-filename: enable.sh
+          buildsystem: simple
+          build-commands:
+                 - cp enable.sh /usr/lib/sdk/innative         
