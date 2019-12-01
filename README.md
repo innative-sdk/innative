@@ -86,7 +86,7 @@ Any Linux system configured with [flatpak](https://flatpak.org/setup/) can build
     flatpak --user --assumeyes install org.freedesktop.Sdk.Extension.innative.flatpak
     flatpak run --command=sh --devel $APP
     . /usr/lib/sdk/innative/enable.sh
-    innative-cmd --help
+    innative-cmd
 
 ### Build benchmarks
 The benchmarks are already compiled to webassembly, but if you want to recompile them yourself, you can run `make benchmarks` from the root directory, assuming you have a webassembly-enabled compiler available. If you are on windows, it is recommended you simply use WSL to build the benchmarks.
