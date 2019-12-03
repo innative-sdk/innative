@@ -47,7 +47,7 @@ typedef struct IN__TABLE_ENTRY
   varuint32 type;
 } INTableEntry;
 
-// Allows C code to access a webassembly global, provided it knows the correct type.
+// Allows C code to access a WebAssembly global, provided it knows the correct type.
 typedef union IN__GLOBAL_TYPE
 {
   uint32_t i32;
@@ -58,7 +58,7 @@ typedef union IN__GLOBAL_TYPE
   INTableEntry* table;
 } INGlobal;
 
-// Stores metadata about a webassembly module compiled into the binary
+// Stores metadata about a WebAssembly module compiled into the binary
 typedef struct IN__MODULE_METADATA
 {
   const char* name;
@@ -82,7 +82,7 @@ typedef struct IN__EXPORTS
   /// \param arg0 the first argument sent to the program. Used to determine binary location on POSIX systems.
   Environment* (*CreateEnvironment)(unsigned int modules, unsigned int maxthreads, const char* arg0);
 
-  /// Adds a module to an environment. This could happen asyncronously if multithreading is enabled, in which case
+  /// Adds a module to an environment. This could happen asynchronously if multithreading is enabled, in which case
   // 'err' won't be valid until FinalizeEnvironment() is called to resolve all pending module loads.
   /// \param env The environment to modify.
   /// \param data Either a pointer to the module in memory, if size is non-zero, or a UTF8 encoded null-terminated string
@@ -90,27 +90,25 @@ typedef struct IN__EXPORTS
   /// \param size The length of the memory that the data pointer points to, or zero if the data pointer is actually a UTF8
   /// encoded null terminated string.
   /// \param name A name to use for the module. If the module data does not contain a name, this will be used.
-  /// \param err A pointer to an integer that recieves an error code should the function fail. Not valid until
+  /// \param err A pointer to an integer that receives an error code should the function fail. Not valid until
   /// FinalizeEnvironment() is called.
   void (*AddModule)(Environment* env, const void* data, uint64_t size, const char* name, int* err);
 
-  /// Adds a prebuilt module object to the environment. This happens syncronously, regardless of multithreading flags.
+  /// Adds a prebuilt module object to the environment. This happens synchronously, regardless of multithreading flags.
   /// \param env The environment to modify.
   /// \param m The module to add to the environment. This must be a valid Module object or the validation step will fail.
   /// The module will be copied into the environment - further modifications to the given module pointer won't affect the
   /// environment's internal copy.
   int (*AddModuleObject)(Environment* env, const Module* m);
 
-  /// Adds a whitelist entry to the environment. This will only be used if the whitelist is enabled via the flags.
-  /// \param env The environment to modify.
-  /// \param module_name The name of a module, in case the C function is actually a name-mangled webassembly function. This
-  /// parameter should be null for standard C functions.
-  /// \param export_name The name of the function to add to the
-  /// whitelist. Must be a valid UTF8 webassembly function name.
+  /// Adds a whitelist entry to the environment. This will only be used if the whitelist is enabled via the ENV_WHITELIST
+  /// flag. \param env The environment to modify. \param module_name The name of a module, in case the C function is
+  /// actually a name-mangled WebAssembly function. This parameter should be null for standard C functions. \param
+  /// export_name The name of the function to add to the whitelist. Must be a valid UTF8 WebAssembly function name.
   enum IN_ERROR (*AddWhitelist)(Environment* env, const char* module_name, const char* export_name);
 
   /// Adds an embedding to the environment. This is usually a static or shared C library that exposes C functions that the
-  /// webassembly modules can call.
+  /// WebAssembly modules can call.
   /// \param env The environment to modify.
   /// \param tag An IN_EMBEDDING_TAGS enumeration option that provides an optional hint for the type of file. To
   ///  automatically choose, set to 0.
@@ -124,7 +122,7 @@ typedef struct IN__EXPORTS
   /// \param symbol The null-terminated name of the symbol to export.
   enum IN_ERROR (*AddCustomExport)(Environment* env, const char* symbol);
 
-  /// Finalizes the environment, blocking until all modules have finished loading (in case of any asyncronous loads) and
+  /// Finalizes the environment, blocking until all modules have finished loading (in case of any asynchronous loads) and
   /// ensures all configuration data is loaded.
   /// \param env The environment to finalize
   enum IN_ERROR (*FinalizeEnvironment)(Environment* env);
@@ -139,57 +137,56 @@ typedef struct IN__EXPORTS
   /// \param file The path of the output file that is produced.
   enum IN_ERROR (*Compile)(Environment* env, const char* file);
 
-  /// Loads a webassembly binary (usually a dynamic library) produced by Compile into memory, allowing you to load functions
+  /// Loads a WebAssembly binary (usually a dynamic library) produced by Compile into memory, allowing you to load functions
   /// and other exported symbols.
   /// \param file the path of the file to load.
   void* (*LoadAssembly)(const char* file);
 
-  /// Frees a webassembly binary, unloading it from memory and performing any cleanup required.
-  /// \param assembly A pointer to a webassembly binary loaded by LoadAssembly.
+  /// Frees a WebAssembly binary, unloading it from memory and performing any cleanup required.
+  /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   void (*FreeAssembly)(void* assembly);
 
-  /// Gets a function from a webassembly binary that has been loaded into memory. This function cannot determine the type
+  /// Gets a function from a WebAssembly binary that has been loaded into memory. This function cannot determine the type
   /// signature, you must cast it manually to the correct function type.
-  /// \param assembly A pointer to a webassembly binary loaded by LoadAssembly.
+  /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   /// \param module_name The name of the module the function is exported from.
-  /// \param function The name of the function.
-  IN_Entrypoint (*LoadFunction)(void* assembly, const char* module_name,
-                                const char* function); // if function is null, loads the entrypoint function
+  /// \param function The name of the function. If null, loads the entrypoint function.
+  IN_Entrypoint (*LoadFunction)(void* assembly, const char* module_name, const char* function);
 
   /// Gets a function pointer from a table, given the specified index. If the index is out of bounds, returns null.
-  /// \param assembly A pointer to a webassembly binary loaded by LoadAssembly.
+  /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   /// \param module_name The name of the module the table is exported from.
   /// \param function The name of the table the function pointer belongs to.
   /// \param index The index of the function pointer. If this is out of bounds, the function returns null.
   IN_Entrypoint (*LoadTable)(void* assembly, const char* module_name, const char* table, varuint32 function_index);
 
-  /// Gets a pointer to a global from a webassembly binary loaded by LoadAssembly, which can potentially be modified if it
+  /// Gets a pointer to a global from a WebAssembly binary loaded by LoadAssembly, which can potentially be modified if it
   /// is mutable (but this function cannot determine whether it was intended to be mutable).
-  /// \param assembly A pointer to a webassembly binary loaded by LoadAssembly.
+  /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   /// \param module_name The name of the module the global is exported from.
   /// \param export_name The name of the global that has been exported.
   INGlobal* (*LoadGlobal)(void* assembly, const char* module_name, const char* export_name);
 
-  /// Gets the metadata associated with the module at the given zero-based index
-  /// \param assembly A pointer to a webassembly binary loaded by LoadAssembly.
+  /// Gets the metadata associated with the module at the given zero-based index.
+  /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   /// \param module_index A zero-based index. If this is out-of-bounds, the function returns null.
   INModuleMetadata* (*GetModuleMetadata)(void* assembly, uint32_t module_index);
 
   /// Gets a function pointer from a table, given the specified index. This function has bounds checking.
-  /// \param assembly A pointer to a webassembly binary loaded by LoadAssembly.
+  /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   /// \param module_index The index of the module the table is exported from.
   /// \param table_index The index of the table the function pointer belongs to.
   /// \param function_index The index of the function pointer.
   IN_Entrypoint (*LoadTableIndex)(void* assembly, uint32_t module_index, uint32_t table_index, varuint32 function_index);
 
   /// Gets a global value at the specified index, or returns null if the index is out of bounds.
-  /// \param assembly A pointer to a webassembly binary loaded by LoadAssembly.
+  /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   /// \param module_index The index of the module the table is exported from.
   /// \param global_index The index of the global to retrieve.
   INGlobal* (*LoadGlobalIndex)(void* assembly, uint32_t module_index, uint32_t global_index);
 
   /// Gets a linear memory global at the specified index, or returns null if the index is out of bounds.
-  /// \param assembly A pointer to a webassembly binary loaded by LoadAssembly.
+  /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   /// \param module_index The index of the module the table is exported from.
   /// \param global_index The index of the linear memory to retrieve.
   INGlobal* (*LoadMemoryIndex)(void* assembly, uint32_t module_index, uint32_t memory_index);
@@ -232,7 +229,7 @@ typedef struct IN__EXPORTS
   /// \param m The index of the in the given environment that will be serialized.
   /// \param out If 'len' is zero, the path to an output file. Otherwise, a pointer to an in-memory buffer that will contain
   /// the serialized result. If null, defaults to a file called '<module_name>.wat' in the current working directory
-  /// /param len If 'len' is nonzero and out is not null, then this should be the length of the buffer pointed to by out
+  /// \param len If 'len' is nonzero and out is not null, then this should be the length of the buffer pointed to by out
   int (*SerializeModule)(Environment* env, size_t m, const char* out, size_t* len);
 
   /// Loads a source map from the given path or memory location into the module at index 'm'
