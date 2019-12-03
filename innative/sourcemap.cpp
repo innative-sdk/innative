@@ -170,7 +170,15 @@ IN_ERROR sourcemap::ParseArray(const Environment& env, const char*& data, const 
 {
   SkipWhitespace(data, end);
   if(data >= end || *data != '[')
-    return ERR_MAP_EXPECTED_OPEN_BRACKET;
+  {
+    if(data + 4 > end || STRNICMP(data, "null", 4) != 0)
+      return ERR_MAP_EXPECTED_OPEN_BRACKET;
+    data += 4;
+    out   = 0;
+    count = 0;
+    return ERR_SUCCESS;
+  }
+
   if(data + 1 >= end)
     return ERR_MAP_EXPECTED_CLOSE_BRACKET;
 
