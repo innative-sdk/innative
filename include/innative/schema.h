@@ -20,7 +20,7 @@
 #define kh_exist2(h, x) ((x < kh_end(h)) && kh_exist(h, x))
 
 #ifdef __cplusplus
-#include <string>
+  #include <string>
 extern "C" {
 #endif
 
@@ -446,7 +446,7 @@ typedef struct IN_WASM_ENVIRONMENT
   int loglevel;                    // IN_LOG_LEVEL
   FILE* log;                       // Output stream for log messages
   void (*wasthook)(void*);         // Optional hook for WAST debugging cases
-  const char** exports; // Use AddCustomExport() to manage this list
+  const char** exports;            // Use AddCustomExport() to manage this list
   varuint32 n_exports;
 
   struct kh_modules_s* modulemap;

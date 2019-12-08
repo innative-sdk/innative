@@ -4,12 +4,12 @@
 #include "internal.h"
 
 #ifdef IN_PLATFORM_WIN32
-#include "../innative/win32.h"
+  #include "../innative/win32.h"
 #elif defined(IN_PLATFORM_POSIX)
-#include <unistd.h>
-#include <sys/mman.h>
+  #include <unistd.h>
+  #include <sys/mman.h>
 #else
-#error unknown platform!
+  #error unknown platform!
 #endif
 
 #ifdef IN_PLATFORM_WIN32
@@ -23,7 +23,7 @@ const int SYSCALL_MREMAP = 25;
 const int SYSCALL_EXIT   = 60;
 const int MREMAP_MAYMOVE = 1;
 
-#ifdef IN_CPU_x86_64
+  #ifdef IN_CPU_x86_64
 IN_COMPILER_DLLEXPORT extern IN_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2,
                                                                        size_t p3, size_t p4, size_t p5, size_t p6)
 {
@@ -36,7 +36,7 @@ IN_COMPILER_DLLEXPORT extern IN_COMPILER_NAKED void* _innative_syscall(size_t sy
                  "movq 8(%rsp), %r9\n\t"
                  "syscall\n\t"
                  "ret");
-#elif defined(IN_CPU_x86)
+  #elif defined(IN_CPU_x86)
 __asm volatile(".cfi_startproc\n"
                "pushl %ebp\n\t"
                ".cfi_adjust_cfa_offset 4\n\t"
@@ -72,7 +72,7 @@ __asm volatile(".cfi_startproc\n"
                ".cfi_restore %ebp\n\t"
                "ret\n\t"
                ".cfi_endproc");
-#elif defined(IN_CPU_ARM)
+  #elif defined(IN_CPU_ARM)
 __asm volatile("mov	ip, sp\n\t"
                "push{ r4, r5, r6, r7 }\n\t"
                "cfi_adjust_cfa_offset(16)\n\t"
@@ -94,13 +94,13 @@ __asm volatile("mov	ip, sp\n\t"
                "cfi_restore(r7)\n\t"
                "cmn	r0, #4096\n\t"
                "it	cc\n\t"
-#ifdef ARCH_HAS_BX
+    #ifdef ARCH_HAS_BX
                "bxcc lr\n\t"
-#else
+    #else
                "movcc pc, lr\n\t"
-#endif
+    #endif
 );
-#elif defined(IN_CPU_ARM64)
+  #elif defined(IN_CPU_ARM64)
 __asm volatile("uxtw        x8, w0\n\t"
                "mov        x0, x1\n\t"
                "mov        x1, x2\n\t"
@@ -112,7 +112,7 @@ __asm volatile("uxtw        x8, w0\n\t"
                "svc        0x0\n\t"
                "cmn        x0, #4095\n\t"
                "RET");
-#elif defined(IN_CPU_POWERPC) || defined(IN_CPU_POWERPC64)
+  #elif defined(IN_CPU_POWERPC) || defined(IN_CPU_POWERPC64)
 __asm volatile("mr   r0,r3\n\t"
                "mr   r3,r4\n\t"
                "mr   r4,r5\n\t"
@@ -122,35 +122,35 @@ __asm volatile("mr   r0,r3\n\t"
                "mr   r8,r9\n\t"
                "sc\n\t"
                "bnslr+\n\t");
-#elif defined(IN_CPU_MIPS64)
+  #elif defined(IN_CPU_MIPS64)
 
-#if _MIPS_SIM == _ABI64 || _MIPS_SIM == _ABIN32
-#define SZREG 8
-#else
-#define SZREG 4
-#endif
+    #if _MIPS_SIM == _ABI64 || _MIPS_SIM == _ABIN32
+      #define SZREG 8
+    #else
+      #define SZREG 4
+    #endif
 
-#if(_MIPS_SIM == _ABIO32 && _MIPS_SZPTR == 32)
-#define PTR_ADDIU addiu
-#endif
-#if _MIPS_SIM == _ABIN32
-#if !defined __mips_isa_rev || __mips_isa_rev < 6
-#define PTR_ADDIU addi /* no u */
-#else
-#define PTR_ADDIU addiu
-#endif
-#endif
-#if(_MIPS_SIM == _ABIO32 && _MIPS_SZPTR == 64 /* o64??? */) || _MIPS_SIM == _ABI64
-#define PTR_ADDIU daddiu
-#endif
+    #if(_MIPS_SIM == _ABIO32 && _MIPS_SZPTR == 32)
+      #define PTR_ADDIU addiu
+    #endif
+    #if _MIPS_SIM == _ABIN32
+      #if !defined __mips_isa_rev || __mips_isa_rev < 6
+        #define PTR_ADDIU addi /* no u */
+      #else
+        #define PTR_ADDIU addiu
+      #endif
+    #endif
+    #if(_MIPS_SIM == _ABIO32 && _MIPS_SZPTR == 64 /* o64??? */) || _MIPS_SIM == _ABI64
+      #define PTR_ADDIU daddiu
+    #endif
 
-#if(SZREG == 4)
-#define REG_S sw
-#define REG_L lw
-#else
-#define REG_S sd
-#define REG_L ld
-#endif
+    #if(SZREG == 4)
+      #define REG_S sw
+      #define REG_L lw
+    #else
+      #define REG_S sd
+      #define REG_L ld
+    #endif
 
 __asm volatile(".mask 0x00010000, -SZREG"
                ".fmask 0x00000000, 0"
@@ -172,22 +172,22 @@ __asm volatile(".mask 0x00010000, -SZREG"
                "PTR_ADDIU sp, SZREG"
                "cfi_adjust_cfa_offset (-SZREG)"
                "ret");
-#else
-#error unsupported architecture!
-#endif
+  #else
+    #error unsupported architecture!
+  #endif
 }
 #endif
 
 IN_COMPILER_DLLEXPORT extern void _innative_internal_abort()
 {
 #ifdef IN_COMPILER_MSC
-#if defined(IN_CPU_x86_64) || defined(IN_CPU_x86)
+  #if defined(IN_CPU_x86_64) || defined(IN_CPU_x86)
   __ud2();
-#elif defined(IN_CPU_ARM)
+  #elif defined(IN_CPU_ARM)
   __trap(-1);
-#elif defined(IN_CPU_ARM64)
+  #elif defined(IN_CPU_ARM64)
   __break(-1);
-#endif
+  #endif
   __fastfail(FAST_FAIL_FATAL_APP_EXIT);
 #else
   __builtin_trap();
@@ -204,7 +204,7 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_write_out(const void* buf, 
   size_t cast = 1;
   _innative_syscall(SYSCALL_WRITE, (void*)cast, (size_t)buf, num, 0, 0, 0);
 #else
-#error unknown platform!
+  #error unknown platform!
 #endif
 }
 
@@ -270,7 +270,7 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
     if((void*)info >= (void*)0xfffffffffffff001) // This is a syscall error from -4095 to -1
       return 0;
 #else
-#error unknown platform!
+  #error unknown platform!
 #endif
   }
   else if(!max || i <= max)
@@ -288,7 +288,7 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
     if((void*)info >= (void*)0xfffffffffffff001) // This is a syscall error from -4095 to -1
       return 0;
 #else
-#error unknown platform!
+  #error unknown platform!
 #endif
   }
 
@@ -315,7 +315,7 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_free_memory(void* p)
 #elif defined(IN_PLATFORM_POSIX)
     _innative_syscall(SYSCALL_MUNMAP, info - 1, info[-1], 0, 0, 0, 0);
 #else
-#error unknown platform!
+  #error unknown platform!
 #endif
   }
 }

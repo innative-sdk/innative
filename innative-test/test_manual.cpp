@@ -28,7 +28,7 @@ void TestHarness::test_manual()
   TEST(!err);
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_IMPORT_FUNCTION, 0);
   err = (*_exports.SetIdentifier)(env, &m.importsection.imports[0].export_name, "_innative_funcptr");
-  m.importsection.imports[0].kind = WASM_KIND_FUNCTION;
+  m.importsection.imports[0].kind                 = WASM_KIND_FUNCTION;
   m.importsection.imports[0].func_desc.type_index = 1;
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_MEMORY, 0);
@@ -42,9 +42,9 @@ void TestHarness::test_manual()
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_ELEMENT, 0);
   TEST(!err);
-  m.element.elements[0].n_elements = 1;
-  varuint32 elems[]                = { 1 };
-  m.element.elements[0].elements   = elems;
+  m.element.elements[0].n_elements    = 1;
+  varuint32 elems[]                   = { 1 };
+  m.element.elements[0].elements      = elems;
   m.element.elements[0].offset.opcode = OP_i32_const;
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_GLOBAL, 0);
@@ -169,7 +169,7 @@ void TestHarness::test_manual()
     if(func)
       TEST(func(2, 2) == 4);
 
-    auto funcptr = (decltype(func)(*)(varsint32))(*_exports.LoadFunction(assembly, "manual", "funcptr"));
+    auto funcptr = (decltype(func) (*)(varsint32))(*_exports.LoadFunction(assembly, "manual", "funcptr"));
     TEST(funcptr);
     if(funcptr)
       TEST(funcptr(1) == func);
@@ -197,7 +197,8 @@ void TestHarness::test_manual()
     auto tablefunc = (varsint32(*)(varsint32, varsint32))(*_exports.LoadTableIndex)(assembly, 0, 0, 0);
     TEST(tablefunc);
     if(tablefunc)
-      TEST(tablefunc != nullptr); // Note: This is the internal fastcc call, not the __cdecl exported wrapper, so it is not safe to call
+      TEST(tablefunc !=
+           nullptr); // Note: This is the internal fastcc call, not the __cdecl exported wrapper, so it is not safe to call
 
     auto tablefunc2 = (varsint32(*)(varsint32, varsint32))(*_exports.LoadTable)(assembly, "manual", "table_test", 0);
     TEST(tablefunc2);

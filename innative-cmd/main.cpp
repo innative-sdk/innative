@@ -11,7 +11,7 @@
 #include "../innative/filesys.h"
 
 #ifdef IN_PLATFORM_WIN32
-#include "../innative/win32.h"
+  #include "../innative/win32.h"
 
 inline std::unique_ptr<uint8_t[]> LoadFile(const path& file, long& sz)
 {
@@ -576,11 +576,11 @@ int main(int argc, char* argv[])
         std::cout << "Failed to end resource update!" << std::endl;
     };
 
-#ifdef IN_DEBUG
+  #ifdef IN_DEBUG
     std::string exe = "innative-loader-d" IN_EXE_EXTENSION;
-#else
+  #else
     std::string exe = "innative-loader" IN_EXE_EXTENSION;
-#endif
+  #endif
     if(!copy_file(GetProgramPath() / exe, commandline.output_file.value, copy_options::overwrite_existing))
     {
       std::cout << "Could not find or copy loader EXE!" << std::endl;

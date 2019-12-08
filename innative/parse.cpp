@@ -491,9 +491,9 @@ IN_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const E
 
 IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, const Environment& env)
 {
-  f.debug      = { 1, (unsigned int)s.pos };
-  IN_ERROR err = ParseVarUInt32(s, f.body_size);
-  size_t end   = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
+  f.debug       = { 1, (unsigned int)s.pos };
+  IN_ERROR err  = ParseVarUInt32(s, f.body_size);
+  size_t end    = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
   varuint32 idx = &f - m.code.funcbody;
   if(idx >= m.function.n_funcdecl)
     return ERR_FUNCTION_BODY_MISMATCH;
@@ -794,8 +794,9 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
                                                                                            env);
       break;
     case WASM_SECTION_CODE:
-      err = Parse<FunctionBody, Module&, const Environment&>::template Array<&ParseFunctionBody>(
-        s, m.code.funcbody, m.code.n_funcbody, env, m, env);
+      err = Parse<FunctionBody, Module&, const Environment&>::template Array<&ParseFunctionBody>(s, m.code.funcbody,
+                                                                                                 m.code.n_funcbody, env, m,
+                                                                                                 env);
       break;
     case WASM_SECTION_DATA:
       err = Parse<DataInit, const Environment&>::template Array<&ParseDataInit>(s, m.data.data, m.data.n_data, env, env);

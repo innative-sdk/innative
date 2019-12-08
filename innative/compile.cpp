@@ -116,6 +116,23 @@ const SourceMapSegment* GetMappedSegment(code::Context& context, unsigned int li
   return context.m.sourcemap ? GetSourceMapSegment(context.m.sourcemap, line, column) : nullptr;
 }
 
+llvm::DIFile* ResolveMappedSegment(code::Context& context, unsigned int& line, unsigned int& column)
+{
+  auto file = context.dunit;
+
+  if(context.m.sourcemap)
+  {
+    if(auto segment = GetMappedSegment(context, line, column))
+    {
+      line   = (unsigned int)segment->original_line;
+      column = (unsigned int)segment->original_column;
+      file   = context.dfiles[segment->source_index];
+    }
+  }
+
+  return file;
+}
+
 llvm::DILocation* GetMappedLocation(code::Context& context, unsigned int line, unsigned int column,
                                     llvm::DILocalScope* scope)
 {
@@ -250,14 +267,14 @@ Func* HomogenizeFunction(Func* fn, llvm::StringRef name, const Twine& canonical,
   if(context.dbuilder && fn->getSubprogram())
     FunctionDebugInfo(wrap, name, context, true, false, fn->getSubprogram()->getFile(), fn->getSubprogram()->getLine(), 0);
 
+  if(context.dbuilder && wrap->getSubprogram())
+    context.builder.SetCurrentDebugLocation(
+      llvm::DILocation::get(context.context, wrap->getSubprogram()->getLine(), 0, wrap->getSubprogram()));
+
   auto prev = context.builder.GetInsertBlock();
 
   BB* bb = BB::Create(context.context, "homogenize_block", wrap);
   context.builder.SetInsertPoint(bb);
-
-  if(context.dbuilder && wrap->getSubprogram())
-    context.builder.SetCurrentDebugLocation(
-      llvm::DILocation::get(context.context, wrap->getSubprogram()->getLine(), 0, wrap->getSubprogram()));
 
   vector<llvmVal*> values;
   int i = 0;
@@ -1882,15 +1899,11 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
     auto line   = body.debug.line;
     auto column = body.debug.column;
     auto file   = context.dunit;
-
-    if(context.m.sourcemap && body.n_body > 0)
+    if(body.n_body > 0)
     {
-      if(auto segment = GetMappedSegment(context, body.body[0].line, body.body[0].column))
-      {
-        line   = (unsigned int)segment->original_line;
-        column = (unsigned int)segment->original_column;
-        file   = context.dfiles[segment->source_index];
-      }
+      line   = body.body[0].line;
+      column = body.body[0].column;
+      file   = ResolveMappedSegment(context, line, column);
     }
 
     FunctionDebugInfo(fn, name + "|" + context.m.name.str(), context, true, false, file, line, column);
@@ -2101,14 +2114,14 @@ void ExportFunction(code::FunctionSet& fn,
 {
   if(!fn.exported)
   {
-    ABI abi = CURRENT_ABI;
+    ABI abi   = CURRENT_ABI;
+    auto base = fn.imported ? fn.imported : fn.internal;
 
-    if(ctx->dbuilder)
+    if(ctx->dbuilder && base->getSubprogram())
       ctx->builder.SetCurrentDebugLocation(
-        llvm::DILocation::get(context, ctx->init->getSubprogram()->getLine(), 0, ctx->init->getSubprogram()));
+        llvm::DILocation::get(context, base->getSubprogram()->getLine(), 0, base->getSubprogram()));
 
-    fn.exported = (*wrapper)(fn.imported ? fn.imported : fn.internal, name, canonical, *ctx, Func::ExternalLinkage,
-                             llvm::CallingConv::C);
+    fn.exported = (*wrapper)(base, name, canonical, *ctx, Func::ExternalLinkage, llvm::CallingConv::C);
   }
 }
 std::string GenFlagString(const Environment& env)
@@ -2351,10 +2364,8 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
                                   Func::ExternalLinkage, "_innative_internal_env_free_memory", context.llvm);
 
   if(context.dbuilder)
-  {
     FunctionDebugInfo(context.init, "innative_internal_init|" + std::string(context.m.name.str()), context, true, true,
                       context.dunit, 0, 0);
-  }
 
   context.functions.reserve(context.m.importsection.functions + context.m.function.n_funcdecl);
   context.tables.reserve(context.m.importsection.tables - context.m.importsection.functions + context.m.table.n_tables);
@@ -2495,13 +2506,23 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
     if(index >= context.m.type.n_functions)
       return ERR_INVALID_TYPE_INDEX;
 
-    auto debugname = context.m.code.funcbody[i].debug.name;
+    auto debug = context.m.code.funcbody[i].debug;
     context.functions.emplace_back();
     context.functions.back().internal =
       CompileFunction(context.m.type.functions[index],
-                      std::string(!debugname.size() ? "func" : debugname.str()) + "#" +
+                      std::string(!debug.name.size() ? "func" : debug.name.str()) + "#" +
                         std::to_string(context.functions.size()) + "|" + context.m.name.str(),
                       context);
+
+    if(context.dbuilder)
+    {
+      auto line   = debug.line;
+      auto column = debug.column;
+      auto file   = ResolveMappedSegment(context, line, column);
+
+      FunctionDebugInfo(context.functions.back().internal, context.functions.back().internal->getName(), context, true,
+                        false, file, line, column);
+    }
 
     auto name      = context.functions.back().internal->getName() + "|#external";
     auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &HomogenizeFunction : &WrapFunction;
@@ -3129,19 +3150,9 @@ IN_ERROR innative::CompileEnvironment(const Environment* env, const char* outfil
     builder.SetInsertPoint(entryblock);
     if(mainctx.dbuilder)
     {
-      auto line   = mainctx.m.start_line;
-      auto column = 0;
-      auto file   = mainctx.dunit;
-
-      if(mainctx.m.sourcemap)
-      {
-        if(auto segment = GetMappedSegment(mainctx, line, column))
-        {
-          line   = (unsigned int)segment->original_line;
-          column = (unsigned int)segment->original_column;
-          file   = mainctx.dfiles[segment->source_index];
-        }
-      }
+      unsigned int line   = mainctx.m.start_line;
+      unsigned int column = 0;
+      auto file           = ResolveMappedSegment(mainctx, line, column);
       FunctionDebugInfo(mainstub, mainstub->getName(), mainctx, true, false, file, line, column);
       builder.SetCurrentDebugLocation(GetSPLocation(mainctx, mainstub->getSubprogram()));
     }

@@ -2,7 +2,7 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifdef TESTING_WASM
-#include "benchmark.h"
+  #include "benchmark.h"
 
 int64_t Benchmarks::fib(int64_t n)
 #else

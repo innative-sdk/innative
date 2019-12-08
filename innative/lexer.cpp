@@ -166,7 +166,7 @@ namespace innative {
                            Args... args)
     {
       numbuf.clear();
-      size_t length             = token.len;
+      size_t length          = token.len;
       int (*digitcheck)(int) = (token.len > 2 && token.pos[0] == '0' && token.pos[1] == 'x') ? &isxdigit : &isdigit;
       for(size_t i = 0; i < token.len; ++i)
       {
