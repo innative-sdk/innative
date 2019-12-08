@@ -191,7 +191,7 @@ int innative::CallLinker(const Environment* env, std::vector<const char*>& linka
 void innative::DeleteCache(const Environment& env, Module& m)
 {
   // Certain error conditions can result in us clearing the cache of an invalid module.
-  if(m.name.size() > 0)                           // Prevent an error from happening if the name is invalid.
+  if(m.name.size() > 0)                          // Prevent an error from happening if the name is invalid.
     remove(GetLinkerObjectPath(env, m, path())); // Always remove the file if it exists
 
   if(m.cache != nullptr)
@@ -347,14 +347,14 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
       "/OPT:REF",
       "/DYNAMICBASE",
       "/NXCOMPAT",
-#ifdef IN_CPU_x86_64
+  #ifdef IN_CPU_x86_64
       "/MACHINE:X64",
-#elif defined(IN_CPU_x86)
+  #elif defined(IN_CPU_x86)
       "/MACHINE:X86",
       "/LARGEADDRESSAWARE",
-#elif defined(IN_CPU_ARM) || defined(IN_CPU_ARM64)
+  #elif defined(IN_CPU_ARM) || defined(IN_CPU_ARM64)
       "/MACHINE:ARM",
-#endif
+  #endif
     };
 
     if(env->flags & ENV_LIBRARY)
@@ -391,7 +391,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
     std::vector<std::string> cache = { std::string("--output=") + file.u8string(), "-L" + libpath.u8string(),
                                        "-L" + workdir.u8string() };
 #else
-#error unknown platform
+  #error unknown platform
 #endif
     std::vector<path> garbage;
 

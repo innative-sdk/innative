@@ -406,7 +406,8 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
     {
       tokens.Push(WatToken{ WatTokens::OPEN });
       tokens.Push(WatToken{ WatTokens::LOCAL });
-      PushLocalName(env, tokens, j, m.code.funcbody[i].local_debug + fn.n_params, m.code.funcbody[i].n_local_debug - fn.n_params, 'l');
+      PushLocalName(env, tokens, j, m.code.funcbody[i].local_debug + fn.n_params,
+                    m.code.funcbody[i].n_local_debug - fn.n_params, 'l');
       tokens.Push(WatToken{ TypeEncodingToken(m.code.funcbody[i].locals[j]) });
       tokens.Push(WatToken{ WatTokens::CLOSE });
     }

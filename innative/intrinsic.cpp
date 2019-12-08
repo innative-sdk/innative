@@ -48,7 +48,8 @@ IN_ERROR innative::code::IN_Intrinsic_FuncPtr(code::Context& context, llvm::Valu
 
   InsertConditionalTrap(
     context.builder.CreateICmpUGE(context.builder.CreateIntCast(params[0], context.builder.getInt64Ty(), false),
-                                  context.builder.getInt64(context.exported_functions->getType()->getElementType()->getArrayNumElements())),
+                                  context.builder.getInt64(
+                                    context.exported_functions->getType()->getElementType()->getArrayNumElements())),
     context);
 
   // Deference global variable to get the actual array of function pointers, index into them, then dereference that array

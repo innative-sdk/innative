@@ -9,17 +9,17 @@
 #include <algorithm>
 
 #ifdef IN_PLATFORM_WIN32
-#include "../innative/win32.h"
-#include <intrin.h>
+  #include "../innative/win32.h"
+  #include <intrin.h>
 #elif defined(IN_PLATFORM_POSIX)
-#include <unistd.h>
-#include <cpuid.h>
-#include <limits.h>
-#include <dlfcn.h>
-#include <sys/mman.h>
-#include <dirent.h>
+  #include <unistd.h>
+  #include <cpuid.h>
+  #include <limits.h>
+  #include <dlfcn.h>
+  #include <sys/mman.h>
+  #include <dirent.h>
 #else
-#error unknown platform
+  #error unknown platform
 #endif
 
 using std::string;
@@ -287,7 +287,7 @@ namespace innative {
       getcwd(const_cast<char*>(buf.data()), buf.capacity());
       buf.resize(strlen(buf.data()));
 #else
-#error unknown platform
+  #error unknown platform
 #endif
       return path(std::move(buf));
     }
@@ -306,7 +306,7 @@ namespace innative {
         return path(src);
       buf.resize(strlen(resolve));
 #else
-#error unknown platform
+  #error unknown platform
 #endif
       return path(std::move(buf));
     }
@@ -336,21 +336,21 @@ namespace innative {
       info[4] = sysinfo.wProcessorArchitecture | (flags << 16);
       __cpuid(info, 1);
 #elif defined(IN_PLATFORM_POSIX)
-#ifdef IN_CPU_x86_64
+  #ifdef IN_CPU_x86_64
       info[4] = 1;
-#elif defined(IN_CPU_IA_64)
+  #elif defined(IN_CPU_IA_64)
       info[4] = 2;
-#elif defined(IN_CPU_x86)
+  #elif defined(IN_CPU_x86)
       info[4] = 3;
-#elif defined(IN_CPU_ARM)
+  #elif defined(IN_CPU_ARM)
       info[4] = 4;
-#elif defined(IN_CPU_MIPS)
+  #elif defined(IN_CPU_MIPS)
       info[4] = 5;
-#elif defined(IN_CPU_POWERPC)
+  #elif defined(IN_CPU_POWERPC)
       info[4] = 6;
-#elif defined(IN_CPU_ARM64)
+  #elif defined(IN_CPU_ARM64)
       info[4] = 7;
-#endif
+  #endif
       info[4] |= (flags << 16);
       __get_cpuid(1, info + 0, info + 1, info + 2, info + 3);
 #endif

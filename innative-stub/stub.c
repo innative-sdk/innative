@@ -4,7 +4,7 @@
 #include "innative/export.h"
 
 #ifdef IN_PLATFORM_WIN32
-#include "../innative/win32.h"
+  #include "../innative/win32.h"
 
 const wchar_t* GetRegString(wchar_t* buf, size_t sz, int major, int minor, int revision)
 {
@@ -77,10 +77,10 @@ bool EnumKeyValue(HKEY hive, const wchar_t* key, uint16_t* version)
   return true;
 }
 #elif defined(IN_PLATFORM_POSIX)
-#define MAKESTRING2(x) #x
-#define MAKESTRING(x) MAKESTRING2(x)
+  #define MAKESTRING2(x) #x
+  #define MAKESTRING(x)  MAKESTRING2(x)
 
-#include <dlfcn.h>
+  #include <dlfcn.h>
 #endif
 
 // This is a stub loader for the runtime. It looks for an existing installation
@@ -167,6 +167,6 @@ IN_COMPILER_DLLEXPORT extern void innative_runtime(INExports* exports)
       dlclose(lib);
   }
 #else
-#error Unknown platform!
+  #error Unknown platform!
 #endif
 }

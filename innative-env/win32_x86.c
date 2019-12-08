@@ -5,15 +5,15 @@
 
 // Only compile this file for 32-bit windows, as it implements functions emitted by the MSVC compiler
 #ifdef IN_COMPILER_MSC
-#ifdef IN_CPU_x86
+  #ifdef IN_CPU_x86
 
-#define CRT_LOWORD(x) dword ptr[x + 0]
-#define CRT_HIWORD(x) dword ptr[x + 4]
+    #define CRT_LOWORD(x) dword ptr[x + 0]
+    #define CRT_HIWORD(x) dword ptr[x + 4]
 
 __declspec(naked) void _alldiv()
 {
-#define DVND esp + 16 // stack address of dividend (a)
-#define DVSR esp + 24 // stack address of divisor (b)
+    #define DVND esp + 16 // stack address of dividend (a)
+    #define DVSR esp + 24 // stack address of divisor (b)
 
   __asm
   {
@@ -143,14 +143,14 @@ __declspec(naked) void _alldiv()
       ret     16
   }
 
-#undef DVND
-#undef DVSR
+    #undef DVND
+    #undef DVSR
 }
 
 __declspec(naked) void _alldvrm()
 {
-#define DVND esp + 16 // stack address of dividend (a)
-#define DVSR esp + 24 // stack address of divisor (b)
+    #define DVND esp + 16 // stack address of dividend (a)
+    #define DVSR esp + 24 // stack address of divisor (b)
 
   __asm
   {
@@ -325,14 +325,14 @@ __declspec(naked) void _alldvrm()
       ret     16
   }
 
-#undef DVND
-#undef DVSR
+    #undef DVND
+    #undef DVSR
 }
 
 __declspec(naked) void _allmul()
 {
-#define A esp + 8  // stack address of a
-#define B esp + 16 // stack address of b
+    #define A esp + 8  // stack address of a
+    #define B esp + 16 // stack address of b
 
   __asm {
     push    ebx
@@ -355,14 +355,14 @@ __declspec(naked) void _allmul()
     ret     16; callee restores the stack
   }
 
-#undef A
-#undef B
+    #undef A
+    #undef B
 }
 
 __declspec(naked) void _allrem()
 {
-#define DVND esp + 12 // stack address of dividend (a)
-#define DVSR esp + 20 // stack address of divisor (b)
+    #define DVND esp + 12 // stack address of dividend (a)
+    #define DVSR esp + 20 // stack address of divisor (b)
 
   __asm
   {
@@ -502,8 +502,8 @@ __declspec(naked) void _allrem()
       ret     16
   }
 
-#undef DVND
-#undef DVSR
+    #undef DVND
+    #undef DVSR
 }
 
 __declspec(naked) void _allshl()
@@ -585,8 +585,8 @@ __declspec(naked) void _allshr()
 
 __declspec(naked) void _aulldiv()
 {
-#define DVND esp + 12 // stack address of dividend (a)
-#define DVSR esp + 20 // stack address of divisor (b)
+    #define DVND esp + 12 // stack address of dividend (a)
+    #define DVSR esp + 20 // stack address of divisor (b)
 
   __asm
   {
@@ -675,14 +675,14 @@ __declspec(naked) void _aulldiv()
       ret     16
   }
 
-#undef DVND
-#undef DVSR
+    #undef DVND
+    #undef DVSR
 }
 
 __declspec(naked) void _aulldvrm()
 {
-#define DVND esp + 8  // stack address of dividend (a)
-#define DVSR esp + 16 // stack address of divisor (b)
+    #define DVND esp + 8  // stack address of dividend (a)
+    #define DVSR esp + 16 // stack address of divisor (b)
 
   __asm
   {
@@ -799,14 +799,14 @@ __declspec(naked) void _aulldvrm()
       ret     16
   }
 
-#undef DVND
-#undef DVSR
+    #undef DVND
+    #undef DVSR
 }
 
 __declspec(naked) void _aullrem()
 {
-#define DVND esp + 8  // stack address of dividend (a)
-#define DVSR esp + 16 // stack address of divisor (b)
+    #define DVND esp + 8  // stack address of dividend (a)
+    #define DVSR esp + 16 // stack address of divisor (b)
 
   __asm
   {
@@ -894,8 +894,8 @@ __declspec(naked) void _aullrem()
     pop     ebx
       ret     16
   }
-#undef DVND
-#undef DVSR
+    #undef DVND
+    #undef DVSR
 }
 __declspec(naked) void _aullshr()
 {
@@ -929,5 +929,5 @@ __declspec(naked) void _aullshr()
   }
 }
 
-#endif
+  #endif
 #endif

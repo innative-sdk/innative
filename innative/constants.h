@@ -11,7 +11,7 @@
 #include <array>
 
 #define MAKESTRING2(x) #x
-#define MAKESTRING(x) MAKESTRING2(x)
+#define MAKESTRING(x)  MAKESTRING2(x)
 
 #define IN_VERSION_STRING \
   MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
@@ -39,11 +39,11 @@ namespace innative {
   };
 
 #ifdef IN_PLATFORM_WIN32
-#ifdef IN_CPU_x86
+  #ifdef IN_CPU_x86
   static constexpr ABI CURRENT_ABI = ABI::Win32;
-#else
+  #else
   static constexpr ABI CURRENT_ABI = ABI::Win64;
-#endif
+  #endif
 #elif defined(IN_PLATFORM_BSD)
   static constexpr ABI CURRENT_ABI            = ABI::FreeBSD;
 #elif defined(IN_PLATFORM_SOLARIS)

@@ -145,49 +145,49 @@ typedef unsigned long long khint64_t;
 #endif
 
 #ifndef kh_inline
-#ifdef _MSC_VER
-#define kh_inline __inline
-#else
-#define kh_inline inline
-#endif
+  #ifdef _MSC_VER
+    #define kh_inline __inline
+  #else
+    #define kh_inline inline
+  #endif
 #endif /* kh_inline */
 
 #ifndef klib_unused
-#if(defined __clang__ && __clang_major__ >= 3) || (defined __GNUC__ && __GNUC__ >= 3)
-#define klib_unused __attribute__((__unused__))
-#else
-#define klib_unused
-#endif
+  #if(defined __clang__ && __clang_major__ >= 3) || (defined __GNUC__ && __GNUC__ >= 3)
+    #define klib_unused __attribute__((__unused__))
+  #else
+    #define klib_unused
+  #endif
 #endif /* klib_unused */
 
 typedef khint32_t khint_t;
 typedef khint_t khiter_t;
 
-#define __ac_isempty(flag, i) (flag[i] & 2)
-#define __ac_isdel(flag, i) (flag[i] & 1)
-#define __ac_iseither(flag, i) (flag[i] & 3)
-#define __ac_set_isdel_false(flag, i) (flag[i] &= ~1)
+#define __ac_isempty(flag, i)           (flag[i] & 2)
+#define __ac_isdel(flag, i)             (flag[i] & 1)
+#define __ac_iseither(flag, i)          (flag[i] & 3)
+#define __ac_set_isdel_false(flag, i)   (flag[i] &= ~1)
 #define __ac_set_isempty_false(flag, i) (flag[i] &= ~2)
-#define __ac_set_isboth_false(flag, i) (flag[i] = 0)
-#define __ac_set_isdel_true(flag, i) (flag[i] |= 1)
+#define __ac_set_isboth_false(flag, i)  (flag[i] = 0)
+#define __ac_set_isdel_true(flag, i)    (flag[i] |= 1)
 
 #define __ac_fsize(m) ((m) < 16 ? 1 : (m) >> 4)
 
 #ifndef kroundup32
-#define kroundup32(x) (--(x), (x) |= (x) >> 1, (x) |= (x) >> 2, (x) |= (x) >> 4, (x) |= (x) >> 8, (x) |= (x) >> 16, ++(x))
+  #define kroundup32(x) (--(x), (x) |= (x) >> 1, (x) |= (x) >> 2, (x) |= (x) >> 4, (x) |= (x) >> 8, (x) |= (x) >> 16, ++(x))
 #endif
 
 #ifndef kcalloc
-#define kcalloc(N, Z) calloc(N, Z)
+  #define kcalloc(N, Z) calloc(N, Z)
 #endif
 #ifndef kmalloc
-#define kmalloc(Z) malloc(Z)
+  #define kmalloc(Z) malloc(Z)
 #endif
 #ifndef krealloc
-#define krealloc(P, Z) realloc(P, Z)
+  #define krealloc(P, Z) realloc(P, Z)
 #endif
 #ifndef kfree
-#define kfree(P) free(P)
+  #define kfree(P) free(P)
 #endif
 
 static const double __ac_HASH_UPPER = 0.77;

@@ -7,22 +7,22 @@
 #include "innative/schema.h"
 
 #ifdef IN_PLATFORM_WIN32
-#define IN_STATIC_EXTENSION ".lib"
-#define IN_LIBRARY_FLAG ""
-#define IN_LIBRARY_EXTENSION ".dll"
-#define IN_EXE_EXTENSION ".exe"
-#define IN_WIN32_REGPATH L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\innative-cmd.exe"
+  #define IN_STATIC_EXTENSION  ".lib"
+  #define IN_LIBRARY_FLAG      ""
+  #define IN_LIBRARY_EXTENSION ".dll"
+  #define IN_EXE_EXTENSION     ".exe"
+  #define IN_WIN32_REGPATH     L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\innative-cmd.exe"
 #else
-#define IN_STATIC_EXTENSION ".a"
-#define IN_LIBRARY_FLAG "-l"
-#define IN_LIBRARY_EXTENSION ".so"
-#define IN_EXE_EXTENSION ""
+  #define IN_STATIC_EXTENSION  ".a"
+  #define IN_LIBRARY_FLAG      "-l"
+  #define IN_LIBRARY_EXTENSION ".so"
+  #define IN_EXE_EXTENSION     ""
 #endif
 
 #ifdef IN_DEBUG
-#define INNATIVE_DEFAULT_ENVIRONMENT "innative-env-d" IN_STATIC_EXTENSION
+  #define INNATIVE_DEFAULT_ENVIRONMENT "innative-env-d" IN_STATIC_EXTENSION
 #else
-#define INNATIVE_DEFAULT_ENVIRONMENT "innative-env" IN_STATIC_EXTENSION
+  #define INNATIVE_DEFAULT_ENVIRONMENT "innative-env" IN_STATIC_EXTENSION
 #endif
 
 #define IN_INIT_FUNCTION "_innative_internal_start"

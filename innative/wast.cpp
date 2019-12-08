@@ -16,15 +16,15 @@
 #include <functional>
 
 #ifdef IN_PLATFORM_WIN32
-#include "../innative/win32.h"
+  #include "../innative/win32.h"
 #endif
 
 #ifdef IN_PLATFORM_POSIX
-#define LONGJMP(x, i) siglongjmp(x, i)
-#define SETJMP(x) sigsetjmp(x, 1)
+  #define LONGJMP(x, i) siglongjmp(x, i)
+  #define SETJMP(x)     sigsetjmp(x, 1)
 #else
-#define LONGJMP(x, i) longjmp(x, i)
-#define SETJMP(x) setjmp(x)
+  #define LONGJMP(x, i) longjmp(x, i)
+  #define SETJMP(x)     setjmp(x)
 #endif
 
 using namespace innative;
@@ -408,13 +408,13 @@ int wat::IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, Wast
     if(GetExceptionCode() == EXCEPTION_STACK_OVERFLOW)
     {
       void* lpPage;
-#ifdef IN_CPU_x86
+  #ifdef IN_CPU_x86
       __asm mov lpPage, esp;
-#elif defined(IN_CPU_x86_64)
+  #elif defined(IN_CPU_x86_64)
       lpPage = (void*)GetRSPValue();
-#else
-#error unsupported CPU architecture
-#endif
+  #else
+    #error unsupported CPU architecture
+  #endif
       // Get page size of system
       SYSTEM_INFO si;
       GetSystemInfo(&si);

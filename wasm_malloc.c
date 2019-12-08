@@ -4,39 +4,39 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define WASM_PAGE_POWER 16
-#define WASM_PAGE_SIZE (1 << WASM_PAGE_POWER)
-#define MIN_ALLOC_POWER 4
-#define MIN_ALLOC_SIZE (1 << MIN_ALLOC_POWER)
+#define WASM_PAGE_POWER    16
+#define WASM_PAGE_SIZE     (1 << WASM_PAGE_POWER)
+#define MIN_ALLOC_POWER    4
+#define MIN_ALLOC_SIZE     (1 << MIN_ALLOC_POWER)
 #define ALLOC_GROWTH_POWER 2
-#define ALLOC_GROWTH_RATE (1 << ALLOC_GROWTH_POWER)
+#define ALLOC_GROWTH_RATE  (1 << ALLOC_GROWTH_POWER)
 
 // A full binary tree of n levels has 2^n - 1 nodes, and the lowest level has half the nodes, so we count how many bytes
 // are available, divide by 2, and multiply by the minimum allocation size to get how many bytes each bitmap page addresses.
 // This is 2^p / 2 * 2^n, which is equal to 2^(p - 1 + n)
 #define PAGE_ALLOC_POWER (WASM_PAGE_POWER + MIN_ALLOC_POWER - 1)
-#define PAGE_ALLOC_SIZE (1 << PAGE_ALLOC_POWER)
+#define PAGE_ALLOC_SIZE  (1 << PAGE_ALLOC_POWER)
 
 #define HEAP_PARENT(i) ((i - 1) / 2)
-#define HEAP_LEFT(i) ((i << 1) + 1)
-#define HEAP_RIGHT(i) ((i << 1) + 2)
-#define HEAP_SIZE(i) ((size_t)1 << (i + MIN_ALLOC_POWER - 1))
+#define HEAP_LEFT(i)   ((i << 1) + 1)
+#define HEAP_RIGHT(i)  ((i << 1) + 2)
+#define HEAP_SIZE(i)   ((size_t)1 << (i + MIN_ALLOC_POWER - 1))
 
 #ifdef TESTING_WASM
-#include <string.h>
-#define MALLOC wasm_malloc
-#define FREE wasm_free
-#define REALLOC wasm_realloc
-#define CALLOC wasm_calloc
-#define EXPORT
+  #include <string.h>
+  #define MALLOC  wasm_malloc
+  #define FREE    wasm_free
+  #define REALLOC wasm_realloc
+  #define CALLOC  wasm_calloc
+  #define EXPORT
 size_t __builtin_wasm_memory_size(size_t memory);
 size_t __builtin_wasm_memory_grow(size_t memory, size_t delta);
 #else
-#define EXPORT __attribute__((visibility("default")))
-#define MALLOC malloc
-#define FREE free
-#define REALLOC realloc
-#define CALLOC calloc
+  #define EXPORT  __attribute__((visibility("default")))
+  #define MALLOC  malloc
+  #define FREE    free
+  #define REALLOC realloc
+  #define CALLOC  calloc
 
 EXPORT void* memcpy(void* pdest, const void* psrc, size_t sz)
 {
@@ -337,13 +337,13 @@ EXPORT void FREE(void* ptr)
   if(index == (size_t)~0)
   {
 #ifdef _MSC_VER
-#ifdef _M_ARM64
+  #ifdef _M_ARM64
     __break(-1);
-#elif defined(_M_ARM)
+  #elif defined(_M_ARM)
     __trap(-1);
-#else
+  #else
     __ud2();
-#endif
+  #endif
 #else
     __builtin_trap();
 #endif

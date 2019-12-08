@@ -9,19 +9,19 @@
 using namespace innative;
 
 #ifdef IN_DEBUG
-#define TEST_EMBEDDING "innative-assemblyscript-d" IN_STATIC_EXTENSION
+  #define TEST_EMBEDDING "innative-assemblyscript-d" IN_STATIC_EXTENSION
 #else
-#define TEST_EMBEDDING "innative-assemblyscript" IN_STATIC_EXTENSION
+  #define TEST_EMBEDDING "innative-assemblyscript" IN_STATIC_EXTENSION
 #endif
 
 #ifdef IN_PLATFORM_POSIX
-#define LONGJMP(x, i) siglongjmp(x, i)
-#define SETJMP(x) sigsetjmp(x, 1)
+  #define LONGJMP(x, i) siglongjmp(x, i)
+  #define SETJMP(x)     sigsetjmp(x, 1)
 #else
-#define LONGJMP(x, i) longjmp(x, i)
-#define SETJMP(x) setjmp(x)
+  #define LONGJMP(x, i) longjmp(x, i)
+  #define SETJMP(x)     setjmp(x)
 
-#include "../innative/win32.h"
+  #include "../innative/win32.h"
 #endif
 
 jmp_buf jump_location;
@@ -98,7 +98,7 @@ void TestHarness::test_assemblyscript()
 
   fn(TEST_EMBEDDING, 0);
 
-  long embedsz = 0;
+  long embedsz   = 0;
   auto embedfile = utility::LoadFile(TEST_EMBEDDING, embedsz);
 
   fn((const char*)embedfile.get(), embedsz);

@@ -7,9 +7,9 @@
 using namespace innative;
 
 #ifdef IN_DEBUG
-#define TEST_EMBEDDING "innative-test-embedding-d" IN_STATIC_EXTENSION
+  #define TEST_EMBEDDING "innative-test-embedding-d" IN_STATIC_EXTENSION
 #else
-#define TEST_EMBEDDING "innative-test-embedding" IN_STATIC_EXTENSION
+  #define TEST_EMBEDDING "innative-test-embedding" IN_STATIC_EXTENSION
 #endif
 
 void TestHarness::test_embedding()

@@ -5,12 +5,7 @@
 #include <stdio.h>
 
 TestHarness::TestHarness(const INExports& exports, const char* arg0, int loglevel, FILE* out, const path& folder) :
-  _exports(exports),
-  _arg0(arg0),
-  _loglevel(loglevel),
-  _target(out),
-  _folder(folder),
-  _testdata(0, 0)
+  _exports(exports), _arg0(arg0), _loglevel(loglevel), _target(out), _folder(folder), _testdata(0, 0)
 {}
 TestHarness::~TestHarness()
 {
@@ -57,12 +52,12 @@ size_t TestHarness::Run(FILE* out)
   {
     TEST(CompileWASM("../scripts/test-h.wat") == ERR_SUCCESS);
 #ifdef IN_PLATFORM_WIN32
-#ifdef IN_32BIT
+  #ifdef IN_32BIT
     TEST(CompileWASM("../scripts/test-win32-cref.wat") == ERR_SUCCESS);
-#else
+  #else
     TEST(CompileWASM("../scripts/test-win64.wat") == ERR_SUCCESS);
     TEST(CompileWASM("../scripts/test-win64-cref.wat") == ERR_SUCCESS);
-#endif
+  #endif
 #endif
 
     char buf[COLUMNS[1] + 1] = { 0 };
