@@ -259,10 +259,10 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
     FunctionType* func = ModuleFunction(env.modules[i], exp.index);
     if(!func)
       AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid exported function index %u", exp.index);
-    else if(imp.func_desc.type_index >= m->type.n_functions)
+    else if(imp.func_desc.type_index >= m->type.n_functypes)
       AppendError(env, env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid imported function type index %u",
                   imp.func_desc.type_index);
-    else if(!MatchFunctionType(m->type.functions[imp.func_desc.type_index], *func))
+    else if(!MatchFunctionType(m->type.functypes[imp.func_desc.type_index], *func))
       AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_IMPORT_TYPE,
                   "Imported function signature didn't match exported function signature.");
     break;
@@ -341,9 +341,9 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   }
 }
 
-void innative::ValidateFunction(const varuint32& decl, Environment& env, Module* m)
+void innative::ValidateFunction(const FunctionDesc& decl, Environment& env, Module* m)
 {
-  if(decl >= m->type.n_functions)
+  if(decl.type_index >= m->type.n_functypes)
     AppendError(env, env.errors, m, ERR_INVALID_TYPE_INDEX, "Invalid function declaration type index: %u", decl);
 }
 
@@ -558,8 +558,8 @@ namespace innative {
                   "[%u] 0 is not a valid table index because there are 0 tables.", ins.line);
 
     ValidatePopType(ins, values, TE_i32, env, m); // Pop callee
-    if(sig < m->type.n_functions)
-      ValidateFunctionSig(ins, values, m->type.functions[sig], env, m);
+    if(sig < m->type.n_functypes)
+      ValidateFunctionSig(ins, values, m->type.functypes[sig], env, m);
     else
       AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX,
                   "[%u] signature index was %u, which is an invalid function signature index.", ins.line, sig);
@@ -1086,12 +1086,12 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
     ret = sig.returns[0];
 
   // Calculate function locals
-  if(sig.n_params > (std::numeric_limits<uint32_t>::max() - body.n_locals))
+  if(sig.n_params > (std::numeric_limits<uint32_t>::max() - body.local_size))
   {
     AppendError(env, env.errors, m, ERR_FATAL_TOO_MANY_LOCALS, "n_local + n_params exceeds the max value of uint32!");
     return;
   }
-  varuint32 n_local = sig.n_params + body.n_locals;
+  varuint32 n_local = sig.n_params + body.local_size;
 
   varsint7* locals = tmalloc<varsint7>(env, n_local);
   if(locals)
@@ -1101,7 +1101,8 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
 
   n_local = sig.n_params;
   for(varuint32 i = 0; i < body.n_locals; ++i)
-    locals[n_local++] = body.locals[i];
+    for(varuint32 j = 0; j < body.locals[i].count; ++j)
+    locals[n_local++] = body.locals[i].type;
 
   control.Push({ values.Limit(), ret, OP_block }); // Push the function body block with the function signature
 
@@ -1242,14 +1243,14 @@ void innative::ValidateModule(Environment& env, Module& m)
     AppendError(env, env.errors, &m, ERR_MULTIPLE_MEMORIES, "Cannot have more than 1 memory defined.");
 
   if(m.knownsections & (1 << WASM_SECTION_TYPE))
-    ValidateSection<FunctionType, &ValidateFunctionSig>(m.type.functions, m.type.n_functions, env, &m);
+    ValidateSection<FunctionType, &ValidateFunctionSig>(m.type.functypes, m.type.n_functypes, env, &m);
 
   if(m.knownsections & (1 << WASM_SECTION_IMPORT))
     ValidateSection<Import, &ValidateImport>(m.importsection.imports, m.importsection.n_import, env, &m);
 
   if(m.knownsections & (1 << WASM_SECTION_FUNCTION))
   {
-    ValidateSection<varuint32, &ValidateFunction>(m.function.funcdecl, m.function.n_funcdecl, env, &m);
+    ValidateSection<FunctionDesc, &ValidateFunction>(m.function.funcdecl, m.function.n_funcdecl, env, &m);
 
     if(m.function.n_funcdecl != m.code.n_funcbody)
       AppendError(env, env.errors, &m, ERR_FUNCTION_BODY_MISMATCH,
@@ -1292,8 +1293,8 @@ void innative::ValidateModule(Environment& env, Module& m)
   {
     for(varuint32 j = 0; j < m.code.n_funcbody; ++j)
     {
-      if(m.function.funcdecl[j] < m.type.n_functions)
-        ValidateFunctionBody(m.type.functions[m.function.funcdecl[j]], m.code.funcbody[j], env, &m);
+      if(m.function.funcdecl[j].type_index < m.type.n_functypes)
+        ValidateFunctionBody(m.type.functypes[m.function.funcdecl[j].type_index], m.code.funcbody[j], env, &m);
     }
   }
 

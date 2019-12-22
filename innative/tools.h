@@ -12,12 +12,12 @@ namespace innative {
   Environment* CreateEnvironment(unsigned int modules, unsigned int maxthreads, const char* arg0);
   void ClearEnvironmentCache(Environment* env, Module* m);
   void DestroyEnvironment(Environment* env);
-  void LoadModule(Environment* env, size_t index, const void* data, uint64_t size, const char* name, const char* file,
+  void LoadModule(Environment* env, size_t index, const void* data, size_t size, const char* name, const char* file,
                   int* err);
-  void AddModule(Environment* env, const void* data, uint64_t size, const char* name, int* err);
+  void AddModule(Environment* env, const void* data, size_t size, const char* name, int* err);
   int AddModuleObject(Environment* env, const Module* m);
   enum IN_ERROR AddWhitelist(Environment* env, const char* module_name, const char* export_name);
-  enum IN_ERROR AddEmbedding(Environment* env, int tag, const void* data, uint64_t size);
+  enum IN_ERROR AddEmbedding(Environment* env, int tag, const void* data, size_t size);
   enum IN_ERROR AddCustomExport(Environment* env, const char* symbol);
   enum IN_ERROR FinalizeEnvironment(Environment* env);
   enum IN_ERROR Validate(Environment* env);
@@ -40,14 +40,14 @@ namespace innative {
   int DeleteModuleSection(Environment* env, Module* m, enum WASM_MODULE_SECTIONS field, varuint32 index);
   int SetByteArray(Environment* env, ByteArray* bytearray, const void* data, varuint32 size);
   int SetIdentifier(Environment* env, Identifier* identifier, const char* str);
-  int InsertModuleLocal(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index, varsint7 local,
+  int InsertModuleLocal(Environment* env, FunctionBody* body, varuint32 index, varsint7 local, varuint32 count,
                         DebugInfo* info);
-  int RemoveModuleLocal(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index);
+  int RemoveModuleLocal(Environment* env, FunctionBody* body, varuint32 index);
   int InsertModuleInstruction(Environment* env, FunctionBody* body, varuint32 index, Instruction* ins);
   int RemoveModuleInstruction(Environment* env, FunctionBody* body, varuint32 index);
-  int InsertModuleParam(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index, varsint7 param,
+  int InsertModuleParam(Environment* env, FunctionType* func, FunctionDesc* desc, varuint32 index, varsint7 param,
                         DebugInfo* name);
-  int RemoveModuleParam(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index);
+  int RemoveModuleParam(Environment* env, FunctionType* func, FunctionDesc* desc, varuint32 index);
   int InsertModuleReturn(Environment* env, FunctionType* func, varuint32 index, varsint7 result);
   int RemoveModuleReturn(Environment* env, FunctionType* func, varuint32 index);
 }

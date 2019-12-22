@@ -74,17 +74,11 @@ namespace innative {
       }
     };
 
-    struct LocalEntry
+    IN_ERROR ParseFunctionLocal(Stream& s, FunctionLocal& entry)
     {
-      varuint32 count;
-      varsint7 type;
-      int column;
-    };
-
-    IN_ERROR ParseLocalEntry(Stream& s, LocalEntry& entry)
-    {
-      entry.column = s.pos;
-      IN_ERROR err = ParseVarUInt32(s, entry.count);
+      entry.debug.line   = 1;
+      entry.debug.column = s.pos;
+      IN_ERROR err       = ParseVarUInt32(s, entry.count);
 
       if(err >= 0)
         err = ParseVarSInt7(s, entry.type);
@@ -166,6 +160,14 @@ IN_ERROR innative::ParseResizableLimits(Stream& s, ResizableLimits& limits)
 
   return err;
 }
+
+IN_ERROR innative::ParseFunctionDesc(utility::Stream& s, FunctionDesc& desc)
+{
+  desc.debug.line   = 1;
+  desc.debug.column = s.pos;
+  return ParseVarUInt32(s, desc.type_index);
+}
+
 IN_ERROR innative::ParseMemoryDesc(Stream& s, MemoryDesc& mem)
 {
   mem.debug = { 1, (unsigned int)s.pos };
@@ -498,39 +500,21 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, cons
   if(idx >= m.function.n_funcdecl)
     return ERR_FUNCTION_BODY_MISMATCH;
 
-  auto& sig = m.type.functions[m.function.funcdecl[idx]];
+  auto& sig = m.type.functypes[m.function.funcdecl[idx].type_index];
 
-  if(err >= 0) // Parse local entries into a temporary array, then expand them into a usable local type array.
+  if(err >= 0)
   {
-    LocalEntry* locals;
-    varuint32 n_locals;
-    err = Parse<LocalEntry>::template Array<&ParseLocalEntry>(s, locals, n_locals, env);
+    err = Parse<FunctionLocal>::template Array<&ParseFunctionLocal>(s, f.locals, f.n_locals, env);
     if(err < 0)
       return err;
 
-    f.n_locals = 0;
-    for(varuint32 i = 0; i < n_locals; ++i)
+    f.local_size = 0;
+    for(varuint32 i = 0; i < f.n_locals; ++i)
     {
-      if(locals[i].count > (std::numeric_limits<uint32_t>::max() - f.n_locals))
+      if(f.locals[i].count > (std::numeric_limits<uint32_t>::max() - f.local_size))
         return ERR_FATAL_TOO_MANY_LOCALS; // Ensure we don't overflow the local count
-      f.n_locals += locals[i].count;
+      f.local_size += f.locals[i].count;
     }
-    f.locals        = tmalloc<varsint7>(env, f.n_locals);
-    f.n_local_debug = f.n_locals + sig.n_params;
-    f.local_debug   = tmalloc<DebugInfo>(env, f.n_local_debug);
-    if((f.n_locals > 0 && !f.locals) || (f.n_local_debug > 0 && !f.local_debug))
-      return ERR_FATAL_OUT_OF_MEMORY;
-
-    memset(f.local_debug, 0, sizeof(DebugInfo) * f.n_local_debug);
-    f.n_locals      = 0;
-    f.n_local_debug = sig.n_params;
-    for(varuint32 i = 0; i < n_locals; ++i)
-      for(varuint32 j = 0; j < locals[i].count; ++j)
-      {
-        f.local_debug[f.n_local_debug].column = locals[i].column;
-        f.local_debug[f.n_local_debug++].line = 1;
-        f.locals[f.n_locals++]                = locals[i].type;
-      }
   }
 
   f.body = 0;
@@ -560,26 +544,30 @@ IN_ERROR innative::ParseDataInit(Stream& s, DataInit& data, const Environment& e
   return err;
 }
 
-IN_ERROR innative::ParseNameSectionLocal(Stream& s, size_t num, DebugInfo*& target, const Environment& env)
+IN_ERROR innative::ParseNameSectionParam(Stream& s, size_t num, Module& m, FunctionDesc& desc,
+                                         DebugInfo* (*fn)(Stream&, Module&, FunctionDesc&, varuint32, const Environment&),
+                                         const Environment& env)
 {
   IN_ERROR err;
-  auto index = s.ReadVarUInt32(err);
-  if(err < 0)
-    return err;
-  if(index >= num)
-    return ERR_INVALID_LOCAL_INDEX;
+  varuint32 n_params = m.type.functypes[desc.type_index].n_params;
+  desc.param_debug   = tmalloc<DebugInfo>(env, n_params);
+  memset(desc.param_debug, 0, sizeof(DebugInfo) * n_params);
 
-  ByteArray buf;
-  err = ParseByteArray(s, buf, true, env);
-  if(err >= 0 && buf.get() != nullptr)
+  for(varuint32 i = 0; i < num; ++i)
   {
-    if(!target) // Only bother allocating the debug name if there's actually a name to worry about
-    {
-      target = tmalloc<DebugInfo>(env, num);
-      memset(target, 0, sizeof(DebugInfo) * num);
-    }
-    target[index].name = buf;
+    auto index = s.ReadVarUInt32(err);
+    if(err < 0)
+      return err;
+    DebugInfo* debug = (index >= n_params) ? (*fn)(s, m, desc, index - n_params, env) : &desc.param_debug[index];
+    if(!debug)
+      return ERR_INVALID_LOCAL_INDEX;
+
+    debug->line   = 1;
+    debug->column = s.pos;
+
+    err = ParseByteArray(s, debug->name, true, env);
   }
+
   return err;
 }
 
@@ -617,10 +605,10 @@ IN_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Envi
           continue;
         }
         index -= m.importsection.functions;
-        if(index >= m.code.n_funcbody)
+        if(index >= m.function.n_funcdecl)
           return ERR_INVALID_FUNCTION_INDEX;
 
-        err = ParseByteArray(s, m.code.funcbody[index].debug.name, true, env);
+        err = ParseByteArray(s, m.function.funcdecl[index].debug.name, true, env);
       }
     }
     break;
@@ -628,22 +616,24 @@ IN_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Envi
     {
       varuint32 count = s.ReadVarUInt32(err);
 
-      for(varuint32 i = 0; i < count && err >= 0; ++i)
+      for(varuint32 k = 0; k < count && err >= 0; ++k)
       {
         auto fn = s.ReadVarUInt32(err);
         if(err < 0)
           return err;
 
+        varuint32 num = s.ReadVarUInt32(err);
         if(fn < m.importsection.functions)
         {
-          varuint32 num = s.ReadVarUInt32(err);
-          auto sig      = m.importsection.imports[fn].func_desc.type_index;
-          if(sig >= m.type.n_functions)
+          auto& desc = m.importsection.imports[fn].func_desc;
+          if(desc.type_index >= m.type.n_functypes)
             return ERR_INVALID_TYPE_INDEX;
 
-          for(varuint32 j = 0; j < num && err >= 0; ++j)
-            ParseNameSectionLocal(s, m.type.functions[sig].n_params, m.importsection.imports[fn].func_desc.param_debug,
-                                  env);
+          if(num > 0)
+            err = ParseNameSectionParam(
+              s, num, m, desc,
+              [](Stream& s, Module& m, FunctionDesc& desc, varuint32, const Environment&) -> DebugInfo* { return nullptr; },
+              env);
 
           continue;
         }
@@ -652,11 +642,50 @@ IN_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Envi
         if(fn >= m.code.n_funcbody)
           return ERR_INVALID_FUNCTION_INDEX;
 
-        varuint32 num = s.ReadVarUInt32(err);
-        m.code.funcbody[fn].n_local_debug =
-          m.code.funcbody[fn].n_locals + m.type.functions[m.function.funcdecl[fn]].n_params;
-        for(varuint32 j = 0; j < num && err >= 0; ++j)
-          ParseNameSectionLocal(s, m.code.funcbody[fn].n_local_debug, m.code.funcbody[fn].local_debug, env);
+        auto& desc = m.function.funcdecl[fn];
+        if(desc.type_index >= m.type.n_functypes)
+          return ERR_INVALID_TYPE_INDEX;
+
+        // We count the maximum possible number of splits (summation of all counts minus one) and limit num to that
+        varuint32 worst_case = 0;
+        for(varuint32 i = 0; i < m.code.funcbody[desc.type_index].n_locals; ++i)
+          worst_case += m.code.funcbody[desc.type_index].locals[i].count;
+        worst_case = std::min(worst_case - m.code.funcbody[desc.type_index].n_locals, num);
+
+        // Then we over-commit by allocating the worst possible scenario (which in practice usually isn't that much)
+        auto locals = tmalloc<FunctionLocal>(env, worst_case);
+        tmemcpy(locals, worst_case, m.code.funcbody[desc.type_index].locals, m.code.funcbody[desc.type_index].n_locals);
+        m.code.funcbody[desc.type_index].locals = locals;
+
+        err = ParseNameSectionParam(
+          s, num, m, desc,
+          [](Stream& s, Module& m, FunctionDesc& desc, varuint32 index, const Environment& env) -> DebugInfo* {
+            if(index >= m.code.funcbody[desc.type_index].local_size)
+              return nullptr;
+
+            FunctionLocal* p = m.code.funcbody[desc.type_index].locals;
+            while(index >= p->count)
+            {
+              index -= p->count;
+              ++p;
+              assert(p < (p + m.code.funcbody[desc.type_index].n_locals));
+            }
+
+            if(index > 0) // If this isn't an exact match, split the node
+            {
+              FunctionLocal* last = p++;
+              memmove(p + 1, p, m.code.funcbody[desc.type_index].n_locals - (p - m.code.funcbody[desc.type_index].locals));
+              p->type     = last->type;
+              p->count    = last->count - index;
+              last->count = index;
+              ++m.code.funcbody[desc.type_index].n_locals;
+            }
+            return &p->debug; // Now return that new debug value
+          },
+          env);
+
+        if(err < 0)
+          return err;
       }
     }
     break;
@@ -741,8 +770,8 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
     switch(opcode)
     {
     case WASM_SECTION_TYPE:
-      err = Parse<FunctionType, const Environment&>::template Array<&ParseFunctionType>(s, m.type.functions,
-                                                                                        m.type.n_functions, env, env);
+      err = Parse<FunctionType, const Environment&>::template Array<&ParseFunctionType>(s, m.type.functypes,
+                                                                                        m.type.n_functypes, env, env);
       break;
     case WASM_SECTION_IMPORT:
     {
@@ -771,7 +800,7 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
     }
     break;
     case WASM_SECTION_FUNCTION:
-      err = Parse<varuint32>::template Array<&ParseVarUInt32>(s, m.function.funcdecl, m.function.n_funcdecl, env);
+      err = Parse<FunctionDesc>::template Array<&ParseFunctionDesc>(s, m.function.funcdecl, m.function.n_funcdecl, env);
       break;
     case WASM_SECTION_TABLE:
       err = Parse<TableDesc>::template Array<&ParseTableDesc>(s, m.table.tables, m.table.n_tables, env);

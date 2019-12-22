@@ -266,9 +266,9 @@ void innative::AppendIntrinsics(Environment& env)
 int innative::GetParameterBytes(const IN_WASM_MODULE& m, const Import& imp)
 {
   int total = 0;
-  if(imp.kind == WASM_KIND_FUNCTION && imp.func_desc.type_index < m.type.n_functions)
+  if(imp.kind == WASM_KIND_FUNCTION && imp.func_desc.type_index < m.type.n_functypes)
   {
-    auto& sig = m.type.functions[imp.func_desc.type_index];
+    auto& sig = m.type.functypes[imp.func_desc.type_index];
     for(varuint32 i = 0; i < sig.n_params; ++i)
     {
       switch(sig.params[i])

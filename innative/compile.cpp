@@ -959,10 +959,10 @@ llvmVal* GetMemSize(llvmVal* target, code::Context& context)
 // Gets the first type index that matches the given type, used as a stable type hash
 varuint32 GetFirstType(varuint32 type, code::Context& context)
 {
-  if(type < context.m.type.n_functions)
+  if(type < context.m.type.n_functypes)
   {
     for(varuint32 i = 0; i < type; ++i)
-      if(MatchFunctionType(context.m.type.functions[i], context.m.type.functions[type]))
+      if(MatchFunctionType(context.m.type.functypes[i], context.m.type.functypes[type]))
         return i;
   }
 
@@ -972,11 +972,11 @@ varuint32 GetFirstType(varuint32 type, code::Context& context)
 IN_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
 {
   index = GetFirstType(index, context);
-  if(index >= context.m.type.n_functions)
+  if(index >= context.m.type.n_functypes)
     return ERR_INVALID_TYPE_INDEX;
 
   IN_ERROR err;
-  FunctionType& ftype = context.m.type.functions[index];
+  FunctionType& ftype = context.m.type.functypes[index];
   llvmVal* callee;
   if(err = PopType(TE_i32, context, callee))
     return err;
@@ -1353,6 +1353,30 @@ IN_ERROR CompileFloatCmp(code::Context& context, llvm::Intrinsic::ID id, const T
   return PushReturn(context, context.builder.CreateSelect(nancheck, llvm::ConstantFP::getNaN(val1->getType()), compare));
 }
 
+uint64_t GetLocalOffset(llvm::AllocaInst* p)
+{
+  return llvm::cast<llvm::ConstantInt>(
+           llvm::cast<llvm::ConstantAsMetadata>(p->getMetadata(IN_LOCAL_INDEX_METADATA)->getOperand(0))->getValue())
+    ->getZExtValue();
+}
+
+llvm::Value* GetLocal(code::Context& context, varuint32 index)
+{
+  auto i = std::upper_bound(context.locals.begin(), context.locals.end(), index,
+                            [](varuint32 v, llvm::AllocaInst* r) { return v < GetLocalOffset(r); });
+  if(i == context.locals.begin())
+    return nullptr;
+  auto offset = GetLocalOffset(*--i);
+  assert(index >= offset);
+  index -= offset;
+  if(!index)
+    return *i;
+  auto size = llvm::cast<llvm::ConstantInt>((*i)->getArraySize())->getZExtValue();
+  if(index >= size)
+    return nullptr;
+  return context.builder.CreateInBoundsGEP(*i, { context.builder.getInt32(index) });
+}
+
 IN_ERROR CompileInstruction(Instruction& ins, code::Context& context)
 {
   // fputs(OPNAMES[ins.opcode], context.env.log);
@@ -1405,22 +1429,26 @@ IN_ERROR CompileInstruction(Instruction& ins, code::Context& context)
 
     // Variable access
   case OP_local_get:
-    if(ins.immediates[0]._varuint32 >= context.locals.size())
+  {
+    auto local = GetLocal(context, ins.immediates[0]._varuint32);
+    if(!local)
       return ERR_INVALID_LOCAL_INDEX;
-    PushReturn(context, context.builder.CreateLoad(context.locals[ins.immediates[0]._varuint32]));
+    PushReturn(context, context.builder.CreateLoad(local));
     return ERR_SUCCESS;
+  }
   case OP_local_set:
   case OP_local_tee:
   {
-    if(ins.immediates[0]._varuint32 >= context.locals.size())
+    auto local = GetLocal(context, ins.immediates[0]._varuint32);
+    if(!local)
       return ERR_INVALID_LOCAL_INDEX;
     if(context.values.Size() < 1)
       return ERR_INVALID_VALUE_STACK;
     context.builder.CreateStore(!context.values.Peek() ?
                                   llvm::Constant::getAllOnesValue(
-                                    context.locals[ins.immediates[0]._varuint32]->getType()->getElementType()) :
+                                    llvm::cast<llvm::PointerType>(local->getType())->getElementType()) :
                                   context.values.Peek(),
-                                context.locals[ins.immediates[0]._varuint32]);
+                                local);
     if(context.values.Peek() != nullptr &&
        ins.opcode == OP_local_set) // tee_local is the same as set_local except the operand isn't popped
       context.values.Pop();
@@ -1877,12 +1905,19 @@ IN_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   return ERR_SUCCESS;
 }
 
-IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memlocal, FunctionType& sig, FunctionBody& body,
+IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memlocal, FunctionDesc& desc, FunctionBody& body,
                              code::Context& context)
 {
   // Ensure context is reset
   assert(!context.control.Size() && !context.control.Limit());
   assert(!context.values.Size() && !context.values.Limit());
+
+  if(desc.type_index >= context.m.type.n_functypes)
+    return ERR_INVALID_TYPE_INDEX;
+  auto& sig = context.m.type.functypes[desc.type_index];
+
+  if(sig.n_params != fn->arg_size())
+    return ERR_SIGNATURE_MISMATCH;
 
   // Get return value
   varsint7 ret = TE_void;
@@ -1895,7 +1930,7 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
 
   if(context.dbuilder)
   {
-    auto name   = std::string(!body.debug.name.size() ? "func#" + std::to_string(indice) : body.debug.name.str());
+    auto name   = std::string(!desc.debug.name.size() ? "func#" + std::to_string(indice) : desc.debug.name.str());
     auto line   = body.debug.line;
     auto column = body.debug.column;
     auto file   = context.dunit;
@@ -1916,25 +1951,30 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
   context.builder.SetInsertPoint(BB::Create(context.context, "entry", fn)); // Setup initial basic block.
   context.locals.resize(0);
   context.locals.reserve(sig.n_params + body.n_locals);
-  varuint32 index = 0;
+  varuint32 index  = 0;
+  varuint32 offset = 0;
+  auto curloc      = context.builder.getCurrentDebugLocation();
 
   // We allocate parameters first, followed by local variables
   for(auto& arg : fn->args())
   {
     std::string name = "$p" + std::to_string(index + 1);
-    if(index < body.n_local_debug && body.local_debug[index].name.size())
-      name = body.local_debug[index].name.str();
+    if(desc.param_debug && desc.param_debug[index].name.size())
+      name = desc.param_debug[index].name.str();
 
     assert(index < sig.n_params);
     auto ty = GetLLVMType(sig.params[index], context);
     assert(ty == arg.getType());
     context.locals.push_back(context.builder.CreateAlloca(ty, nullptr, name));
+    context.locals.back()->setMetadata(
+      IN_LOCAL_INDEX_METADATA,
+      llvm::MDNode::get(context.context, { llvm::ConstantAsMetadata::get(context.builder.getInt32(offset++)) }));
 
     if(context.dbuilder)
     {
       llvm::DILocation* loc = context.builder.getCurrentDebugLocation();
-      if(index < body.n_local_debug && body.local_debug[index].line > 0)
-        loc = GetMappedLocation(context, body.local_debug[index].line, body.local_debug[index].column, fn->getSubprogram());
+      if(desc.param_debug && desc.param_debug[index].line > 0)
+        loc = GetMappedLocation(context, desc.param_debug[index].line, desc.param_debug[index].column, fn->getSubprogram());
 
       llvm::DILocalVariable* dparam = context.dbuilder->createParameterVariable(
         fn->getSubprogram(), context.locals.back()->getName(),
@@ -1952,20 +1992,24 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
 
   for(varuint32 i = 0; i < body.n_locals; ++i)
   {
-    std::string name = "$l" + std::to_string(i + 1);
-    if(index + i < body.n_local_debug && body.local_debug[index + i].name.size())
-      name = body.local_debug[index + i].name.str();
+    std::string name = "$l" + std::to_string(offset + 1);
+    if(body.locals[i].debug.name.size())
+      name = body.locals[i].debug.name.str();
 
-    auto ty = GetLLVMType(body.locals[i], context);
-    context.locals.push_back(context.builder.CreateAlloca(ty, nullptr, name));
+    auto ty    = GetLLVMType(body.locals[i].type, context);
+    auto count = (body.locals[i].count > 1) ? context.builder.getInt32(body.locals[i].count) : nullptr;
+    context.locals.push_back(context.builder.CreateAlloca(ty, count, name));
+    context.locals.back()->setMetadata(
+      IN_LOCAL_INDEX_METADATA,
+      llvm::MDNode::get(context.context, { llvm::ConstantAsMetadata::get(context.builder.getInt32(offset)) }));
 
     if(context.dbuilder)
     {
       llvm::DILocation* loc = context.builder.getCurrentDebugLocation();
-      if(index + i < body.n_local_debug && body.local_debug[index + i].line > 0)
-        loc = GetMappedLocation(context, body.local_debug[index + i].line, body.local_debug[index + i].column,
-                                fn->getSubprogram());
+      //if(body.locals[i].debug.line > 0)
+      //  loc = GetMappedLocation(context, body.locals[i].debug.line, body.locals[i].debug.column, fn->getSubprogram());
 
+      assert(loc->getScope()->getSubprogram() == context.builder.getCurrentDebugLocation()->getScope()->getSubprogram());
       llvm::DILocalVariable* dparam =
         context.dbuilder->createAutoVariable(fn->getSubprogram(), context.locals.back()->getName(), loc->getFile(),
                                              loc->getLine(),
@@ -1976,6 +2020,7 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
     }
 
     context.builder.CreateStore(llvm::Constant::getNullValue(ty), context.locals.back());
+    offset += body.locals[i].count;
   }
 
   unsigned int stacksize = 0;
@@ -2307,7 +2352,7 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
     path abspath     = GetAbsolutePath(GetPath(context.m.filepath));
     context.dbuilder = new llvm::DIBuilder(*context.llvm);
 
-    long sz;
+    size_t sz;
     auto debugfile = LoadFile(abspath, sz);
     if(debugfile.get())
     {
@@ -2382,7 +2427,7 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
     {
       auto index = imp.func_desc.type_index;
 
-      if(index >= context.m.type.n_functions)
+      if(index >= context.m.type.n_functypes)
         return ERR_INVALID_TYPE_INDEX;
 
       auto fname    = CanonImportName(imp, env->system);
@@ -2391,7 +2436,7 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
         context.functions.back().internal = static_cast<Func*>(kh_val(context.importhash, iter));
       else
       {
-        context.functions.back().internal = CompileFunction(context.m.type.functions[index], fname, context);
+        context.functions.back().internal = CompileFunction(context.m.type.functypes[index], fname, context);
         context.functions.back().internal->setLinkage(Func::ExternalLinkage);
         int r;
         khiter_t iter =
@@ -2502,22 +2547,21 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
   // Declare function prototypes
   for(varuint32 i = 0; i < context.m.function.n_funcdecl; ++i)
   {
-    auto index = context.m.function.funcdecl[i];
-    if(index >= context.m.type.n_functions)
+    auto decl = context.m.function.funcdecl[i];
+    if(decl.type_index >= context.m.type.n_functypes)
       return ERR_INVALID_TYPE_INDEX;
 
-    auto debug = context.m.code.funcbody[i].debug;
     context.functions.emplace_back();
     context.functions.back().internal =
-      CompileFunction(context.m.type.functions[index],
-                      std::string(!debug.name.size() ? "func" : debug.name.str()) + "#" +
+      CompileFunction(context.m.type.functypes[decl.type_index],
+                      std::string(!decl.debug.name.size() ? "func" : decl.debug.name.str()) + "#" +
                         std::to_string(context.functions.size()) + "|" + context.m.name.str(),
                       context);
 
     if(context.dbuilder)
     {
-      auto line   = debug.line;
-      auto column = debug.column;
+      auto line   = decl.debug.line;
+      auto column = decl.debug.column;
       auto file   = ResolveMappedSegment(context, line, column);
 
       FunctionDebugInfo(context.functions.back().internal, context.functions.back().internal->getName(), context, true,
@@ -2728,11 +2772,8 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
 
     if(fn)
     {
-      if(context.m.function.funcdecl[i] >= context.m.type.n_functions)
-        return ERR_INVALID_TYPE_INDEX;
-      if((err = CompileFunctionBody(fn, code_index, context.functions[code_index].memlocal,
-                                    context.m.type.functions[context.m.function.funcdecl[i]], context.m.code.funcbody[i],
-                                    context)) < 0)
+      if((err = CompileFunctionBody(fn, code_index, context.functions[code_index].memlocal, context.m.function.funcdecl[i],
+                                    context.m.code.funcbody[i], context)) < 0)
         return err;
     }
     ++code_index;
@@ -2769,13 +2810,13 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
     std::array<llvm::Constant*, 10> values = {
       new llvm::GlobalVariable(*context.llvm, gname->getType(), true, llvm::GlobalValue::PrivateLinkage, gname),
       context.builder.getInt32(context.m.version),
-      context.builder.getInt32(context.tables.size()),
+      context.builder.getInt32((uint32)context.tables.size()),
       new llvm::GlobalVariable(*context.llvm, gtables->getType(), true, llvm::GlobalValue::PrivateLinkage, gtables),
-      context.builder.getInt32(context.memories.size()),
+      context.builder.getInt32((uint32)context.memories.size()),
       new llvm::GlobalVariable(*context.llvm, gmemories->getType(), true, llvm::GlobalValue::PrivateLinkage, gmemories),
-      context.builder.getInt32(context.globals.size()),
+      context.builder.getInt32((uint32)context.globals.size()),
       new llvm::GlobalVariable(*context.llvm, gglobals->getType(), true, llvm::GlobalValue::PrivateLinkage, gglobals),
-      context.builder.getInt32(context.functions.size()),
+      context.builder.getInt32((uint32)context.functions.size()),
       context.exported_functions,
     };
     auto metadata = llvm::ConstantStruct::getAnon(values);

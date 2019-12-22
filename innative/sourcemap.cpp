@@ -395,7 +395,7 @@ IN_ERROR ParseSourceMap(const Environment* env, SourceMap* map, const char* data
   const char* end;
   if(!len)
   {
-    long sz;
+    size_t sz;
     f = utility::LoadFile(utility::GetPath(data), sz);
     if(!f)
       return ERR_FATAL_FILE_ERROR;
@@ -426,26 +426,12 @@ const SourceMapSegment* GetSourceMapSegment(SourceMap* map, size_t line, size_t 
     return &map->mappings[line].segments[map->mappings[line].n_segments - 1];
 
   // Do a lower-bound binary search on the nearest matching column
-  ptrdiff_t c = map->mappings[line].n_segments;
-  ptrdiff_t c2;
-  ptrdiff_t m;
-  ptrdiff_t first = 0;
+  auto end = map->mappings[line].segments + map->mappings[line].n_segments;
+  auto i = std::lower_bound(map->mappings[line].segments, end,
+                            column,
+                            [](const SourceMapSegment& l, size_t v) { return l.column < v; });
 
-  while(c > 0)
-  {
-    c2 = (c >> 1);
-    m  = first + c2;
-
-    if(column >= map->mappings[line].segments[m].column)
-    {
-      first = m + 1;
-      c -= c2 + 1;
-    }
-    else
-      c = c2;
-  }
-
-  return &map->mappings[line].segments[first];
+  return i == end ? map->mappings[line].segments : i;
 }
 
 template<> void sourcemap::Serialize<size_t>(size_t s, FILE* f) { fprintf(f, "%zu", s); }
