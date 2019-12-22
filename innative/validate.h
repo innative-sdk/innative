@@ -12,7 +12,7 @@ namespace innative {
   void ValidateFunctionSig(const FunctionType& sig, Environment& env, Module* m);
   bool MatchFunctionType(const FunctionType& a, const FunctionType& b);
   void ValidateImport(const Import& imp, Environment& env, Module* m);
-  void ValidateFunction(const varuint32& decl, Environment& env, Module* m);
+  void ValidateFunction(const FunctionDesc& decl, Environment& env, Module* m);
   void ValidateLimits(const ResizableLimits& limits, Environment& env, Module* m);
   void ValidateTable(const TableDesc& table, Environment& env, Module* m);
   void ValidateMemory(const MemoryDesc& mem, Environment& env, Module* m);

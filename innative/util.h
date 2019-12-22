@@ -318,22 +318,28 @@ namespace innative {
       return s;
     }
 
-    inline std::unique_ptr<uint8_t[]> LoadFile(const path& file, long& sz)
+    inline std::unique_ptr<uint8_t[]> LoadFile(const path& file, size_t& sz)
     {
       FILE* f = nullptr;
       FOPEN(f, file.c_str(), "rb");
       if(!f)
         return nullptr;
       fseek(f, 0, SEEK_END);
-      sz = ftell(f);
+      long pos = ftell(f);
+      if(pos < 0)
+      {
+        fclose(f);
+        return nullptr;
+      }
+      sz = static_cast<size_t>(pos);
       fseek(f, 0, SEEK_SET);
       std::unique_ptr<uint8_t[]> data(new uint8_t[sz]);
-      sz = (long)fread(data.get(), 1, sz, f);
+      sz = fread(data.get(), 1, sz, f);
       fclose(f);
       return data;
     }
 
-    inline bool DumpFile(const path& file, const void* data, long sz)
+    inline bool DumpFile(const path& file, const void* data, size_t sz)
     {
       FILE* f = nullptr;
       FOPEN(f, file.c_str(), "wb");

@@ -278,21 +278,22 @@ typedef struct IN__EXPORTS
   /// \param str A null-terminated string to be copied into the identifier.
   int (*SetIdentifier)(Environment* env, Identifier* identifier, const char* str);
 
-  /// Inserts a local into the given function body at the provided index and initializes it with a type, and an optional
-  /// debuginfo value.
+  /// Inserts a local group definition into the given function body at the provided index and initializes it with a type,
+  /// and an optional debuginfo value.
   /// \param env The environment associated with the given function.
-  /// \param func The FunctionBody object to insert the local definition into.
-  /// \param index The index where the new local will be inserted.
-  /// \param local The local that will be inserted.
+  /// \param body The FunctionBody object to insert the local definition into.
+  /// \param index The index where the new local will be inserted. This refers to local groups, NOT the actual local index.
+  /// \param local The type that will be inserted.
+  /// \param count How many locals of the given type will be in this local group.
   /// \param info An optional pointer to debug information describing the local.
-  int (*InsertModuleLocal)(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index, varsint7 local,
+  int (*InsertModuleLocal)(Environment* env, FunctionBody* body, varuint32 index, varsint7 local, varuint32 count,
                            DebugInfo* info);
 
   // Removes a local definition from the given function body at the provided index.
   /// \param env The environment associated with the given function.
-  /// \param func The FunctionBody object to remove the local definition from.
+  /// \param body The FunctionBody object to remove the local definition from.
   /// \param index The index of the local that will be removed.
-  int (*RemoveModuleLocal)(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index);
+  int (*RemoveModuleLocal)(Environment* env, FunctionBody* body, varuint32 index);
 
   /// Inserts an instruction into the given function body at the provided index and initializes it with an initial value.
   /// \param env The environment associated with the given function.
@@ -311,17 +312,19 @@ typedef struct IN__EXPORTS
   /// function body and a DebugInfo object are provided, also inserts and initializes the appropriate debug information.
   /// \param env The environment associated with the given function.
   /// \param func The FunctionType object to insert the parameter into.
+  /// \param desc The corresponding FunctionDesc object to add the debug information to.
   /// \param param The parameter that will be inserted.
   /// \param info An optional pointer to debug information describing the parameter.
-  int (*InsertModuleParam)(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index, varsint7 param,
+  int (*InsertModuleParam)(Environment* env, FunctionType* func, FunctionDesc* desc, varuint32 index, varsint7 param,
                            DebugInfo* info);
 
   /// Removes a parameter from the given function type at the provided index. If the corresponding function body is
   /// provided, also removes the corresponding DebugInfo object from the body, if it exists.
   /// \param env The environment associated with the given function.
   /// \param func The FunctionType object to remove the parameter from.
+  /// \param desc The corresponding FunctionDesc object to remove the debug information from.
   /// \param index The index of the parameter that will be removed.
-  int (*RemoveModuleParam)(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index);
+  int (*RemoveModuleParam)(Environment* env, FunctionType* func, FunctionDesc* desc, varuint32 index);
 
   /// Inserts and initializes a return value into the given function type at the provided index.
   /// \param env The environment associated with the given function.

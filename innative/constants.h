@@ -109,6 +109,7 @@ namespace innative {
     constexpr char IN_ENV_EXTENSION[]        = ".ir-env-cache";
     constexpr char IN_GLUE_STRING[]          = "_WASM_";
     constexpr char IN_MEMORY_MAX_METADATA[]  = "__IN_MEMORY_MAX_METADATA";
+    constexpr char IN_LOCAL_INDEX_METADATA[]        = "__IN_LOCAL_INDEX";
     constexpr char IN_MEMORY_GROW_METADATA[] = "__IN_MEMORY_GROW_METADATA";
     constexpr char IN_FUNCTION_TRAVERSED[]   = "__IN_FUNCTION_TRAVERSED";
     constexpr char IN_TEMP_PREFIX[]          = "wast_m";

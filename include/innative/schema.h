@@ -220,7 +220,7 @@ typedef struct IN_WASM_FUNCTION_DESC
 {
   varuint32 type_index;
   DebugInfo debug;
-  DebugInfo* param_debug; // Always the size of n_params from the signature
+  DebugInfo* param_debug; // Always the size of n_params from the signature, or NULL
 } FunctionDesc;
 
 // Represents a single webassembly import definition
@@ -256,17 +256,23 @@ typedef struct IN_WASM_TABLE_INIT
   varuint32* elements;
 } TableInit;
 
+// Stores a local declaration, which includes the count and debug information.
+typedef struct IN_WASM_FUNCTION_LOCAL
+{
+  varuint32 count; // We need to keep track of this to reconstruct arrays
+  varsint7 type;
+  DebugInfo debug; // If a name section specifies a local in the middle of a compressed array, we split it off
+} FunctionLocal;
+
 // Defines the locals, instructions, and debug information for a webassembly function body
 typedef struct IN_WASM_FUNCTION_BODY
 {
-  varuint32 body_size;
+  FunctionLocal* locals;
   varuint32 n_locals;
-  varsint7* locals;
-  DebugInfo*
-    local_debug; // INTERNAL: debug names of locals, always the size of n_locals + n_params or NULL if it doesn't exist
-  varuint32 n_local_debug;
+  varuint32 local_size; // total number of individual locals (sum of all counts)
   Instruction* body;
-  varuint32 n_body; // INTERNAL: track actual number of instructions
+  varuint32 n_body;    // track actual number of instructions
+  varuint32 body_size; // track number of bytes used by instruction section
   DebugInfo debug;
 } FunctionBody;
 
@@ -313,8 +319,8 @@ typedef struct IN_WASM_MODULE
 
   struct TypeSection
   {
-    varuint32 n_functions;
-    FunctionType* functions;
+    varuint32 n_functypes;
+    FunctionType* functypes;
   } type;
 
   struct ImportSection
@@ -333,7 +339,7 @@ typedef struct IN_WASM_MODULE
   struct FunctionSection
   {
     varuint32 n_funcdecl;
-    varuint32* funcdecl;
+    FunctionDesc* funcdecl;
   } function;
 
   struct TableSection

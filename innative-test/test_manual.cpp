@@ -61,28 +61,28 @@ void TestHarness::test_manual()
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_TYPE, 0);
   TEST(!err);
-  m.type.functions[0].form = TE_func; // Set our function form
+  m.type.functypes[0].form = TE_func; // Set our function form
 
   // Add our function return type (we set the parameters later)
-  err = (*_exports.InsertModuleReturn)(env, &m.type.functions[0], 0, TE_i32);
+  err = (*_exports.InsertModuleReturn)(env, &m.type.functypes[0], 0, TE_i32);
   TEST(!err);
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_TYPE, 1);
   TEST(!err);
-  m.type.functions[1].form = TE_func; // Set our function form
+  m.type.functypes[1].form = TE_func; // Set our function form
 
-  err = (*_exports.InsertModuleReturn)(env, &m.type.functions[1], 0, TE_i64);
+  err = (*_exports.InsertModuleReturn)(env, &m.type.functypes[1], 0, TE_i64);
   TEST(!err);
-  err = (*_exports.InsertModuleParam)(env, &m.type.functions[1], 0, 0, TE_i32, 0);
+  err = (*_exports.InsertModuleParam)(env, &m.type.functypes[1], 0, 0, TE_i32, 0);
   TEST(!err);
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_FUNCTION, 0);
   TEST(!err);
-  m.function.funcdecl[0] = 0; // Refer to our 0th type for this function
+  m.function.funcdecl[0].type_index = 0; // Refer to our 0th type for this function
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_FUNCTION, 1);
   TEST(!err);
-  m.function.funcdecl[1] = 1; // This is a wrapper around the imported intrinsic
+  m.function.funcdecl[1].type_index = 1; // This is a wrapper around the imported intrinsic
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_CODE, 0);
   TEST(!err);
@@ -108,9 +108,9 @@ void TestHarness::test_manual()
   TEST(!err);
   err = (*_exports.SetIdentifier)(env, &info_b.name, "b");
   TEST(!err);
-  err = (*_exports.InsertModuleParam)(env, &m.type.functions[0], &m.code.funcbody[0], 0, TE_i32, &info_a);
+  err = (*_exports.InsertModuleParam)(env, &m.type.functypes[0], &m.function.funcdecl[0], 0, TE_i32, &info_a);
   TEST(!err);
-  err = (*_exports.InsertModuleParam)(env, &m.type.functions[0], &m.code.funcbody[0], 1, TE_i32, &info_b);
+  err = (*_exports.InsertModuleParam)(env, &m.type.functypes[0], &m.function.funcdecl[0], 1, TE_i32, &info_b);
   TEST(!err);
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_CODE, 1);

@@ -88,10 +88,10 @@ void innative::DestroyEnvironment(Environment* env)
   free(env);
 }
 
-void innative::LoadModule(Environment* env, size_t index, const void* data, uint64_t size, const char* name,
+void innative::LoadModule(Environment* env, size_t index, const void* data, size_t size, const char* name,
                           const char* file, int* err)
 {
-  Stream s = { (uint8_t*)data, (size_t)size, 0 };
+  Stream s = { (uint8_t*)data, size, 0 };
   std::string fallback;
   if(!name)
   {
@@ -102,7 +102,7 @@ void innative::LoadModule(Environment* env, size_t index, const void* data, uint
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
   {
     env->modules[index] = { 0 };
-    *err = innative::ParseWatModule(*env, file, env->modules[index], s.data, (size_t)size, StringRef{ name, strlen(name) });
+    *err = innative::ParseWatModule(*env, file, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
   }
   else
     *err = ParseModule(s, file, *env, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
@@ -139,7 +139,7 @@ size_t ReserveModule(Environment* env, int* err)
   return index;
 }
 
-void innative::AddModule(Environment* env, const void* data, uint64_t size, const char* name, int* err)
+void innative::AddModule(Environment* env, const void* data, size_t size, const char* name, int* err)
 {
   *err = ERR_SUCCESS;
   if(!env || !err)
@@ -152,15 +152,13 @@ void innative::AddModule(Environment* env, const void* data, uint64_t size, cons
   std::unique_ptr<uint8_t[]> data_module;
   if(!size)
   {
-    long sz     = 0;
     file        = (const char*)data;
-    data_module = utility::LoadFile(file, sz);
+    data_module = utility::LoadFile(file, size);
     if(data_module.get() == nullptr)
     {
       *err = ERR_FATAL_FILE_ERROR;
       return;
     }
-    size = sz;
     data = data_module.get();
   }
 
@@ -207,7 +205,7 @@ IN_ERROR innative::AddWhitelist(Environment* env, const char* module_name, const
   return ERR_SUCCESS;
 }
 
-IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, uint64_t size)
+IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, size_t size)
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;
@@ -423,13 +421,11 @@ int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bo
   std::unique_ptr<uint8_t[]> data_module;
   if(!sz)
   {
-    long len;
     target      = reinterpret_cast<const char*>(data);
-    data_module = utility::LoadFile(utility::GetPath(target), len);
+    data_module = utility::LoadFile(utility::GetPath(target), sz);
     if(data_module.get() == nullptr)
       return ERR_FATAL_FILE_ERROR;
     data = data_module.get();
-    sz   = len;
   }
   else if(env->flags & ENV_DEBUG)
   {
@@ -580,7 +576,7 @@ int innative::InsertModuleSection(Environment* env, Module* m, enum WASM_MODULE_
   {
   case WASM_MODULE_TYPE:
     m->knownsections |= (1 << WASM_SECTION_TYPE);
-    return InsertModuleType<FunctionType>(env, m->type.functions, m->type.n_functions, index, { 0 });
+    return InsertModuleType<FunctionType>(env, m->type.functypes, m->type.n_functypes, index, { 0 });
   case WASM_MODULE_IMPORT_FUNCTION: ++m->importsection.functions;
   case WASM_MODULE_IMPORT_TABLE: ++m->importsection.tables;
   case WASM_MODULE_IMPORT_MEMORY: ++m->importsection.memories;
@@ -589,7 +585,7 @@ int innative::InsertModuleSection(Environment* env, Module* m, enum WASM_MODULE_
     return InsertModuleType(env, m->importsection.imports, m->importsection.n_import, index, Import{});
   case WASM_MODULE_FUNCTION:
     m->knownsections |= (1 << WASM_SECTION_FUNCTION);
-    return InsertModuleType<varuint32>(env, m->function.funcdecl, m->function.n_funcdecl, index, { 0 });
+    return InsertModuleType<FunctionDesc>(env, m->function.funcdecl, m->function.n_funcdecl, index, { 0 });
   case WASM_MODULE_TABLE:
     m->knownsections |= (1 << WASM_SECTION_TABLE);
     return InsertModuleType<TableDesc>(env, m->table.tables, m->table.n_tables, index, { 0 });
@@ -648,12 +644,13 @@ int innative::DeleteModuleSection(Environment* env, Module* m, enum WASM_MODULE_
 
   switch(field)
   {
-  case WASM_MODULE_TYPE: return DeleteModuleType<FunctionType>(env, m->type.functions, m->type.n_functions, index);
+  case WASM_MODULE_TYPE: return DeleteModuleType<FunctionType>(env, m->type.functypes, m->type.n_functypes, index);
   case WASM_MODULE_IMPORT_FUNCTION: --m->importsection.functions;
   case WASM_MODULE_IMPORT_TABLE: --m->importsection.tables;
   case WASM_MODULE_IMPORT_MEMORY: --m->importsection.memories;
   case WASM_MODULE_IMPORT_GLOBAL: return DeleteModuleType(env, m->importsection.imports, m->importsection.n_import, index);
-  case WASM_MODULE_FUNCTION: return DeleteModuleType<varuint32>(env, m->function.funcdecl, m->function.n_funcdecl, index);
+  case WASM_MODULE_FUNCTION:
+    return DeleteModuleType<FunctionDesc>(env, m->function.funcdecl, m->function.n_funcdecl, index);
   case WASM_MODULE_TABLE: return DeleteModuleType<TableDesc>(env, m->table.tables, m->table.n_tables, index);
   case WASM_MODULE_MEMORY: return DeleteModuleType<MemoryDesc>(env, m->memory.memories, m->memory.n_memories, index);
   case WASM_MODULE_GLOBAL: return DeleteModuleType<GlobalDecl>(env, m->global.globals, m->global.n_globals, index);
@@ -686,31 +683,23 @@ int innative::SetIdentifier(Environment* env, Identifier* identifier, const char
   return ERR_SUCCESS;
 }
 
-int innative::InsertModuleLocal(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index, varsint7 local,
-                                DebugInfo* info)
+int innative::InsertModuleLocal(Environment* env, FunctionBody* body, varuint32 index, varsint7 type, varuint32 count, DebugInfo* info)
 {
   if(!body)
     return ERR_FATAL_NULL_POINTER;
-  if(info || body->local_debug)
-  {
-    int err =
-      InsertModuleType(env, body->local_debug, body->n_local_debug, func->n_params + index, !info ? DebugInfo{ 0 } : *info);
-    if(err < 0)
-      return err;
-  }
+
+  FunctionLocal local = { count, type };
+
+  if(info)
+    local.debug = *info;
+
   return InsertModuleType(env, body->locals, body->n_locals, index, local);
 }
 
-int innative::RemoveModuleLocal(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index)
+int innative::RemoveModuleLocal(Environment* env, FunctionBody* body, varuint32 index)
 {
   if(!body)
     return ERR_FATAL_NULL_POINTER;
-  if(body->n_local_debug)
-  {
-    int err = DeleteModuleType(env, body->local_debug, body->n_local_debug, func->n_params + index);
-    if(err < 0)
-      return err;
-  }
   return DeleteModuleType(env, body->locals, body->n_locals, index);
 }
 
@@ -728,27 +717,29 @@ int innative::RemoveModuleInstruction(Environment* env, FunctionBody* body, varu
   return DeleteModuleType(env, body->body, body->n_body, index);
 }
 
-int innative::InsertModuleParam(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index, varsint7 param,
+int innative::InsertModuleParam(Environment* env, FunctionType* func, FunctionDesc* desc, varuint32 index, varsint7 param,
                                 DebugInfo* name)
 {
   if(!func)
     return ERR_FATAL_NULL_POINTER;
-  if(body && (name || body->local_debug))
+  if(name || desc)
   {
-    int err = InsertModuleType(env, body->local_debug, body->n_local_debug, index, !name ? DebugInfo{ 0 } : *name);
+    auto n  = func->n_params;
+    int err = InsertModuleType(env, desc->param_debug, n, index, !name ? DebugInfo{ 0 } : *name);
     if(err < 0)
       return err;
   }
   return InsertModuleType(env, func->params, func->n_params, index, param);
 }
 
-int innative::RemoveModuleParam(Environment* env, FunctionType* func, FunctionBody* body, varuint32 index)
+int innative::RemoveModuleParam(Environment* env, FunctionType* func, FunctionDesc* desc, varuint32 index)
 {
   if(!func)
     return ERR_FATAL_NULL_POINTER;
-  if(body && body->local_debug)
+  if(desc && desc->param_debug)
   {
-    int err = DeleteModuleType(env, body->local_debug, body->n_local_debug, index);
+    auto n  = func->n_params;
+    int err = DeleteModuleType(env, desc->param_debug, n, index);
     if(err < 0)
       return err;
   }

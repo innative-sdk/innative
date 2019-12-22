@@ -98,7 +98,7 @@ void TestHarness::test_assemblyscript()
 
   fn(TEST_EMBEDDING, 0);
 
-  long embedsz   = 0;
+  size_t embedsz   = 0;
   auto embedfile = utility::LoadFile(TEST_EMBEDDING, embedsz);
 
   fn((const char*)embedfile.get(), embedsz);

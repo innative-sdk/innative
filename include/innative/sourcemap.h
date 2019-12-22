@@ -25,6 +25,20 @@ typedef struct IN_SOURCE_GROUP
   size_t n_segments;
 } SourceMapGroup;
 
+typedef struct IN_SOURCE_TYPE
+{
+  struct IN_SOURCE_TYPE* p;
+  size_t n;
+} SourceMapType;
+
+typedef struct IN_SOURCE_VARIABLE
+{
+  size_t type_index;
+  size_t group;
+  size_t segment;
+  size_t name_index;
+} SourceMapVariable;
+
 typedef struct IN_SOURCE_MAP
 {
   short version;
@@ -39,6 +53,10 @@ typedef struct IN_SOURCE_MAP
   struct IN_SOURCE_GROUP* mappings; // One group per line
   size_t n_mappings;
   size_t x_google_linecount;
+  struct IN_SOURCE_TYPE* x_innative_types;
+  size_t n_innative_types;
+  struct IN_SOURCE_VARIABLE* x_innative_variables;
+  size_t n_innative_variables;
 } SourceMap;
 
 extern IN_COMPILER_DLLEXPORT enum IN_ERROR DWARFSourceMap(struct IN_WASM_ENVIRONMENT* env, SourceMap* map, const char* obj,

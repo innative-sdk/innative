@@ -153,17 +153,17 @@ namespace innative {
         return m.importsection.imports[index].func_desc.type_index;
       index -= m.importsection.functions;
       if(index < m.function.n_funcdecl)
-        return m.function.funcdecl[index];
+        return m.function.funcdecl[index].type_index;
       return (varuint32)~0;
     }
 
     FunctionType* ModuleFunction(const Module& m, varuint32 index)
     {
       if(index < m.importsection.functions)
-        return &m.type.functions[m.importsection.imports[index].func_desc.type_index];
+        return &m.type.functypes[m.importsection.imports[index].func_desc.type_index];
       index -= m.importsection.functions;
       if(index < m.function.n_funcdecl)
-        return &m.type.functions[m.function.funcdecl[index]];
+        return &m.type.functypes[m.function.funcdecl[index].type_index];
       return nullptr;
     }
     TableDesc* ModuleTable(const Module& m, varuint32 index)

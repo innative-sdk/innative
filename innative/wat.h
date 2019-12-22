@@ -32,13 +32,14 @@ namespace innative {
     varuint32 GetFromHash(wat::kh_indexname_t* hash, const WatToken& t);
     int MergeFunctionType(const FunctionType& ftype, varuint32& out);
     int ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo** info, varuint32* n_info, bool anonymous);
-    varuint32 GetLocal(FunctionBody& f, FunctionType& sig, const WatToken& t);
+    varuint32 GetLocal(FunctionBody& f, FunctionDesc& desc, varuint32 n_param, const WatToken& t);
     int ParseConstantOperator(Queue<WatToken>& tokens, Instruction& op);
-    int ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionBody& f, FunctionType& sig, DeferWatAction& defer);
+    int ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionBody& f, FunctionDesc& desc, FunctionType& sig,
+                      DeferWatAction& defer);
     void ParseLabel(Queue<WatToken>& tokens);
     bool CheckLabel(Queue<WatToken>& tokens);
-    int ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, FunctionType& sig, varuint32 index);
-    int ParseExpression(Queue<WatToken>& tokens, FunctionBody& f, FunctionType& sig, varuint32 index);
+    int ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, FunctionDesc& desc, FunctionType& sig, varuint32 index);
+    int ParseExpression(Queue<WatToken>& tokens, FunctionBody& f, FunctionDesc& desc, FunctionType& sig, varuint32 index);
     int ParseFunction(Queue<WatToken>& tokens, varuint32* index, utility::StringRef name);
     int ParseResizableLimits(ResizableLimits& limits, Queue<WatToken>& tokens);
     int ParseTableDesc(TableDesc& t, Queue<WatToken>& tokens);
@@ -65,7 +66,7 @@ namespace innative {
     static int WatString(const Environment& env, ByteArray& str, utility::StringRef t);
     static void WriteUTF32(uint32_t ch, ByteArray& str, varuint32& index);
     static varsint7 WatValType(WatTokens id);
-    static int ParseLocalAppend(const Environment& env, FunctionBody& body, Queue<WatToken>& tokens);
+    static int ParseLocalAppend(const Environment& env, FunctionLocal& local, FunctionBody& body, Queue<WatToken>& tokens);
     static int AddName(wat::kh_indexname_t* h, WatToken t, varuint32 index);
 
     IN_FORCEINLINE static int WatString(const Environment& env, ByteArray& str, const WatToken& t)
