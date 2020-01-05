@@ -1,7 +1,9 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
+#include "llvm.h"
 #include "intrinsic.h"
+#include "compile.h"
 
 using namespace innative;
 

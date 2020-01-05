@@ -9,7 +9,7 @@
 
 namespace innative {
   namespace wat {
-    KHASH_DECLARE(indexname, utility::StringRef, varuint32);
+    KHASH_DECLARE(indexname, utility::StringSpan, varuint32);
   }
 
   struct WatParser
@@ -40,7 +40,7 @@ namespace innative {
     bool CheckLabel(Queue<WatToken>& tokens);
     int ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, FunctionDesc& desc, FunctionType& sig, varuint32 index);
     int ParseExpression(Queue<WatToken>& tokens, FunctionBody& f, FunctionDesc& desc, FunctionType& sig, varuint32 index);
-    int ParseFunction(Queue<WatToken>& tokens, varuint32* index, utility::StringRef name);
+    int ParseFunction(Queue<WatToken>& tokens, varuint32* index, utility::StringSpan name);
     int ParseResizableLimits(ResizableLimits& limits, Queue<WatToken>& tokens);
     int ParseTableDesc(TableDesc& t, Queue<WatToken>& tokens);
     int ParseTable(Queue<WatToken>& tokens, varuint32* index);
@@ -59,11 +59,11 @@ namespace innative {
                            Import** out);
 
     static int ParseBlockType(Queue<WatToken>& tokens, varsint7& out);
-    static int ParseModule(Environment& env, Module& m, const char* file, Queue<WatToken>& tokens, utility::StringRef name,
+    static int ParseModule(Environment& env, Module& m, const char* file, Queue<WatToken>& tokens, utility::StringSpan name,
                            WatToken& internalname);
     static int ParseName(const Environment& env, ByteArray& name, const WatToken& t);
     static int AddWatValType(const Environment& env, WatTokens id, varsint7*& a, varuint32& n);
-    static int WatString(const Environment& env, ByteArray& str, utility::StringRef t);
+    static int WatString(const Environment& env, ByteArray& str, utility::StringSpan t);
     static void WriteUTF32(uint32_t ch, ByteArray& str, varuint32& index);
     static varsint7 WatValType(WatTokens id);
     static int ParseLocalAppend(const Environment& env, FunctionLocal& local, FunctionBody& body, Queue<WatToken>& tokens);
@@ -73,7 +73,7 @@ namespace innative {
     {
       if(t.id != WatTokens::STRING)
         return ERR_WAT_EXPECTED_STRING;
-      return WatString(env, str, utility::StringRef{ t.pos, t.len });
+      return WatString(env, str, utility::StringSpan{ t.pos, t.len });
     }
 
     IN_FORCEINLINE static WatToken GetWatNameToken(Queue<WatToken>& tokens)
@@ -114,7 +114,7 @@ namespace innative {
     Environment& env;
     Module& m;
     Queue<DeferWatAction> deferred;
-    Stack<utility::StringRef> stack;
+    Stack<utility::StringSpan> stack;
     wat::kh_indexname_t* typehash;
     wat::kh_indexname_t* funchash;
     wat::kh_indexname_t* tablehash;
@@ -127,7 +127,7 @@ namespace innative {
   if((t).Size() == 0 || (t).Pop().id != (e)) \
   return (err)
 
-  int ParseWatModule(Environment& env, const char* file, Module& m, uint8_t* data, size_t sz, utility::StringRef name);
+  int ParseWatModule(Environment& env, const char* file, Module& m, uint8_t* data, size_t sz, utility::StringSpan name);
   void WatSkipSection(Queue<WatToken>& tokens, ptrdiff_t count = 1);
   size_t WatLineNumber(const char* start, const char* pos);
 }

@@ -14,8 +14,8 @@ void TestHarness::test_util()
     TEST(BASE64[IN_BASE64[i]] == i);
 
   {
-    StringRef a = { nullptr, 0 };
-    StringRef b = { "asdf", 4 };
+    StringSpan a = { nullptr, 0 };
+    StringSpan b = { "asdf", 4 };
     TEST(!(a == b));
     TEST(a == a);
     TEST(b == b);

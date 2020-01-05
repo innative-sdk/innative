@@ -84,7 +84,7 @@ int TestHarness::CompileWASM(const path& file)
   env->flags |= ENV_DEBUG;
   env->optimize = ENV_OPTIMIZE_O0;
 #endif
-  int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
+  int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
   if(err < 0)
   {
     (*_exports.DestroyEnvironment)(env);

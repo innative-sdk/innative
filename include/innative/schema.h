@@ -273,7 +273,8 @@ typedef struct IN_WASM_FUNCTION_BODY
   Instruction* body;
   varuint32 n_body;    // track actual number of instructions
   varuint32 body_size; // track number of bytes used by instruction section
-  DebugInfo debug;
+  unsigned int line;
+  unsigned int column;
 } FunctionBody;
 
 // Encodes initialization data for a data section
@@ -412,6 +413,7 @@ typedef struct IN_WASM_EMBEDDING
   uint64_t size; // If size is 0, data points to a null terminated UTF8 file path
   int tag; // defines the type of embedding data included, determined by the runtime. 0 is always a static library file for
            // the current platform.
+  const char* name;
   struct IN_WASM_EMBEDDING* next;
 } Embedding;
 

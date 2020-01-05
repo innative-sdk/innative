@@ -3,7 +3,6 @@
 
 #include "parse.h"
 #include "validate.h"
-#include "compile.h"
 #include "link.h"
 #include "tools.h"
 #include "wast.h"
@@ -42,7 +41,7 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
     env->linker     = 0;
     env->log        = stdout;
     env->loglevel   = LOG_WARNING;
-    env->rootpath   = utility::AllocString(*env, GetProgramPath(arg0).parent_path().u8string());
+    env->rootpath   = AllocString(*env, GetProgramPath(arg0).parent_path().u8string());
     env->libpath    = env->rootpath;
     if(!env->libpath) // Out of memory
     {
@@ -88,8 +87,8 @@ void innative::DestroyEnvironment(Environment* env)
   free(env);
 }
 
-void innative::LoadModule(Environment* env, size_t index, const void* data, size_t size, const char* name,
-                          const char* file, int* err)
+void innative::LoadModule(Environment* env, size_t index, const void* data, size_t size, const char* name, const char* file,
+                          int* err)
 {
   Stream s = { (uint8_t*)data, size, 0 };
   std::string fallback;
@@ -102,7 +101,7 @@ void innative::LoadModule(Environment* env, size_t index, const void* data, size
   if((env->flags & ENV_ENABLE_WAT) && size > 0 && s.data[0] != 0)
   {
     env->modules[index] = { 0 };
-    *err = innative::ParseWatModule(*env, file, env->modules[index], s.data, size, StringRef{ name, strlen(name) });
+    *err = innative::ParseWatModule(*env, file, env->modules[index], s.data, size, StringSpan{ name, strlen(name) });
   }
   else
     *err = ParseModule(s, file, *env, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
@@ -153,7 +152,7 @@ void innative::AddModule(Environment* env, const void* data, size_t size, const 
   if(!size)
   {
     file        = (const char*)data;
-    data_module = utility::LoadFile(file, size);
+    data_module = LoadFile(file, size);
     if(data_module.get() == nullptr)
     {
       *err = ERR_FATAL_FILE_ERROR;
@@ -205,7 +204,7 @@ IN_ERROR innative::AddWhitelist(Environment* env, const char* module_name, const
   return ERR_SUCCESS;
 }
 
-IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, size_t size)
+IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, size_t size, const char* name_override)
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;
@@ -228,7 +227,7 @@ IN_ERROR innative::AddCustomExport(Environment* env, const char* symbol)
   if(!env || !symbol)
     return ERR_FATAL_NULL_POINTER;
 
-  IN_ERROR err = utility::ReallocArray(*env, env->exports, env->n_exports);
+  IN_ERROR err = ReallocArray(*env, env->exports, env->n_exports);
   if(err < 0)
     return err;
 
@@ -265,9 +264,9 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
           return f;
         };
 
-        path envpath(utility::GetPath(env->libpath));
-        path rootpath(utility::GetPath(env->rootpath));
-        path src(utility::GetPath((const char*)embed->data));
+        path envpath(GetPath(env->libpath));
+        path rootpath(GetPath(env->rootpath));
+        path src(GetPath((const char*)embed->data));
         path out;
         FILE* f = 0;
 
@@ -367,7 +366,7 @@ IN_ERROR innative::Compile(Environment* env, const char* file)
 }
 IN_Entrypoint innative::LoadFunction(void* assembly, const char* module_name, const char* function)
 {
-  auto canonical = utility::CanonicalName(StringRef::From(module_name), StringRef::From(function));
+  auto canonical = CanonicalName(StringSpan::From(module_name), StringSpan::From(function));
   return (IN_Entrypoint)LoadDLLFunction(assembly, !function ? IN_INIT_FUNCTION : canonical.c_str());
 }
 
@@ -375,7 +374,7 @@ IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const
 {
   INGlobal* ref =
     (INGlobal*)LoadDLLFunction(assembly,
-                               utility::CanonicalName(StringRef::From(module_name), StringRef::From(table)).c_str());
+                               CanonicalName(StringSpan::From(module_name), StringSpan::From(table)).c_str());
   if(ref != nullptr && index < (reinterpret_cast<uint64_t*>(ref->table)[-1] / sizeof(INTableEntry)))
     return ref->table[index].func;
   return nullptr;
@@ -384,7 +383,7 @@ IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const
 INGlobal* innative::LoadGlobal(void* assembly, const char* module_name, const char* export_name)
 {
   return (INGlobal*)LoadDLLFunction(
-    assembly, utility::CanonicalName(StringRef::From(module_name), StringRef::From(export_name)).c_str());
+    assembly, CanonicalName(StringSpan::From(module_name), StringSpan::From(export_name)).c_str());
 }
 
 void* innative::LoadAssembly(const char* file)
@@ -401,12 +400,12 @@ void innative::FreeAssembly(void* assembly) { FreeDLL(assembly); }
 
 const char* innative::GetTypeEncodingString(int type_encoding)
 {
-  return utility::EnumToString(utility::TYPE_ENCODING_MAP, type_encoding, 0, 0);
+  return EnumToString(TYPE_ENCODING_MAP, type_encoding, 0, 0);
 }
 
 const char* innative::GetErrorString(int error_code)
 {
-  return utility::EnumToString(utility::ERR_ENUM_MAP, error_code, 0, 0);
+  return EnumToString(ERR_ENUM_MAP, error_code, 0, 0);
 }
 
 int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bool always_compile, const char* output)
@@ -422,7 +421,7 @@ int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bo
   if(!sz)
   {
     target      = reinterpret_cast<const char*>(data);
-    data_module = utility::LoadFile(utility::GetPath(target), sz);
+    data_module = LoadFile(GetPath(target), sz);
     if(data_module.get() == nullptr)
       return ERR_FATAL_FILE_ERROR;
     data = data_module.get();
@@ -446,16 +445,16 @@ int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bo
   {
     char buf[10];
     if(env->loglevel >= LOG_FATAL)
-      FPRINTF(env->log, "Error loading environment: %s\n", utility::EnumToString(utility::ERR_ENUM_MAP, err, buf, 10));
+      FPRINTF(env->log, "Error loading environment: %s\n", EnumToString(ERR_ENUM_MAP, err, buf, 10));
     return err;
   }
 
-  err = ParseWast(*env, data, sz, utility::GetPath(target), always_compile, output);
+  err = ParseWast(*env, data, sz, GetPath(target), always_compile, output);
 
   if(env->loglevel >= LOG_ERROR && err < 0)
   {
     char buf[10];
-    FPRINTF(env->log, "Error loading modules: %s\n", utility::EnumToString(utility::ERR_ENUM_MAP, err, buf, 10));
+    FPRINTF(env->log, "Error loading modules: %s\n", EnumToString(ERR_ENUM_MAP, err, buf, 10));
   }
 
   if(env->loglevel >= LOG_NOTICE && target)
@@ -463,7 +462,7 @@ int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bo
   return err;
 }
 
-int innative::SerializeModule(Environment* env, size_t m, const char* out, size_t* len)
+int innative::SerializeModule(Environment* env, size_t m, const char* out, size_t* len, bool emitdebug)
 {
   if(!env)
     return ERR_FATAL_NULL_POINTER;
@@ -488,7 +487,7 @@ int innative::SerializeModule(Environment* env, size_t m, const char* out, size_
   else
   {
     std::ostringstream ss;
-    wat::WriteTokens(tokens, ss);
+    wat::WriteTokens(tokens, ss, emitdebug);
     if(ss.tellp() < 0)
       return ERR_FATAL_FILE_ERROR;
 
@@ -508,7 +507,8 @@ int innative::SerializeModule(Environment* env, size_t m, const char* out, size_
   if(f.bad())
     return ERR_FATAL_FILE_ERROR;
 
-  wat::WriteTokens(tokens, f);
+  wat::WriteTokens(tokens, f, emitdebug);
+  DumpSourceMap(env->modules[m].sourcemap, (name + ".dump").c_str());
   return ERR_SUCCESS;
 }
 int innative::LoadSourceMap(Environment* env, unsigned int m, const char* path, size_t len)
@@ -683,7 +683,8 @@ int innative::SetIdentifier(Environment* env, Identifier* identifier, const char
   return ERR_SUCCESS;
 }
 
-int innative::InsertModuleLocal(Environment* env, FunctionBody* body, varuint32 index, varsint7 type, varuint32 count, DebugInfo* info)
+int innative::InsertModuleLocal(Environment* env, FunctionBody* body, varuint32 index, varsint7 type, varuint32 count,
+                                DebugInfo* info)
 {
   if(!body)
     return ERR_FATAL_NULL_POINTER;
@@ -763,7 +764,7 @@ int innative::RemoveModuleReturn(Environment* env, FunctionType* func, varuint32
 INModuleMetadata* innative::GetModuleMetadata(void* assembly, uint32_t module_index)
 {
   return (INModuleMetadata*)LoadDLLFunction(
-    assembly, utility::CanonicalName(StringRef(), StringRef::From(IN_METADATA_PREFIX), module_index).c_str());
+    assembly, CanonicalName(StringSpan(), StringSpan::From(IN_METADATA_PREFIX), module_index).c_str());
 }
 IN_Entrypoint innative::LoadTableIndex(void* assembly, uint32_t module_index, uint32_t table_index,
                                        varuint32 function_index)

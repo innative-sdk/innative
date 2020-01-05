@@ -17,7 +17,7 @@ namespace innative {
   void AddModule(Environment* env, const void* data, size_t size, const char* name, int* err);
   int AddModuleObject(Environment* env, const Module* m);
   enum IN_ERROR AddWhitelist(Environment* env, const char* module_name, const char* export_name);
-  enum IN_ERROR AddEmbedding(Environment* env, int tag, const void* data, size_t size);
+  enum IN_ERROR AddEmbedding(Environment* env, int tag, const void* data, size_t size, const char* name_override);
   enum IN_ERROR AddCustomExport(Environment* env, const char* symbol);
   enum IN_ERROR FinalizeEnvironment(Environment* env);
   enum IN_ERROR Validate(Environment* env);
@@ -34,7 +34,7 @@ namespace innative {
   const char* GetTypeEncodingString(int type_encoding);
   const char* GetErrorString(int error_code);
   int CompileScript(const uint8_t* data, size_t sz, Environment* env, bool always_compile, const char* output);
-  int SerializeModule(Environment* env, size_t m, const char* out, size_t* len);
+  int SerializeModule(Environment* env, size_t m, const char* out, size_t* len, bool emitdebug);
   int LoadSourceMap(Environment* env, unsigned int m, const char* path, size_t len);
   int InsertModuleSection(Environment* env, Module* m, enum WASM_MODULE_SECTIONS field, varuint32 index);
   int DeleteModuleSection(Environment* env, Module* m, enum WASM_MODULE_SECTIONS field, varuint32 index);

@@ -42,7 +42,7 @@ void* Benchmarks::LoadWASM(const path& wasm, const char* name, int flags, int op
   env->log      = stdout;
   env->loglevel = _loglevel;
 
-  int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
+  int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
 
   if(err < 0)
   {

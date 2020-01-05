@@ -115,7 +115,8 @@ typedef struct IN__EXPORTS
   /// \param data Either a pointer to memory, or a UTF8 encoded null-terminated string pointing to a file.
   /// \param size The length of the memory that the
   /// data pointer points to. If size is 0, the data pointer is actually a null terminated UTF8 encoded file path.
-  enum IN_ERROR (*AddEmbedding)(Environment* env, int tag, const void* data, uint64_t size);
+  /// \param name_override Resolves all functions in this embedded library as raw C functions with the given module name.
+  enum IN_ERROR (*AddEmbedding)(Environment* env, int tag, const void* data, uint64_t size, const char* name_override);
 
   /// Tells the linker to export the given symbol from the resulting binary.
   /// \param env The environment to modify.
@@ -230,7 +231,8 @@ typedef struct IN__EXPORTS
   /// \param out If 'len' is zero, the path to an output file. Otherwise, a pointer to an in-memory buffer that will contain
   /// the serialized result. If null, defaults to a file called '<module_name>.wat' in the current working directory
   /// \param len If 'len' is nonzero and out is not null, then this should be the length of the buffer pointed to by out
-  int (*SerializeModule)(Environment* env, size_t m, const char* out, size_t* len);
+  /// \param emitdebug If true, emits any per-instruction debug information associated with the given module.
+  int (*SerializeModule)(Environment* env, size_t m, const char* out, size_t* len, bool emitdebug);
 
   /// Loads a source map from the given path or memory location into the module at index 'm'
   /// \param env The environment that contains the module the sourcemap will be attached to.

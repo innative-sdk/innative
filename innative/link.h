@@ -20,6 +20,8 @@ namespace innative {
   IN_ERROR GenerateLinkerObjects(const Environment& env, std::vector<std::string>& cache);
   int CallLinker(const Environment* env, std::vector<const char*>& linkargs, LLD_FORMAT format);
   path GetLinkerObjectPath(const Environment& env, Module& m, const path& outfile);
+  IN_ERROR CompileEnvironment(Environment* env, const char* file);
+  int GetCallingConvention(const Import& imp);
 }
 
 #endif

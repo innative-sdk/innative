@@ -76,7 +76,7 @@ IN_WASM_ALLOCATOR::~IN_WASM_ALLOCATOR()
 
 namespace innative {
   namespace utility {
-    KHASH_INIT(opnames, StringRef, uint8_t, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
+    KHASH_INIT(opnames, StringSpan, uint8_t, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
 
     kh_opnames_t* GenOpNames()
     {
@@ -87,7 +87,7 @@ namespace innative {
       {
         if(strcmp(OPNAMES[i], "RESERVED") != 0)
         {
-          khiter_t iter   = kh_put_opnames(h, StringRef{ OPNAMES[i], strlen(OPNAMES[i]) }, &r);
+          khiter_t iter   = kh_put_opnames(h, StringSpan{ OPNAMES[i], strlen(OPNAMES[i]) }, &r);
           kh_val(h, iter) = (uint8_t)i;
         }
       }
@@ -130,8 +130,8 @@ namespace innative {
 
       for(auto& i : legacy)
       {
-        khiter_t iter = kh_put_opnames(h, StringRef{ i.first, strlen(i.first) }, &r);
-        khint_t k     = kh_get_opnames(h, StringRef{ i.second, strlen(i.second) });
+        khiter_t iter = kh_put_opnames(h, StringSpan{ i.first, strlen(i.first) }, &r);
+        khint_t k     = kh_get_opnames(h, StringSpan{ i.second, strlen(i.second) });
         assert(k != kh_end(h));
         kh_val(h, iter) = kh_val(h, k);
       }
@@ -139,7 +139,7 @@ namespace innative {
       return h;
     }
 
-    uint8_t GetInstruction(StringRef ref)
+    uint8_t GetInstruction(StringSpan ref)
     {
       static const kh_opnames_t* h = GenOpNames();
 

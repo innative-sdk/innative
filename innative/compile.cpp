@@ -1,28 +1,17 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
+#include "llvm.h"
 #include "util.h"
 #include "validate.h"
 #include "optimize.h"
 #include "intrinsic.h"
 #include "compile.h"
+#include "debug_sourcemap.h"
+#include "debug_wat.h"
 #include "link.h"
 #include "innative/export.h"
-#pragma warning(push)
-#pragma warning(disable : 4146 4267 4141 4244 4624)
-#define _SCL_SECURE_NO_WARNINGS
-#include "llvm/IR/Verifier.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/IR/CallSite.h"
-#include "llvm/IR/InstIterator.h"
-#include "llvm/Analysis/TargetTransformInfo.h"
-#include "llvm/Analysis/TargetTransformInfoImpl.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/TargetSelect.h"
-#include "llvm/Support/TargetRegistry.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/MC/SubtargetFeature.h"
-#pragma warning(pop)
+#include "stack.h"
 #include <iostream>
 #include <sstream>
 
@@ -97,154 +86,6 @@ FuncTy* GetFunctionType(FunctionType& signature, code::Context& context)
   return FuncTy::get(ret, false);
 }
 
-llvm::DIType* CreateDebugType(llvmTy* t, code::Context& context);
-
-llvm::DISubroutineType* CreateFunctionDebugType(llvm::FunctionType* fn, llvm::CallingConv::ID callconv,
-                                                code::Context& context)
-{
-  llvm::SmallVector<llvm::Metadata*, 8> dwarfTys = { CreateDebugType(fn->getReturnType(), context) };
-  for(unsigned int i = 0; i < fn->getNumParams(); ++i)
-    dwarfTys.push_back(CreateDebugType(fn->getParamType(i), context));
-
-  return context.dbuilder->createSubroutineType(context.dbuilder->getOrCreateTypeArray(dwarfTys), llvm::DINode::FlagZero,
-                                                (callconv == llvm::CallingConv::C) ? llvm::dwarf::DW_CC_normal :
-                                                                                     llvm::dwarf::DW_CC_nocall);
-}
-
-const SourceMapSegment* GetMappedSegment(code::Context& context, unsigned int line, unsigned int column)
-{
-  return context.m.sourcemap ? GetSourceMapSegment(context.m.sourcemap, line, column) : nullptr;
-}
-
-llvm::DIFile* ResolveMappedSegment(code::Context& context, unsigned int& line, unsigned int& column)
-{
-  auto file = context.dunit;
-
-  if(context.m.sourcemap)
-  {
-    if(auto segment = GetMappedSegment(context, line, column))
-    {
-      line   = (unsigned int)segment->original_line;
-      column = (unsigned int)segment->original_column;
-      file   = context.dfiles[segment->source_index];
-    }
-  }
-
-  return file;
-}
-
-llvm::DILocation* GetMappedLocation(code::Context& context, unsigned int line, unsigned int column,
-                                    llvm::DILocalScope* scope)
-{
-  auto segment = GetMappedSegment(context, line, column);
-  if(segment && segment->source_index < context.dfiles.size())
-  {
-    if(context.dfiles[segment->source_index] == scope->getFile())
-      return llvm::DILocation::get(context.context, segment->original_line, segment->original_column, scope);
-    if(segment->source_index < context.subprograms.size())
-    {
-      if(!context.subprograms[segment->source_index])
-      {
-        auto original = scope->getSubprogram();
-        context.subprograms[segment->source_index] =
-          context.dbuilder->createFunction(original->getScope(), scope->getFile()->getName(), original->getName(),
-                                           context.dfiles[segment->source_index], segment->original_line,
-                                           original->getType(), segment->original_line, original->getFlags(),
-                                           original->getSPFlags());
-      }
-
-      return llvm::DILocation::get(context.context, segment->original_line, segment->original_column,
-                                   context.subprograms[segment->source_index],
-                                   llvm::DILocation::get(context.context, line, column, scope));
-    }
-  }
-  return llvm::DILocation::get(context.context, line, column, scope);
-}
-
-llvm::DIType* CreateDebugType(llvmTy* t, code::Context& context)
-{
-  if(t->isPointerTy())
-  {
-    auto base = CreateDebugType(t->getPointerElementType(), context);
-    return context.dbuilder->createPointerType(base, context.intptrty->getBitWidth(), 0U, llvm::None,
-                                               std::string(base->getName()) + "*");
-  }
-
-  if(t->isFloatTy())
-    return context.diF32;
-  if(t->isDoubleTy())
-    return context.diF64;
-  if(t->isVoidTy())
-    return context.diVoid;
-  if(t->isIntegerTy() && static_cast<llvm::IntegerType*>(t)->getBitWidth() == 1)
-    return context.diI1;
-  if(t->isIntegerTy() && static_cast<llvm::IntegerType*>(t)->getBitWidth() == 8)
-    return context.diI8;
-  if(t->isIntegerTy() && static_cast<llvm::IntegerType*>(t)->getBitWidth() == 32)
-    return context.diI32;
-  if(t->isIntegerTy() && static_cast<llvm::IntegerType*>(t)->getBitWidth() == 64)
-    return context.diVoid;
-  if(t->isFunctionTy())
-    return CreateFunctionDebugType(llvm::cast<llvm::FunctionType>(t), llvm::CallingConv::Fast, context);
-  if(t->isStructTy())
-  {
-    uint64_t bits      = 0;
-    unsigned int align = 0;
-    llvm::SmallVector<llvm::Metadata*, 16> elems;
-    for(unsigned int i = 0; i < t->getStructNumElements(); ++i)
-    {
-      auto elem = CreateDebugType(t->getStructElementType(i), context);
-      elems.push_back(elem);
-      bits += elem->getSizeInBits();
-      align = std::max(align, elem->getAlignInBits());
-    }
-
-    return context.dbuilder->createStructType(context.dcu, t->getStructName(), context.dunit, 0, bits, align,
-                                              llvm::DINode::FlagZero, nullptr, context.dbuilder->getOrCreateArray(elems));
-  }
-  if(t->isArrayTy())
-  {
-    auto elem = CreateDebugType(t->getArrayElementType(), context);
-    return context.dbuilder->createArrayType(elem->getSizeInBits() * t->getArrayNumElements(), elem->getAlignInBits(), elem,
-                                             llvm::DINodeArray());
-  }
-
-  assert(false);
-  return nullptr;
-}
-
-void FunctionDebugInfo(Func* fn, llvm::StringRef name, code::Context& context, bool definition, bool artificial,
-                       llvm::DIFile* file, unsigned int line, unsigned int col)
-{
-  llvm::DISubprogram::DISPFlags spflags = llvm::DISubprogram::DISPFlags::SPFlagZero;
-  llvm::DINode::DIFlags diflags         = llvm::DINode::FlagZero;
-
-  if(!fn->hasValidDeclarationLinkage())
-    spflags |= llvm::DISubprogram::DISPFlags::SPFlagLocalToUnit;
-
-  if(definition)
-    spflags |= llvm::DISubprogram::DISPFlags::SPFlagDefinition;
-
-  if(context.env.optimize != 0)
-    spflags |= llvm::DISubprogram::DISPFlags::SPFlagOptimized;
-
-  if(artificial)
-    diflags |= llvm::DINode::FlagArtificial;
-
-  if(!definition)
-    diflags |= llvm::DINode::FlagFwdDecl;
-
-  if(fn->doesNotReturn())
-    diflags |= llvm::DINode::FlagNoReturn;
-
-  if(name.empty())
-    name = fn->getName();
-
-  auto subtype = CreateFunctionDebugType(fn->getFunctionType(), fn->getCallingConv(), context);
-  fn->setSubprogram(
-    context.dbuilder->createFunction(file, name, fn->getName(), file, line, subtype, line, diflags, spflags));
-}
-
 Func* CompileFunction(FunctionType& signature, const Twine& name, code::Context& context)
 {
   Func* fn = Func::Create(GetFunctionType(signature, context),
@@ -264,13 +105,11 @@ Func* HomogenizeFunction(Func* fn, llvm::StringRef name, const Twine& canonical,
   Func* wrap = Func::Create(FuncTy::get(context.builder.getInt64Ty(), types, false), linkage, canonical, context.llvm);
   wrap->setCallingConv(callconv);
 
-  if(context.dbuilder && fn->getSubprogram())
-    FunctionDebugInfo(wrap, name, context, true, false, fn->getSubprogram()->getFile(), fn->getSubprogram()->getLine(), 0);
+  if(fn->getSubprogram())
+    context.debugger->FunctionDebugInfo(wrap, name, context.env.optimize != 0, true, true, fn->getSubprogram()->getFile(),
+                                        fn->getSubprogram()->getLine(), 0);
 
-  if(context.dbuilder && wrap->getSubprogram())
-    context.builder.SetCurrentDebugLocation(
-      llvm::DILocation::get(context.context, wrap->getSubprogram()->getLine(), 0, wrap->getSubprogram()));
-
+  context.debugger->SetSPLocation(context.builder, wrap->getSubprogram());
   auto prev = context.builder.GetInsertBlock();
 
   BB* bb = BB::Create(context.context, "homogenize_block", wrap);
@@ -327,17 +166,15 @@ Func* WrapFunction(Func* fn, llvm::StringRef name, const Twine& canonical, code:
 {
   Func* wrap = Func::Create(fn->getFunctionType(), linkage, canonical, context.llvm);
   wrap->setCallingConv(callconv);
-  if(context.dbuilder && fn->getSubprogram())
-    FunctionDebugInfo(wrap, name, context, true, false, fn->getSubprogram()->getFile(), fn->getSubprogram()->getLine(), 0);
+  if(fn->getSubprogram())
+    context.debugger->FunctionDebugInfo(wrap, name, context.env.optimize != 0, true, true, fn->getSubprogram()->getFile(),
+                                        fn->getSubprogram()->getLine(), 0);
 
+  context.debugger->SetSPLocation(context.builder, wrap->getSubprogram());
   auto prev = context.builder.GetInsertBlock();
 
   BB* bb = BB::Create(context.context, "wrapper_block", wrap);
   context.builder.SetInsertPoint(bb);
-
-  if(context.dbuilder && wrap->getSubprogram())
-    context.builder.SetCurrentDebugLocation(
-      llvm::DILocation::get(context.context, wrap->getSubprogram()->getLine(), 0, wrap->getSubprogram()));
 
   vector<llvmVal*> values;
   for(auto& arg : wrap->args())
@@ -581,13 +418,9 @@ BB* PushLabel(const char* name, varsint7 sig, uint8_t opcode, Func* fnptr, code:
               llvm::DILocalScope* scope)
 {
   BB* bb = BB::Create(context.context, name, fnptr);
+  context.debugger->PushBlock(scope, context.builder.getCurrentDebugLocation());
 
-  if(context.dbuilder)
-    scope = context.dbuilder->createLexicalBlock(scope, context.builder.getCurrentDebugLocation()->getFile(),
-                                                 context.builder.getCurrentDebugLocation().getLine(),
-                                                 context.builder.getCurrentDebugLocation().getCol());
-
-  context.control.Push(code::Block{ bb, 0, context.values.Limit(), sig, opcode, scope });
+  context.control.Push(code::Block{ bb, 0, context.values.Limit(), sig, opcode });
   context.values.SetLimit(
     context.values.Size() +
     context.values.Limit()); // Set limit to current stack size to prevent a block from popping past this
@@ -677,6 +510,7 @@ IN_ERROR PopLabel(code::Context& context, BB* block)
 
   context.values.SetLimit(context.control.Peek().limit);
   context.control.Pop();
+  context.debugger->PopBlock();
 
   return ERR_SUCCESS;
 }
@@ -694,7 +528,7 @@ IN_ERROR CompileIfBlock(varsint7 sig, code::Context& context)
   Func* parent                  = context.builder.GetInsertBlock()->getParent();
   BB* tblock                    = BB::Create(context.context, "if_true", parent);
   BB* fblock                    = BB::Create(context.context, "if_else", parent); // Create else stub
-  BB* endblock                  = PushLabel("if_end", sig, OP_if, nullptr, context, context.control.Peek().scope);
+  BB* endblock                  = PushLabel("if_end", sig, OP_if, nullptr, context, context.debugger->curscope);
   context.control.Peek().ifelse = fblock;
 
   context.builder.CreateCondBr(cmp, tblock, fblock); // Insert branch in current block
@@ -1391,10 +1225,10 @@ IN_ERROR CompileInstruction(Instruction& ins, code::Context& context)
     return ERR_SUCCESS;
   case OP_nop: return ERR_SUCCESS;
   case OP_block:
-    PushLabel("block", ins.immediates[0]._varsint7, OP_block, nullptr, context, context.control.Peek().scope);
+    PushLabel("block", ins.immediates[0]._varsint7, OP_block, nullptr, context, context.debugger->curscope);
     return ERR_SUCCESS;
   case OP_loop:
-    PushLabel("loop", ins.immediates[0]._varsint7, OP_loop, nullptr, context, context.control.Peek().scope);
+    PushLabel("loop", ins.immediates[0]._varsint7, OP_loop, nullptr, context, context.debugger->curscope);
     context.builder.CreateBr(context.control.Peek().block); // Branch into next block
     BindLabel(context.control.Peek().block, context);
     return ERR_SUCCESS;
@@ -1924,27 +1758,7 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
   if(sig.n_returns > 0)
     ret = sig.returns[0];
 
-  context.subprograms.resize(context.dfiles.size());
-  for(auto& i : context.subprograms)
-    i = nullptr;
-
-  if(context.dbuilder)
-  {
-    auto name   = std::string(!desc.debug.name.size() ? "func#" + std::to_string(indice) : desc.debug.name.str());
-    auto line   = body.debug.line;
-    auto column = body.debug.column;
-    auto file   = context.dunit;
-    if(body.n_body > 0)
-    {
-      line   = body.body[0].line;
-      column = body.body[0].column;
-      file   = ResolveMappedSegment(context, line, column);
-    }
-
-    FunctionDebugInfo(fn, name + "|" + context.m.name.str(), context, true, false, file, line, column);
-    context.builder.SetCurrentDebugLocation(llvm::DILocation::get(context.context, line, column, fn->getSubprogram()));
-  }
-
+  context.debugger->FuncBody(fn, indice, desc, body, context);
   PushLabel("exit", ret, OP_return, nullptr, context,
             fn->getSubprogram()); // Setup the function exit block that wraps everything
 
@@ -1970,21 +1784,7 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
       IN_LOCAL_INDEX_METADATA,
       llvm::MDNode::get(context.context, { llvm::ConstantAsMetadata::get(context.builder.getInt32(offset++)) }));
 
-    if(context.dbuilder)
-    {
-      llvm::DILocation* loc = context.builder.getCurrentDebugLocation();
-      if(desc.param_debug && desc.param_debug[index].line > 0)
-        loc = GetMappedLocation(context, desc.param_debug[index].line, desc.param_debug[index].column, fn->getSubprogram());
-
-      llvm::DILocalVariable* dparam = context.dbuilder->createParameterVariable(
-        fn->getSubprogram(), context.locals.back()->getName(),
-        index + 1, // the arg index starts at 1
-        loc->getFile(), loc->getLine(), CreateDebugType(context.locals.back()->getAllocatedType(), context), true);
-
-      context.dbuilder->insertDeclare(context.locals.back(), dparam, context.dbuilder->createExpression(), loc,
-                                      context.builder.GetInsertBlock());
-    }
-
+    context.debugger->FuncParam(fn, index, desc, context);
     ++index;
     context.builder.CreateStore(&arg, context.locals.back()); // Store parameter (we can't use the parameter directly
                                                               // because wasm lets you store to parameters)
@@ -2003,22 +1803,7 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
       IN_LOCAL_INDEX_METADATA,
       llvm::MDNode::get(context.context, { llvm::ConstantAsMetadata::get(context.builder.getInt32(offset)) }));
 
-    if(context.dbuilder)
-    {
-      llvm::DILocation* loc = context.builder.getCurrentDebugLocation();
-      //if(body.locals[i].debug.line > 0)
-      //  loc = GetMappedLocation(context, body.locals[i].debug.line, body.locals[i].debug.column, fn->getSubprogram());
-
-      assert(loc->getScope()->getSubprogram() == context.builder.getCurrentDebugLocation()->getScope()->getSubprogram());
-      llvm::DILocalVariable* dparam =
-        context.dbuilder->createAutoVariable(fn->getSubprogram(), context.locals.back()->getName(), loc->getFile(),
-                                             loc->getLine(),
-                                             CreateDebugType(context.locals.back()->getAllocatedType(), context), true);
-
-      context.dbuilder->insertDeclare(context.locals.back(), dparam, context.dbuilder->createExpression(), loc,
-                                      context.builder.GetInsertBlock());
-    }
-
+    context.debugger->FuncLocal(fn, index, desc, context);
     context.builder.CreateStore(llvm::Constant::getNullValue(ty), context.locals.back());
     offset += body.locals[i].count;
   }
@@ -2041,10 +1826,7 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
   // Begin iterating through the instructions until there aren't any left
   for(varuint32 i = 0; i < body.n_body; ++i)
   {
-    if(context.dbuilder)
-      context.builder.SetCurrentDebugLocation(
-        GetMappedLocation(context, body.body[i].line, body.body[i].column, context.control.Peek().scope));
-
+    context.debugger->DebugIns(fn, body.body[i], context);
     IN_ERROR err = CompileInstruction(body.body[i], context);
     if(err < 0)
       return err;
@@ -2063,19 +1845,6 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
   return ERR_SUCCESS;
 }
 
-void GenGlobalDebugInfo(llvm::GlobalVariable* v, llvm::StringRef name, code::Context& context, size_t line)
-{
-  if(context.dbuilder)
-  {
-    auto expr = context.dbuilder->createExpression(llvm::SmallVector<uint64_t, 1>{ llvm::dwarf::DW_OP_deref });
-
-    v->addDebugInfo(context.dbuilder->createGlobalVariableExpression(context.dcu, name, v->getName(), context.dunit,
-                                                                     (unsigned int)line,
-                                                                     CreateDebugType(v->getType(), context),
-                                                                     !v->hasValidDeclarationLinkage(), expr));
-  }
-}
-
 llvm::GlobalVariable* CreateGlobal(code::Context& context, llvmTy* ty, bool isconst, bool external, llvm::StringRef name,
                                    const Twine& canonical, size_t line, llvm::Constant* init = 0)
 {
@@ -2086,7 +1855,7 @@ llvm::GlobalVariable* CreateGlobal(code::Context& context, llvmTy* ty, bool isco
 
   if(external)
     r->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
-  GenGlobalDebugInfo(r, name, context, line);
+  context.debugger->DebugGlobal(r, name, line);
   return r;
 }
 
@@ -2162,81 +1931,9 @@ void ExportFunction(code::FunctionSet& fn,
     ABI abi   = CURRENT_ABI;
     auto base = fn.imported ? fn.imported : fn.internal;
 
-    if(ctx->dbuilder && base->getSubprogram())
-      ctx->builder.SetCurrentDebugLocation(
-        llvm::DILocation::get(context, base->getSubprogram()->getLine(), 0, base->getSubprogram()));
-
+    ctx->debugger->SetSPLocation(ctx->builder, base->getSubprogram());
     fn.exported = (*wrapper)(base, name, canonical, *ctx, Func::ExternalLinkage, llvm::CallingConv::C);
   }
-}
-std::string GenFlagString(const Environment& env)
-{
-  std::string f = env.flags ? "-flag" : "";
-  if(env.flags & ENV_DEBUG)
-    f += " debug";
-  if(env.flags & ENV_LIBRARY)
-    f += " library";
-  if(env.flags & ENV_WHITELIST)
-    f += " whitelist";
-  if(env.flags & ENV_ENABLE_WAT)
-    f += " wat";
-  if(env.flags & ENV_MULTITHREADED)
-    f += " multithreaded";
-  if(env.flags & ENV_EMIT_LLVM)
-    f += " llvm";
-  if(env.flags & ENV_HOMOGENIZE_FUNCTIONS)
-    f += " homogenize";
-  if(env.flags & ENV_NO_INIT)
-    f += " noinit";
-  if(env.flags & ENV_CHECK_STACK_OVERFLOW)
-    f += " check_stack_overflow";
-  if(env.flags & ENV_CHECK_FLOAT_TRUNC)
-    f += " check_float_trunc";
-  if(env.flags & ENV_CHECK_MEMORY_ACCESS)
-    f += " check_memory_access";
-  if(env.flags & ENV_CHECK_INDIRECT_CALL)
-    f += " check_indirect_call";
-  if(env.flags & ENV_CHECK_INT_DIVISION)
-    f += " check_int_division";
-  if(env.flags & ENV_DISABLE_TAIL_CALL)
-    f += " disable_tail_call";
-
-  if(env.optimize & ENV_OPTIMIZE_FAST_MATH_REASSOCIATE)
-    f += " fast_math_reassociate";
-  if(env.optimize & ENV_OPTIMIZE_FAST_MATH_NO_NAN)
-    f += " fast_math_no_nan";
-  if(env.optimize & ENV_OPTIMIZE_FAST_MATH_NO_INF)
-    f += " fast_math_no_inf";
-  if(env.optimize & ENV_OPTIMIZE_FAST_MATH_NO_SIGNED_ZERO)
-    f += " fast_math_no_signed_zero";
-  if(env.optimize & ENV_OPTIMIZE_FAST_MATH_ALLOW_RECIPROCAL)
-    f += " fast_math_allow_reciprocal";
-  if(env.optimize & ENV_OPTIMIZE_FAST_MATH_CONTRACT)
-    f += " fast_math_contract";
-  if(env.optimize & ENV_OPTIMIZE_FAST_MATH_ALLOW_APPROXIMATE_FUNCTIONS)
-    f += " fast_math_approximate_functions";
-
-  switch(env.optimize & ENV_OPTIMIZE_OMASK)
-  {
-  case ENV_OPTIMIZE_O0: f += " O0"; break;
-  case ENV_OPTIMIZE_O1: f += " O1"; break;
-  case ENV_OPTIMIZE_O2: f += " O2"; break;
-  case ENV_OPTIMIZE_O3: f += " O3"; break;
-  case ENV_OPTIMIZE_Os: f += " Os"; break;
-  }
-
-  if(env.features)
-    f += " -feature";
-
-  if(env.features == (uint64_t)~0)
-    f += " all";
-  else
-  {
-    if(env.features & ENV_FEATURE_MUTABLE_GLOBALS)
-      f += " mutable_globals";
-  }
-
-  return f;
 }
 
 int innative::GetCallingConvention(const Import& imp)
@@ -2267,129 +1964,31 @@ int innative::GetCallingConvention(const Import& imp)
   return llvm::CallingConv::C;
 }
 
-llvm::DIFile::ChecksumKind ComputeChecksum(llvm::StringRef data, llvm::SmallString<32>& Checksum)
-{
-  Checksum.clear();
-
-  llvm::MD5 Hash;
-  llvm::MD5::MD5Result Result;
-
-  Hash.update(data);
-  Hash.final(Result);
-
-  Hash.stringifyResult(Result, Checksum);
-  return llvm::DIFile::CSK_MD5;
-}
-
-llvm::DILocation* GetSPLocation(code::Context& context, llvm::DISubprogram* sp)
-{
-  return llvm::DILocation::get(context.context, sp->getScopeLine(), 0, sp, nullptr,
-                               sp->getFlags() & llvm::DINode::FlagArtificial);
-}
-
-void EvaluateSourceMap(Environment& env, const char* filepath, SourceMap* map)
-{
-  path root      = GetPath(map->sourceRoot);
-  path workdir   = GetWorkingDir();
-  path parentdir = GetPath(filepath).parent_path();
-
-  auto check = [](const path& file) -> bool {
-    FILE* f = 0;
-    FOPEN(f, file.c_str(), "rb");
-    if(f)
-    {
-      fclose(f);
-      return true;
-    }
-    return false;
-  };
-
-  for(size_t i = 0; i < map->n_sources; ++i)
-  {
-    path source = GetPath(map->sources[i]);
-    if(check(root / source))
-      map->sources[i] = AllocString(env, (root / source).u8string());
-    else if(check(source))
-      map->sources[i] = AllocString(env, GetAbsolutePath(source).u8string());
-    else if(check(workdir / source))
-      map->sources[i] = AllocString(env, (workdir / source).u8string());
-    else if(check(parentdir / source))
-      map->sources[i] = AllocString(env, (parentdir / source).u8string());
-    else if(i < map->n_sourcesContent && map->sourcesContent[i] != 0 && map->sourcesContent[i][0] != 0)
-    {
-      source = temp_directory_path() / source.filename();
-      if(DumpFile(source, map->sourcesContent[i], strlen(map->sourcesContent[i])))
-        map->sources[i] = AllocString(env, source.u8string());
-    }
-  }
-}
-
-IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32 m_idx)
+IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx)
 {
   context.llvm = new llvm::Module(context.m.name.str(), context.context);
   context.llvm->setTargetTriple(context.machine->getTargetTriple().getTriple());
   context.llvm->setDataLayout(context.machine->createDataLayout());
   context.intptrty = context.builder.getIntPtrTy(context.llvm->getDataLayout(), 0);
 
-  // If we have a sourcemap, check to see if the files exist. If they don't, see if we can reconstruct them
-  if(context.m.sourcemap)
-    EvaluateSourceMap(*const_cast<Environment*>(env), context.m.filepath, context.m.sourcemap);
-
   if(env->flags & ENV_DEBUG)
   {
-    context.llvm->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
-    if(llvm::Triple(context.llvm->getTargetTriple()).isOSWindows())
-    {
-      context.llvm->addModuleFlag(llvm::Module::Warning, "CodeView", 1);
-      context.llvm->addModuleFlag(llvm::Module::Warning, "CodeViewGHash", 1);
-    }
-
-    if(llvm::Triple(context.llvm->getTargetTriple()).isOSDarwin())
-      context.llvm->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 2);
-
     if(!context.m.filepath)
       return ERR_FATAL_FILE_ERROR;
-    path abspath     = GetAbsolutePath(GetPath(context.m.filepath));
-    context.dbuilder = new llvm::DIBuilder(*context.llvm);
-
-    size_t sz;
-    auto debugfile = LoadFile(abspath, sz);
-    if(debugfile.get())
-    {
-      llvm::SmallString<32> checksum;
-      llvm::DIFile::ChecksumKind CSKind = ComputeChecksum(llvm::StringRef((const char*)debugfile.get(), sz), checksum);
-      llvm::DIFile::ChecksumInfo<llvm::StringRef> CSInfo(CSKind, checksum);
-      context.dunit = context.dbuilder->createFile(abspath.filename().u8string(), abspath.parent_path().u8string(), CSInfo);
-    }
-    else
-      context.dunit = context.dbuilder->createFile(abspath.filename().u8string(), abspath.parent_path().u8string());
-
-    context.dcu = context.dbuilder->createCompileUnit(llvm::dwarf::DW_LANG_C89, context.dunit,
-                                                      "inNative Runtime v" IN_VERSION_STRING, env->optimize != 0,
-                                                      GenFlagString(*env), WASM_MAGIC_VERSION, context.m.name.str());
-
-    context.diF32  = context.dbuilder->createBasicType("f32", 32, llvm::dwarf::DW_ATE_float);
-    context.diF64  = context.dbuilder->createBasicType("f64", 64, llvm::dwarf::DW_ATE_float);
-    context.diI1   = context.dbuilder->createBasicType("i1", 1, llvm::dwarf::DW_ATE_boolean);
-    context.diI8   = context.dbuilder->createBasicType("i8", 8, llvm::dwarf::DW_ATE_signed);
-    context.diI32  = context.dbuilder->createBasicType("i32", 32, llvm::dwarf::DW_ATE_signed);
-    context.diI64  = context.dbuilder->createBasicType("i64", 64, llvm::dwarf::DW_ATE_signed);
-    context.diVoid = context.dbuilder->createUnspecifiedType("void");
-
     if(context.m.sourcemap)
-    {
-      for(size_t i = 0; i < context.m.sourcemap->n_sources; ++i)
-      {
-        path p = GetPath(context.m.sourcemap->sources[i]);
-        context.dfiles.push_back(context.dbuilder->createFile(p.filename().u8string(), p.parent_path().u8string()));
-      }
-    }
+      context.debugger.reset(new code::DebugSourceMap(context.m.sourcemap, context.intptrty, *context.llvm,
+                                                      context.m.name.str(), env, context.m.filepath));
+    else
+      context.debugger.reset(
+        new code::DebugWat(context.intptrty, *context.llvm, context.m.name.str(), env, context.m.filepath));
   }
+  else
+    context.debugger.reset(new code::Debugger());
 
   // Define a unique init function for performing module initialization
   context.init =
     TopLevelFunction(context.context, context.builder,
-                     CanonicalName(StringRef::From(context.m.name), StringRef::From("innative_internal_init")).c_str(),
+                     CanonicalName(StringSpan::From(context.m.name), StringSpan::From("innative_internal_init")).c_str(),
                      context.llvm);
 
   // Declare C runtime function prototypes that we assume exist on the system
@@ -2408,9 +2007,8 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
   Func* fn_memfree = Func::Create(FuncTy::get(context.builder.getVoidTy(), { context.builder.getInt8PtrTy(0) }, false),
                                   Func::ExternalLinkage, "_innative_internal_env_free_memory", context.llvm);
 
-  if(context.dbuilder)
-    FunctionDebugInfo(context.init, "innative_internal_init|" + std::string(context.m.name.str()), context, true, true,
-                      context.dunit, 0, 0);
+  context.debugger->FunctionDebugInfo(context.init, "innative_internal_init|" + std::string(context.m.name.str()),
+                                      context.env.optimize != 0, true, true, nullptr, 0, 0);
 
   context.functions.reserve(context.m.importsection.functions + context.m.function.n_funcdecl);
   context.tables.reserve(context.m.importsection.tables - context.m.importsection.functions + context.m.table.n_tables);
@@ -2558,16 +2156,8 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
                         std::to_string(context.functions.size()) + "|" + context.m.name.str(),
                       context);
 
-    if(context.dbuilder)
-    {
-      auto line   = decl.debug.line;
-      auto column = decl.debug.column;
-      auto file   = ResolveMappedSegment(context, line, column);
-
-      FunctionDebugInfo(context.functions.back().internal, context.functions.back().internal->getName(), context, true,
-                        false, file, line, column);
-    }
-
+    context.debugger->FuncDecl(context.functions.back().internal, context.m.code.funcbody[i].column, decl.debug.line,
+                               context.env.optimize != 0);
     auto name      = context.functions.back().internal->getName() + "|#external";
     auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &HomogenizeFunction : &WrapFunction;
     ExportFunction(context.functions.back(), wrapperfn, &context, name.str(), name, context.context);
@@ -2589,13 +2179,11 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
       new llvm::GlobalVariable(*context.llvm, gexported->getType(), true, llvm::GlobalValue::PrivateLinkage, gexported);
   }
 
-  if(context.dbuilder)
-    context.builder.SetCurrentDebugLocation(GetSPLocation(context, context.init->getSubprogram()));
-
+  context.debugger->SetSPLocation(context.builder, context.init->getSubprogram());
   auto DeclareGlobal = [](varuint32 i, code::Context& context, DebugInfo& debug, bool constant, llvmTy* type,
                           const char* fallback, llvm::Constant* init) -> llvm::GlobalVariable* {
     auto canonical =
-      CanonicalName(StringRef::From(context.m.name), StringRef::From(!debug.name.get() ? fallback : debug.name.str()), i);
+      CanonicalName(StringSpan::From(context.m.name), StringSpan::From(!debug.name.get() ? fallback : debug.name.str()), i);
     auto name =
       (!debug.name.get() ? fallback + std::to_string(i) : std::string(debug.name.str())) + "|" + context.m.name.str();
 
@@ -2663,8 +2251,7 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
                     GetLLVMType(context.m.global.globals[i].desc.type, context), "globalvariable#", init));
   }
 
-  if(context.dbuilder)
-    context.builder.SetCurrentDebugLocation(GetSPLocation(context, context.init->getSubprogram()));
+  context.debugger->SetSPLocation(context.builder, context.init->getSubprogram());
 
   // Process data section by appending to the init function
   for(varuint32 i = 0; i < context.m.data.n_data; ++i)
@@ -2674,8 +2261,8 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
                                              llvm::makeArrayRef<uint8_t>(d.data.get(), d.data.get() + d.data.size()));
     auto val    = new llvm::GlobalVariable(*context.llvm, data->getType(), true,
                                         llvm::GlobalValue::LinkageTypes::PrivateLinkage, data,
-                                        CanonicalName(StringRef{ 0, 0 }, StringRef::From("data"), i));
-    GenGlobalDebugInfo(val, val->getName(), context, 0);
+                                        CanonicalName(StringSpan{ 0, 0 }, StringSpan::From("data"), i));
+    context.debugger->DebugGlobal(val, val->getName(), 0);
 
     llvm::Constant* offset;
     if(err = CompileInitConstant(d.offset, context.m, context, offset))
@@ -2739,15 +2326,12 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
   // Create cleanup function
   context.exit =
     TopLevelFunction(context.context, context.builder,
-                     CanonicalName(StringRef::From(context.m.name), StringRef::From("innative_internal_exit")).c_str(),
+                     CanonicalName(StringSpan::From(context.m.name), StringSpan::From("innative_internal_exit")).c_str(),
                      context.llvm);
 
-  if(context.dbuilder)
-  {
-    FunctionDebugInfo(context.exit, "innative_internal_exit|" + std::string(context.m.name.str()), context, true, true,
-                      context.dunit, 0, 0);
-    context.builder.SetCurrentDebugLocation(GetSPLocation(context, context.exit->getSubprogram()));
-  }
+  context.debugger->FunctionDebugInfo(context.exit, "innative_internal_exit|" + std::string(context.m.name.str()),
+                                      context.env.optimize != 0, true, true, nullptr, 0, 0);
+  context.debugger->SetSPLocation(context.builder, context.exit->getSubprogram());
 
   for(size_t i = context.m.importsection.memories - context.m.importsection.tables; i < context.memories.size();
       ++i) // Don't accidentally delete imported linear memories
@@ -2822,7 +2406,7 @@ IN_ERROR CompileModule(const Environment* env, code::Context& context, varuint32
     auto metadata = llvm::ConstantStruct::getAnon(values);
     auto v        = new llvm::GlobalVariable(*context.llvm, metadata->getType(), true,
                                       llvm::GlobalValue::LinkageTypes::ExternalLinkage, metadata,
-                                      CanonicalName(StringRef(), StringRef::From(IN_METADATA_PREFIX), m_idx));
+                                      CanonicalName(StringSpan(), StringSpan::From(IN_METADATA_PREFIX), m_idx));
     v->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
   }
 
@@ -2920,7 +2504,7 @@ void ResolveModuleExports(const Environment* env, Module* root, llvm::LLVMContex
     Export* e = &m->exportsection.exports[j];
 
     // Calculate the canonical name we wish to export as using the initial export object
-    auto canonical = CanonicalName(StringRef::From(m->name), StringRef::From(e->name));
+    auto canonical = CanonicalName(StringSpan::From(m->name), StringSpan::From(e->name));
 
     // Resolve the export/module pair to the concrete source
     for(;;)
@@ -2967,7 +2551,7 @@ void ResolveModuleExports(const Environment* env, Module* root, llvm::LLVMContex
   }
 }
 
-IN_ERROR innative::CompileEnvironment(const Environment* env, const char* outfile)
+IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
 {
   if(!outfile || !outfile[0])
     return ERR_FATAL_NO_OUTPUT_FILE;
@@ -2979,7 +2563,7 @@ IN_ERROR innative::CompileEnvironment(const Environment* env, const char* outfil
 
   // Construct the LLVM environment and current working directories
   if(!env->context)
-    const_cast<Environment*>(env)->context = new llvm::LLVMContext();
+    env->context = new llvm::LLVMContext();
 
   llvm::IRBuilder<> builder(*env->context);
   bool has_start = false;
@@ -3079,17 +2663,16 @@ IN_ERROR innative::CompileEnvironment(const Environment* env, const char* outfil
     AddMemLocalCaching(*m->cache);
 
   if((!has_start || env->flags & ENV_NO_INIT) && !(env->flags & ENV_LIBRARY))
-    return ERR_FATAL_NO_START_FUNCTION; // We can't compile an EXE without at least one start function
+  {
+    env->flags |= ENV_LIBRARY; // Attempting to compile a library as an EXE is a common error, so we fix it for you.
+    fprintf(env->log, "WARNING: Compiling dynamic library because no start function was found! If this was intended, use '-f library' next time.\n");
+  }
 
   // Create cleanup function
   code::Context& mainctx = *env->modules[0].cache;
   Func* cleanup          = TopLevelFunction(*env->context, builder, IN_EXIT_FUNCTION, mainctx.llvm);
-
-  if(mainctx.dbuilder)
-  {
-    FunctionDebugInfo(cleanup, IN_EXIT_FUNCTION, mainctx, true, true, mainctx.dunit, 0, 0);
-    builder.SetCurrentDebugLocation(GetSPLocation(mainctx, cleanup->getSubprogram()));
-  }
+  mainctx.debugger->FunctionDebugInfo(cleanup, IN_EXIT_FUNCTION, mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(mainctx.builder, cleanup->getSubprogram());
 
   builder.CreateCall(mainctx.exit, {})->setCallingConv(mainctx.exit->getCallingConv());
 
@@ -3105,12 +2688,8 @@ IN_ERROR innative::CompileEnvironment(const Environment* env, const char* outfil
 
   // Create main function that calls all init functions for all modules and all start functions
   Func* main = TopLevelFunction(*env->context, builder, IN_INIT_FUNCTION, nullptr);
-
-  if(mainctx.dbuilder)
-  {
-    FunctionDebugInfo(main, IN_INIT_FUNCTION, mainctx, true, true, mainctx.dunit, 0, 0);
-    builder.SetCurrentDebugLocation(GetSPLocation(mainctx, main->getSubprogram()));
-  }
+  mainctx.debugger->FunctionDebugInfo(main, IN_INIT_FUNCTION, mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(mainctx.builder, main->getSubprogram());
 
   builder.CreateCall(mainctx.init, {})->setCallingConv(mainctx.init->getCallingConv());
 
@@ -3189,14 +2768,8 @@ IN_ERROR innative::CompileEnvironment(const Environment* env, const char* outfil
     mainstub->setCallingConv(llvm::CallingConv::X86_StdCall);
     BB* entryblock = BB::Create(*env->context, "entry", mainstub);
     builder.SetInsertPoint(entryblock);
-    if(mainctx.dbuilder)
-    {
-      unsigned int line   = mainctx.m.start_line;
-      unsigned int column = 0;
-      auto file           = ResolveMappedSegment(mainctx, line, column);
-      FunctionDebugInfo(mainstub, mainstub->getName(), mainctx, true, false, file, line, column);
-      builder.SetCurrentDebugLocation(GetSPLocation(mainctx, mainstub->getSubprogram()));
-    }
+    mainctx.debugger->FuncDecl(mainstub, 0, mainctx.m.start_line, mainctx.env.optimize != 0);
+    mainctx.debugger->SetSPLocation(builder, mainstub->getSubprogram());
 
     if(!(env->flags & ENV_NO_INIT)) // Only actually initialize things on DLL load if we actually want to, otherwise
                                     // create a stub function

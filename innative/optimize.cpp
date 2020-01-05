@@ -1,7 +1,9 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
+#include "llvm.h"
 #include "optimize.h"
+#include "compile.h"
 #pragma warning(push)
 #pragma warning(disable : 4146 4267 4141 4244 4624)
 #define _SCL_SECURE_NO_WARNINGS

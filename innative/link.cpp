@@ -1,16 +1,12 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
+#include "llvm.h"
 #include "util.h"
 #include "link.h"
+#include "compile.h"
 #include "intrinsic.h"
 #include "innative/export.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/IR/Verifier.h"
-#include "llvm/Analysis/TargetTransformInfo.h"
-#include "llvm/Analysis/TargetTransformInfoImpl.h"
-#include "lld/Common/Driver.h"
-#include "lld/Common/ErrorHandler.h"
 
 using namespace innative;
 
@@ -315,8 +311,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
   // Finalize all modules
   for(varuint32 i = 0; i < env->n_modules; ++i)
   {
-    if(env->modules[i].cache->dbuilder)
-      env->modules[i].cache->dbuilder->finalize();
+    env->modules[i].cache->debugger->Finalize();
 
     if(env->flags & ENV_EMIT_LLVM)
     {

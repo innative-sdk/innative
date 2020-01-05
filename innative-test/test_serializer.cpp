@@ -30,9 +30,9 @@ void TestHarness::test_serializer()
     (*_exports.AddModule)(env, MODULE, sizeof(MODULE), "reverse", &err);
     (*_exports.FinalizeEnvironment)(env);
 
-    (*_exports.SerializeModule)(env, 0, 0, &len1);
+    (*_exports.SerializeModule)(env, 0, 0, &len1, false);
     iter1 = std::unique_ptr<char[]>(new char[len1]);
-    TEST((*_exports.SerializeModule)(env, 0, iter1.get(), &len1) == ERR_SUCCESS);
+    TEST((*_exports.SerializeModule)(env, 0, iter1.get(), &len1, false) == ERR_SUCCESS);
     (*_exports.DestroyEnvironment)(env);
   }
 
@@ -46,9 +46,9 @@ void TestHarness::test_serializer()
     (*_exports.AddModule)(env, iter1.get(), len1, "reverse", &err);
     (*_exports.FinalizeEnvironment)(env);
 
-    (*_exports.SerializeModule)(env, 0, 0, &len2);
+    (*_exports.SerializeModule)(env, 0, 0, &len2, false);
     iter2 = std::unique_ptr<char[]>(new char[len2]);
-    TEST((*_exports.SerializeModule)(env, 0, iter2.get(), &len2) == ERR_SUCCESS);
+    TEST((*_exports.SerializeModule)(env, 0, iter2.get(), &len2, false) == ERR_SUCCESS);
     (*_exports.DestroyEnvironment)(env);
   }
 

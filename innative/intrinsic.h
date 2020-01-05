@@ -4,7 +4,7 @@
 #ifndef IN__INTRINSIC_H
 #define IN__INTRINSIC_H
 
-#include "llvm.h"
+#include "compile.h"
 
 namespace innative {
   namespace code {

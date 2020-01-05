@@ -1,19 +1,35 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
+#include "llvm.h"
 #include "innative/sourcemap.h"
 #include "innative/schema.h"
 #include "util.h"
 #include "stream.h"
-#include "llvm/DebugInfo/DIContext.h"
-#include "llvm/DebugInfo/DWARF/DWARFContext.h"
-#include "llvm/Object/Archive.h"
-#include "llvm/Object/MachOUniversal.h"
-#include "llvm/Object/ObjectFile.h"
 
-using namespace llvm;
+using llvm::DWARFContext;
+using llvm::DWARFDebugLoc;
+using llvm::DWARFDie;
+using llvm::DWARFFormValue;
+using llvm::dyn_cast;
+using llvm::Error;
+using llvm::MemoryBuffer;
+using llvm::MemoryBufferRef;
+using llvm::Optional;
+using llvm::StringRef;
+using namespace llvm::object;
+using namespace llvm::dwarf;
 
 typedef bool (*HandlerFn)(Environment* env, DWARFContext& DICtx, SourceMap* map, size_t code_section_offset);
+
+static kh_inline khint_t kh_type_hash(const SourceMapType& s)
+{
+  return sizeof(size_t) == 8 ? kh_int64_hash_func(s.offset) : kh_int_hash_func(s.offset);
+}
+static kh_inline khint_t kh_type_equal(const SourceMapType& a, const SourceMapType& b) { return a.offset == b.offset; }
+
+KHASH_INIT(mapname, const char*, size_t, 1, kh_str_hash_func, kh_str_hash_equal)
+KHASH_INIT(maptype, SourceMapType, size_t, 1, kh_type_hash, kh_type_equal)
 
 static bool error(const Environment* env, llvm::StringRef Prefix, std::error_code EC)
 {
@@ -25,7 +41,7 @@ static bool error(const Environment* env, llvm::StringRef Prefix, std::error_cod
 
 static bool handleBuffer(Environment* env, StringRef Filename, MemoryBufferRef Buffer, HandlerFn HandleObj, SourceMap* map);
 
-static bool handleArchive(Environment* env, StringRef Filename, object::Archive& Arch, HandlerFn HandleObj, SourceMap* map)
+static bool handleArchive(Environment* env, StringRef Filename, Archive& Arch, HandlerFn HandleObj, SourceMap* map)
 {
   bool Result = true;
   Error Err   = Error::success();
@@ -72,17 +88,17 @@ static bool handleBuffer(Environment* env, StringRef Filename, MemoryBufferRef B
     }
   }
 
-  Expected<std::unique_ptr<object::Binary>> BinOrErr = object::createBinary(Buffer);
+  llvm::Expected<std::unique_ptr<Binary>> BinOrErr = createBinary(Buffer);
   if(!error(env, Filename, errorToErrorCode(BinOrErr.takeError())))
     return false;
 
   bool Result = true;
-  if(auto* Obj = dyn_cast<object::ObjectFile>(BinOrErr->get()))
+  if(auto* Obj = dyn_cast<ObjectFile>(BinOrErr->get()))
   {
     std::unique_ptr<DWARFContext> DICtx = DWARFContext::create(*Obj);
     Result                              = HandleObj(env, *DICtx, map, code_section_offset);
   }
-  else if(auto* Fat = dyn_cast<object::MachOUniversalBinary>(BinOrErr->get()))
+  else if(auto* Fat = dyn_cast<MachOUniversalBinary>(BinOrErr->get()))
     for(auto& ObjForArch : Fat->objects())
     {
       std::string ObjName = (Filename + "(" + ObjForArch.getArchFlagName() + ")").str();
@@ -105,7 +121,7 @@ static bool handleBuffer(Environment* env, StringRef Filename, MemoryBufferRef B
       else
         consumeError(ArchiveOrErr.takeError());
     }
-  else if(auto* Arch = dyn_cast<object::Archive>(BinOrErr->get()))
+  else if(auto* Arch = dyn_cast<Archive>(BinOrErr->get()))
     Result = handleArchive(env, Filename, *Arch, HandleObj, map);
   return Result;
 }
@@ -114,7 +130,7 @@ static bool handleFile(Environment* env, StringRef Filename, HandlerFn HandleObj
 {
   map->file = innative::utility::AllocString(*env, Filename.str());
 
-  ErrorOr<std::unique_ptr<MemoryBuffer>> BuffOrErr = MemoryBuffer::getFileOrSTDIN(Filename);
+  llvm::ErrorOr<std::unique_ptr<MemoryBuffer>> BuffOrErr = MemoryBuffer::getFileOrSTDIN(Filename);
   if(!error(env, Filename, BuffOrErr.getError()))
     return false;
   std::unique_ptr<MemoryBuffer> Buffer = std::move(BuffOrErr.get());
@@ -135,21 +151,258 @@ template<class T> void resizeSourceMap(Environment* env, T*& root, size_t& size,
   root = p;
 }
 
+DWARFDie AsReferencedDIE(const DWARFFormValue& V, const llvm::DWARFUnit& unit)
+{
+  if(auto SpecRef = V.getAsRelativeReference())
+  {
+    if(SpecRef->Unit)
+      return SpecRef->Unit->getDIEForOffset(SpecRef->Unit->getOffset() + SpecRef->Offset);
+    if(auto SpecUnit = unit.getUnitVector().getUnitForOffset(SpecRef->Offset))
+      return SpecUnit->getDIEForOffset(SpecRef->Offset);
+  }
+  return DWARFDie();
+}
+
+size_t GetSourceMapName(Environment* env, kh_mapname_t* h, const char* name, size_t& index)
+{
+  auto iter = kh_get_mapname(h, name);
+  if(iter >= kh_end(h))
+  {
+    int r;
+    iter = kh_put_mapname(h, innative::utility::AllocString(*env, name), &r);
+    if(r < 0)
+      return false;
+    kh_value(h, iter) = index++;
+  }
+  return kh_value(h, iter);
+};
+
+size_t GetSourceMapType(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t* maptype, size_t& n_types,
+                        const DWARFFormValue& type, kh_mapname_t* mapname, size_t& n_names)
+{
+  if(DWARFDie die = AsReferencedDIE(type, unit))
+  {
+    if(!isType(die.getTag()))
+      return false;
+    int r;
+    auto iter = kh_put_maptype(maptype, SourceMapType{ die.getOffset() }, &r);
+    if(r > 0)
+    {
+      kh_value(maptype, iter)   = n_types++;
+      kh_key(maptype, iter).tag = die.getTag();
+      if(auto file = die.find(DW_AT_decl_file))
+      {
+        if(const auto* LT = unit.getContext().getLineTableForUnit(&unit))
+          kh_key(maptype, iter).source_index = file->getAsUnsignedConstant().getValue() - 1;
+      }
+      if(auto line = die.find(DW_AT_decl_line))
+        kh_key(maptype, iter).original_line = line->getAsUnsignedConstant().getValue();
+      if(auto name = die.find(DW_AT_name))
+      {
+        if(auto attr = name->getAsCString())
+          kh_key(maptype, iter).name_index = GetSourceMapName(env, mapname, attr.getValue(), n_names);
+      }
+
+      // Figure out what kind of type this is
+      switch(die.getTag())
+      {
+      case DW_TAG_base_type:
+        kh_key(maptype, iter).n_types    = 0;
+        kh_key(maptype, iter).encoding   = 0;
+        kh_key(maptype, iter).bit_size   = 0;
+        kh_key(maptype, iter).byte_align = 0;
+
+        if(auto line = die.find(DW_AT_encoding))
+          kh_key(maptype, iter).encoding = (unsigned short)line->getAsUnsignedConstant().getValue();
+        if(auto line = die.find(DW_AT_bit_size))
+          kh_key(maptype, iter).bit_size = (unsigned short)line->getAsUnsignedConstant().getValue();
+        if(auto line = die.find(DW_AT_byte_size))
+          kh_key(maptype, iter).bit_size = (unsigned short)(line->getAsUnsignedConstant().getValue() << 3);
+        if(auto line = die.find(DW_AT_alignment))
+          kh_key(maptype, iter).byte_align = (unsigned short)line->getAsUnsignedConstant().getValue();
+
+        break;
+      case DW_TAG_pointer_type:
+      case DW_TAG_reference_type:
+      case DW_TAG_rvalue_reference_type:
+      case DW_TAG_ptr_to_member_type:
+      case DW_TAG_const_type:
+      case DW_TAG_volatile_type:
+      case DW_TAG_restrict_type:
+      case DW_TAG_typedef:
+      case DW_TAG_array_type:
+        kh_key(maptype, iter).n_types = 1;
+        if(auto innertype = die.find(DW_AT_type))
+          kh_key(maptype, iter).type_index =
+            GetSourceMapType(env, unit, maptype, n_types, innertype.getValue(), mapname, n_names);
+        break;
+      default: return (size_t)~0;
+      }
+    }
+
+    return kh_value(maptype, iter);
+  }
+
+  return (size_t)~0;
+}
+
+bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, SourceMapScope* parent, const DWARFDie& die,
+                     llvm::DWARFUnit* CU, size_t& n_variables, size_t& n_ranges, size_t& n_scopes, size_t& n_functions,
+                     kh_maptype_t* maptype, size_t& n_types, kh_mapname_t* mapname, size_t& n_names,
+                     size_t code_section_offset)
+{
+  if(die.getTag() == DW_TAG_variable || die.getTag() == DW_TAG_formal_parameter)
+  {
+    assert(parent != 0);
+    parent->variables[parent->n_variables++] = n_variables;
+    auto& v                                = map->x_innative_variables[n_variables];
+    v.offset                               = die.getOffset();
+    v.type_index                           = (size_t)~0;
+    v.source_index                         = (size_t)~0;
+    v.name_index                           = (size_t)~0;
+    v.tag                                  = die.getTag();
+
+    // Resolve standard attributes for variables or formal parameters
+    if(auto name = die.find(DW_AT_name))
+    {
+      if(auto attr = name->getAsCString())
+        v.name_index = GetSourceMapName(env, mapname, attr.getValue(), n_names);
+    }
+    if(auto line = die.find(DW_AT_decl_line))
+      v.original_line = line->getAsUnsignedConstant().getValue();
+    if(auto col = die.find(DW_AT_decl_column))
+      v.original_column = col->getAsUnsignedConstant().getValue();
+    if(auto file = die.find(DW_AT_decl_file))
+    {
+      if(const auto* LT = CU->getContext().getLineTableForUnit(CU))
+        v.source_index = file->getAsUnsignedConstant().getValue() - 1;
+    }
+    if(auto location = die.find(DW_AT_location))
+    {
+      if(Optional<llvm::ArrayRef<uint8_t>> block = location->getAsBlock())
+      {
+        llvm::DataExtractor data(llvm::toStringRef(*block), DICtx.isLittleEndian(), 0);
+        llvm::DWARFExpression expr(data, CU->getVersion(), CU->getAddressByteSize());
+
+        v.n_expr = 0;
+        for(auto& op : expr)
+          v.n_expr += 1 + (op.getDescription().Op[0] != llvm::DWARFExpression::Operation::SizeNA) +
+                      (op.getDescription().Op[1] != llvm::DWARFExpression::Operation::SizeNA);
+
+        v.p_expr = innative::utility::tmalloc<int64_t>(*env, v.n_expr);
+        v.n_expr = 0;
+        for(auto& op : expr)
+        {
+          v.p_expr[v.n_expr++] = op.getCode();
+          for(int i = 0; i < 2; ++i)
+            if(op.getDescription().Op[i] != llvm::DWARFExpression::Operation::SizeNA)
+              v.p_expr[v.n_expr++] = op.getRawOperand(i);
+        }
+      }
+      else if(Optional<uint64_t> Offset = location->getAsSectionOffset())
+      {
+        // Location list.
+        if(const DWARFDebugLoc* DebugLoc = DICtx.getDebugLoc())
+        {
+          if(const DWARFDebugLoc::LocationList* LocList = DebugLoc->getLocationListAtOffset(*Offset))
+          {
+            for(auto& entry : LocList->Entries)
+            {
+              assert(false);
+              return false;
+            }
+          }
+        }
+      }
+    }
+
+    if(auto type = die.find(DW_AT_type))
+      v.type_index = GetSourceMapType(env, *CU, maptype, n_types, type.getValue(), mapname, n_names);
+
+    ++n_variables;
+  }
+  else
+  {
+    SourceMapScope* scope = 0;
+    if(die.getTag() == DW_TAG_lexical_block)
+    {
+      scope = &map->x_innative_scopes[n_scopes];
+      if(auto addresses = die.getAddressRanges())
+      {
+        for(auto& a : addresses.get())
+        {
+          assert(a.SectionIndex == ~0ULL);
+          if(a.valid())
+            map->x_innative_ranges[n_ranges++] =
+              SourceMapRange{ n_scopes, a.LowPC + code_section_offset, a.HighPC + code_section_offset };
+        }
+      }
+      ++n_scopes;
+    }
+    else
+    {
+      auto& v = map->x_innative_functions[n_functions];
+      scope   = &v.scope;
+      
+      if(auto line = die.find(DW_AT_decl_line))
+        v.original_line = line->getAsUnsignedConstant().getValue();
+      if(auto type = die.find(DW_AT_type))
+        v.type_index = GetSourceMapType(env, *CU, maptype, n_types, type.getValue(), mapname, n_names);
+      if(auto file = die.find(DW_AT_decl_file))
+      {
+        if(const auto* LT = CU->getContext().getLineTableForUnit(CU))
+          v.source_index = file->getAsUnsignedConstant().getValue() - 1;
+      }
+
+      if(auto addresses = die.getAddressRanges())
+      {
+        for(auto& a : addresses.get())
+        {
+          assert(a.SectionIndex == ~0ULL);
+          if(a.valid())
+            map->x_innative_functions[n_functions].range =
+              SourceMapRange{ die.getOffset(), a.LowPC + code_section_offset, a.HighPC + code_section_offset };
+        }
+      }
+
+      ++n_functions;
+    }
+
+    scope->name_index = (size_t)~0;
+    if(auto name = die.find(DW_AT_name))
+    {
+      if(auto attr = name->getAsCString())
+        scope->name_index = GetSourceMapName(env, mapname, attr.getValue(), n_names);
+    }
+
+    scope->n_variables = 0;
+    for(auto& child : die.children())
+      scope->n_variables += child.getTag() == DW_TAG_variable || child.getTag() == DW_TAG_formal_parameter;
+
+    scope->variables   = innative::utility::tmalloc<size_t>(*env, scope->n_variables);
+    scope->n_variables = 0;
+
+    for(auto& child : die.children())
+      if(!ParseDWARFChild(env, DICtx, map, scope, child, CU, n_variables, n_ranges, n_scopes, n_functions, maptype, n_types,
+                          mapname, n_names, code_section_offset))
+        return false;
+  }
+
+  return true;
+}
+
 bool DumpSourceMap(Environment* env, DWARFContext& DICtx, SourceMap* map, size_t code_section_offset)
 {
-  size_t file_offset;
-  size_t content_offset;
-  size_t mapping_offset;
-
-  resizeSourceMap(env, map->mappings, map->n_mappings, 1); // For binary files, there is only ever 1 line
-  if(!map->mappings)
-    return false;
+  auto mapname   = kh_init_mapname();
+  auto maptype   = kh_init_maptype();
+  size_t n_names = map->n_names;
+  size_t n_types = map->n_innative_types;
 
   for(auto& CU : DICtx.compile_units())
   {
-    file_offset    = map->n_sources;
-    content_offset = map->n_sourcesContent;
-    mapping_offset = map->mappings[0].n_segments;
+    size_t file_offset    = map->n_sources;
+    size_t content_offset = map->n_sourcesContent;
+    size_t mapping_offset = map->n_segments;
 
     auto linetable  = DICtx.getLineTableForUnit(CU.get());
     auto& filenames = linetable->Prologue.FileNames;
@@ -170,30 +423,99 @@ bool DumpSourceMap(Environment* env, DWARFContext& DICtx, SourceMap* map, size_t
           "";
     }
 
-    resizeSourceMap(env, map->mappings[0].segments, map->mappings[0].n_segments, mapping_offset + linetable->Rows.size());
-    if(!map->mappings[0].segments)
+    resizeSourceMap(env, map->segments, map->n_segments, mapping_offset + linetable->Rows.size());
+    if(!map->segments)
       return false;
 
     for(auto& row : linetable->Rows)
     {
       if(!row.Line)
         continue;
-      map->mappings[0].segments[mapping_offset].column          = row.Address.Address + code_section_offset;
-      map->mappings[0].segments[mapping_offset].original_column = row.Column;
-      map->mappings[0].segments[mapping_offset].original_line   = row.Line;
-      map->mappings[0].segments[mapping_offset].source_index    = row.File - 1 + file_offset;
+      map->segments[mapping_offset].linecolumn      = row.Address.Address + code_section_offset;
+      map->segments[mapping_offset].original_column = row.Column;
+      map->segments[mapping_offset].original_line   = row.Line;
+      map->segments[mapping_offset].source_index    = row.File - 1 + file_offset;
 
       ++mapping_offset;
-      assert(mapping_offset <= map->mappings[0].n_segments);
+      assert(mapping_offset <= map->n_segments);
     }
 
-    map->mappings[0].n_segments = mapping_offset;
+    map->n_segments = mapping_offset;
+    size_t diecount = 0;
+
+    for(auto& die : CU->dies())
+      diecount += die.getTag() == DW_TAG_variable || die.getTag() == DW_TAG_formal_parameter;
+
+    size_t n_variables = map->n_innative_variables;
+    resizeSourceMap(env, map->x_innative_variables, map->n_innative_variables, n_variables + diecount);
+
+    diecount = 0;
+    for(auto& die : CU->dies())
+    {
+      if(die.getTag() == DW_TAG_lexical_block) // || DW_TAG_inlined_subroutine
+        if(auto addresses = DWARFDie(CU.get(), &die).getAddressRanges())
+          diecount += addresses->size();
+    }
+
+    size_t n_ranges = map->n_innative_ranges;
+    resizeSourceMap(env, map->x_innative_ranges, map->n_innative_ranges, n_ranges + diecount);
+
+    diecount = 0;
+    for(auto& die : CU->dies())
+      diecount += die.getTag() == DW_TAG_lexical_block; // || DW_TAG_inlined_subroutine
+
+    size_t n_scopes = map->n_innative_scopes;
+    resizeSourceMap(env, map->x_innative_scopes, map->n_innative_scopes, n_scopes + diecount);
+
+    diecount = 0;
+    for(auto& die : CU->dies())
+      diecount += die.getTag() == DW_TAG_subprogram;
+
+    size_t n_functions = map->n_innative_functions;
+    resizeSourceMap(env, map->x_innative_functions, map->n_innative_functions, n_functions + diecount);
+
+    if((!map->x_innative_variables && map->n_innative_variables) || (!map->x_innative_ranges && map->n_innative_ranges) ||
+       (!map->x_innative_scopes && map->n_innative_scopes) || (!map->x_innative_functions && map->n_innative_functions))
+      return false;
+
+    for(auto& entry : CU->dies())
+    {
+      auto die = DWARFDie(CU.get(), &entry);
+
+      if(die.getTag() == DW_TAG_subprogram)
+        if(!ParseDWARFChild(env, DICtx, map, 0, die, CU.get(), n_variables, n_ranges, n_scopes, n_functions, maptype,
+                            n_types, mapname, n_names, code_section_offset))
+          return false;
+    }
+
+    map->n_innative_variables = n_variables;
+    map->n_innative_functions = n_functions;
+    map->n_innative_scopes    = n_scopes;
+    map->n_innative_ranges    = n_ranges;
   }
 
-  std::sort(map->mappings[0].segments, map->mappings[0].segments + map->mappings[0].n_segments,
-            [](SourceMapSegment& a, SourceMapSegment& b) { return a.column < b.column; });
+  resizeSourceMap(env, map->names, map->n_names, n_names);
+  resizeSourceMap(env, map->x_innative_types, map->n_innative_types, n_types);
 
-  map->x_google_linecount = map->mappings[0].n_segments;
+  for(khint_t i = 0; i < kh_end(mapname); ++i)
+    if(kh_exist(mapname, i))
+      map->names[kh_value(mapname, i)] = kh_key(mapname, i);
+
+  for(khint_t i = 0; i < kh_end(maptype); ++i)
+    if(kh_exist(maptype, i))
+      map->x_innative_types[kh_value(maptype, i)] = kh_key(maptype, i);
+
+  kh_destroy_mapname(mapname);
+  kh_destroy_maptype(maptype);
+
+  std::sort(map->segments, map->segments + map->n_segments,
+            [](SourceMapSegment& a, SourceMapSegment& b) { return a.linecolumn < b.linecolumn; });
+  std::sort(map->x_innative_ranges, map->x_innative_ranges + map->n_innative_ranges,
+            [](SourceMapRange& a, SourceMapRange& b) { return a.low == b.low ? a.high > b.high : a.low < b.low; });
+  std::sort(map->x_innative_functions, map->x_innative_functions + map->n_innative_functions,
+            [](SourceMapFunction& a, SourceMapFunction& b) { return a.range.low < b.range.low; });
+
+  map->x_google_linecount = !map->n_segments ? 0 : (map->segments[map->n_segments - 1].linecolumn >> 32) + 1;
   return true;
 }
 

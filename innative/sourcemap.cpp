@@ -5,6 +5,7 @@
 #include "constants.h"
 #include "util.h"
 #include <algorithm>
+#include <fstream>
 
 namespace innative {
   namespace sourcemap {
@@ -261,50 +262,24 @@ IN_ERROR sourcemap::ParseMapping(const Environment& env, SourceMap* map, const c
   // recursion stack trick here is ill-advised, because the mapping string can be incredibly huge for large files.
   size_t n = 1;
 
-  // We first iterate forward through the string, counting semicolons and creating an array at the end.
+  // We iterate through the string and count both semicolons and commas, which gives us a segment count
   while(cur < end && *cur != '"')
   {
-    if(*cur == ';')
+    if(*cur == ';' || *cur == ',')
       ++n;
     ++cur;
   }
   if(cur >= end || *cur != '"')
     return ERR_MAP_EXPECTED_QUOTE;
 
-  map->n_mappings = n;
-  map->mappings   = utility::tmalloc<SourceMapGroup>(env, map->n_mappings);
-  if(!map->mappings)
+  map->n_segments = n;
+  map->segments   = utility::tmalloc<SourceMapSegment>(env, n);
+  if(!map->segments)
     return ERR_FATAL_OUT_OF_MEMORY;
 
-  map->mappings[--n].n_segments = 1;
-
-  // Then we iterate backwards, counting commas and allocating subarrays
-  do
-  {
-    --cur;
-    if(*cur == ',')
-      ++map->mappings[n].n_segments;
-    else if(*cur == ';' || cur <= data)
-    {
-      if(map->mappings[n].n_segments > 0)
-      {
-        map->mappings[n].segments = utility::tmalloc<SourceMapSegment>(env, map->mappings[n].n_segments);
-        if(!map->mappings[n].segments)
-          return ERR_FATAL_OUT_OF_MEMORY;
-
-        memset(map->mappings[n].segments, 0, sizeof(SourceMapSegment) * map->mappings[n].n_segments);
-      }
-      else
-        map->mappings[n].segments = 0;
-
-      if(cur > data)
-        --n;
-    }
-  } while(cur > data);
-
-  // Then we iterate forwards once more, assigning values to each subarray element.
-  size_t i = 0;
+  // Then we iterate forwards again, assigning values to each subarray element.
   assert(!n);
+  uint64_t line                = 0;
   n                            = 0;
   size_t last_column           = 0;
   size_t last_source_index     = 0;
@@ -313,50 +288,36 @@ IN_ERROR sourcemap::ParseMapping(const Environment& env, SourceMap* map, const c
   size_t last_name_index       = 0;
   SourceMapSegment* last_valid = 0;
 
-  // Find the first non-empty line
-  for(size_t k = 0; k < map->n_mappings; ++k)
-    if(map->mappings[k].segments)
-    {
-      last_valid = map->mappings[k].segments;
-      break;
-    }
-
   while(*data != '"') // we can drop the cur < end check because we know it has to be a valid string
   {
-    if(map->mappings[n].segments)
-    {
-      last_valid                                   = map->mappings[n].segments;
-      map->mappings[n].segments[i].column          = last_column += DecodeVLQ(data);
-      map->mappings[n].segments[i].source_index    = last_source_index += DecodeVLQ(data);
-      map->mappings[n].segments[i].original_line   = last_original_line += DecodeVLQ(data);
-      map->mappings[n].segments[i].original_column = last_original_column += DecodeVLQ(data);
-      map->mappings[n].segments[i].name_index      = last_name_index += DecodeVLQ(data);
-    }
-    else // we map empty lines to the last valid line
-    {
-      map->mappings[n].n_segments = 1;
-      map->mappings[n].segments   = last_valid;
-    }
+    if(n >= map->n_segments)
+      return ERR_MAP_UNEXPECTED_BASE64;
+
+    map->segments[n].linecolumn      = (line << 32) | (last_column += DecodeVLQ(data));
+    map->segments[n].source_index    = last_source_index += DecodeVLQ(data);
+    map->segments[n].original_line   = last_original_line += DecodeVLQ(data);
+    map->segments[n].original_column = last_original_column += DecodeVLQ(data);
+    map->segments[n].name_index      = last_name_index += DecodeVLQ(data);
 
     if(data >= end)
       return ERR_MAP_UNEXPECTED_END;
     else if(*data == ',')
-    {
-      ++i;
       ++data;
-    }
     else if(*data == ';')
     {
-      std::sort(map->mappings[n].segments, map->mappings[n].segments + map->mappings[n].n_segments,
-                [](SourceMapSegment& a, SourceMapSegment& b) { return a.column < b.column; });
       last_column = 0;
-      ++n;
+      ++line;
       ++data;
-      i = 0;
     }
     else if(*data != '"')
       return ERR_MAP_UNEXPECTED_BASE64;
+
+    ++n;
   }
+
+  map->n_segments = n;
+  std::sort(map->segments, map->segments + map->n_segments,
+            [](SourceMapSegment& a, SourceMapSegment& b) { return a.linecolumn < b.linecolumn; });
 
   ++data;
   return ERR_SUCCESS;
@@ -407,31 +368,6 @@ IN_ERROR ParseSourceMap(const Environment* env, SourceMap* map, const char* data
 
   *map = { 0 };
   return sourcemap::ParseObject(*env, map, data, end, &sourcemap::ParseRoot);
-}
-
-const SourceMapSegment* GetSourceMapSegment(SourceMap* map, size_t line, size_t column)
-{
-  if(!map || !map->n_mappings || !line)
-    return nullptr;
-
-  line -= 1; // line numbers start at one, so adjust them to start at 0.
-
-  if(line > map->n_mappings)
-    line = map->n_mappings - 1;
-
-  // check if the value is in-bounds
-  if(column <= map->mappings[line].segments[0].column)
-    return &map->mappings[line].segments[0];
-  if(column >= map->mappings[line].segments[map->mappings[line].n_segments - 1].column)
-    return &map->mappings[line].segments[map->mappings[line].n_segments - 1];
-
-  // Do a lower-bound binary search on the nearest matching column
-  auto end = map->mappings[line].segments + map->mappings[line].n_segments;
-  auto i = std::lower_bound(map->mappings[line].segments, end,
-                            column,
-                            [](const SourceMapSegment& l, size_t v) { return l.column < v; });
-
-  return i == end ? map->mappings[line].segments : i;
 }
 
 template<> void sourcemap::Serialize<size_t>(size_t s, FILE* f) { fprintf(f, "%zu", s); }
@@ -524,40 +460,46 @@ void sourcemap::SerializeMapping(const SourceMap* map, FILE* f)
   sourcemap::Serialize("mappings", f);
   fputc(':', f);
   fputc('"', f);
-  size_t last_column          = 0;
+  uint32_t last_line          = 0;
+  uint32_t last_column        = 0;
   size_t last_source_index    = 0;
   size_t last_original_line   = 0;
   size_t last_original_column = 0;
   size_t last_name_index      = 0;
-
-  for(size_t i = 0; i < map->n_mappings; ++i)
+  bool comma                  = false;
+  for(size_t i = 0; i < map->n_segments; ++i)
   {
-    last_column = 0;
-    if(i > 0)
-      fputc(';', f);
-    for(size_t j = 0; j < map->mappings[i].n_segments; ++j)
+    uint32_t line = map->segments[i].linecolumn >> 32;
+    while(last_line < line)
     {
-      if(j > 0)
-        fputc(',', f);
-      int32_t diff_column          = map->mappings[i].segments[j].column - last_column;
-      int32_t diff_source_index    = map->mappings[i].segments[j].source_index - last_source_index;
-      int32_t diff_original_line   = map->mappings[i].segments[j].original_line - 1 - last_original_line;
-      int32_t diff_original_column = map->mappings[i].segments[j].original_column - last_original_column;
-      int32_t diff_name_index      = map->mappings[i].segments[j].name_index - last_name_index;
-      last_column                  = map->mappings[i].segments[j].column;
-      last_source_index            = map->mappings[i].segments[j].source_index;
-      last_original_line           = map->mappings[i].segments[j].original_line - 1;
-      last_original_column         = map->mappings[i].segments[j].original_column;
-      last_name_index              = map->mappings[i].segments[j].name_index;
-
-      EncodeVLQ(diff_column, f);
-      EncodeVLQ(diff_source_index, f);
-      EncodeVLQ(diff_original_line, f);
-      EncodeVLQ(diff_original_column, f);
-
-      if(diff_name_index)
-        EncodeVLQ(diff_name_index, f);
+      fputc(';', f);
+      last_column = 0;
+      comma       = false;
+      ++last_line;
     }
+
+    if(comma)
+      fputc(',', f);
+    comma = true;
+
+    int32_t diff_column          = (map->segments[i].linecolumn & 0xFFFFFFFF) - last_column;
+    int32_t diff_source_index    = map->segments[i].source_index - last_source_index;
+    int32_t diff_original_line   = map->segments[i].original_line - 1 - last_original_line;
+    int32_t diff_original_column = map->segments[i].original_column - last_original_column;
+    int32_t diff_name_index      = map->segments[i].name_index - last_name_index;
+    last_column                  = (map->segments[i].linecolumn & 0xFFFFFFFF);
+    last_source_index            = map->segments[i].source_index;
+    last_original_line           = map->segments[i].original_line - 1;
+    last_original_column         = map->segments[i].original_column;
+    last_name_index              = map->segments[i].name_index;
+
+    EncodeVLQ(diff_column, f);
+    EncodeVLQ(diff_source_index, f);
+    EncodeVLQ(diff_original_line, f);
+    EncodeVLQ(diff_original_column, f);
+
+    if(diff_name_index)
+      EncodeVLQ(diff_name_index, f);
   }
   fputc('"', f);
 }
@@ -602,5 +544,39 @@ enum IN_ERROR SerializeSourceMap(const SourceMap* map, const char* out)
 
   if(fclose(f) != 0)
     return ERR_FATAL_FILE_ERROR;
+  return ERR_SUCCESS;
+}
+
+enum IN_ERROR DumpSourceMap(const SourceMap* map, const char* out)
+{
+  // This dumps the mapping and variable sections of the sourcemap for easier debugging
+  std::ofstream fs(out, std::ios_base::trunc | std::ios_base::binary | std::ios_base::out);
+  if(!fs)
+    return ERR_FATAL_FILE_ERROR;
+
+  fs << "Mapping: \n";
+
+  for(size_t i = 0; i < map->n_segments; ++i)
+  {
+    auto& s = map->segments[i];
+    fs << "\n[" << (s.linecolumn >> 32) + 1 << ':' << (s.linecolumn & 0xFFFFFFFF) << "] | "
+       << ((s.source_index < map->n_sources) ? map->sources[s.source_index] : "(none)") << '[' << s.original_line << ':'
+       << s.original_column << ']';
+  }
+
+  fs << "\n\nVariables: \n";
+
+  for(size_t i = 0; i < map->n_innative_variables; ++i)
+  {
+    auto& v = map->x_innative_variables[i];
+    fs << "\n"
+       << ((v.name_index < map->n_names) ? map->names[v.name_index] : "") << "[" << map->x_innative_variables[i].tag << "] "
+       << ((v.source_index < map->n_sources) ? map->sources[v.source_index] : "(none)") << '[' << v.original_line << ':'
+       << v.original_column << ']';
+
+    if(v.type_index < map->n_innative_types && map->x_innative_types[v.type_index].name_index < map->n_names)
+      fs << ' ' << map->names[map->x_innative_types[v.type_index].name_index];
+  }
+
   return ERR_SUCCESS;
 }

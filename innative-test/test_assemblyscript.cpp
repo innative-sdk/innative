@@ -48,9 +48,9 @@ void TestHarness::test_assemblyscript()
     err     = (*_exports.AddWhitelist)(env, "env", "abort");
     TEST(!err);
 
-    err = (*_exports.AddEmbedding)(env, 0, embed, sz);
+    err = (*_exports.AddEmbedding)(env, 0, embed, sz, 0);
     TEST(!err);
-    err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
+    err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
     TEST(!err);
 
     (*_exports.AddModule)(env, wasm_path, 0, "astest", &err);
