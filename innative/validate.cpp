@@ -4,7 +4,6 @@
 #include "validate.h"
 #include "util.h"
 #include "stack.h"
-#include "compile.h"
 #include "link.h"
 #include <stdio.h>
 #include <stdarg.h>
@@ -1154,7 +1153,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
   }
 
   for(varuint32 i = 0; i < sig.n_returns; ++i)
-    ValidatePopType(Instruction{ 0, 0, body.debug.line, body.debug.column }, values, sig.returns[i], env, m);
+    ValidatePopType(Instruction{ 0, 0, body.line, body.column }, values, sig.returns[i], env, m);
 
   if(control.Size() > 0)
     AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Control stack not fully terminated, off by %zu",

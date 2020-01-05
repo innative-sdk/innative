@@ -244,8 +244,8 @@ struct CommandLine
     shared_libs("Links the input files against <FILE>, which must be an ELF shared library.", "<FILE>"),
     output_file("Sets the output path for the resulting executable or library.", "<FILE>"),
     serialize(
-      "Serializes all modules to .wat files in addition to compiling them. <FILE> can specify the output if only one module is present.",
-      "<FILE>"),
+      "Serializes all modules to .wat files in addition to compiling them. <FILE> can specify the output if only one module is present, or 'emitdebug' will emit debug information",
+      "<FILE>|emitdebug"),
     generate_loader(
       "Instead of compiling immediately, creates a loader embedded with all the modules, environments, and settings, which compiles the modules on-demand when run."),
     verbose("Turns on verbose logging."),
@@ -534,7 +534,8 @@ int main(int argc, char* argv[])
       }
       return ERR_SUCCESS;
     };
-    exports.AddEmbedding = [](Environment* env, int tag, const void* data, uint64_t size) -> IN_ERROR {
+    exports.AddEmbedding = [](Environment* env, int tag, const void* data, uint64_t size,
+                              const char* name_override) -> IN_ERROR {
       char buf[20];
       _itoa_s(tag, buf, 10);
       if(!size)
@@ -667,16 +668,16 @@ int main(int argc, char* argv[])
   // Add all embedding environments, plus the default environment
   commandline.libs.values.push_back(INNATIVE_DEFAULT_ENVIRONMENT);
 
-  auto add_embeds = [](int tag, std::vector<std::string>& values, Environment* env, INExports& exports) -> int {
+  auto add_embeds = [](int tag, std::vector<std::string>& values, Environment* environment, INExports& exp) -> int {
     IN_ERROR result = ERR_SUCCESS;
     for(auto& embedding : values)
     {
-      IN_ERROR err = (*exports.AddEmbedding)(env, tag, embedding.c_str(), 0);
-      if(err < 0)
+      IN_ERROR e = (*exp.AddEmbedding)(environment, tag, embedding.c_str(), 0, 0);
+      if(e < 0)
       {
-        printerr(exports, env->log, tag ? "Error loading shared library " : "Error loading embedding ", embedding.c_str(),
-                 err);
-        result = err;
+        printerr(exp, environment->log, tag ? "Error loading shared library " : "Error loading embedding ",
+                 embedding.c_str(), e);
+        result = e;
       }
     }
     return result;
@@ -723,9 +724,12 @@ int main(int argc, char* argv[])
 
   if(commandline.serialize.set) // If you want to serialize the results, we do so now that the modules have been loaded
   {
+    bool emitdebug = false;
     if(commandline.serialize.has_value) // If a name was specified, verify only one module exists
     {
-      if(env->n_modules != 1)
+      if(!STRICMP(commandline.serialize.value.c_str(), "emitdebug"))
+        emitdebug = true;
+      else if(env->n_modules != 1)
         fprintf(
           stderr,
           "If you have more than one module, you cannot specify an output file for serialization. Use [-s] by itself, instead.\n");
@@ -736,10 +740,10 @@ int main(int argc, char* argv[])
       std::string target = env->modules[i].name.str();
       target += ".wat";
 
-      if(commandline.serialize.has_value)
+      if(!emitdebug && commandline.serialize.has_value)
         target = commandline.serialize.value;
 
-      (*exports.SerializeModule)(env, i, target.c_str(), 0);
+      (*exports.SerializeModule)(env, i, target.c_str(), 0, emitdebug);
     }
   }
 

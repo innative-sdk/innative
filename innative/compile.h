@@ -6,12 +6,74 @@
 
 #include "innative/schema.h"
 #include "constants.h"
+#include "llvm.h"
+#include "filesys.h"
+#include "stack.h"
+#include "debug.h"
 #include <vector>
 #include <string>
 
 namespace innative {
-  IN_ERROR CompileEnvironment(const Environment* env, const char* file);
-  int GetCallingConvention(const Import& imp);
+  namespace code {
+    struct Intrinsic;
+
+    struct BlockResult
+    {
+      llvm::Value* v;
+      llvm::BasicBlock* b;
+      BlockResult* next;
+    };
+
+    struct Block
+    {
+      llvm::BasicBlock* block;   // Label
+      llvm::BasicBlock* ifelse;  // Label for else statement
+      size_t limit;              // Limit of value stack
+      varsint7 sig;              // Block signature
+      uint8_t op;                // instruction that pushed this label
+      BlockResult* results;      // Holds alternative branch results targeting this block
+    };
+
+    struct FunctionSet
+    {
+      llvm::Function* internal;
+      llvm::Function* exported;
+      llvm::Function* imported;
+      Intrinsic* intrinsic;
+      llvm::AllocaInst* memlocal;
+    };
+
+    KHASH_DECLARE(importhash, const char*, llvm::GlobalObject*);
+
+    struct Context
+    {
+      const Environment& env;
+      Module& m;
+      llvm::LLVMContext& context;
+      llvm::Module* llvm;
+      llvm::IRBuilder<>& builder;
+      llvm::TargetMachine* machine;
+      kh_importhash_t* importhash;
+      path objfile; // If this module has been compiled to a .obj file, stores the path so we can reliably delete it.
+      llvm::IntegerType* intptrty;
+      std::unique_ptr<Debugger> debugger;
+      Stack<llvm::Value*> values; // Tracks the current value stack
+      Stack<Block> control;       // Control flow stack
+      std::vector<llvm::AllocaInst*> locals;
+      llvm::AllocaInst* memlocal;
+      std::vector<llvm::GlobalVariable*> memories;
+      std::vector<llvm::GlobalVariable*> tables;
+      std::vector<llvm::GlobalVariable*> globals;
+      llvm::GlobalVariable* exported_functions;
+      std::vector<FunctionSet> functions;
+      llvm::Function* init;
+      llvm::Function* exit;
+      llvm::Function* start;
+      llvm::Function* memgrow;
+    };
+
+    IN_ERROR InsertConditionalTrap(llvm::Value* cond, Context& context);
+  }
 }
 
 #endif

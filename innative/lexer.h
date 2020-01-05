@@ -67,6 +67,7 @@ namespace innative {
     RANGE_ERROR,
     INTEGER, // Explicit integer/float are only used as a shortcut when generating token lists
     FLOAT,
+    DEBUG_INFO, // only used in the serializer
     TOTALCOUNT,
   };
 

@@ -493,7 +493,8 @@ IN_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const E
 
 IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, const Environment& env)
 {
-  f.debug       = { 1, (unsigned int)s.pos };
+  f.line = 1;
+  f.column = (unsigned int)s.pos;
   IN_ERROR err  = ParseVarUInt32(s, f.body_size);
   size_t end    = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
   varuint32 idx = &f - m.code.funcbody;

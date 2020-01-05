@@ -16,7 +16,7 @@ using namespace wat;
 
 namespace innative {
   namespace wat {
-    __KHASH_IMPL(indexname, , StringRef, varuint32, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
+    __KHASH_IMPL(indexname, , StringSpan, varuint32, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
   }
 }
 
@@ -43,7 +43,7 @@ varuint32 WatParser::GetJump(WatToken var)
     return ResolveInlineToken<varuint32, &ResolveTokenu32>(var);
   if(var.id == WatTokens::NAME)
   {
-    utility::StringRef err = { var.pos, var.len };
+    utility::StringSpan err = { var.pos, var.len };
     for(varuint32 i = 0; i < stack.Size(); ++i)
       if(stack[i] == err)
         return i;
@@ -86,7 +86,7 @@ void WatParser::WriteUTF32(uint32_t ch, ByteArray& str, varuint32& index)
   index += bytesToWrite;
 }
 
-int WatParser::WatString(const Environment& env, ByteArray& str, StringRef t)
+int WatParser::WatString(const Environment& env, ByteArray& str, StringSpan t)
 {
   if(!t.s)
     return ERR_PARSE_INVALID_NAME;
@@ -339,7 +339,7 @@ varuint32 WatParser::GetFromHash(kh_indexname_t* hash, const WatToken& t)
     return ResolveInlineToken<varuint32, &ResolveTokenu32>(t);
   else if(t.id == WatTokens::NAME)
   {
-    khiter_t iter = kh_get_indexname(hash, StringRef{ t.pos, t.len });
+    khiter_t iter = kh_get_indexname(hash, StringSpan{ t.pos, t.len });
 
     if(kh_exist2(hash, iter))
       return kh_val(hash, iter);
@@ -576,11 +576,11 @@ void WatParser::ParseLabel(Queue<WatToken>& tokens)
 {
   if(tokens.Peek().id == WatTokens::NAME)
   {
-    stack.Push(StringRef{ tokens.Peek().pos, tokens.Peek().len });
+    stack.Push(StringSpan{ tokens.Peek().pos, tokens.Peek().len });
     tokens.Pop();
   }
   else
-    stack.Push(StringRef{ 0, 0 });
+    stack.Push(StringSpan{ 0, 0 });
 }
 
 bool WatParser::CheckLabel(Queue<WatToken>& tokens)
@@ -588,7 +588,7 @@ bool WatParser::CheckLabel(Queue<WatToken>& tokens)
   if(tokens.Peek().id == WatTokens::NAME)
   {
     WatToken t = tokens.Pop();
-    return stack.Peek() == StringRef{ t.pos, t.len };
+    return stack.Peek() == StringSpan{ t.pos, t.len };
   }
 
   return true;
@@ -930,12 +930,12 @@ int WatParser::ParseLocalAppend(const Environment& env, FunctionLocal& local, Fu
   return AppendArray<FunctionLocal>(env, local, body.locals, body.n_locals);
 }
 
-int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringRef name)
+int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringSpan name)
 {
   int err;
   FunctionBody body = { 0 };
-  body.debug.line   = tokens.Peek().line;
-  body.debug.column = tokens.Peek().column;
+  body.line   = tokens.Peek().line;
+  body.column = tokens.Peek().column;
 
   *index    = m.function.n_funcdecl + m.importsection.functions;
   Import* i = 0;
@@ -946,7 +946,8 @@ int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringRe
     return ParseTypeUse(tokens, i->func_desc.type_index, &i->func_desc.param_debug, 0, false);
 
   FunctionDesc desc = { 0 };
-  desc.debug = body.debug;
+  desc.debug.line   = body.line;
+  desc.debug.column = body.column;
   if(err = ParseTypeUse(tokens, desc.type_index, &desc.param_debug, 0, false))
     return err;
 
@@ -1225,7 +1226,7 @@ int WatParser::AddName(kh_indexname_t* h, WatToken t, varuint32 index)
   if(t.id == WatTokens::NAME)
   {
     int r;
-    khiter_t iter = kh_put_indexname(h, StringRef{ t.pos, t.len }, &r);
+    khiter_t iter = kh_put_indexname(h, StringSpan{ t.pos, t.len }, &r);
     if(!r)
       return ERR_WAT_DUPLICATE_NAME;
     if(iter != kh_end(h))
@@ -1400,7 +1401,7 @@ void innative::WatSkipSection(Queue<WatToken>& tokens, ptrdiff_t count)
   }
 }
 
-int WatParser::ParseModule(Environment& env, Module& m, const char* file, Queue<WatToken>& tokens, StringRef name,
+int WatParser::ParseModule(Environment& env, Module& m, const char* file, Queue<WatToken>& tokens, StringSpan name,
                            WatToken& internalname)
 {
   int err;
@@ -1445,12 +1446,12 @@ int WatParser::ParseModule(Environment& env, Module& m, const char* file, Queue<
       if(fname.id == WatTokens::NAME)
       {
         int r;
-        iter = kh_put_indexname(state.funchash, StringRef{ fname.pos, fname.len }, &r);
+        iter = kh_put_indexname(state.funchash, StringSpan{ fname.pos, fname.len }, &r);
         if(!r)
           return ERR_WAT_DUPLICATE_NAME;
       }
 
-      StringRef ref = { nullptr, 0 };
+      StringSpan ref = { nullptr, 0 };
       if(iter != kh_end(state.funchash))
         ref = { kh_key(state.funchash, iter).s, kh_key(state.funchash, iter).len };
       varuint32 index;
@@ -1461,8 +1462,8 @@ int WatParser::ParseModule(Environment& env, Module& m, const char* file, Queue<
       {
         if(index < m.importsection.functions)
           state.ParseName(env, m.importsection.imports[index].func_desc.debug.name, fname);
-        else if(index - m.importsection.functions < m.code.n_funcbody)
-          state.ParseName(env, m.code.funcbody[index - m.importsection.functions].debug.name, fname);
+        else if(index - m.importsection.functions < m.function.n_funcdecl)
+          state.ParseName(env, m.function.funcdecl[index - m.importsection.functions].debug.name, fname);
       }
 
       if(iter != kh_end(state.funchash))
@@ -1584,7 +1585,7 @@ int WatParser::ParseModule(Environment& env, Module& m, const char* file, Queue<
   return ParseExportFixup(m, env.errors, env);
 }
 
-int innative::ParseWatModule(Environment& env, const char* file, Module& m, uint8_t* data, size_t sz, StringRef name)
+int innative::ParseWatModule(Environment& env, const char* file, Module& m, uint8_t* data, size_t sz, StringSpan name)
 {
   Queue<WatToken> tokens;
   TokenizeWAT(tokens, (char*)data, (char*)data + sz);

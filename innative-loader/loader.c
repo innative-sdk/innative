@@ -42,7 +42,7 @@ BOOL CALLBACK EnumHandler(__in_opt HMODULE hModule, __in LPCSTR lpType, __in LPS
 
 void EnumEnvironmentHandler(struct WinPass* pass, uint8_t* data, DWORD sz, const char* name)
 {
-  *pass->err = (*pass->exports->AddEmbedding)(pass->env, atoi(name), data, sz);
+  *pass->err = (*pass->exports->AddEmbedding)(pass->env, atoi(name), data, sz, 0);
 }
 
 void EnumModuleHandler(struct WinPass* pass, uint8_t* data, DWORD sz, const char* name)

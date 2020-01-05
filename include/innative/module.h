@@ -4,6 +4,10 @@
 #ifndef IN__MODULE_H
 #define IN__MODULE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 enum WASM_MODULE_SECTIONS
 {
   WASM_MODULE_TYPE = 1,
@@ -21,5 +25,9 @@ enum WASM_MODULE_SECTIONS
   WASM_MODULE_DATA,
   WASM_MODULE_CUSTOM,
 };
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

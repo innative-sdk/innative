@@ -3,7 +3,6 @@
 
 #include "wast.h"
 #include "validate.h"
-#include "compile.h"
 #include "link.h"
 #include "tools.h"
 #include "queue.h"
@@ -173,7 +172,7 @@ kh_stringmap_t* wat::GenWastStringMap(std::initializer_list<std::pair<const char
 
 size_t wat::GetWastMapping(kh_indexname_t* mapping, const WatToken& t)
 {
-  khiter_t iter = kh_get_indexname(mapping, StringRef{ t.pos, t.len });
+  khiter_t iter = kh_get_indexname(mapping, StringSpan{ t.pos, t.len });
   return kh_exist2(mapping, iter) ? kh_val(mapping, iter) : (size_t)~0;
 }
 
@@ -313,14 +312,14 @@ int wat::ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname
     while(tokens.Peek().id == WatTokens::STRING)
       if(err = WatParser::WatString(env, quote, tokens.Pop()))
         return err;
-    if(err = ParseWatModule(env, file.u8string().c_str(), m, quote.get(), quote.size(), StringRef{ name.pos, name.len }))
+    if(err = ParseWatModule(env, file.u8string().c_str(), m, quote.get(), quote.size(), StringSpan{ name.pos, name.len }))
       return err;
     if(name.id == WatTokens::NAME) // Override name if it exists
       if(err = WatParser::ParseName(env, m.name, name))
         return err;
   }
   else if(err = WatParser::ParseModule(env, m, file.u8string().c_str(), tokens,
-                                       StringRef{ tempname.data(), tempname.size() }, name))
+                                       StringSpan{ tempname.data(), tempname.size() }, name))
     return err;
 
   if(name.id == WatTokens::NAME) // Only add this to our name mapping if an actual name token was specified, regardless
@@ -514,7 +513,7 @@ int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname
       return cache_err;
     assert(cache);
     void* f = reinterpret_cast<void*>(
-      LoadDLLFunction(cache, utility::CanonicalName(StringRef::From(m->name), StringRef::From(func)).c_str()));
+      LoadDLLFunction(cache, utility::CanonicalName(StringSpan::From(m->name), StringSpan::From(func)).c_str()));
     if(!f)
       return ERR_INVALID_FUNCTION_INDEX;
 
@@ -993,7 +992,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       tokens.SetPosition(tokens.GetPosition() - 1); // Recover the '('
 
       if(err =
-           WatParser::ParseModule(env, *last, file.u8string().c_str(), tokens, StringRef{ name.data(), name.size() }, t))
+           WatParser::ParseModule(env, *last, file.u8string().c_str(), tokens, StringSpan{ name.data(), name.size() }, t))
         return err;
 
       tokens.SetPosition(tokens.GetPosition() - 1); // Recover the ')'

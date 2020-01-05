@@ -40,15 +40,15 @@ namespace innative {
     typedef unsigned int uintcpuinfo[5];
 #endif
 
-    struct StringRef
+    struct StringSpan
     {
       const char* s;
       size_t len;
 
-      static StringRef From(const ByteArray& b) { return StringRef{ b.str(), b.size() }; }
-      static StringRef From(const char* s) { return StringRef{ s, !s ? 0 : strlen(s) }; }
+      static StringSpan From(const ByteArray& b) { return StringSpan{ b.str(), b.size() }; }
+      static StringSpan From(const char* s) { return StringSpan{ s, !s ? 0 : strlen(s) }; }
 
-      bool operator==(const StringRef& r) const
+      bool operator==(const StringSpan& r) const
       {
         if(len != r.len)
           return false;
@@ -93,7 +93,7 @@ namespace innative {
       FlipEndian(reinterpret_cast<uint8_t*>(target), sizeof(T));
     }
 
-    inline khint_t __ac_X31_hash_stringrefins(utility::StringRef ref)
+    inline khint_t __ac_X31_hash_stringrefins(utility::StringSpan ref)
     {
       const char* s   = ref.s;
       const char* end = ref.s + ref.len;
@@ -198,7 +198,7 @@ namespace innative {
       return (m.knownsections & (1 << opcode)) != 0;
     }
 
-    uint8_t GetInstruction(StringRef s);
+    uint8_t GetInstruction(StringSpan s);
     varuint32 ModuleFunctionType(const Module& m, varuint32 index);
     FunctionType* ModuleFunction(const Module& m, varuint32 index);
     TableDesc* ModuleTable(const Module& m, varuint32 index);
@@ -230,7 +230,7 @@ namespace innative {
     }
 
     // Creates a C-compatible mangled name with an optional index
-    inline std::string CanonicalName(StringRef prefix, StringRef name, int index = -1)
+    inline std::string CanonicalName(StringSpan prefix, StringSpan name, int index = -1)
     {
       static const char HEX[17] = "0123456789ABCDEF";
 
@@ -287,8 +287,8 @@ namespace innative {
     inline std::string CanonImportName(const Import& imp, const char* system)
     {
       if(IsSystemImport(imp.module_name, system) && !imp.alternate) // system module imports are always raw function names
-        return CanonicalName(StringRef{ 0, 0 }, StringRef::From(imp.export_name));
-      return CanonicalName(StringRef::From(imp.module_name), StringRef::From(imp.export_name));
+        return CanonicalName(StringSpan{ 0, 0 }, StringSpan::From(imp.export_name));
+      return CanonicalName(StringSpan::From(imp.module_name), StringSpan::From(imp.export_name));
     }
 
     // Generates a whitelist string for a module and export name, which includes calling convention information

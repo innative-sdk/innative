@@ -17,7 +17,7 @@ using namespace wat;
 
 namespace innative {
   namespace wat {
-    KHASH_INIT(tokens, StringRef, WatTokens, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
+    KHASH_INIT(tokens, StringSpan, WatTokens, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
 
     template<int LEN>
     inline kh_tokens_t* GenTokenHash(const char* (&list)[LEN],
@@ -29,13 +29,13 @@ namespace innative {
       int r;
       for(int i = 0; i < LEN; ++i)
       {
-        auto iter       = kh_put_tokens(h, StringRef{ list[i], strlen(list[i]) }, &r);
+        auto iter       = kh_put_tokens(h, StringSpan{ list[i], strlen(list[i]) }, &r);
         kh_val(h, iter) = WatTokens(count++);
       }
 
       for(auto& e : legacy)
       {
-        auto iter       = kh_put_tokens(h, StringRef{ e.first, strlen(e.first) }, &r);
+        auto iter       = kh_put_tokens(h, StringSpan{ e.first, strlen(e.first) }, &r);
         kh_val(h, iter) = e.second;
       }
 
@@ -526,7 +526,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
               s[0] != ')' && s[0] != '(' && s[0] != ';')
           IncToken(s, end, line, column);
 
-        StringRef ref = { begin, static_cast<size_t>(s - begin) };
+        StringSpan ref = { begin, static_cast<size_t>(s - begin) };
         khiter_t iter = kh_get_tokens(tokenhash, ref);
         if(kh_exist2(tokenhash, iter))
           tokens.Push(WatToken{ kh_val(tokenhash, iter), begin, line, column });

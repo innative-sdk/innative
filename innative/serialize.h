@@ -19,7 +19,7 @@ namespace innative {
                              const FunctionBody* body, const FunctionDesc* desc);
     void PushExportToken(Queue<WatToken>& tokens, const Module& m, varuint7 kind, varuint32 index, bool outside);
     void TokenizeModule(const Environment& env, Queue<WatToken>& tokens, const Module& m);
-    void WriteTokens(Queue<WatToken> tokens, std::ostream& out);
+    void WriteTokens(Queue<WatToken> tokens, std::ostream& out, bool emitdebug);
   }
 }
 
