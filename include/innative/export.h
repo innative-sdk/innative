@@ -47,6 +47,18 @@ typedef struct IN__TABLE_ENTRY
   varuint32 type;
 } INTableEntry;
 
+typedef struct IN__TABLE
+{
+  INTableEntry* entries;
+  uint64_t size;
+} INTable;
+
+typedef struct IN__MEMORY
+{
+  void* bytes;
+  uint64_t size;
+} INMemory;
+
 // Allows C code to access a WebAssembly global, provided it knows the correct type.
 typedef union IN__GLOBAL_TYPE
 {
@@ -54,8 +66,8 @@ typedef union IN__GLOBAL_TYPE
   uint64_t i64;
   float f32;
   double f64;
-  void* memory; // The additional indirection for memory is important here, becuase the global is a pointer to a pointer
-  INTableEntry* table;
+  INMemory memory; // The additional indirection for memory is important here, becuase the global is a pointer to a pointer
+  INTable table;
 } INGlobal;
 
 // Stores metadata about a WebAssembly module compiled into the binary
@@ -64,9 +76,9 @@ typedef struct IN__MODULE_METADATA
   const char* name;
   varuint32 version;
   varuint32 n_tables;
-  INTableEntry*** tables;
+  INTable** tables;
   varuint32 n_memories;
-  void*** memories;
+  INMemory** memories;
   varuint32 n_globals;
   INGlobal** globals;
   varuint32 n_functions;

@@ -8,11 +8,12 @@
 #include <algorithm>
 
 using namespace innative;
-using namespace code;
 using namespace utility;
+using namespace code;
+using namespace llvm::dwarf;
 
-DebugSourceMap::DebugSourceMap(SourceMap* s, llvm::IntegerType* intptr, llvm::Module& m, const char* name, Environment* env,
-                               const char* filepath) :
+code::DebugSourceMap::DebugSourceMap(SourceMap* s, llvm::IntegerType* intptr, llvm::Module& m, const char* name,
+                                     Environment* env, const char* filepath, llvm::LLVMContext& context) :
   sourcemap(s), Debugger(intptr, m, name, env, filepath)
 {
   // If we have a sourcemap, check to see if the files exist. If they don't, see if we can reconstruct them
@@ -57,48 +58,20 @@ DebugSourceMap::DebugSourceMap(SourceMap* s, llvm::IntegerType* intptr, llvm::Mo
   }
 
   types.resize(s->n_innative_types);
-}
 
-const SourceMapSegment* DebugSourceMap::GetMappedSegment(unsigned int line, unsigned int column) { return nullptr; }
-
-llvm::DIFile* DebugSourceMap::ResolveMappedSegment(unsigned int& line, unsigned int& column)
-{
-  auto file = dunit;
-
-  if(auto segment = GetMappedSegment(line, column))
+  llvm::Metadata** globals = tmalloc<llvm::Metadata*>(*env, sourcemap->n_innative_globals);
+  for(size_t i = 0; i < sourcemap->n_innative_globals; ++i)
   {
-    line   = (unsigned int)segment->original_line;
-    column = (unsigned int)segment->original_column;
-    file   = files[segment->source_index];
+    auto& g          = sourcemap->x_innative_variables[sourcemap->x_innative_globals[i]];
+    const char* name = g.name_index < sourcemap->n_names ? sourcemap->names[g.name_index] : "";
+    // auto expr        = dbuilder->createExpression(llvm::ArrayRef<int64_t>(g.p_expr, g.n_expr));
+    auto expr = dbuilder->createExpression(llvm::SmallVector<uint64_t, 1>{});
+    assert(expr->isValid());
+    globals[i] = dbuilder->createGlobalVariableExpression(dcu, name, name, GetSourceFile(g.source_index), g.original_line,
+                                                          SourceDebugType(g.type_index), false, expr);
   }
-
-  return file;
-}
-
-llvm::DILocation* DebugSourceMap::GetMappedLocation(unsigned int line, unsigned int column, llvm::DILocalScope* scope,
-                                                    llvm::LLVMContext& context)
-{
-  auto segment = GetMappedSegment(line, column);
-  if(segment && segment->source_index < files.size())
-  {
-    if(files[segment->source_index] == scope->getFile())
-      return llvm::DILocation::get(context, segment->original_line, segment->original_column, scope);
-    if(segment->source_index < subprograms.size())
-    {
-      if(!subprograms[segment->source_index])
-      {
-        auto original = scope->getSubprogram();
-        subprograms[segment->source_index] =
-          dbuilder->createFunction(original->getScope(), scope->getFile()->getName(), original->getName(),
-                                   files[segment->source_index], segment->original_line, original->getType(),
-                                   segment->original_line, original->getFlags(), original->getSPFlags());
-      }
-
-      return llvm::DILocation::get(context, segment->original_line, segment->original_column,
-                                   subprograms[segment->source_index], llvm::DILocation::get(context, line, column, scope));
-    }
-  }
-  return llvm::DILocation::get(context, line, column, scope);
+  dcu->replaceGlobalVariables(
+    llvm::MDTuple::get(context, llvm::ArrayRef<llvm::Metadata*>(globals, sourcemap->n_innative_globals)));
 }
 
 llvm::DIFile* DebugSourceMap::GetSourceFile(size_t i) { return (i < files.size()) ? files[i] : dunit; }
@@ -126,12 +99,12 @@ void DebugSourceMap::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned 
 
   llvm::SmallVector<llvm::Metadata*, 8> dwarfTys = { SourceDebugType(f->type_index) };
   for(unsigned int i = 0; i < f->scope.n_variables; ++i)
-    if(sourcemap->x_innative_variables[f->scope.variables[i]].tag == llvm::dwarf::DW_TAG_formal_parameter)
+    if(sourcemap->x_innative_variables[f->scope.variables[i]].tag == DW_TAG_formal_parameter)
       dwarfTys.push_back(SourceDebugType(sourcemap->x_innative_variables[f->scope.variables[i]].type_index));
 
-  auto subtype = dbuilder->createSubroutineType(dbuilder->getOrCreateTypeArray(dwarfTys), llvm::DINode::FlagZero,
-                                                (fn->getCallingConv() == llvm::CallingConv::C) ? llvm::dwarf::DW_CC_normal :
-                                                                                                 llvm::dwarf::DW_CC_nocall);
+  auto subtype =
+    dbuilder->createSubroutineType(dbuilder->getOrCreateTypeArray(dwarfTys), llvm::DINode::FlagZero,
+                                   (fn->getCallingConv() == llvm::CallingConv::C) ? DW_CC_normal : DW_CC_nocall);
 
   FunctionDebugInfo(fn, name, optimized, true, false, GetSourceFile(f->source_index), f->original_line, 0, subtype);
 }
@@ -165,20 +138,62 @@ void DebugSourceMap::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& d
   context.builder.SetCurrentDebugLocation(
     llvm::DILocation::get(context.context, fn->getSubprogram()->getLine(), 0, fn->getSubprogram()));
 
-  while(scopes.Size() > 0) // Unfortunately we can't actually gaurantee all the scopes will pop due to imprecise debug information
+  // Unfortunately we can't actually gaurantee all the scopes will pop due to imprecise debug information
+  while(scopes.Size() > 0)
     scopes.Pop();
 
   scopecache.resize(0); // Wipe the cache
   scopecache.resize(sourcemap->n_innative_scopes);
   curscope = fn->getSubprogram();
+  curbody  = &body;
 }
+
+void DebugSourceMap::PostFuncBody(FunctionBody& body, code::Context& context)
+{
+  SourceMapFunction* f = GetSourceFunction(curbody->column);
+
+  if(context.globals.size() > 0)
+  {
+    dbuilder->insertDeclare(context.memlocal,
+                            dbuilder->createAutoVariable(curscope, "MEMLOCAL", GetSourceFile(f->source_index), 0,
+                                                         dbuilder->createPointerType(diI32, intptrty->getBitWidth()), true),
+                            dbuilder->createExpression(), context.builder.getCurrentDebugLocation(),
+                            context.builder.GetInsertBlock());
+  }
+}
+
+void DebugSourceMap::DebugSetGlobal(int index, code::Context& context)
+{
+  SourceMapFunction* f = GetSourceFunction(curbody->column);
+
+  if(!index)
+  {
+    stacklocal = context.builder.CreateAlloca(context.memories[0]->getType()->getElementType()->getContainedType(0), nullptr, "IN_!stacklocal");
+
+    dbuilder->insertDeclare(stacklocal,
+                            dbuilder->createAutoVariable(curscope, "STACKLOCAL", GetSourceFile(f->source_index), 0,
+                                                         CreateDebugType(stacklocal->getType()), true),
+                            dbuilder->createExpression(), llvm::DILocation::get(context.context, 0, 0, curscope),
+                            context.builder.GetInsertBlock());
+    context.builder.CreateStore(context.builder.CreateIntToPtr(context.builder.CreateLoad(context.globals[0]),
+                                                               context.builder.getInt8PtrTy()),
+                                stacklocal);
+
+    if(f)
+      UpdateVariables(f->scope, context);
+  }
+}
+
+void DebugSourceMap::DebugMemLocal(code::Context& context) {}
 
 void DebugSourceMap::FuncParam(llvm::Function* fn, size_t index, FunctionDesc& desc, code::Context& context) {}
 
 void DebugSourceMap::FuncLocal(llvm::Function* fn, size_t indice, FunctionDesc& desc, code::Context& context) {}
 
-llvm::DILocation* DebugSourceMap::UpdateLocation(llvm::DILocation* loc, Instruction& i, code::Context& context)
+void DebugSourceMap::UpdateLocation(Instruction& i, code::Context& context)
 {
+  llvm::DILocation* loc = 0;
+
   while(cursegment < sourcemap->n_segments &&
         sourcemap->segments[cursegment].linecolumn < ((i.line - 1ULL) << 32 | i.column))
   {
@@ -186,12 +201,128 @@ llvm::DILocation* DebugSourceMap::UpdateLocation(llvm::DILocation* loc, Instruct
       context.builder.CreateIntrinsic(llvm::Intrinsic::donothing, {}, {})->setDebugLoc(loc);
 
     auto& s = sourcemap->segments[cursegment++];
-    loc     = llvm::DILocation::get(context.context, s.original_line, s.original_column, curscope);
+
+    if(files[s.source_index] == curscope->getFile() || s.source_index >= subprograms.size())
+      loc = llvm::DILocation::get(context.context, s.original_line, s.original_column, curscope);
+    else
+    {
+      if(!subprograms[s.source_index])
+      {
+        auto original = curscope->getSubprogram();
+        subprograms[s.source_index] =
+          dbuilder->createFunction(original->getScope(), original->getName(), original->getLinkageName(),
+                                   files[s.source_index], original->getLine(), original->getType(),
+                                   original->getScopeLine(), original->getFlags(), original->getSPFlags());
+      }
+
+      loc = context.builder.getCurrentDebugLocation();
+      if(loc->getInlinedAt())
+        loc = loc->getInlinedAt();
+      loc = llvm::DILocation::get(context.context, s.original_line, s.original_column, subprograms[s.source_index], loc);
+    }
   }
 
   if(loc)
     context.builder.SetCurrentDebugLocation(loc);
-  return context.builder.getCurrentDebugLocation();
+}
+
+enum
+{
+  DW_OP_WASM_location = 0xEB,
+};
+
+enum DW_WASM_OP
+{
+  DW_WASM_OP_LOCAL  = 0x00,
+  DW_WASM_OP_GLOBAL = 0x01,
+  DW_WASM_OP_STACK  = 0x02,
+};
+
+llvm::DIType* DebugSourceMap::StructOffsetType(llvm::DIType* ty, llvm::DIScope* scope, llvm::DIFile* file,
+                                               llvm::StringRef name, uint64_t indice, unsigned int bitsize, unsigned int bytealign)
+{
+  auto member = dbuilder->createMemberType(scope, name, file, 0, ty->getSizeInBits(), 1, (indice + 0x00000000000010008) << 3,
+                                           llvm::DINode::FlagZero, ty);
+  auto offset = dbuilder->createStructType(scope, "WASM_" + name.str(), file, 0,
+                                           ty->getSizeInBits(),
+                                           1, llvm::DINode::FlagZero, 0, dbuilder->getOrCreateArray({ member }));
+  return dbuilder->createPointerType(offset, bitsize, bytealign, llvm::None, "ptr_" + name.str());
+}
+
+void DebugSourceMap::UpdateVariables(SourceMapScope& scope, code::Context& context)
+{
+  int params = 0;
+
+  for(size_t i = 0; i < scope.n_variables; ++i)
+  {
+    assert(scope.variables[i] < sourcemap->n_innative_variables);
+    auto& v            = sourcemap->x_innative_variables[scope.variables[i]];
+    const char* name   = v.name_index < sourcemap->n_names ? sourcemap->names[v.name_index] : "";
+    llvm::DIFile* file = GetSourceFile(v.source_index);
+    auto ty            = SourceDebugType(v.type_index);
+
+    if(v.n_expr > 1 && v.p_expr[0] == DW_OP_plus_uconst)
+      ty = StructOffsetType(ty, file, file, name, v.p_expr[1], intptrty->getBitWidth(), 1);
+
+    llvm::DILocalVariable* dparam;
+    if(v.tag == DW_TAG_formal_parameter)
+      dparam = dbuilder->createParameterVariable(curscope, name, ++params, file, v.original_line, ty, true);
+    else
+      dparam = dbuilder->createAutoVariable(curscope, name, file, v.original_line, ty, true);
+
+    auto expr = dbuilder->createExpression();
+    if(v.n_expr > 1 && v.p_expr[0] == DW_OP_plus_uconst)
+    {
+      dbuilder->insertDeclare(stacklocal, dparam, expr,
+                              llvm::DILocation::get(context.context, v.original_line, v.original_column, curscope),
+                              context.builder.GetInsertBlock());
+    }
+    else if(v.n_expr > 2 && v.p_expr[0] == DW_OP_WASM_location && v.p_expr[1] == DW_WASM_OP_LOCAL)
+    {
+      expr = dbuilder->createExpression(llvm::SmallVector<int64_t, 3>{ DW_OP_deref, DW_OP_stack_value });
+
+      if(v.p_expr[2] < context.locals.size())
+        dbuilder->insertDbgValueIntrinsic(context.locals[v.p_expr[2]], dparam, expr,
+                                          llvm::DILocation::get(context.context, v.original_line, v.original_column,
+                                                                curscope),
+                                          context.builder.GetInsertBlock());
+    }
+    else if(v.n_expr > 2 && v.p_expr[0] == DW_OP_WASM_location && v.p_expr[1] == DW_WASM_OP_GLOBAL)
+    {
+      expr = dbuilder->createExpression(llvm::SmallVector<int64_t, 3>{ DW_OP_deref, DW_OP_stack_value });
+
+      if(v.p_expr[2] < context.globals.size())
+        dbuilder->insertDbgValueIntrinsic(context.globals[v.p_expr[2]], dparam, expr,
+                                          llvm::DILocation::get(context.context, v.original_line, v.original_column,
+                                                                curscope),
+                                          context.builder.GetInsertBlock());
+    }
+    else if(v.n_expr > 2 && v.p_expr[0] == DW_OP_WASM_location && v.p_expr[1] == DW_WASM_OP_STACK)
+    {
+      expr = dbuilder->createExpression(llvm::SmallVector<int64_t, 3>{ DW_OP_stack_value });
+
+      if(v.p_expr[2] <
+         context.values
+           .Size()) // TODO: we're going from the bottom of the limit, but it may be the bottom of the entire values stack
+        dbuilder->insertDbgValueIntrinsic(context.values.Get()[context.values.Limit() + v.p_expr[2]], dparam, expr,
+                                          llvm::DILocation::get(context.context, v.original_line, v.original_column,
+                                                                curscope),
+                                          context.builder.GetInsertBlock());
+    }
+    else
+      dbuilder->insertDbgValueIntrinsic(
+        stacklocal, dparam, expr, llvm::DILocation::get(context.context, v.original_line, v.original_column, curscope),
+        context.builder.GetInsertBlock());
+  }
+
+  {
+    auto dparam =
+      dbuilder->createAutoVariable(curscope, "scopeoffset", curscope->getFile(), 0,
+                                   StructOffsetType(diI32, dunit, dunit, "scopeoffset", 0, intptrty->getBitWidth(), 1), true);
+
+    dbuilder->insertDeclare(stacklocal, dparam, dbuilder->createExpression(),
+                            llvm::DILocation::get(context.context, 0, 0, curscope), context.builder.GetInsertBlock());
+  }
 }
 
 void DebugSourceMap::DebugIns(llvm::Function* fn, Instruction& i, code::Context& context)
@@ -201,9 +332,6 @@ void DebugSourceMap::DebugIns(llvm::Function* fn, Instruction& i, code::Context&
     scopes.Pop();
   curscope = scopes.Size() > 0 ? scopecache[sourcemap->x_innative_ranges[scopes.Peek()].scope] : fn->getSubprogram();
   assert(curscope);
-  assert(context.builder.getCurrentDebugLocation()->getScope()->getSubprogram() == fn->getSubprogram());
-
-  llvm::DILocation* loc = 0;
 
   // push scopes and any variables they contain
   while(curscopeindex < sourcemap->n_innative_ranges && i.column >= sourcemap->x_innative_ranges[curscopeindex].low)
@@ -221,46 +349,17 @@ void DebugSourceMap::DebugIns(llvm::Function* fn, Instruction& i, code::Context&
       }
       curscope = scopecache[cur.scope];
       assert(cur.scope < sourcemap->n_innative_scopes);
-      int params = 0;
 
-      loc = UpdateLocation(loc, i, context);
-      assert(loc->getScope()->getSubprogram() == fn->getSubprogram());
-
-      for(size_t i = 0; i < scope.n_variables; ++i)
-      {
-        assert(scope.variables[i] < sourcemap->n_innative_variables);
-        auto& v            = sourcemap->x_innative_variables[scope.variables[i]];
-        const char* name   = v.name_index < sourcemap->n_names ? sourcemap->names[v.name_index] : "";
-        llvm::DIFile* file = GetSourceFile(v.source_index);
-
-        llvm::DILocalVariable* dparam;
-        if(v.tag == llvm::dwarf::DW_TAG_formal_parameter)
-          dparam = dbuilder->createParameterVariable(curscope, name, ++params, file, v.original_line,
-                                                     SourceDebugType(v.type_index), true);
-        else
-          dparam = dbuilder->createAutoVariable(curscope, name, file, v.original_line, SourceDebugType(v.type_index), true);
-
-        dbuilder->insertDeclare(context.memlocal, dparam,
-                                dbuilder->createExpression(llvm::ArrayRef<int64_t>(v.p_expr, v.n_expr)), loc,
-                                context.builder.GetInsertBlock());
-      }
+      UpdateVariables(scope, context);
     }
 
     ++curscopeindex;
   }
 
-  loc = UpdateLocation(loc, i, context);
-  assert(loc->getScope()->getSubprogram() == fn->getSubprogram());
+  UpdateLocation(i, context);
 }
 
-void DebugSourceMap::DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t line)
-{
-  auto expr = dbuilder->createExpression(llvm::SmallVector<uint64_t, 1>{ llvm::dwarf::DW_OP_deref });
-
-  v->addDebugInfo(dbuilder->createGlobalVariableExpression(dcu, name, v->getName(), dunit, (unsigned int)line,
-                                                           CreateDebugType(v->getType()), !v->hasValidDeclarationLinkage(),
-                                                           expr));
-}
+void DebugSourceMap::DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t line) {}
 
 llvm::DIType* DebugSourceMap::SourceDebugType(size_t index)
 {
@@ -273,29 +372,36 @@ llvm::DIType* DebugSourceMap::SourceDebugType(size_t index)
 
     switch(type.tag)
     {
-    case llvm::dwarf::DW_TAG_base_type: types[index] = dbuilder->createBasicType(name, type.bit_size, type.encoding); break;
-    case llvm::dwarf::DW_TAG_const_type:
-    case llvm::dwarf::DW_TAG_volatile_type:
-    case llvm::dwarf::DW_TAG_restrict_type:
-    case llvm::dwarf::DW_TAG_atomic_type:
-    case llvm::dwarf::DW_TAG_interface_type:
+    case DW_TAG_base_type: types[index] = dbuilder->createBasicType(name, type.bit_size, type.encoding); break;
+    case DW_TAG_const_type:
+    case DW_TAG_volatile_type:
+    case DW_TAG_restrict_type:
+    case DW_TAG_atomic_type:
+    case DW_TAG_interface_type:
       if(auto ty = SourceDebugType(type.type_index))
         types[index] = dbuilder->createQualifiedType(type.tag, ty);
       break;
-    case llvm::dwarf::DW_TAG_pointer_type:
+    case DW_TAG_pointer_type:
       if(auto ty = SourceDebugType(type.type_index))
-        types[index] = dbuilder->createPointerType(ty, type.bit_size, type.byte_align << 3, llvm::None, name);
+      {
+        auto member = dbuilder->createMemberType(file, name, file, 0, ty->getSizeInBits(), 0, 0x00000000000010008 << 3,
+                                                 llvm::DINode::FlagZero, ty);
+        auto offset = dbuilder->createStructType(file, "WASMOffset", file, 0, ty->getSizeInBits(), 0,
+                                                 llvm::DINode::FlagZero, 0, dbuilder->getOrCreateArray({ member }));
+        types[index] =
+          dbuilder->createPointerType(offset, 32, 0, llvm::None, name);
+      }
       break;
-    case llvm::dwarf::DW_TAG_rvalue_reference_type:
-    case llvm::dwarf::DW_TAG_reference_type:
+    case DW_TAG_rvalue_reference_type:
+    case DW_TAG_reference_type:
       if(auto ty = SourceDebugType(type.type_index))
         types[index] = dbuilder->createReferenceType(type.tag, ty, type.bit_size, type.byte_align << 3, llvm::None);
       break;
-    case llvm::dwarf::DW_TAG_typedef:
+    case DW_TAG_typedef:
       if(auto ty = SourceDebugType(type.type_index))
         types[index] = dbuilder->createTypedef(ty, name, file, type.original_line, file);
       break;
-    case llvm::dwarf::DW_TAG_ptr_to_member_type:
+    case DW_TAG_ptr_to_member_type:
       if(type.n_types == 2)
       {
         auto base = SourceDebugType(type.types[1]);
@@ -304,10 +410,11 @@ llvm::DIType* DebugSourceMap::SourceDebugType(size_t index)
           types[index] = dbuilder->createMemberPointerType(base, cls, type.bit_size, type.byte_align << 3);
       }
       break;
-    // case llvm::dwarf::DW_TAG_inheritance:
+    case DW_TAG_structure_type: break;
+    // case DW_TAG_inheritance:
     //  if(auto ty = SourceDebugType(type.type_index))
     //    dbuilder->createInheritance()
-    case llvm::dwarf::DW_TAG_enumeration_type:
+    case DW_TAG_enumeration_type:
       if(auto ty = SourceDebugType(type.type_index))
       {
         llvm::SmallVector<llvm::Metadata*, 8> elements;
@@ -324,7 +431,7 @@ llvm::DIType* DebugSourceMap::SourceDebugType(size_t index)
                                                        type.byte_align << 3, dbuilder->getOrCreateArray(elements), ty);
       }
       break;
-    case llvm::dwarf::DW_TAG_subroutine_type:
+    case DW_TAG_subroutine_type:
     {
       llvm::SmallVector<llvm::Metadata*, 8> params;
       for(size_t i = 0; i < type.n_types; ++i)

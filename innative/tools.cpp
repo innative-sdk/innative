@@ -375,8 +375,8 @@ IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const
   INGlobal* ref =
     (INGlobal*)LoadDLLFunction(assembly,
                                CanonicalName(StringSpan::From(module_name), StringSpan::From(table)).c_str());
-  if(ref != nullptr && index < (reinterpret_cast<uint64_t*>(ref->table)[-1] / sizeof(INTableEntry)))
-    return ref->table[index].func;
+  if(ref != nullptr && index < (ref->table.size / sizeof(INTableEntry)))
+    return ref->table.entries[index].func;
   return nullptr;
 }
 
@@ -773,8 +773,8 @@ IN_Entrypoint innative::LoadTableIndex(void* assembly, uint32_t module_index, ui
   if(!metadata || table_index >= metadata->n_tables)
     return nullptr;
   INGlobal* table = (INGlobal*)metadata->tables[table_index];
-  if(function_index < (reinterpret_cast<uint64_t*>(table->table)[-1] / sizeof(INTableEntry)))
-    return table->table[function_index].func;
+  if(function_index < (table->table.size / sizeof(INTableEntry)))
+    return table->table.entries[function_index].func;
   return nullptr;
 }
 INGlobal* innative::LoadGlobalIndex(void* assembly, uint32_t module_index, uint32_t global_index)

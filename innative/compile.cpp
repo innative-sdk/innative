@@ -254,7 +254,8 @@ IN_ERROR PopType(varsint7 ty, code::Context& context, llvmVal*& v, bool peek = f
   }
   else if(ty == TE_cref && context.values.Peek()->getType()->isIntegerTy())
   { // If this is true, we need to do an int -> cref conversion
-    v = context.builder.CreatePtrToInt(context.builder.CreateLoad(context.memories[0]), context.builder.getInt64Ty());
+    v = context.builder.CreatePtrToInt(context.builder.CreateLoad(context.GetPairPtr(context.memories[0], 0)),
+                                       context.builder.getInt64Ty());
     v = context.builder.CreateAdd(context.builder.CreateZExt(peek ? context.values.Peek() : context.values.Pop(),
                                                              context.builder.getInt64Ty()),
                                   v, "", true, true);
@@ -271,8 +272,28 @@ IN_ERROR PopType(varsint7 ty, code::Context& context, llvmVal*& v, bool peek = f
   return ERR_SUCCESS;
 }
 
-// Given a function pointer to the appropriate builder function, pops two binary arguments off the stack and pushes the
-// result
+// Returns a table struct containing the element_type and a type index
+llvm::StructType* code::Context::GetTableType(varsint7 element_type)
+{
+  return llvm::StructType::create({ GetLLVMType(element_type, *this), GetLLVMType(TE_i32, *this) });
+}
+
+llvm::StructType* code::Context::GetPairType(llvmTy* ty)
+{
+  return llvm::StructType::create({ ty, GetLLVMType(TE_i64, *this) });
+}
+
+llvmVal* code::Context::GetPairPtr(llvm::GlobalVariable* v, int index)
+{
+  return builder.CreateInBoundsGEP(v, { builder.getInt32(0), builder.getInt32(index) });
+}
+llvm::Constant* code::Context::GetPairNull(llvm::StructType* ty)
+{
+  return llvm::ConstantStruct::get(ty, llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ty->getElementType(0))),
+                                   builder.getInt64(0));
+}
+
+// Given a pointer to the appropriate builder function, pops two binary arguments off the stack and pushes the result
 template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR, typename... Args>
 IN_ERROR CompileBinaryOp(code::Context& context, llvmVal* (llvm::IRBuilder<>::*op)(llvmVal*, llvmVal*, Args...),
                          Args... args)
@@ -783,11 +804,9 @@ IN_ERROR CompileCall(varuint32 index, code::Context& context)
   return ERR_SUCCESS;
 }
 
-llvmVal* GetMemSize(llvmVal* target, code::Context& context)
+llvmVal* GetMemSize(llvm::GlobalVariable* target, code::Context& context)
 {
-  return context.builder.CreateLoad(context.builder.CreateGEP(
-    context.builder.CreatePointerCast(context.builder.CreateLoad(target), context.builder.getInt64Ty()->getPointerTo()),
-    { CInt::get(context.builder.getInt32Ty(), -1, true) }));
+  return context.builder.CreateLoad(context.GetPairPtr(target, 1));
 }
 
 // Gets the first type index that matches the given type, used as a stable type hash
@@ -829,8 +848,8 @@ IN_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
       return err;
   }
 
-  uint64_t bytewidth =
-    context.llvm->getDataLayout().getTypeAllocSize(context.tables[0]->getType()->getElementType()->getPointerElementType());
+  uint64_t bytewidth = context.llvm->getDataLayout().getTypeAllocSize(
+    context.tables[0]->getType()->getElementType()->getContainedType(0)->getPointerElementType());
 
   if(context.env.flags & ENV_CHECK_INDIRECT_CALL) // In strict mode, trap if index is out of bounds
   {
@@ -844,10 +863,10 @@ IN_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
 
   // Deference global variable to get the actual array of function pointers, index into them, then dereference that array
   // index to get the actual function pointer
-  llvmVal* funcptr =
-    context.builder.CreateLoad(context.builder.CreateInBoundsGEP(context.builder.CreateLoad(context.tables[0]),
-                                                                 { callee, context.builder.getInt32(0) }),
-                               "indirect_call_load_func_ptr");
+  llvmVal* funcptr = context.builder.CreateLoad(
+    context.builder.CreateInBoundsGEP(context.builder.CreateLoad(context.GetPairPtr(context.tables[0], 0)),
+                                      { callee, context.builder.getInt32(0) }),
+    "indirect_call_load_func_ptr");
 
   if(context.env.flags & ENV_CHECK_INDIRECT_CALL) // In strict mode, trap if function pointer is NULL
     InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(funcptr, context.intptrty),
@@ -862,8 +881,8 @@ IN_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
   if(context.env.flags &
      ENV_CHECK_INDIRECT_CALL) // In strict mode, trap if the expected type does not match the actual type of the function
   {
-    auto sig = context.builder.CreateLoad(context.builder.CreateInBoundsGEP(context.builder.CreateLoad(context.tables[0]),
-                                                                            { callee, context.builder.getInt32(1) }));
+    auto sig = context.builder.CreateLoad(context.builder.CreateInBoundsGEP(
+      context.builder.CreateLoad(context.GetPairPtr(context.tables[0], 0)), { callee, context.builder.getInt32(1) }));
     InsertConditionalTrap(context.builder.CreateICmpNE(sig, context.builder.getInt32(index), "indirect_call_sig_check"),
                           context);
   }
@@ -871,7 +890,10 @@ IN_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
   // CreateCall will then do the final dereference of the function pointer to make the indirect call
   CallInst* call = context.builder.CreateCall(funcptr, llvm::makeArrayRef(ArgsV, ftype.n_params));
   if(context.memories.size() > 0)
-    context.builder.CreateStore(context.builder.CreateLoad(context.memories[0]), context.memlocal);
+  {
+    context.builder.CreateStore(context.builder.CreateLoad(context.GetPairPtr(context.memories[0], 0)), context.memlocal);
+    context.debugger->DebugMemLocal(context);
+  }
   context.builder.GetInsertBlock()->getParent()->setMetadata(IN_MEMORY_GROW_METADATA,
                                                              llvm::MDNode::get(context.context, {}));
 
@@ -905,10 +927,9 @@ llvmVal* GetMemPointer(code::Context& context, llvmVal* base, llvm::PointerType*
                        varuint32 offset)
 {
   assert(context.memories.size() > 0);
-  llvmVal* src          = !memory ? context.memlocal : static_cast<llvmVal*>(context.memories[memory]);
+  llvmVal* src = !memory ? context.memlocal : static_cast<llvmVal*>(context.GetPairPtr(context.memories[memory], 0));
   llvm::IntegerType* ty = context.machine->getPointerSizeInBits(memory) == 32 ? context.builder.getInt32Ty() :
                                                                                 context.builder.getInt64Ty();
-  Func* uadd_with_overflow = llvm::Intrinsic::getDeclaration(context.llvm, llvm::Intrinsic::uadd_with_overflow, { ty });
 
   // If our native integer size is larger than the webassembly memory pointer size, then overflow is not possible and we
   // can bypass the check.
@@ -919,8 +940,9 @@ llvmVal* GetMemPointer(code::Context& context, llvmVal* base, llvm::PointerType*
   if(context.env.flags &
      ENV_CHECK_MEMORY_ACCESS) // In strict mode, generate a check that traps if this is an invalid memory access
   {
-    llvmVal* end = context.builder.CreateIntCast(GetMemSize(src, context), ty, false);
+    llvmVal* end = context.builder.CreateIntCast(GetMemSize(context.memories[memory], context), ty, false);
     llvmVal* cond;
+    Func* uadd_with_overflow = llvm::Intrinsic::getDeclaration(context.llvm, llvm::Intrinsic::uadd_with_overflow, { ty });
 
     if(bypass) // If we can bypass the overflow check because we have enough bits, only check the upper bound
     {
@@ -1001,7 +1023,7 @@ IN_ERROR CompileStore(code::Context& context, varuint7 memory, varuint32 offset,
 }
 
 // Gets memory size in pages, not bytes
-llvmVal* CompileMemSize(llvmVal* target, code::Context& context)
+llvmVal* CompileMemSize(llvm::GlobalVariable* target, code::Context& context)
 {
   return context.builder.CreateIntCast(context.builder.CreateLShr(GetMemSize(target, context), 16),
                                        context.builder.getInt32Ty(), true);
@@ -1023,8 +1045,9 @@ IN_ERROR CompileMemGrow(code::Context& context, const char* name)
                ->getValue();
   CallInst* call = context.builder.CreateCall(
     context.memgrow,
-    { context.builder.CreateLoad(context.memories[0]),
-      context.builder.CreateShl(context.builder.CreateZExt(delta, context.builder.getInt64Ty()), 16), max },
+    { context.builder.CreateLoad(context.GetPairPtr(context.memories[0], 0)),
+      context.builder.CreateShl(context.builder.CreateZExt(delta, context.builder.getInt64Ty()), 16), max,
+      context.GetPairPtr(context.memories[0], 1) },
     name);
 
   llvmVal* success =
@@ -1036,8 +1059,10 @@ IN_ERROR CompileMemGrow(code::Context& context, const char* name)
 
   context.builder.CreateCondBr(success, successblock, contblock);
   context.builder.SetInsertPoint(successblock); // Only set new memory if call succeeded
-  context.builder.CreateAlignedStore(call, context.memories[0], context.builder.getInt64Ty()->getPrimitiveSizeInBits() / 8);
-  context.builder.CreateStore(context.builder.CreateLoad(context.memories[0]), context.memlocal);
+  context.builder.CreateAlignedStore(call, context.GetPairPtr(context.memories[0], 0),
+                                     context.builder.getInt64Ty()->getPrimitiveSizeInBits() / 8);
+  context.builder.CreateStore(context.builder.CreateLoad(context.GetPairPtr(context.memories[0], 0)), context.memlocal);
+  context.debugger->DebugMemLocal(context);
   context.builder.CreateBr(contblock);
 
   context.builder.SetInsertPoint(contblock);
@@ -1298,6 +1323,7 @@ IN_ERROR CompileInstruction(Instruction& ins, code::Context& context)
                                     context.globals[ins.immediates[0]._varuint32]->getType()->getElementType()) :
                                   context.values.Pop(),
                                 context.globals[ins.immediates[0]._varuint32]);
+    context.debugger->DebugSetGlobal(ins.immediates[0]._varuint32, context);
     return ERR_SUCCESS;
   case OP_global_get:
     if(ins.immediates[0]._varuint32 >= context.globals.size())
@@ -1375,7 +1401,7 @@ IN_ERROR CompileInstruction(Instruction& ins, code::Context& context)
   case OP_i64_store32:
     return CompileStore<TE_i64>(context, 0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OPNAMES[ins.opcode],
                                 context.builder.getInt32Ty());
-  case OP_memory_size: return PushReturn(context, CompileMemSize(context.memlocal, context));
+  case OP_memory_size: return PushReturn(context, CompileMemSize(context.memories[0], context));
   case OP_memory_grow:
     return CompileMemGrow(context, OPNAMES[ins.opcode]);
 
@@ -1812,16 +1838,20 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
   for(auto local : context.locals)
     stacksize += (local->getType()->getElementType()->getPrimitiveSizeInBits() / 8);
 
-  // If we allocate more than 2048 bytes of stack space, make a stack probe so we can't blow past the gaurd page.
-  if(stacksize > 2048)
-    fn->addFnAttr("probe-stack");
-
   if(context.memories.size() > 0)
   {
     memlocal = context.memlocal =
-      context.builder.CreateAlloca(context.memories[0]->getType()->getElementType(), nullptr, "IN_!memlocal");
-    context.builder.CreateStore(context.builder.CreateLoad(context.memories[0]), context.memlocal);
+      context.builder.CreateAlloca(context.memories[0]->getType()->getElementType()->getContainedType(0), nullptr,
+                                   "IN_!memlocal");
+    context.builder.CreateStore(context.builder.CreateLoad(context.GetPairPtr(context.memories[0], 0)), context.memlocal);
+    stacksize += (memlocal->getType()->getElementType()->getPrimitiveSizeInBits() / 8);
   }
+
+  context.debugger->PostFuncBody(body, context);
+
+  // If we allocate more than 2048 bytes of stack space, make a stack probe so we can't blow past the gaurd page.
+  if(stacksize > 2048)
+    fn->addFnAttr("probe-stack");
 
   // Begin iterating through the instructions until there aren't any left
   for(varuint32 i = 0; i < body.n_body; ++i)
@@ -1906,12 +1936,6 @@ code::Intrinsic* GetIntrinsic(Import& imp, code::Context& context)
   return nullptr;
 }
 
-// Returns a table struct containing the element_type and a type index
-llvmTy* GetTableType(varsint7 element_type, code::Context& context)
-{
-  return llvm::StructType::create({ GetLLVMType(element_type, context), GetLLVMType(TE_i32, context) });
-}
-
 Func* TopLevelFunction(llvm::LLVMContext& context, llvm::IRBuilder<>& builder, const char* name, llvm::Module* m)
 {
   Func* fn = Func::Create(FuncTy::get(builder.getVoidTy(), false), Func::ExternalLinkage, name, m);
@@ -1977,7 +2001,7 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
       return ERR_FATAL_FILE_ERROR;
     if(context.m.sourcemap)
       context.debugger.reset(new code::DebugSourceMap(context.m.sourcemap, context.intptrty, *context.llvm,
-                                                      context.m.name.str(), env, context.m.filepath));
+                                                      context.m.name.str(), env, context.m.filepath, context.context));
     else
       context.debugger.reset(
         new code::DebugWat(context.intptrty, *context.llvm, context.m.name.str(), env, context.m.filepath));
@@ -1992,10 +2016,11 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
                      context.llvm);
 
   // Declare C runtime function prototypes that we assume exist on the system
-  context.memgrow = Func::Create(
-    FuncTy::get(context.builder.getInt8PtrTy(0),
-                { context.builder.getInt8PtrTy(0), context.builder.getInt64Ty(), context.builder.getInt64Ty() }, false),
-    Func::ExternalLinkage, "_innative_internal_env_grow_memory", context.llvm);
+  context.memgrow = Func::Create(FuncTy::get(context.builder.getInt8PtrTy(0),
+                                             { context.builder.getInt8PtrTy(0), context.builder.getInt64Ty(),
+                                               context.builder.getInt64Ty(), context.builder.getInt64Ty()->getPointerTo() },
+                                             false),
+                                 Func::ExternalLinkage, "_innative_internal_env_grow_memory", context.llvm);
   context.memgrow
     ->setReturnDoesNotAlias(); // This is a system memory allocation function, so the return value does not alias
 
@@ -2004,7 +2029,8 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
                 { context.builder.getInt8PtrTy(0), context.builder.getInt8PtrTy(0), context.builder.getInt64Ty() }, false),
     Func::ExternalLinkage, "_innative_internal_env_memcpy", context.llvm);
 
-  Func* fn_memfree = Func::Create(FuncTy::get(context.builder.getVoidTy(), { context.builder.getInt8PtrTy(0) }, false),
+  Func* fn_memfree = Func::Create(FuncTy::get(context.builder.getVoidTy(),
+                                              { context.builder.getInt8PtrTy(0), context.builder.getInt64Ty() }, false),
                                   Func::ExternalLinkage, "_innative_internal_env_free_memory", context.llvm);
 
   context.debugger->FunctionDebugInfo(context.init, "innative_internal_init|" + std::string(context.m.name.str()),
@@ -2075,9 +2101,9 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
     {
       auto pair       = ResolveTrueExport(*env, context.m.importsection.imports[i]);
       auto table_desc = ModuleTable(*pair.first, pair.second->index);
+      auto ty         = context.GetPairType(context.GetTableType(table_desc->element_type)->getPointerTo(0));
 
-      context.tables.push_back(CreateGlobal(context, GetTableType(table_desc->element_type, context)->getPointerTo(0),
-                                            false, true, name, canonical, table_desc->debug.line));
+      context.tables.push_back(CreateGlobal(context, ty, false, true, name, canonical, table_desc->debug.line));
 
       int r;
       iter = code::kh_put_importhash(context.importhash, context.tables.back()->getName().data(), &r);
@@ -2099,12 +2125,12 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
     {
       auto pair     = ResolveTrueExport(*env, context.m.importsection.imports[i]);
       auto mem_desc = ModuleMemory(*pair.first, pair.second->index);
+      auto ty       = context.GetPairType(context.builder.getInt8PtrTy(0));
 
-      context.memories.push_back(
-        CreateGlobal(context, context.builder.getInt8PtrTy(0), false, true, name, canonical, mem_desc->debug.line));
+      context.memories.push_back(CreateGlobal(context, ty, false, true, name, canonical, mem_desc->debug.line));
 
       auto max = context.builder.getInt64(
-        ((mem_desc->limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? ((uint64_t)mem_desc->limits.maximum) : 0x10000ULL) << 16);
+        ((mem_desc->limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? ((uint64_t)mem_desc->limits.maximum) : 0ULL) << 16);
       context.memories.back()->setMetadata(IN_MEMORY_MAX_METADATA,
                                            llvm::MDNode::get(context.context, { llvm::ConstantAsMetadata::get(max) }));
 
@@ -2193,12 +2219,12 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
   // Declare tables and allocate in init function
   for(varuint32 i = 0; i < context.m.table.n_tables; ++i)
   {
-    auto type = GetTableType(context.m.table.tables[i].element_type, context)->getPointerTo(0);
-    context.tables.push_back(DeclareGlobal(i, context, context.m.table.tables[i].debug, false, type, "table#",
-                                           llvm::ConstantPointerNull::get(type)));
+    auto type = context.GetTableType(context.m.table.tables[i].element_type)->getPointerTo(0);
+    auto pair = context.GetPairType(type);
+    context.tables.push_back(
+      DeclareGlobal(i, context, context.m.table.tables[i].debug, false, pair, "table#", context.GetPairNull(pair)));
 
-    uint64_t bytewidth = context.llvm->getDataLayout().getTypeAllocSize(
-      context.tables.back()->getType()->getElementType()->getPointerElementType());
+    uint64_t bytewidth = context.llvm->getDataLayout().getTypeAllocSize(type->getElementType());
     if(!bytewidth)
       return ERR_INVALID_TABLE_TYPE;
 
@@ -2207,13 +2233,16 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
                          context.builder.getInt64(context.m.table.tables[i].resizable.minimum * bytewidth),
                          context.builder.getInt64((context.m.table.tables[i].resizable.flags & WASM_LIMIT_HAS_MAXIMUM) ?
                                                     (context.m.table.tables[i].resizable.maximum * bytewidth) :
-                                                    0) });
+                                                    0),
+                         context.GetPairPtr(context.tables.back(), 1) });
+
     call->setCallingConv(context.memgrow->getCallingConv());
 
     InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty),
                                                        CInt::get(context.intptrty, 0)),
                           context);
-    context.builder.CreateStore(context.builder.CreatePointerCast(call, type), context.tables.back());
+    context.builder.CreateStore(context.builder.CreatePointerCast(call, type),
+                                context.GetPairPtr(context.tables.back(), 0));
   }
 
   // Declare linear memory spaces and allocate in init function
@@ -2221,20 +2250,22 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
   {
     MemoryDesc& mem = context.m.memory.memories[i];
     auto type       = context.builder.getInt8PtrTy(0);
+    auto pair       = context.GetPairType(type);
     auto sz         = context.builder.getInt64(((uint64_t)mem.limits.minimum) << 16);
     auto max        = context.builder.getInt64(
-      ((mem.limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? ((uint64_t)mem.limits.maximum) : 0x10000ULL) << 16);
+      ((mem.limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? ((uint64_t)mem.limits.maximum) : 0ULL) << 16);
     context.memories.push_back(
-      DeclareGlobal(i, context, mem.debug, false, type, "linearmemory#", llvm::ConstantPointerNull::get(type)));
+      DeclareGlobal(i, context, mem.debug, false, pair, "linearmemory#", context.GetPairNull(pair)));
     context.memories.back()->setMetadata(IN_MEMORY_MAX_METADATA,
                                          llvm::MDNode::get(context.context, { llvm::ConstantAsMetadata::get(max) }));
 
-    CallInst* call = context.builder.CreateCall(context.memgrow, { llvm::ConstantPointerNull::get(type), sz, max });
+    CallInst* call = context.builder.CreateCall(context.memgrow, { llvm::ConstantPointerNull::get(type), sz, max,
+                                                                   context.GetPairPtr(context.memories.back(), 1) });
     call->setCallingConv(context.memgrow->getCallingConv());
     InsertConditionalTrap(context.builder.CreateICmpEQ(context.builder.CreatePtrToInt(call, context.intptrty),
                                                        CInt::get(context.intptrty, 0)),
                           context);
-    context.builder.CreateStore(call, context.memories.back());
+    context.builder.CreateStore(call, context.GetPairPtr(context.memories.back(), 0));
   }
 
   IN_ERROR err;
@@ -2270,12 +2301,11 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
 
     // Then we create a memcpy call that copies this data to the appropriate location in the init function
     context.builder
-      .CreateCall(fn_memcpy,
-                  { context.builder.CreateInBoundsGEP(context.builder.getInt8Ty(),
-                                                      context.builder.CreateLoad(context.memories[d.index]), offset),
-                    context.builder.CreateInBoundsGEP(data->getType(), val,
-                                                      { context.builder.getInt32(0), context.builder.getInt32(0) }),
-                    context.builder.getInt64(GetTotalSize(data->getType())) })
+      .CreateCall(fn_memcpy, { context.builder.CreateInBoundsGEP(
+                                 context.builder.CreateLoad(context.GetPairPtr(context.memories[d.index], 0)), offset),
+                               context.builder.CreateInBoundsGEP(
+                                 data->getType(), val, { context.builder.getInt32(0), context.builder.getInt32(0) }),
+                               context.builder.getInt64(GetTotalSize(data->getType())) })
       ->setCallingConv(fn_memcpy->getCallingConv());
   }
 
@@ -2301,7 +2331,7 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
           return ERR_INVALID_FUNCTION_INDEX;
 
         // Store function pointer in correct table memory location
-        auto ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tables[e.index]),
+        auto ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.GetPairPtr(context.tables[e.index], 0)),
                                              { context.builder.CreateAdd(offset, CInt::get(offset->getType(), j, true)),
                                                context.builder.getInt32(0) });
         context.builder.CreateAlignedStore(context.builder.CreatePointerCast(context.functions[e.elements[j]].internal,
@@ -2312,7 +2342,7 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
         if(index == (varuint32)~0)
           return ERR_INVALID_FUNCTION_INDEX;
 
-        ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.tables[e.index]),
+        ptr = context.builder.CreateGEP(context.builder.CreateLoad(context.GetPairPtr(context.tables[e.index], 0)),
                                         { context.builder.CreateAdd(offset, CInt::get(offset->getType(), j, true)),
                                           context.builder.getInt32(1) });
         context.builder.CreateAlignedStore(context.builder.getInt32(index), ptr, 4);
@@ -2335,14 +2365,18 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
 
   for(size_t i = context.m.importsection.memories - context.m.importsection.tables; i < context.memories.size();
       ++i) // Don't accidentally delete imported linear memories
-    context.builder.CreateCall(fn_memfree, { context.builder.CreateLoad(context.memories[i]) })
+    context.builder
+      .CreateCall(fn_memfree, { context.builder.CreateLoad(context.GetPairPtr(context.memories[i], 0)),
+                                context.builder.CreateLoad(context.GetPairPtr(context.memories[i], 1)) })
       ->setCallingConv(fn_memfree->getCallingConv());
 
   for(size_t i = context.m.importsection.tables - context.m.importsection.functions; i < context.tables.size();
       ++i) // Don't accidentally delete imported tables
     context.builder
-      .CreateCall(fn_memfree, { context.builder.CreatePointerCast(context.builder.CreateLoad(context.tables[i]),
-                                                                  context.builder.getInt8PtrTy(0)) })
+      .CreateCall(fn_memfree,
+                  { context.builder.CreatePointerCast(context.builder.CreateLoad(context.GetPairPtr(context.tables[i], 0)),
+                                                      context.builder.getInt8PtrTy(0)),
+                    context.builder.CreateLoad(context.GetPairPtr(context.tables[i], 1)) })
       ->setCallingConv(fn_memfree->getCallingConv());
 
   // Terminate cleanup function
@@ -2481,7 +2515,7 @@ void AddMemLocalCaching(code::Context& ctx)
             {
               ctx.builder.SetInsertPoint(
                 &i); // Setting the insert point doesn't actually gaurantee the instructions come after the call
-              auto load = ctx.builder.CreateLoad(ctx.memories[0]);
+              auto load = ctx.builder.CreateLoad(ctx.GetPairPtr(ctx.memories[0], 0));
               load->moveAfter(&i); // So we manually move them after the call instruction just to be sure.
               ctx.builder.CreateStore(load, fn.memlocal)->moveAfter(load);
             }
@@ -2665,7 +2699,9 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   if((!has_start || env->flags & ENV_NO_INIT) && !(env->flags & ENV_LIBRARY))
   {
     env->flags |= ENV_LIBRARY; // Attempting to compile a library as an EXE is a common error, so we fix it for you.
-    fprintf(env->log, "WARNING: Compiling dynamic library because no start function was found! If this was intended, use '-f library' next time.\n");
+    fprintf(
+      env->log,
+      "WARNING: Compiling dynamic library because no start function was found! If this was intended, use '-f library' next time.\n");
   }
 
   // Create cleanup function

@@ -63,13 +63,20 @@ typedef struct IN_SOURCE_VARIABLE
   long long* p_expr;
 } SourceMapVariable;
 
-// Can represent either a lexical scope or an inlined subroutine scope
+// Can represent a lexical scope or an inlined subroutine scope
 typedef struct IN_SOURCE_RANGE
 {
   size_t scope;
   size_t low;
   size_t high;
 } SourceMapRange;
+
+typedef struct IN_SOURCE_LOCATION
+{
+  SourceMapRange range;
+  size_t n_expr;
+  long long* p_expr;
+} SourceMapLocation;
 
 typedef struct IN_SOURCE_SCOPE
 {
@@ -105,6 +112,8 @@ typedef struct IN_SOURCE_MAP
   size_t n_innative_types;
   struct IN_SOURCE_VARIABLE* x_innative_variables;
   size_t n_innative_variables;
+  struct IN_SOURCE_LOCATION* x_innative_locations;
+  size_t n_innative_locations;
   struct IN_SOURCE_RANGE* x_innative_ranges;
   size_t n_innative_ranges;
   struct IN_SOURCE_SCOPE* x_innative_scopes;
@@ -113,6 +122,8 @@ typedef struct IN_SOURCE_MAP
   size_t n_innative_functions;
   struct IN_SOURCE_ENUMERATOR* x_innative_enumerators;
   size_t n_innative_enumerators;
+  size_t* x_innative_globals;
+  size_t n_innative_globals;
 } SourceMap;
 
 extern IN_COMPILER_DLLEXPORT enum IN_ERROR DWARFSourceMap(struct IN_WASM_ENVIRONMENT* env, SourceMap* map, const char* obj,

@@ -175,7 +175,7 @@ void innative::wat::TokenizeInstruction(const Environment& env, Queue<WatToken>&
     if(ins.immediates[1]._varuptr != 0)
     {
       tokens.Push(WatToken{ WatTokens::OFFSET });
-      tokens.Push(WatToken{ WatTokens::INTEGER, 0, 0, 0, (1LL << (int64_t)ins.immediates[1]._varuptr) });
+      tokens.Push(WatToken{ WatTokens::INTEGER, 0, 0, 0, (int64_t)ins.immediates[1]._varuptr });
     }
     break;
   }
@@ -415,7 +415,7 @@ void innative::wat::TokenizeModule(const Environment& env, Queue<WatToken>& toke
 
     tokens.Push(WatToken{ WatTokens::OPEN });
     tokens.Push(WatToken{ WatTokens::TYPE });
-    PushNewNameToken(env, tokens, "t%u", m.function.funcdecl[i]);
+    PushNewNameToken(env, tokens, "t%u", m.function.funcdecl[i].type_index);
     tokens.Push(WatToken{ WatTokens::CLOSE });
 
     if(m.function.funcdecl[i].type_index >= m.type.n_functypes)
