@@ -493,8 +493,8 @@ IN_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const E
 
 IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, const Environment& env)
 {
-  f.line = 1;
-  f.column = (unsigned int)s.pos;
+  f.line        = 1;
+  f.column      = (unsigned int)s.pos;
   IN_ERROR err  = ParseVarUInt32(s, f.body_size);
   size_t end    = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
   varuint32 idx = &f - m.code.funcbody;
@@ -861,13 +861,27 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
           if(err)
             return err;
         }
+        else if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), "external_debug_info"))
+        {
+          Identifier externalDebugURL;
+          ParseIdentifier(s, externalDebugURL, env);
+          m.sourcemap = tmalloc<SourceMap>(env, 1);
+          if(!m.sourcemap)
+            return ERR_FATAL_OUT_OF_MEMORY;
+          *m.sourcemap = { 0 };
+
+          err = DWARFSourceMap(const_cast<Environment*>(&env), m.sourcemap, externalDebugURL.str(), 0);
+          if(err)
+            return err;
+        }
         else if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), ".debug_line"))
         {
           m.sourcemap = tmalloc<SourceMap>(env, 1);
           if(!m.sourcemap)
             return ERR_FATAL_OUT_OF_MEMORY;
           *m.sourcemap = { 0 };
-          err          = DWARFSourceMap(const_cast<Environment*>(&env), m.sourcemap, (char*)s.data, s.size);
+
+          err = DWARFSourceMap(const_cast<Environment*>(&env), m.sourcemap, (char*)s.data, s.size);
           if(m.filepath)
             m.sourcemap->file = m.filepath;
           if(err)

@@ -18,7 +18,7 @@ IN_ERROR innative::code::IN_Intrinsic_ToC(code::Context& context, llvm::Value** 
   if(!context.memories.size())
     return ERR_INVALID_MEMORY_INDEX;
 
-  out = context.builder.CreateAdd(context.builder.CreatePtrToInt(context.builder.CreateLoad(context.memories[0]),
+  out = context.builder.CreateAdd(context.builder.CreatePtrToInt(context.builder.CreateLoad(context.GetPairPtr(context.memories[0], 0)),
                                                                  context.builder.getInt64Ty()),
                                   params[0], "", true, true);
   return ERR_SUCCESS;
@@ -29,7 +29,8 @@ IN_ERROR innative::code::IN_Intrinsic_FromC(code::Context& context, llvm::Value*
   if(!context.memories.size())
     return ERR_INVALID_MEMORY_INDEX;
 
-  out = context.builder.CreateSub(context.builder.CreatePtrToInt(context.builder.CreateLoad(context.memories[0]),
+  out = context.builder.CreateSub(
+    context.builder.CreatePtrToInt(context.builder.CreateLoad(context.GetPairPtr(context.memories[0], 0)),
                                                                  context.builder.getInt64Ty()),
                                   params[0], "", true, true);
   return ERR_SUCCESS;

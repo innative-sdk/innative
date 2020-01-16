@@ -5,7 +5,7 @@
 
 extern "C" {
 extern void _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz);
-extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max);
+extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max, uint64_t* size);
 extern void _innative_internal_env_print(uint64_t a);
 }
 
@@ -57,27 +57,30 @@ void TestHarness::test_environment()
       TEST(!dest[i]);
   }
 
-  uint64_t* p = (uint64_t*)_innative_internal_env_grow_memory(0, 0, 0);
-  TEST(!_innative_internal_env_grow_memory(0, 9, 1));
-  TEST(!_innative_internal_env_grow_memory(p, 9, 1));
-  p = (uint64_t*)_innative_internal_env_grow_memory(p, 1, 1);
+  uint64_t sz = 0;
+  uint64_t* p = (uint64_t*)_innative_internal_env_grow_memory(0, 0, 0, &sz);
   TEST(p != 0);
-  TEST(p[-1] == 1);
+  p = (uint64_t*)_innative_internal_env_grow_memory(0, 0, 0, 0);
+  TEST(!_innative_internal_env_grow_memory(0, 9, 1, &sz));
+  TEST(!_innative_internal_env_grow_memory(p, 9, 1, &sz));
+  p = (uint64_t*)_innative_internal_env_grow_memory(p, 1, 1, &sz);
+  TEST(p != 0);
+  TEST(sz == 1);
   TEST(reinterpret_cast<char*>(p)[0] == 0);
-  TEST(!_innative_internal_env_grow_memory(p, 1, 1));
-  p = (uint64_t*)_innative_internal_env_grow_memory(p, 1, 2);
+  TEST(!_innative_internal_env_grow_memory(p, 1, 1, &sz));
+  p = (uint64_t*)_innative_internal_env_grow_memory(p, 1, 2, &sz);
   TEST(p != 0);
-  TEST(p[-1] == 2);
+  TEST(sz == 2);
   TEST(reinterpret_cast<char*>(p)[0] == 0);
   TEST(reinterpret_cast<char*>(p)[1] == 0);
-  p = (uint64_t*)_innative_internal_env_grow_memory(p, 1000, 0);
+  p = (uint64_t*)_innative_internal_env_grow_memory(p, 1000, 0, &sz);
   TEST(p != 0);
-  TEST(p[-1] == 1002);
+  TEST(sz == 1002);
   for(int i = 0; i < 1000; ++i)
     TEST(!reinterpret_cast<char*>(p)[i]);
 
-  p = (uint64_t*)_innative_internal_env_grow_memory(p, 100000, 0);
+  p = (uint64_t*)_innative_internal_env_grow_memory(p, 100000, 0, &sz);
   TEST(p != 0);
-  TEST(p[-1] == 101002);
-  TEST(!_innative_internal_env_grow_memory(p, 100000, 200000));
+  TEST(sz == 101002);
+  TEST(!_innative_internal_env_grow_memory(p, 100000, 200000, &sz));
 }

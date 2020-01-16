@@ -54,6 +54,7 @@ namespace innative {
     inline size_t Capacity() const { return _capacity; }
     inline size_t Size() const { return _size - _limit; }
     inline size_t Limit() const { return _limit; }
+    inline T* Get() const { return _array; }
     inline void SetLimit(size_t limit)
     {
       assert(limit <= _size);

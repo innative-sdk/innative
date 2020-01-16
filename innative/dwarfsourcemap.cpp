@@ -255,12 +255,12 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
   {
     assert(parent != 0);
     parent->variables[parent->n_variables++] = n_variables;
-    auto& v                                = map->x_innative_variables[n_variables];
-    v.offset                               = die.getOffset();
-    v.type_index                           = (size_t)~0;
-    v.source_index                         = (size_t)~0;
-    v.name_index                           = (size_t)~0;
-    v.tag                                  = die.getTag();
+    auto& v                                  = map->x_innative_variables[n_variables];
+    v.offset                                 = die.getOffset();
+    v.type_index                             = (size_t)~0;
+    v.source_index                           = (size_t)~0;
+    v.name_index                             = (size_t)~0;
+    v.tag                                    = die.getTag();
 
     // Resolve standard attributes for variables or formal parameters
     if(auto name = die.find(DW_AT_name))
@@ -279,11 +279,7 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
     }
     if(auto location = die.find(DW_AT_location))
     {
-      if(Optional<llvm::ArrayRef<uint8_t>> block = location->getAsBlock())
-      {
-        llvm::DataExtractor data(llvm::toStringRef(*block), DICtx.isLittleEndian(), 0);
-        llvm::DWARFExpression expr(data, CU->getVersion(), CU->getAddressByteSize());
-
+      auto fn_parse_expr = [](Environment* env, llvm::DWARFExpression& expr, SourceMapVariable& v) {
         v.n_expr = 0;
         for(auto& op : expr)
           v.n_expr += 1 + (op.getDescription().Op[0] != llvm::DWARFExpression::Operation::SizeNA) +
@@ -298,6 +294,13 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
             if(op.getDescription().Op[i] != llvm::DWARFExpression::Operation::SizeNA)
               v.p_expr[v.n_expr++] = op.getRawOperand(i);
         }
+      };
+
+      if(Optional<llvm::ArrayRef<uint8_t>> block = location->getAsBlock())
+      {
+        llvm::DataExtractor data(llvm::toStringRef(*block), DICtx.isLittleEndian(), 0);
+        llvm::DWARFExpression expr(data, CU->getVersion(), CU->getAddressByteSize());
+        fn_parse_expr(env, expr, v);
       }
       else if(Optional<uint64_t> Offset = location->getAsSectionOffset())
       {
@@ -308,8 +311,12 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
           {
             for(auto& entry : LocList->Entries)
             {
-              assert(false);
-              return false;
+              if(entry.Loc.size() > 0)
+              {
+                llvm::DataExtractor data(StringRef(entry.Loc.data(), entry.Loc.size()), DICtx.isLittleEndian(), 0);
+                llvm::DWARFExpression expr(data, CU->getVersion(), CU->getAddressByteSize());
+                fn_parse_expr(env, expr, v);
+              }
             }
           }
         }
@@ -332,7 +339,7 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
         for(auto& a : addresses.get())
         {
           assert(a.SectionIndex == ~0ULL);
-          if(a.valid())
+          if(a.valid() && a.LowPC != 0)
             map->x_innative_ranges[n_ranges++] =
               SourceMapRange{ n_scopes, a.LowPC + code_section_offset, a.HighPC + code_section_offset };
         }
@@ -343,7 +350,7 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
     {
       auto& v = map->x_innative_functions[n_functions];
       scope   = &v.scope;
-      
+
       if(auto line = die.find(DW_AT_decl_line))
         v.original_line = line->getAsUnsignedConstant().getValue();
       if(auto type = die.find(DW_AT_type))
@@ -440,54 +447,53 @@ bool DumpSourceMap(Environment* env, DWARFContext& DICtx, SourceMap* map, size_t
       assert(mapping_offset <= map->n_segments);
     }
 
-    map->n_segments = mapping_offset;
-    size_t diecount = 0;
+    map->n_segments      = mapping_offset;
+    size_t variablecount = 0;
+    size_t globalcount   = 0;
+    size_t scopecount    = 0;
+    size_t rangecount    = 0;
+    size_t functioncount = 0;
 
-    for(auto& die : CU->dies())
-      diecount += die.getTag() == DW_TAG_variable || die.getTag() == DW_TAG_formal_parameter;
-
-    size_t n_variables = map->n_innative_variables;
-    resizeSourceMap(env, map->x_innative_variables, map->n_innative_variables, n_variables + diecount);
-
-    diecount = 0;
     for(auto& die : CU->dies())
     {
+      variablecount += die.getTag() == DW_TAG_variable || die.getTag() == DW_TAG_formal_parameter;
+      globalcount += die.getTag() == DW_TAG_variable && die.getDepth() == 1;
       if(die.getTag() == DW_TAG_lexical_block) // || DW_TAG_inlined_subroutine
         if(auto addresses = DWARFDie(CU.get(), &die).getAddressRanges())
-          diecount += addresses->size();
+          rangecount += addresses->size();
+      scopecount += die.getTag() == DW_TAG_lexical_block; // || DW_TAG_inlined_subroutine
+      functioncount += die.getTag() == DW_TAG_subprogram;
     }
 
+    size_t n_variables = map->n_innative_variables;
+    resizeSourceMap(env, map->x_innative_variables, map->n_innative_variables, n_variables + variablecount);
+    size_t n_globals = map->n_innative_globals;
+    resizeSourceMap(env, map->x_innative_globals, map->n_innative_globals, n_globals + globalcount);
     size_t n_ranges = map->n_innative_ranges;
-    resizeSourceMap(env, map->x_innative_ranges, map->n_innative_ranges, n_ranges + diecount);
-
-    diecount = 0;
-    for(auto& die : CU->dies())
-      diecount += die.getTag() == DW_TAG_lexical_block; // || DW_TAG_inlined_subroutine
-
+    resizeSourceMap(env, map->x_innative_ranges, map->n_innative_ranges, n_ranges + rangecount);
     size_t n_scopes = map->n_innative_scopes;
-    resizeSourceMap(env, map->x_innative_scopes, map->n_innative_scopes, n_scopes + diecount);
-
-    diecount = 0;
-    for(auto& die : CU->dies())
-      diecount += die.getTag() == DW_TAG_subprogram;
-
+    resizeSourceMap(env, map->x_innative_scopes, map->n_innative_scopes, n_scopes + scopecount);
     size_t n_functions = map->n_innative_functions;
-    resizeSourceMap(env, map->x_innative_functions, map->n_innative_functions, n_functions + diecount);
+    resizeSourceMap(env, map->x_innative_functions, map->n_innative_functions, n_functions + functioncount);
 
     if((!map->x_innative_variables && map->n_innative_variables) || (!map->x_innative_ranges && map->n_innative_ranges) ||
-       (!map->x_innative_scopes && map->n_innative_scopes) || (!map->x_innative_functions && map->n_innative_functions))
+       (!map->x_innative_scopes && map->n_innative_scopes) || (!map->x_innative_functions && map->n_innative_functions) ||
+       (!map->x_innative_globals && map->n_innative_globals))
       return false;
+
+    SourceMapScope global_scope = { 0, n_globals, map->x_innative_globals };
 
     for(auto& entry : CU->dies())
     {
       auto die = DWARFDie(CU.get(), &entry);
 
-      if(die.getTag() == DW_TAG_subprogram)
-        if(!ParseDWARFChild(env, DICtx, map, 0, die, CU.get(), n_variables, n_ranges, n_scopes, n_functions, maptype,
-                            n_types, mapname, n_names, code_section_offset))
+      if(die.getTag() == DW_TAG_subprogram || (die.getTag() == DW_TAG_variable && entry.getDepth() == 1))
+        if(!ParseDWARFChild(env, DICtx, map, &global_scope, die, CU.get(), n_variables, n_ranges, n_scopes, n_functions,
+                            maptype, n_types, mapname, n_names, code_section_offset))
           return false;
     }
 
+    map->n_innative_globals   = global_scope.n_variables;
     map->n_innative_variables = n_variables;
     map->n_innative_functions = n_functions;
     map->n_innative_scopes    = n_scopes;

@@ -26,12 +26,12 @@ namespace innative {
 
     struct Block
     {
-      llvm::BasicBlock* block;   // Label
-      llvm::BasicBlock* ifelse;  // Label for else statement
-      size_t limit;              // Limit of value stack
-      varsint7 sig;              // Block signature
-      uint8_t op;                // instruction that pushed this label
-      BlockResult* results;      // Holds alternative branch results targeting this block
+      llvm::BasicBlock* block;  // Label
+      llvm::BasicBlock* ifelse; // Label for else statement
+      size_t limit;             // Limit of value stack
+      varsint7 sig;             // Block signature
+      uint8_t op;               // instruction that pushed this label
+      BlockResult* results;     // Holds alternative branch results targeting this block
     };
 
     struct FunctionSet
@@ -56,6 +56,7 @@ namespace innative {
       kh_importhash_t* importhash;
       path objfile; // If this module has been compiled to a .obj file, stores the path so we can reliably delete it.
       llvm::IntegerType* intptrty;
+      llvm::StructType* mempairty;
       std::unique_ptr<Debugger> debugger;
       Stack<llvm::Value*> values; // Tracks the current value stack
       Stack<Block> control;       // Control flow stack
@@ -70,6 +71,11 @@ namespace innative {
       llvm::Function* exit;
       llvm::Function* start;
       llvm::Function* memgrow;
+
+      llvm::StructType* GetTableType(varsint7 element_type);
+      llvm::StructType* GetPairType(llvm::Type* ty);
+      llvm::Value* GetPairPtr(llvm::GlobalVariable* v, int index);
+      llvm::Constant* GetPairNull(llvm::StructType* ty);
     };
 
     IN_ERROR InsertConditionalTrap(llvm::Value* cond, Context& context);

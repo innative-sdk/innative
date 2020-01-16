@@ -22,10 +22,13 @@ namespace innative {
       virtual void FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized);
       virtual void FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body,
                             code::Context& context);
+      virtual void PostFuncBody(FunctionBody& body, code::Context& context);
       virtual void FuncParam(llvm::Function* fn, size_t indice, FunctionDesc& desc, code::Context& context);
       virtual void FuncLocal(llvm::Function* fn, size_t indice, FunctionDesc& desc, code::Context& context);
       virtual void DebugIns(llvm::Function* fn, Instruction& i, code::Context& context);
       virtual void DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t line);
+      virtual void DebugMemLocal(code::Context& context);
+      virtual void DebugSetGlobal(int index, code::Context& context);
       virtual void PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc);
       virtual void PopBlock();
 
@@ -52,6 +55,7 @@ namespace innative {
       llvm::DICompileUnit* dcu;
       llvm::DIFile* dunit; // Source WASM or WAT file
       llvm::DILocalScope* curscope;
+      FunctionBody* curbody;
     };
   }
 }

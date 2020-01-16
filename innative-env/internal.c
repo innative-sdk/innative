@@ -13,8 +13,6 @@
 #endif
 
 #ifdef IN_PLATFORM_WIN32
-HANDLE heap     = 0;
-DWORD heapcount = 0;
 #elif defined(IN_PLATFORM_POSIX)
 const int SYSCALL_WRITE  = 1;
 const int SYSCALL_MMAP   = 9;
@@ -224,6 +222,25 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_print(uint64_t n)
   _innative_internal_write_out("\n", 1);
 }
 
+IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned char* mem, uint64_t sz)
+{
+  static const char prefix[] = "\n --- MEMORY DUMP ---\n\n";
+  char buf[256];
+
+  _innative_internal_write_out(prefix, sizeof(prefix));
+  for(uint64_t i = 0; i < sz;)
+  {
+    uint64_t j;
+    for(j = 0; j < (sizeof(buf) / 2) && i < sz; ++j, ++i)
+    {
+      buf[j * 2]     = lookup[(mem[i] & 0xF0) >> 4];
+      buf[j * 2 + 1] = lookup[mem[i] & 0x0F];
+    }
+    _innative_internal_write_out(buf, (size_t)j * 2);
+  }
+  _innative_internal_write_out("\n", 1);
+}
+
 // Very simple memcpy implementation because we don't have access to the C library
 IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz)
 {
@@ -253,38 +270,101 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memcpy(char* dest, cons
   }
 }
 
-// Platform-specific implementation of the mem.grow instruction, except it works in bytes
-IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max)
+// Platform-specific memory free, called by the exit function to clean up memory allocations
+IN_COMPILER_DLLEXPORT extern void _innative_internal_env_free_memory(void* p, uint64_t size)
 {
-  uint64_t* info = (uint64_t*)p;
-  if(info != 0)
+  if(p && size > 0)
   {
-    i += info[-1];
-    if(max > 0 && i > max)
-      return 0;
+    char* start = (char*)p;
+
 #ifdef IN_PLATFORM_WIN32
-    info = HeapReAlloc(heap, HEAP_ZERO_MEMORY, info - 1, (SIZE_T)i + sizeof(uint64_t));
+    char* end = start + size;
+
+    // Resized allocations can potentially have been allocated in multiple chunks, and we must ensure we free them properly
+    while(start < end)
+    {
+      MEMORY_BASIC_INFORMATION meminfo;
+      VirtualQuery(start, &meminfo, sizeof(MEMORY_BASIC_INFORMATION));
+      VirtualFree(meminfo.AllocationBase, 0, MEM_RELEASE);
+      start = (char*)meminfo.BaseAddress + meminfo.RegionSize;
+    }
 #elif defined(IN_PLATFORM_POSIX)
-    info =
-      _innative_syscall(SYSCALL_MREMAP, info - 1, info[-1] + sizeof(uint64_t), i + sizeof(uint64_t), MREMAP_MAYMOVE, 0, 0);
+    _innative_syscall(SYSCALL_MUNMAP, start, size, 0, 0, 0, 0);
+#else
+  #error unknown platform!
+#endif
+  }
+}
+
+// Platform-specific implementation of the mem.grow instruction, except it works in bytes
+IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, uint64_t i, uint64_t max, uint64_t* size)
+{
+  if(!size)
+    return 0;
+  if(!i)
+    return !p ? (void*)~0 : p; // We must return a non-zero pointer even if it's a zero-length allocation.
+  if(i + *size > 0xFFFFFFFF) // Invalid for wasm32
+    return 0;
+
+  char* info = (char*)p;
+  if(info != 0 && *size > 0)
+  {
+    if(max > 0 && (i + *size) > max)
+      return 0;
+    if(max > 0) // If a maximum was specified, the memory should've been reserved already
+    {
+      // It's fine if we aren't aligned on page bounderies because the function won't fail on already committed pages.
+      if(!VirtualAlloc(info + *size, i, MEM_COMMIT, PAGE_READWRITE))
+        return 0;
+      i += *size;
+    }
+    else
+    {
+      // Align size to the page boundary (we can't do this via VirtualQuery)
+      SYSTEM_INFO sysinfo;
+      GetSystemInfo(&sysinfo);
+      size_t sz = *size % sysinfo.dwPageSize;
+      sz        = !sz ? *size : *size + sysinfo.dwPageSize - sz;
+      i -= sz - *size; // Modify i by the difference
+
+      if(!VirtualAlloc(info + sz, i, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE))
+      {
+        // If this fails, we ran into someone else's memory, so we need to move the entire allocation.
+        void* mem = VirtualAlloc(0, i + sz, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        if(!mem)
+          return 0;
+        _innative_internal_env_memcpy(mem, info, *size);
+        _innative_internal_env_free_memory(info, *size);
+        info = mem;
+      }
+
+      i += sz;
+    }
+#ifdef IN_PLATFORM_WIN32
+#elif defined(IN_PLATFORM_POSIX)
+    i += *size;
+    info = _innative_syscall(SYSCALL_MREMAP, info, *size, i, MREMAP_MAYMOVE, 0, 0);
     if((void*)info >= (void*)0xfffffffffffff001) // This is a syscall error from -4095 to -1
       return 0;
 #else
   #error unknown platform!
 #endif
   }
-  else if(!max || i <= max)
+  else
   {
-#ifdef IN_PLATFORM_WIN32
-    if(!heap)
-      heap = HeapCreate(0, (SIZE_T)i, 0);
-    if(!heap)
+    if(max > 0 && i > max)
       return 0;
-    ++heapcount;
-    info = HeapAlloc(heap, HEAP_ZERO_MEMORY, (SIZE_T)i + sizeof(uint64_t));
+#ifdef IN_PLATFORM_WIN32
+    info = VirtualAlloc(0, !max ? i : max, MEM_RESERVE, PAGE_READWRITE);
+    if(!info)
+      return 0;
+    if(!VirtualAlloc(info, i, MEM_COMMIT, PAGE_READWRITE))
+      return 0;
+
+      // for(int j = 0; j < 65535; ++j) // DEBUG
+      //  ((uint32_t*)info)[j] = j;
 #elif defined(IN_PLATFORM_POSIX)
-    info = _innative_syscall(SYSCALL_MMAP, NULL, i + sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
-                             -1, 0);
+    info = _innative_syscall(SYSCALL_MMAP, NULL, i, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if((void*)info >= (void*)0xfffffffffffff001) // This is a syscall error from -4095 to -1
       return 0;
 #else
@@ -297,27 +377,9 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
 
   if(!info)
     return 0;
-  info[0] = i;
-  return info + 1;
-}
 
-// Platform-specific memory free, called by the exit function to clean up memory allocations
-IN_COMPILER_DLLEXPORT extern void _innative_internal_env_free_memory(void* p)
-{
-  if(p)
-  {
-    uint64_t* info = (uint64_t*)p;
-
-#ifdef IN_PLATFORM_WIN32
-    HeapFree(heap, 0, info - 1);
-    if(--heapcount == 0)
-      HeapDestroy(heap);
-#elif defined(IN_PLATFORM_POSIX)
-    _innative_syscall(SYSCALL_MUNMAP, info - 1, info[-1], 0, 0, 0, 0);
-#else
-  #error unknown platform!
-#endif
-  }
+  *size = i;
+  return info;
 }
 
 // You cannot return from the entry point of a program, you must instead call a platform-specific syscall to terminate it.
@@ -329,25 +391,6 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_exit(int status)
   size_t cast = status;
   _innative_syscall(SYSCALL_EXIT, (void*)cast, 0, 0, 0, 0, 0);
 #endif
-}
-
-IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned char* mem, uint64_t sz)
-{
-  static const char prefix[] = "\n --- MEMORY DUMP ---\n\n";
-  char buf[256];
-
-  _innative_internal_write_out(prefix, sizeof(prefix));
-  for(uint64_t i = 0; i < sz;)
-  {
-    uint64_t j;
-    for(j = 0; j < (sizeof(buf) / 2) && i < sz; ++j, ++i)
-    {
-      buf[j * 2]     = lookup[(mem[i] & 0xF0) >> 4];
-      buf[j * 2 + 1] = lookup[mem[i] & 0x0F];
-    }
-    _innative_internal_write_out(buf, (size_t)j * 2);
-  }
-  _innative_internal_write_out("\n", 1);
 }
 
 // This function exists only to test the _WASM_ C export code path

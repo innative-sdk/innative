@@ -189,9 +189,9 @@ void TestHarness::test_manual()
     TEST(mem);
     if(mem)
     {
-      TEST(mem->memory);
-      if(mem->memory)
-        TEST(reinterpret_cast<uint64_t*>(mem->memory)[-1] == (1 << 16));
+      TEST(mem->memory.bytes);
+      if(mem->memory.bytes)
+        TEST(mem->memory.size == (1 << 16));
     }
 
     auto tablefunc = (varsint32(*)(varsint32, varsint32))(*_exports.LoadTableIndex)(assembly, 0, 0, 0);

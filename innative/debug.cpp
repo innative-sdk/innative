@@ -57,6 +57,8 @@ void Debugger::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, F
 void Debugger::FuncParam(llvm::Function* fn, size_t indice, FunctionDesc& desc, code::Context& context) {}
 void Debugger::FuncLocal(llvm::Function* fn, size_t indice, FunctionDesc& desc, code::Context& context) {}
 void Debugger::DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t line) {}
+void Debugger::DebugMemLocal(code::Context& context) {}
+void Debugger::PostFuncBody(FunctionBody& body, code::Context& context) {}
 
 void Debugger::DebugIns(llvm::Function* fn, Instruction& i, code::Context& context) {}
 
@@ -159,6 +161,7 @@ void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool 
 }
 void Debugger::PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc) { curscope = scope; }
 void Debugger::PopBlock() {}
+void Debugger::DebugSetGlobal(int index, code::Context& context) {}
 void Debugger::Finalize()
 {
   if(dbuilder)
@@ -166,7 +169,7 @@ void Debugger::Finalize()
 }
 
 llvm::DIFile::ChecksumKind Debugger::ComputeChecksum(llvm::StringRef data, llvm::SmallString<32>& Checksum)
-  {
+{
   Checksum.clear();
 
   llvm::MD5 Hash;
