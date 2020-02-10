@@ -25,6 +25,7 @@ public:
   static int64_t fib(int64_t n);
   static int nbody(int n);
   static int fannkuch_redux(int n);
+  static int debug(int n);
   static int minimum(int n);
 
   template<typename R, typename... Args>
@@ -58,7 +59,7 @@ public:
   template<typename R, typename... Args>
   int64_t MeasureWASM(const path& wasm, const char* func, int flags, int optimize, Args&&... args)
   {
-    auto name = wasm.filename().u8string();
+    auto name = wasm.filename().replace_extension().string();
     void* m   = LoadWASM(wasm, name.c_str(), flags, optimize);
     assert(m != nullptr);
     R (*f)(Args...) = (R(*)(Args...))(*_exports.LoadFunction)(m, name.c_str(), func);

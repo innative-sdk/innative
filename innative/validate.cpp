@@ -1215,9 +1215,6 @@ void innative::ValidateImportOrder(Module& m)
   }
 }
 
-//#include "serialize.h"
-//#include <iostream>
-
 void innative::ValidateModule(Environment& env, Module& m)
 {
   if(m.magic_cookie != WASM_MAGIC_COOKIE)
@@ -1228,13 +1225,6 @@ void innative::ValidateModule(Environment& env, Module& m)
     AppendError(env, env.errors, &m, ERR_PARSE_INVALID_NAME, "Module has no name!");
 
   ValidateImportOrder(m);
-
-  //{
-  // Queue<wat::WatToken> auxtokens;
-  // wat::TokenizeModule(env, auxtokens, m);
-  // wat::WriteTokens(auxtokens, std::cout);
-  // std::cout << std::endl;
-  //}
 
   if(ModuleTable(m, 1) != nullptr)
     AppendError(env, env.errors, &m, ERR_MULTIPLE_TABLES, "Cannot have more than 1 table defined.");

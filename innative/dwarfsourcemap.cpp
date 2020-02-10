@@ -77,7 +77,8 @@ static bool handleBuffer(Environment* env, StringRef Filename, MemoryBufferRef B
 
         if(op == WASM_SECTION_CODE)
         {
-          code_section_offset = s.pos;
+          s.ReadVarUInt32(err); // read past payload integer
+          code_section_offset = s.pos - 1;
           break;
         }
         s.pos += s.ReadVarUInt32(err);
@@ -177,73 +178,219 @@ size_t GetSourceMapName(Environment* env, kh_mapname_t* h, const char* name, siz
   return kh_value(h, iter);
 };
 
+void ResolveDWARFBitSize(const DWARFDie& die, kh_maptype_t* maptype, khint_t iter)
+{
+  if(auto line = die.find(DW_AT_bit_size))
+    kh_key(maptype, iter).bit_size = (unsigned short)line->getAsUnsignedConstant().getValue();
+  if(auto line = die.find(DW_AT_byte_size))
+    kh_key(maptype, iter).bit_size = (unsigned short)(line->getAsUnsignedConstant().getValue() << 3);
+}
+
+void ResolveDWARFTypeFlags(const DWARFDie& die, kh_maptype_t* maptype, khint_t iter)
+{
+  if(auto flag = die.find(DW_AT_accessibility))
+  {
+    switch(flag->getAsUnsignedConstant().getValue())
+    {
+    case DW_ACCESS_public: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PUBLIC; break;
+    case DW_ACCESS_private: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PRIVATE; break;
+    case DW_ACCESS_protected: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PROTECTED; break;
+    }
+  }
+  if(auto flag = die.find(DW_AT_virtuality))
+  {
+    switch(flag->getAsUnsignedConstant().getValue())
+    {
+    case DW_VIRTUALITY_virtual: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_VIRTUAL; break;
+    case DW_VIRTUALITY_pure_virtual: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PURE_VIRTUAL; break;
+    }
+  }
+  if(auto flag = die.find(DW_AT_friend))
+    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_FRIEND;
+  if(auto flag = die.find(DW_AT_artificial))
+    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_ARTIFICIAL;
+  if(auto flag = die.find(DW_AT_declaration))
+    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_DECLARATION;
+  if(auto flag = die.find(DW_AT_default_value))
+    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_DEFAULT;
+  if(auto flag = die.find(DW_AT_export_symbols))
+    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_EXPORT;
+  if(auto flag = die.find(DW_AT_mutable))
+    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_MUTABLE;
+  if(auto flag = die.find(DW_AT_enum_class))
+    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_ENUM_CLASS;
+}
+
 size_t GetSourceMapType(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t* maptype, size_t& n_types,
-                        const DWARFFormValue& type, kh_mapname_t* mapname, size_t& n_names)
+                        const DWARFDie& die, kh_mapname_t* mapname, size_t& n_names, SourceMap* map);
+
+size_t GetSourceMapTypeRef(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t* maptype, size_t& n_types,
+                           const DWARFFormValue& type, kh_mapname_t* mapname, size_t& n_names, SourceMap* map)
 {
   if(DWARFDie die = AsReferencedDIE(type, unit))
+    return GetSourceMapType(env, unit, maptype, n_types, die, mapname, n_names, map);
+  return (size_t)~0;
+}
+
+size_t GetSourceMapType(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t* maptype, size_t& n_types,
+                        const DWARFDie& die, kh_mapname_t* mapname, size_t& n_names, SourceMap* map)
+{
+  auto tag = die.getTag();
+  if(!isType(die.getTag()) && die.getTag() != DW_TAG_template_value_parameter &&
+     die.getTag() != DW_TAG_template_type_parameter && die.getTag() != DW_TAG_member && die.getTag() != DW_TAG_inheritance)
+    return (size_t)~0;
+  int r;
+  auto iter = kh_put_maptype(maptype, SourceMapType{ die.getOffset() }, &r);
+  if(r > 0)
   {
-    if(!isType(die.getTag()))
-      return false;
-    int r;
-    auto iter = kh_put_maptype(maptype, SourceMapType{ die.getOffset() }, &r);
-    if(r > 0)
+    kh_value(maptype, iter)          = n_types++;
+    kh_key(maptype, iter).tag        = die.getTag();
+    kh_key(maptype, iter).bit_size   = 0;
+    kh_key(maptype, iter).byte_align = 0;
+    kh_key(maptype, iter).name_index = (size_t)~0;
+    kh_key(maptype, iter).source_index = (size_t)~0;
+    kh_key(maptype, iter).type_index = (size_t)~0;
+
+    if(auto file = die.find(DW_AT_decl_file))
     {
-      kh_value(maptype, iter)   = n_types++;
-      kh_key(maptype, iter).tag = die.getTag();
-      if(auto file = die.find(DW_AT_decl_file))
-      {
-        if(const auto* LT = unit.getContext().getLineTableForUnit(&unit))
-          kh_key(maptype, iter).source_index = file->getAsUnsignedConstant().getValue() - 1;
-      }
-      if(auto line = die.find(DW_AT_decl_line))
-        kh_key(maptype, iter).original_line = line->getAsUnsignedConstant().getValue();
-      if(auto name = die.find(DW_AT_name))
-      {
-        if(auto attr = name->getAsCString())
-          kh_key(maptype, iter).name_index = GetSourceMapName(env, mapname, attr.getValue(), n_names);
-      }
-
-      // Figure out what kind of type this is
-      switch(die.getTag())
-      {
-      case DW_TAG_base_type:
-        kh_key(maptype, iter).n_types    = 0;
-        kh_key(maptype, iter).encoding   = 0;
-        kh_key(maptype, iter).bit_size   = 0;
-        kh_key(maptype, iter).byte_align = 0;
-
-        if(auto line = die.find(DW_AT_encoding))
-          kh_key(maptype, iter).encoding = (unsigned short)line->getAsUnsignedConstant().getValue();
-        if(auto line = die.find(DW_AT_bit_size))
-          kh_key(maptype, iter).bit_size = (unsigned short)line->getAsUnsignedConstant().getValue();
-        if(auto line = die.find(DW_AT_byte_size))
-          kh_key(maptype, iter).bit_size = (unsigned short)(line->getAsUnsignedConstant().getValue() << 3);
-        if(auto line = die.find(DW_AT_alignment))
-          kh_key(maptype, iter).byte_align = (unsigned short)line->getAsUnsignedConstant().getValue();
-
-        break;
-      case DW_TAG_pointer_type:
-      case DW_TAG_reference_type:
-      case DW_TAG_rvalue_reference_type:
-      case DW_TAG_ptr_to_member_type:
-      case DW_TAG_const_type:
-      case DW_TAG_volatile_type:
-      case DW_TAG_restrict_type:
-      case DW_TAG_typedef:
-      case DW_TAG_array_type:
-        kh_key(maptype, iter).n_types = 1;
-        if(auto innertype = die.find(DW_AT_type))
-          kh_key(maptype, iter).type_index =
-            GetSourceMapType(env, unit, maptype, n_types, innertype.getValue(), mapname, n_names);
-        break;
-      default: return (size_t)~0;
-      }
+      if(const auto* LT = unit.getContext().getLineTableForUnit(&unit))
+        kh_key(maptype, iter).source_index = file->getAsUnsignedConstant().getValue() - 1;
     }
+    if(auto line = die.find(DW_AT_decl_line))
+      kh_key(maptype, iter).original_line = line->getAsUnsignedConstant().getValue();
+    if(auto name = die.find(DW_AT_name))
+    {
+      if(auto attr = name->getAsCString())
+        kh_key(maptype, iter).name_index = GetSourceMapName(env, mapname, attr.getValue(), n_names);
+    }
+    if(auto align = die.find(DW_AT_alignment))
+      kh_key(maptype, iter).byte_align = (unsigned short)align->getAsUnsignedConstant().getValue();
+    ResolveDWARFTypeFlags(die, maptype, iter);
 
-    return kh_value(maptype, iter);
+    // Figure out what kind of type this is
+    switch(die.getTag())
+    {
+    case DW_TAG_base_type:
+      kh_key(maptype, iter).n_types  = 0;
+      kh_key(maptype, iter).encoding = 0;
+      ResolveDWARFBitSize(die, maptype, iter);
+
+      if(auto line = die.find(DW_AT_encoding))
+        kh_key(maptype, iter).encoding = (unsigned short)line->getAsUnsignedConstant().getValue();
+
+      break;
+    case DW_TAG_array_type:
+      if(auto stride = die.find(DW_AT_bit_stride))
+        kh_key(maptype, iter).bit_stride = stride->getAsUnsignedConstant().getValue();
+      if(auto stride = die.find(DW_AT_byte_stride))
+        kh_key(maptype, iter).bit_stride = (stride->getAsUnsignedConstant().getValue() << 3);
+      ResolveDWARFBitSize(die, maptype, iter);
+    case DW_TAG_atomic_type:
+    case DW_TAG_const_type:
+    case DW_TAG_immutable_type:
+    case DW_TAG_packed_type:
+    case DW_TAG_pointer_type:
+    case DW_TAG_reference_type:
+    case DW_TAG_restrict_type:
+    case DW_TAG_rvalue_reference_type:
+    case DW_TAG_shared_type:
+    case DW_TAG_volatile_type:
+    case DW_TAG_ptr_to_member_type:
+    case DW_TAG_typedef:
+      if(auto innertype = die.find(DW_AT_type))
+      {
+        kh_key(maptype, iter).n_types = 1;
+        kh_key(maptype, iter).type_index =
+          GetSourceMapTypeRef(env, unit, maptype, n_types, innertype.getValue(), mapname, n_names, map);
+      }
+      break;
+    case DW_TAG_enumeration_type:
+    {
+      ResolveDWARFBitSize(die, maptype, iter);
+      if(auto enumtype = die.find(DW_AT_type))
+        kh_key(maptype, iter).type_index =
+          GetSourceMapTypeRef(env, unit, maptype, n_types, enumtype.getValue(), mapname, n_names, map);
+
+      size_t count = 0;
+      for(auto& child : die.children())
+        count += child.getTag() == DW_TAG_enumerator;
+
+      kh_key(maptype, iter).enumerators = innative::utility::tmalloc<size_t>(*env, count);
+      size_t n_enumerators              = map->n_innative_enumerators;
+      resizeSourceMap(env, map->x_innative_enumerators, map->n_innative_enumerators, n_enumerators + count);
+
+      for(auto& child : die.children())
+      {
+        if(child.getTag() != DW_TAG_enumerator)
+          continue;
+
+        auto& e = map->x_innative_enumerators[n_enumerators];
+        if(auto value = child.find(DW_AT_const_value))
+          e.val = value->getAsUnsignedConstant().getValue();
+        if(auto name = child.find(DW_AT_name))
+        {
+          if(auto attr = name->getAsCString())
+            e.name_index = GetSourceMapName(env, mapname, attr.getValue(), n_names);
+        }
+
+        kh_key(maptype, iter).enumerators[kh_key(maptype, iter).n_types++] = n_enumerators++;
+      }
+
+      map->n_innative_enumerators = n_enumerators;
+      break;
+    }
+    case DW_TAG_class_type:
+    case DW_TAG_structure_type:
+    case DW_TAG_union_type:
+    case DW_TAG_interface_type:
+    {
+      ResolveDWARFBitSize(die, maptype, iter);
+
+      size_t count = 0;
+      for(auto& child : die.children())
+        count++;
+
+      kh_key(maptype, iter).types = innative::utility::tmalloc<size_t>(*env, count);
+      if(!kh_key(maptype, iter).types)
+        return (size_t)~0;
+
+      for(auto& child : die.children())
+      {
+        auto ty = GetSourceMapType(env, unit, maptype, count, child, mapname, n_names, map);
+        if(ty != (size_t)~0)
+          kh_key(maptype, iter).types[kh_key(maptype, iter).n_types++] = ty;
+      }
+      break;
+    }
+    case DW_TAG_template_value_parameter:
+    case DW_TAG_template_type_parameter:
+      if(auto innertype = die.find(DW_AT_type))
+      {
+        kh_key(maptype, iter).n_types = 1;
+        kh_key(maptype, iter).type_index =
+          GetSourceMapTypeRef(env, unit, maptype, n_types, innertype.getValue(), mapname, n_names, map);
+      }
+      break;
+    case DW_TAG_member:
+    case DW_TAG_inheritance:
+      ResolveDWARFBitSize(die, maptype, iter);
+
+      if(auto innertype = die.find(DW_AT_type))
+      {
+        kh_key(maptype, iter).n_types = 1;
+        kh_key(maptype, iter).type_index =
+          GetSourceMapTypeRef(env, unit, maptype, n_types, innertype.getValue(), mapname, n_names, map);
+      }
+      if(auto offset = die.find(DW_AT_bit_offset))
+        kh_key(maptype, iter).bit_offset = offset->getAsUnsignedConstant().getValue();
+      if(auto offset = die.find(DW_AT_data_member_location))
+        kh_key(maptype, iter).bit_offset = offset->getAsUnsignedConstant().getValue() << 3;
+      break;
+    default: return (size_t)~0;
+    }
   }
 
-  return (size_t)~0;
+  return kh_value(maptype, iter);
 }
 
 bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, SourceMapScope* parent, const DWARFDie& die,
@@ -286,6 +433,9 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
                       (op.getDescription().Op[1] != llvm::DWARFExpression::Operation::SizeNA);
 
         v.p_expr = innative::utility::tmalloc<int64_t>(*env, v.n_expr);
+        if(!v.p_expr)
+          return false;
+
         v.n_expr = 0;
         for(auto& op : expr)
         {
@@ -324,7 +474,7 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
     }
 
     if(auto type = die.find(DW_AT_type))
-      v.type_index = GetSourceMapType(env, *CU, maptype, n_types, type.getValue(), mapname, n_names);
+      v.type_index = GetSourceMapTypeRef(env, *CU, maptype, n_types, type.getValue(), mapname, n_names, map);
 
     ++n_variables;
   }
@@ -354,7 +504,7 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
       if(auto line = die.find(DW_AT_decl_line))
         v.original_line = line->getAsUnsignedConstant().getValue();
       if(auto type = die.find(DW_AT_type))
-        v.type_index = GetSourceMapType(env, *CU, maptype, n_types, type.getValue(), mapname, n_names);
+        v.type_index = GetSourceMapTypeRef(env, *CU, maptype, n_types, type.getValue(), mapname, n_names, map);
       if(auto file = die.find(DW_AT_decl_file))
       {
         if(const auto* LT = CU->getContext().getLineTableForUnit(CU))
@@ -388,6 +538,9 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
 
     scope->variables   = innative::utility::tmalloc<size_t>(*env, scope->n_variables);
     scope->n_variables = 0;
+
+    if(!scope->variables)
+      return false;
 
     for(auto& child : die.children())
       if(!ParseDWARFChild(env, DICtx, map, scope, child, CU, n_variables, n_ranges, n_scopes, n_functions, maptype, n_types,
@@ -434,8 +587,16 @@ bool DumpSourceMap(Environment* env, DWARFContext& DICtx, SourceMap* map, size_t
     if(!map->segments)
       return false;
 
+    // If clang encounters an unused function that wasn't removed (because you compiled in debug mode), it generates
+    // invalid debug information by restarting at address 0x0, so if we detect this, we skip the rest of the line table.
+    bool first = false;
     for(auto& row : linetable->Rows)
     {
+      if(!first) // record first non-zero address
+        first = row.Address.Address != 0;
+      else if(!row.Address.Address)
+        break; // Bail if this linetable is invalid
+
       if(!row.Line)
         continue;
       map->segments[mapping_offset].linecolumn      = row.Address.Address + code_section_offset;

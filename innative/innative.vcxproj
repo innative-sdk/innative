@@ -396,6 +396,8 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="debug.cpp" />
+    <ClCompile Include="debug_dwarf.cpp" />
+    <ClCompile Include="debug_pdb.cpp" />
     <ClCompile Include="debug_sourcemap.cpp" />
     <ClCompile Include="debug_wat.cpp" />
     <ClCompile Include="dwarfsourcemap.cpp" />
@@ -557,6 +559,8 @@
     <ClInclude Include="compile.h" />
     <ClInclude Include="constants.h" />
     <ClInclude Include="debug.h" />
+    <ClInclude Include="debug_dwarf.h" />
+    <ClInclude Include="debug_pdb.h" />
     <ClInclude Include="debug_sourcemap.h" />
     <ClInclude Include="debug_wat.h" />
     <ClInclude Include="filesys.h" />

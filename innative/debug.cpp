@@ -5,16 +5,17 @@
 #include "debug.h"
 #include "constants.h"
 #include "util.h"
+#include "compile.h"
 
 using namespace innative;
 using namespace code;
 using namespace utility;
 
 Debugger::~Debugger() {}
-Debugger::Debugger() : dbuilder(0) {}
-Debugger::Debugger(llvm::IntegerType* intptr, llvm::Module& m, const char* name, const Environment* env,
-                   const char* filepath) :
-  intptrty(intptr), dbuilder(new llvm::DIBuilder(m))
+Debugger::Debugger() : _dbuilder(0), _context(0) {}
+
+Debugger::Debugger(Context* context, llvm::Module& m, const char* name, const char* filepath) :
+  _context(context), _dbuilder(new llvm::DIBuilder(m))
 {
   m.addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
   if(llvm::Triple(m.getTargetTriple()).isOSWindows())
@@ -35,39 +36,38 @@ Debugger::Debugger(llvm::IntegerType* intptr, llvm::Module& m, const char* name,
     llvm::SmallString<32> checksum;
     llvm::DIFile::ChecksumKind CSKind = ComputeChecksum(llvm::StringRef((const char*)debugfile.get(), sz), checksum);
     llvm::DIFile::ChecksumInfo<llvm::StringRef> CSInfo(CSKind, checksum);
-    dunit = dbuilder->createFile(abspath.filename().u8string(), abspath.parent_path().u8string(), CSInfo);
+    dunit = _dbuilder->createFile(abspath.filename().u8string(), abspath.parent_path().u8string(), CSInfo);
   }
   else
-    dunit = dbuilder->createFile(abspath.filename().u8string(), abspath.parent_path().u8string());
+    dunit = _dbuilder->createFile(abspath.filename().u8string(), abspath.parent_path().u8string());
 
-  dcu = dbuilder->createCompileUnit(llvm::dwarf::DW_LANG_C89, dunit, "inNative Runtime v" IN_VERSION_STRING,
-                                    env->optimize != 0, GenFlagString(*env), WASM_MAGIC_VERSION, name);
+  dcu = _dbuilder->createCompileUnit(llvm::dwarf::DW_LANG_C89, dunit, "inNative Runtime v" IN_VERSION_STRING,
+                                     _context->env.optimize != 0, GenFlagString(_context->env), WASM_MAGIC_VERSION, name);
 
-  diF32  = dbuilder->createBasicType("f32", 32, llvm::dwarf::DW_ATE_float);
-  diF64  = dbuilder->createBasicType("f64", 64, llvm::dwarf::DW_ATE_float);
-  diI1   = dbuilder->createBasicType("i1", 1, llvm::dwarf::DW_ATE_boolean);
-  diI8   = dbuilder->createBasicType("i8", 8, llvm::dwarf::DW_ATE_signed);
-  diI32  = dbuilder->createBasicType("i32", 32, llvm::dwarf::DW_ATE_signed);
-  diI64  = dbuilder->createBasicType("i64", 64, llvm::dwarf::DW_ATE_signed);
-  diVoid = dbuilder->createUnspecifiedType("void");
+  diF32  = _dbuilder->createBasicType("f32", 32, llvm::dwarf::DW_ATE_float);
+  diF64  = _dbuilder->createBasicType("f64", 64, llvm::dwarf::DW_ATE_float);
+  diI1   = _dbuilder->createBasicType("i1", 1, llvm::dwarf::DW_ATE_boolean);
+  diI8   = _dbuilder->createBasicType("i8", 8, llvm::dwarf::DW_ATE_signed);
+  diI32  = _dbuilder->createBasicType("i32", 32, llvm::dwarf::DW_ATE_signed);
+  diI64  = _dbuilder->createBasicType("i64", 64, llvm::dwarf::DW_ATE_signed);
+  diVoid = _dbuilder->createUnspecifiedType("void");
 }
 void Debugger::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized) {}
-void Debugger::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body, code::Context& context)
+void Debugger::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body)
 {}
-void Debugger::FuncParam(llvm::Function* fn, size_t indice, FunctionDesc& desc, code::Context& context) {}
-void Debugger::FuncLocal(llvm::Function* fn, size_t indice, FunctionDesc& desc, code::Context& context) {}
+void Debugger::FuncParam(llvm::Function* fn, size_t indice, FunctionDesc& desc) {}
+void Debugger::FuncLocal(llvm::Function* fn, size_t indice, FunctionDesc& desc) {}
 void Debugger::DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t line) {}
-void Debugger::DebugMemLocal(code::Context& context) {}
-void Debugger::PostFuncBody(FunctionBody& body, code::Context& context) {}
+void Debugger::PostFuncBody(llvm::Function* fn, FunctionBody& body) {}
 
-void Debugger::DebugIns(llvm::Function* fn, Instruction& i, code::Context& context) {}
+void Debugger::DebugIns(llvm::Function* fn, Instruction& i) {}
 
 llvm::DIType* Debugger::CreateDebugType(llvm::Type* t)
 {
   if(t->isPointerTy())
   {
     auto base = CreateDebugType(t->getPointerElementType());
-    return dbuilder->createPointerType(base, intptrty->getBitWidth(), 0U, llvm::None, std::string(base->getName()) + "*");
+    return _dbuilder->createPointerType(base, _context->intptrty->getBitWidth(), 0U, llvm::None, std::string(base->getName()) + "*");
   }
 
   if(t->isFloatTy())
@@ -88,25 +88,27 @@ llvm::DIType* Debugger::CreateDebugType(llvm::Type* t)
     return CreateFunctionDebugType(llvm::cast<llvm::FunctionType>(t), llvm::CallingConv::Fast);
   if(t->isStructTy())
   {
-    uint64_t bits      = 0;
+    uint64_t offset    = 0;
     unsigned int align = 0;
-    llvm::SmallVector<llvm::Metadata*, 16> elems;
+    llvm::SmallVector<llvm::Metadata*, 16> members;
     for(unsigned int i = 0; i < t->getStructNumElements(); ++i)
     {
       auto elem = CreateDebugType(t->getStructElementType(i));
-      elems.push_back(elem);
-      bits += elem->getSizeInBits();
+      offset    = Align<uint64_t>(offset, elem->getAlignInBits());
+      members.push_back(_dbuilder->createMemberType(dcu, "m" + std::to_string(i), dunit, 0, elem->getSizeInBits(),
+                                                 elem->getAlignInBits(), offset, llvm::DINode::FlagZero, elem));
+      offset += elem->getSizeInBits();
       align = std::max(align, elem->getAlignInBits());
     }
 
-    return dbuilder->createStructType(dcu, t->getStructName(), dunit, 0, bits, align, llvm::DINode::FlagZero, nullptr,
-                                      dbuilder->getOrCreateArray(elems));
+    return _dbuilder->createStructType(dcu, t->getStructName(), dunit, 0, offset, align, llvm::DINode::FlagZero, nullptr,
+                                      _dbuilder->getOrCreateArray(members));
   }
   if(t->isArrayTy())
   {
     auto elem = CreateDebugType(t->getArrayElementType());
-    return dbuilder->createArrayType(elem->getSizeInBits() * t->getArrayNumElements(), elem->getAlignInBits(), elem,
-                                     llvm::DINodeArray());
+    llvm::Metadata* range[] = { _dbuilder->getOrCreateSubrange(0, t->getArrayNumElements()) };
+    return _dbuilder->createArrayType(elem->getSizeInBits() * t->getArrayNumElements(), elem->getAlignInBits(), elem, _dbuilder->getOrCreateArray(range));
   }
 
   assert(false);
@@ -119,7 +121,7 @@ llvm::DISubroutineType* Debugger::CreateFunctionDebugType(llvm::FunctionType* fn
   for(unsigned int i = 0; i < fn->getNumParams(); ++i)
     dwarfTys.push_back(CreateDebugType(fn->getParamType(i)));
 
-  return dbuilder->createSubroutineType(dbuilder->getOrCreateTypeArray(dwarfTys), llvm::DINode::FlagZero,
+  return _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(dwarfTys), llvm::DINode::FlagZero,
                                         (callconv == llvm::CallingConv::C) ? llvm::dwarf::DW_CC_normal :
                                                                              llvm::dwarf::DW_CC_nocall);
 }
@@ -127,7 +129,7 @@ llvm::DISubroutineType* Debugger::CreateFunctionDebugType(llvm::FunctionType* fn
 void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool optimized, bool definition, bool artificial,
                                  llvm::DIFile* file, unsigned int line, unsigned int col, llvm::DISubroutineType* subtype)
 {
-  if(!dbuilder)
+  if(!_dbuilder)
     return;
   llvm::DISubprogram::DISPFlags spflags = llvm::DISubprogram::DISPFlags::SPFlagZero;
   llvm::DINode::DIFlags diflags         = llvm::DINode::FlagZero;
@@ -157,15 +159,15 @@ void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool 
     file = dunit;
   if(!subtype)
     subtype = CreateFunctionDebugType(fn->getFunctionType(), fn->getCallingConv());
-  fn->setSubprogram(dbuilder->createFunction(file, name, fn->getName(), file, line, subtype, line, diflags, spflags));
+  fn->setSubprogram(_dbuilder->createFunction(file, name, fn->getName(), file, line, subtype, line, diflags, spflags));
 }
-void Debugger::PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc) { curscope = scope; }
+void Debugger::PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc) { _curscope = scope; }
 void Debugger::PopBlock() {}
-void Debugger::DebugSetGlobal(int index, code::Context& context) {}
+void Debugger::DebugSetGlobal(int index) {}
 void Debugger::Finalize()
 {
-  if(dbuilder)
-    dbuilder->finalize();
+  if(_dbuilder)
+    _dbuilder->finalize();
 }
 
 llvm::DIFile::ChecksumKind Debugger::ComputeChecksum(llvm::StringRef data, llvm::SmallString<32>& Checksum)
@@ -184,7 +186,7 @@ llvm::DIFile::ChecksumKind Debugger::ComputeChecksum(llvm::StringRef data, llvm:
 
 void Debugger::SetSPLocation(llvm::IRBuilder<>& builder, llvm::DISubprogram* sp)
 {
-  if(dbuilder && sp)
+  if(_dbuilder && sp)
     builder.SetCurrentDebugLocation(GetSPLocation(sp->getContext(), sp));
 }
 

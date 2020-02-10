@@ -303,7 +303,7 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
     return 0;
   if(!i)
     return !p ? (void*)~0 : p; // We must return a non-zero pointer even if it's a zero-length allocation.
-  if(i + *size > 0xFFFFFFFF) // Invalid for wasm32
+  if(i + *size > 0xFFFFFFFF)   // Invalid for wasm32
     return 0;
 
   char* info = (char*)p;
@@ -361,8 +361,6 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
     if(!VirtualAlloc(info, i, MEM_COMMIT, PAGE_READWRITE))
       return 0;
 
-      // for(int j = 0; j < 65535; ++j) // DEBUG
-      //  ((uint32_t*)info)[j] = j;
 #elif defined(IN_PLATFORM_POSIX)
     info = _innative_syscall(SYSCALL_MMAP, NULL, i, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if((void*)info >= (void*)0xfffffffffffff001) // This is a syscall error from -4095 to -1

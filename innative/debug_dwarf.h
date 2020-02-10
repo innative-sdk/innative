@@ -1,18 +1,18 @@
 // Copyright (c)2019 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#ifndef IN__DEBUG_SOURCE_MAP_H
-#define IN__DEBUG_SOURCE_MAP_H
+#ifndef IN__DEBUG_DWARF_H
+#define IN__DEBUG_DWARF_H
 
-#include "debug.h"
+#include "debug_sourcemap.h"
 #include "stack.h"
 
 namespace innative {
   namespace code {
-    class DebugSourceMap : public Debugger
+    class DebugDWARF : public DebugSourceMap
     {
     public:
-      DebugSourceMap(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath);
+      DebugDWARF(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath);
       virtual void FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized) override;
       virtual void FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body) override;
       virtual void PostFuncBody(llvm::Function* fn, FunctionBody& body) override;
@@ -22,21 +22,15 @@ namespace innative {
       virtual void DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t line) override;
       virtual void PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc) override;
       virtual void DebugSetGlobal(int index) override;
-      virtual llvm::DIType* GetDebugType(size_t index, llvm::DIType* parent = 0);
-      virtual void UpdateVariables(llvm::Function* fn, SourceMapScope& scope);
+      virtual llvm::DIType* GetDebugType(size_t index, llvm::DIType* parent = 0) override;
+      virtual void UpdateVariables(llvm::Function* fn, SourceMapScope& scope) override;
       void UpdateLocation(Instruction& i);
       SourceMapFunction* GetSourceFunction(unsigned int column);
       llvm::DIFile* GetSourceFile(size_t i);
-      static llvm::DINode::DIFlags GetFlags(unsigned short flags);
+      llvm::DIType* StructOffsetType(llvm::DIType* ty, llvm::DIScope* scope, llvm::DIFile* file, llvm::StringRef name,
+                                     uint64_t indice, unsigned int bitsize, unsigned int bytealign);
 
-      SourceMap* sourcemap;
-      std::vector<llvm::DIType*> types;
-      std::vector<llvm::DIFile*> files;             // sourcemap files
-      std::vector<llvm::DISubprogram*> subprograms; // Seperate subprograms for when functions are split across files
-      std::vector<llvm::DILocalScope*> scopecache;
-      Stack<size_t> scopes; // stack of scope indexes
-      size_t cursegment;
-      size_t curscopeindex;
+      llvm::AllocaInst* stacklocal; // Stores the current frame pointer
     };
   }
 }
