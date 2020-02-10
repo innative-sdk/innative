@@ -304,14 +304,16 @@ std::string innative::ABIMangle(const std::string& src, ABI abi, int convention,
 
 IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
 {
-  path workdir = utility::GetWorkingDir();
-  path libpath = utility::GetPath(env->libpath);
-  path objpath = !env->objpath ? file.parent_path() : utility::GetPath(env->objpath);
+  path workdir   = utility::GetWorkingDir();
+  path libpath   = utility::GetPath(env->libpath);
+  path objpath   = !env->objpath ? file.parent_path() : utility::GetPath(env->objpath);
+  bool UseNatVis = false;
 
   // Finalize all modules
   for(varuint32 i = 0; i < env->n_modules; ++i)
   {
     env->modules[i].cache->debugger->Finalize();
+    UseNatVis = UseNatVis || !env->modules[i].cache->natvis.empty();
 
     if(env->flags & ENV_EMIT_LLVM)
     {
@@ -370,6 +372,29 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
 
     std::vector<std::string> cache = { std::string("/OUT:") + file.u8string(), "/LIBPATH:" + libpath.u8string(),
                                        "/LIBPATH:" + workdir.u8string() };
+
+    if(UseNatVis)
+    {
+      auto embed = file.filename();
+      embed      = objpath / embed.replace_extension("natvis");
+      cache.emplace_back("/NATVIS:" + embed.u8string());
+      FILE* f;
+      FOPEN(f, embed.c_str(), "wb");
+      if(!f)
+        return ERR_FATAL_FILE_ERROR;
+
+      const char prologue[] =
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?><AutoVisualizer xmlns=\"http://schemas.microsoft.com/vstudio/debugger/natvis/2010\">";
+      const char epilogue[] = "</AutoVisualizer>";
+
+      fwrite(prologue, 1, sizeof(prologue) - 1, f);
+
+      for(varuint32 i = 0; i < env->n_modules; ++i)
+        fwrite(env->modules[i].cache->natvis.data(), 1, env->modules[i].cache->natvis.size(), f);
+
+      fwrite(epilogue, 1, sizeof(epilogue) - 1, f);
+      fclose(f);
+    }
 
     for(varuint32 i = 0; i < env->n_exports; ++i)
       cache.push_back(std::string("/EXPORT:") + env->exports[i]);

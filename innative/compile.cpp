@@ -7,6 +7,7 @@
 #include "optimize.h"
 #include "intrinsic.h"
 #include "compile.h"
+#include "debug_pdb.h"
 #include "debug_sourcemap.h"
 #include "debug_wat.h"
 #include "link.h"
@@ -14,6 +15,8 @@
 #include "stack.h"
 #include <iostream>
 #include <sstream>
+
+#define DIVIDER ":"
 
 using namespace innative;
 using namespace utility;
@@ -549,7 +552,7 @@ IN_ERROR CompileIfBlock(varsint7 sig, code::Context& context)
   Func* parent                  = context.builder.GetInsertBlock()->getParent();
   BB* tblock                    = BB::Create(context.context, "if_true", parent);
   BB* fblock                    = BB::Create(context.context, "if_else", parent); // Create else stub
-  BB* endblock                  = PushLabel("if_end", sig, OP_if, nullptr, context, context.debugger->curscope);
+  BB* endblock                  = PushLabel("if_end", sig, OP_if, nullptr, context, context.debugger->_curscope);
   context.control.Peek().ifelse = fblock;
 
   context.builder.CreateCondBr(cmp, tblock, fblock); // Insert branch in current block
@@ -890,10 +893,8 @@ IN_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
   // CreateCall will then do the final dereference of the function pointer to make the indirect call
   CallInst* call = context.builder.CreateCall(funcptr, llvm::makeArrayRef(ArgsV, ftype.n_params));
   if(context.memories.size() > 0)
-  {
     context.builder.CreateStore(context.builder.CreateLoad(context.GetPairPtr(context.memories[0], 0)), context.memlocal);
-    context.debugger->DebugMemLocal(context);
-  }
+
   context.builder.GetInsertBlock()->getParent()->setMetadata(IN_MEMORY_GROW_METADATA,
                                                              llvm::MDNode::get(context.context, {}));
 
@@ -1062,7 +1063,6 @@ IN_ERROR CompileMemGrow(code::Context& context, const char* name)
   context.builder.CreateAlignedStore(call, context.GetPairPtr(context.memories[0], 0),
                                      context.builder.getInt64Ty()->getPrimitiveSizeInBits() / 8);
   context.builder.CreateStore(context.builder.CreateLoad(context.GetPairPtr(context.memories[0], 0)), context.memlocal);
-  context.debugger->DebugMemLocal(context);
   context.builder.CreateBr(contblock);
 
   context.builder.SetInsertPoint(contblock);
@@ -1250,10 +1250,10 @@ IN_ERROR CompileInstruction(Instruction& ins, code::Context& context)
     return ERR_SUCCESS;
   case OP_nop: return ERR_SUCCESS;
   case OP_block:
-    PushLabel("block", ins.immediates[0]._varsint7, OP_block, nullptr, context, context.debugger->curscope);
+    PushLabel("block", ins.immediates[0]._varsint7, OP_block, nullptr, context, context.debugger->_curscope);
     return ERR_SUCCESS;
   case OP_loop:
-    PushLabel("loop", ins.immediates[0]._varsint7, OP_loop, nullptr, context, context.debugger->curscope);
+    PushLabel("loop", ins.immediates[0]._varsint7, OP_loop, nullptr, context, context.debugger->_curscope);
     context.builder.CreateBr(context.control.Peek().block); // Branch into next block
     BindLabel(context.control.Peek().block, context);
     return ERR_SUCCESS;
@@ -1323,7 +1323,7 @@ IN_ERROR CompileInstruction(Instruction& ins, code::Context& context)
                                     context.globals[ins.immediates[0]._varuint32]->getType()->getElementType()) :
                                   context.values.Pop(),
                                 context.globals[ins.immediates[0]._varuint32]);
-    context.debugger->DebugSetGlobal(ins.immediates[0]._varuint32, context);
+    context.debugger->DebugSetGlobal(ins.immediates[0]._varuint32);
     return ERR_SUCCESS;
   case OP_global_get:
     if(ins.immediates[0]._varuint32 >= context.globals.size())
@@ -1784,7 +1784,7 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
   if(sig.n_returns > 0)
     ret = sig.returns[0];
 
-  context.debugger->FuncBody(fn, indice, desc, body, context);
+  context.debugger->FuncBody(fn, indice, desc, body);
   PushLabel("exit", ret, OP_return, nullptr, context,
             fn->getSubprogram()); // Setup the function exit block that wraps everything
 
@@ -1810,7 +1810,7 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
       IN_LOCAL_INDEX_METADATA,
       llvm::MDNode::get(context.context, { llvm::ConstantAsMetadata::get(context.builder.getInt32(offset++)) }));
 
-    context.debugger->FuncParam(fn, index, desc, context);
+    context.debugger->FuncParam(fn, index, desc);
     ++index;
     context.builder.CreateStore(&arg, context.locals.back()); // Store parameter (we can't use the parameter directly
                                                               // because wasm lets you store to parameters)
@@ -1829,7 +1829,7 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
       IN_LOCAL_INDEX_METADATA,
       llvm::MDNode::get(context.context, { llvm::ConstantAsMetadata::get(context.builder.getInt32(offset)) }));
 
-    context.debugger->FuncLocal(fn, index, desc, context);
+    context.debugger->FuncLocal(fn, index, desc);
     context.builder.CreateStore(llvm::Constant::getNullValue(ty), context.locals.back());
     offset += body.locals[i].count;
   }
@@ -1847,7 +1847,7 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
     stacksize += (memlocal->getType()->getElementType()->getPrimitiveSizeInBits() / 8);
   }
 
-  context.debugger->PostFuncBody(body, context);
+  context.debugger->PostFuncBody(fn, body);
 
   // If we allocate more than 2048 bytes of stack space, make a stack probe so we can't blow past the gaurd page.
   if(stacksize > 2048)
@@ -1856,7 +1856,7 @@ IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memloca
   // Begin iterating through the instructions until there aren't any left
   for(varuint32 i = 0; i < body.n_body; ++i)
   {
-    context.debugger->DebugIns(fn, body.body[i], context);
+    context.debugger->DebugIns(fn, body.body[i]);
     IN_ERROR err = CompileInstruction(body.body[i], context);
     if(err < 0)
       return err;
@@ -2000,11 +2000,10 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
     if(!context.m.filepath)
       return ERR_FATAL_FILE_ERROR;
     if(context.m.sourcemap)
-      context.debugger.reset(new code::DebugSourceMap(context.m.sourcemap, context.intptrty, *context.llvm,
-                                                      context.m.name.str(), env, context.m.filepath, context.context));
-    else
       context.debugger.reset(
-        new code::DebugWat(context.intptrty, *context.llvm, context.m.name.str(), env, context.m.filepath));
+        new code::DebugPDB(context.m.sourcemap, &context, *context.llvm, context.m.name.str(), context.m.filepath));
+    else
+      context.debugger.reset(new code::DebugWat(&context, *context.llvm, context.m.name.str(), context.m.filepath));
   }
   else
     context.debugger.reset(new code::Debugger());
@@ -2033,7 +2032,7 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
                                               { context.builder.getInt8PtrTy(0), context.builder.getInt64Ty() }, false),
                                   Func::ExternalLinkage, "_innative_internal_env_free_memory", context.llvm);
 
-  context.debugger->FunctionDebugInfo(context.init, "innative_internal_init|" + std::string(context.m.name.str()),
+  context.debugger->FunctionDebugInfo(context.init, "innative_internal_init" DIVIDER + std::string(context.m.name.str()),
                                       context.env.optimize != 0, true, true, nullptr, 0, 0);
 
   context.functions.reserve(context.m.importsection.functions + context.m.function.n_funcdecl);
@@ -2079,9 +2078,9 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
         context.functions.back().imported->setCallingConv(GetCallingConvention(imp));
 
         auto& debugname = imp.func_desc.debug.name;
-        auto canonical  = !(debugname.get()) ? context.functions.back().imported->getName() + "|#internal" :
-                                              debugname.str() + ("#" + std::to_string(i));
-        auto name = !(debugname.get()) ? std::string(imp.export_name.str()) + "|#internal" : debugname.str();
+        auto canonical  = !(debugname.get()) ? context.functions.back().imported->getName() + DIVIDER "internal" :
+                                              debugname.str() + ("_" + std::to_string(i));
+        auto name = !(debugname.get()) ? std::string(imp.export_name.str()) + DIVIDER "internal" : debugname.str();
         WrapFunction(context.functions.back().imported, name, canonical, context);
       }
     }
@@ -2091,7 +2090,7 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
   for(varuint32 i = context.m.importsection.functions; i < context.m.importsection.tables; ++i)
   {
     auto canonical = CanonImportName(context.m.importsection.imports[i], env->system);
-    auto name      = context.m.importsection.imports[i].export_name.str() + std::string("|") +
+    auto name      = context.m.importsection.imports[i].export_name.str() + std::string(DIVIDER) +
                 context.m.importsection.imports[i].module_name.str();
 
     khiter_t iter = code::kh_get_importhash(context.importhash, canonical.c_str());
@@ -2115,7 +2114,7 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
   for(varuint32 i = context.m.importsection.tables; i < context.m.importsection.memories; ++i)
   {
     auto canonical = CanonImportName(context.m.importsection.imports[i], env->system);
-    auto name      = context.m.importsection.imports[i].export_name.str() + std::string("|") +
+    auto name      = context.m.importsection.imports[i].export_name.str() + std::string(DIVIDER) +
                 context.m.importsection.imports[i].module_name.str();
 
     khiter_t iter = code::kh_get_importhash(context.importhash, canonical.c_str());
@@ -2144,7 +2143,7 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
   for(varuint32 i = context.m.importsection.memories; i < context.m.importsection.globals; ++i)
   {
     auto canonical = CanonImportName(context.m.importsection.imports[i], env->system);
-    auto name      = context.m.importsection.imports[i].export_name.str() + std::string("|") +
+    auto name      = context.m.importsection.imports[i].export_name.str() + std::string(DIVIDER) +
                 context.m.importsection.imports[i].module_name.str();
 
     khiter_t iter = code::kh_get_importhash(context.importhash, canonical.c_str());
@@ -2178,13 +2177,13 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
     context.functions.emplace_back();
     context.functions.back().internal =
       CompileFunction(context.m.type.functypes[decl.type_index],
-                      std::string(!decl.debug.name.size() ? "func" : decl.debug.name.str()) + "#" +
-                        std::to_string(context.functions.size()) + "|" + context.m.name.str(),
+                      std::string(!decl.debug.name.size() ? "func" : decl.debug.name.str()) + "_" +
+                        std::to_string(context.functions.size()) + DIVIDER + context.m.name.str(),
                       context);
 
     context.debugger->FuncDecl(context.functions.back().internal, context.m.code.funcbody[i].column, decl.debug.line,
                                context.env.optimize != 0);
-    auto name      = context.functions.back().internal->getName() + "|#external";
+    auto name      = context.functions.back().internal->getName() + DIVIDER "external";
     auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &HomogenizeFunction : &WrapFunction;
     ExportFunction(context.functions.back(), wrapperfn, &context, name.str(), name, context.context);
   }
@@ -2210,9 +2209,8 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
                           const char* fallback, llvm::Constant* init) -> llvm::GlobalVariable* {
     auto canonical =
       CanonicalName(StringSpan::From(context.m.name), StringSpan::From(!debug.name.get() ? fallback : debug.name.str()), i);
-    auto name =
-      (!debug.name.get() ? fallback + std::to_string(i) : std::string(debug.name.str())) + "|" + context.m.name.str();
-
+    auto name = code::Context::CppString(context.m.name.str()) +
+                ("::" + (!debug.name.get() ? fallback + ("_" + std::to_string(i)) : std::string(debug.name.str())));
     return CreateGlobal(context, type, constant, false, name, canonical, debug.line, init);
   };
 
@@ -2222,7 +2220,7 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
     auto type = context.GetTableType(context.m.table.tables[i].element_type)->getPointerTo(0);
     auto pair = context.GetPairType(type);
     context.tables.push_back(
-      DeclareGlobal(i, context, context.m.table.tables[i].debug, false, pair, "table#", context.GetPairNull(pair)));
+      DeclareGlobal(i, context, context.m.table.tables[i].debug, false, pair, "table", context.GetPairNull(pair)));
 
     uint64_t bytewidth = context.llvm->getDataLayout().getTypeAllocSize(type->getElementType());
     if(!bytewidth)
@@ -2252,10 +2250,10 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
     auto type       = context.builder.getInt8PtrTy(0);
     auto pair       = context.GetPairType(type);
     auto sz         = context.builder.getInt64(((uint64_t)mem.limits.minimum) << 16);
-    auto max        = context.builder.getInt64(
-      ((mem.limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? ((uint64_t)mem.limits.maximum) : 0ULL) << 16);
+    auto max =
+      context.builder.getInt64(((mem.limits.flags & WASM_LIMIT_HAS_MAXIMUM) ? ((uint64_t)mem.limits.maximum) : 0ULL) << 16);
     context.memories.push_back(
-      DeclareGlobal(i, context, mem.debug, false, pair, "linearmemory#", context.GetPairNull(pair)));
+      DeclareGlobal(i, context, mem.debug, false, pair, "linearmemory", context.GetPairNull(pair)));
     context.memories.back()->setMetadata(IN_MEMORY_MAX_METADATA,
                                          llvm::MDNode::get(context.context, { llvm::ConstantAsMetadata::get(max) }));
 
@@ -2279,7 +2277,7 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
 
     context.globals.push_back(
       DeclareGlobal(i, context, context.m.global.globals[i].desc.debug, !context.m.global.globals[i].desc.mutability,
-                    GetLLVMType(context.m.global.globals[i].desc.type, context), "globalvariable#", init));
+                    GetLLVMType(context.m.global.globals[i].desc.type, context), "globalvariable", init));
   }
 
   context.debugger->SetSPLocation(context.builder, context.init->getSubprogram());
@@ -2359,7 +2357,7 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
                      CanonicalName(StringSpan::From(context.m.name), StringSpan::From("innative_internal_exit")).c_str(),
                      context.llvm);
 
-  context.debugger->FunctionDebugInfo(context.exit, "innative_internal_exit|" + std::string(context.m.name.str()),
+  context.debugger->FunctionDebugInfo(context.exit, "innative_internal_exit" DIVIDER + std::string(context.m.name.str()),
                                       context.env.optimize != 0, true, true, nullptr, 0, 0);
   context.debugger->SetSPLocation(context.builder, context.exit->getSubprogram());
 
@@ -2560,7 +2558,7 @@ void ResolveModuleExports(const Environment* env, Module* root, llvm::LLVMContex
     case WASM_KIND_FUNCTION:
       if(!ctx->functions[e->index].exported)
       {
-        auto name = std::string(e->name.str()) + "|" + m->name.str();
+        auto name = std::string(e->name.str()) + DIVIDER + m->name.str();
         ExportFunction(ctx->functions[e->index], wrapperfn, ctx, name, canonical, context);
         ctx->functions[e->index].exported->setDLLStorageClass(
           llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);

@@ -334,6 +334,7 @@
   <ItemGroup>
     <ClCompile Include="..\wasm_malloc.c" />
     <ClCompile Include="benchmark.cpp" />
+    <ClCompile Include="benchmark_debug.cpp" />
     <ClCompile Include="benchmark_fannkuch-redux.cpp" />
     <ClCompile Include="benchmark_fib.cpp" />
     <ClCompile Include="benchmark_n-body.cpp" />

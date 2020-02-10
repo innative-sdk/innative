@@ -174,7 +174,7 @@ size_t _find_indice(void* ptr, uint8_t* heap, size_t capacity, uint8_t* size)
   *size = sz;
   return index;
 }
-
+/*
 char _verify_ptr(void* ptr)
 {
   size_t capacity;
@@ -218,8 +218,7 @@ char _verify_heap(size_t index, uint8_t* heap, size_t capacity, char allocated)
 
 char _verify_heaps()
 {
-  uint8_t* end = (uint8_t*)(__builtin_wasm_memory_size(0) * WASM_PAGE_SIZE);
-  ;
+  uint8_t* end    = (uint8_t*)(__builtin_wasm_memory_size(0) * WASM_PAGE_SIZE);
   uint8_t* heap   = HeapRoot;
   size_t capacity = 1;
 
@@ -232,12 +231,11 @@ char _verify_heaps()
   }
 
   return 1;
-}
+}*/
 
 EXPORT void* MALLOC(size_t num)
 {
   uint8_t* end = (uint8_t*)(__builtin_wasm_memory_size(0) * WASM_PAGE_SIZE);
-  ;
 
   // The root of malloc is the only pointer in this entire program that can legally be 0, but the C++ compiler doesn't know
   // that, so we have to account for this
@@ -261,11 +259,9 @@ EXPORT void* MALLOC(size_t num)
 
   size_t length = capacity * WASM_PAGE_SIZE;
 
-  if(heap >=
-     end) // If our current heap points past addressable memory, there are no buckets large enough for this allocation
+  if(heap >= end) // If our current heap points past addressable memory, there are no buckets large enough for this allocation
   {
-    _wasm_allocate_to_end(heap,
-                          end); // Make sure that the most recent bucket (the one at root) has allocated all possible pages
+    _wasm_allocate_to_end(heap, end); // Make sure the most recent bucket (the one at root) has allocated all possible pages
 
     // Then we allocate pages for the bytemap, plus one additional page
     heap = (uint8_t*)(__builtin_wasm_memory_grow(0, capacity) * WASM_PAGE_SIZE);
