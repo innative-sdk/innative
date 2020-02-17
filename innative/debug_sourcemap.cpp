@@ -90,7 +90,7 @@ void DebugSourceMap::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned 
 
   auto subtype =
     _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(dwarfTys), llvm::DINode::FlagZero,
-                                   (fn->getCallingConv() == llvm::CallingConv::C) ? DW_CC_normal : DW_CC_nocall);
+                                    (fn->getCallingConv() == llvm::CallingConv::C) ? DW_CC_normal : DW_CC_nocall);
 
   FunctionDebugInfo(fn, name, optimized, true, false, GetSourceFile(f->source_index), f->original_line, 0, subtype);
 }
@@ -162,8 +162,8 @@ void DebugSourceMap::UpdateLocation(Instruction& i)
         auto original = _curscope->getSubprogram();
         subprograms[s.source_index] =
           _dbuilder->createFunction(original->getScope(), original->getName(), original->getLinkageName(),
-                                   files[s.source_index], original->getLine(), original->getType(),
-                                   original->getScopeLine(), original->getFlags(), original->getSPFlags());
+                                    files[s.source_index], original->getLine(), original->getType(),
+                                    original->getScopeLine(), original->getFlags(), original->getSPFlags());
       }
 
       loc = _context->builder.getCurrentDebugLocation();
@@ -216,8 +216,9 @@ void DebugSourceMap::DebugIns(llvm::Function* fn, Instruction& i)
 void DebugSourceMap::DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t line)
 {
   v->addDebugInfo(_dbuilder->createGlobalVariableExpression(dcu, name, v->getName(), dunit, (unsigned int)line,
-                                                           CreateDebugType(v->getType()->getElementType()),
-                                                           !v->hasValidDeclarationLinkage(), _dbuilder->createExpression()));
+                                                            CreateDebugType(v->getType()->getElementType()),
+                                                            !v->hasValidDeclarationLinkage(),
+                                                            _dbuilder->createExpression()));
 }
 
 llvm::DINode::DIFlags DebugSourceMap::GetFlags(unsigned short flags)
@@ -238,6 +239,8 @@ llvm::DINode::DIFlags DebugSourceMap::GetFlags(unsigned short flags)
 
 llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
 {
+  if(index == (size_t)~0)
+    return diVoid;
   auto& type = sourcemap->x_innative_types[index];
 
   if(index < types.size() && !types[index])
@@ -283,10 +286,10 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
       llvm::DICompositeType* composite;
       if(type.tag == DW_TAG_class_type)
         composite = _dbuilder->createClassType(file, name, file, type.original_line, type.bit_size, type.byte_align << 3,
-                                              type.bit_offset, llvm::DINode::FlagZero, nullptr, llvm::DINodeArray());
+                                               type.bit_offset, llvm::DINode::FlagZero, nullptr, llvm::DINodeArray());
       else
         composite = _dbuilder->createStructType(file, name, file, type.original_line, type.bit_size, type.byte_align << 3,
-                                               llvm::DINode::FlagZero, nullptr, llvm::DINodeArray());
+                                                llvm::DINode::FlagZero, nullptr, llvm::DINodeArray());
       types[index] = composite;
 
       llvm::SmallVector<llvm::Metadata*, 8> elements;
@@ -300,7 +303,7 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
     case DW_TAG_union_type:
     {
       auto composite = _dbuilder->createUnionType(file, name, file, type.original_line, type.bit_size, type.byte_align << 3,
-                                               GetFlags(type.flags), llvm::DINodeArray());
+                                                  GetFlags(type.flags), llvm::DINodeArray());
       types[index]   = composite;
 
       llvm::SmallVector<llvm::Metadata*, 8> elements;
@@ -331,8 +334,8 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
       break;
     case DW_TAG_member:
       if(auto ty = GetDebugType(type.type_index))
-        types[index] = _dbuilder->createMemberType(file, name, file, type.original_line, type.bit_size, type.byte_align << 3,
-                                                  type.bit_offset, GetFlags(type.flags), ty);
+        types[index] = _dbuilder->createMemberType(file, name, file, type.original_line, type.bit_size,
+                                                   type.byte_align << 3, type.bit_offset, GetFlags(type.flags), ty);
       break;
     case DW_TAG_enumeration_type:
     {
@@ -350,8 +353,8 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
         }
       }
       types[index] = _dbuilder->createEnumerationType(file, name, file, type.original_line, type.bit_size,
-                                                     type.byte_align << 3, _dbuilder->getOrCreateArray(elements), base, "",
-                                                     (type.flags & IN_SOURCE_TYPE_ENUM_CLASS) != 0);
+                                                      type.byte_align << 3, _dbuilder->getOrCreateArray(elements), base, "",
+                                                      (type.flags & IN_SOURCE_TYPE_ENUM_CLASS) != 0);
     }
     break;
     case DW_TAG_subroutine_type:
