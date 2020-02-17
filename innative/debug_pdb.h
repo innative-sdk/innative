@@ -6,13 +6,17 @@
 
 #include "debug_sourcemap.h"
 #include "stack.h"
+#include <unordered_set>
 
 namespace innative {
   namespace code {
+    KHASH_DECLARE(intset, size_t, char);
+
     class DebugPDB : public DebugSourceMap
     {
     public:
       DebugPDB(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath);
+      ~DebugPDB();
       virtual void FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized) override;
       virtual void PostFuncBody(llvm::Function* fn, FunctionBody& body) override;
       virtual void FuncParam(llvm::Function* fn, size_t indice, FunctionDesc& desc) override;
@@ -25,7 +29,7 @@ namespace innative {
 
     protected:
       uint64_t _uid;
-      std::vector<size_t> _deferred;
+      kh_intset_t* _deferred;
     };
   }
 }
