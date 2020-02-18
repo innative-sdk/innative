@@ -344,6 +344,7 @@
     <ClCompile Include="test_embedding.cpp" />
     <ClCompile Include="test_environment.cpp" />
     <ClCompile Include="test_errors.cpp" />
+    <ClCompile Include="test_funcreplace.cpp" />
     <ClCompile Include="test_harness.cpp" />
     <ClCompile Include="test_malloc.cpp" />
     <ClCompile Include="test_manual.cpp" />

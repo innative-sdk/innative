@@ -373,8 +373,7 @@ IN_Entrypoint innative::LoadFunction(void* assembly, const char* module_name, co
 IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const char* table, varuint32 index)
 {
   INGlobal* ref =
-    (INGlobal*)LoadDLLFunction(assembly,
-                               CanonicalName(StringSpan::From(module_name), StringSpan::From(table)).c_str());
+    (INGlobal*)LoadDLLFunction(assembly, CanonicalName(StringSpan::From(module_name), StringSpan::From(table)).c_str());
   if(ref != nullptr && index < (ref->table.size / sizeof(INTableEntry)))
     return ref->table.entries[index].func;
   return nullptr;
@@ -382,8 +381,8 @@ IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const
 
 INGlobal* innative::LoadGlobal(void* assembly, const char* module_name, const char* export_name)
 {
-  return (INGlobal*)LoadDLLFunction(
-    assembly, CanonicalName(StringSpan::From(module_name), StringSpan::From(export_name)).c_str());
+  return (INGlobal*)LoadDLLFunction(assembly,
+                                    CanonicalName(StringSpan::From(module_name), StringSpan::From(export_name)).c_str());
 }
 
 void* innative::LoadAssembly(const char* file)
@@ -403,10 +402,7 @@ const char* innative::GetTypeEncodingString(int type_encoding)
   return EnumToString(TYPE_ENCODING_MAP, type_encoding, 0, 0);
 }
 
-const char* innative::GetErrorString(int error_code)
-{
-  return EnumToString(ERR_ENUM_MAP, error_code, 0, 0);
-}
+const char* innative::GetErrorString(int error_code) { return EnumToString(ERR_ENUM_MAP, error_code, 0, 0); }
 
 int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bool always_compile, const char* output)
 {
@@ -790,4 +786,27 @@ INGlobal* innative::LoadMemoryIndex(void* assembly, uint32_t module_index, uint3
   if(!metadata || memory_index >= metadata->n_memories)
     return nullptr;
   return (INGlobal*)metadata->memories[memory_index];
+}
+int innative::ReplaceTableFuncPtr(void* assembly, uint32_t module_index, uint32_t table_index, const char* function,
+                                          IN_Entrypoint replace)
+{
+  auto metadata = GetModuleMetadata(assembly, module_index);
+  if(!metadata)
+    return ERR_FATAL_INVALID_MODULE;
+  if(table_index >= metadata->n_tables)
+    return ERR_INVALID_TABLE_INDEX;
+  auto target =
+    (IN_Entrypoint)LoadDLLFunction(assembly,
+                                   CanonicalName(StringSpan::From(metadata->name), StringSpan::From(function)).c_str());
+  if(!target)
+    return ERR_INVALID_FUNCTION_INDEX;
+  auto& table = metadata->tables[table_index];
+  for(uint64_t i = 0; i < table->size; ++i)
+    if(table->entries[i].func == target)
+    {
+      table->entries[i].func = replace;
+      return ERR_SUCCESS;
+    }
+
+  return ERR_FUNCTION_BODY_MISMATCH;
 }

@@ -32,6 +32,7 @@ public:
   void test_malloc();
   void test_embedding();
   void test_errors();
+  void test_funcreplace();
   int CompileWASM(const path& file);
 
   inline std::pair<uint32_t, uint32_t> Results()

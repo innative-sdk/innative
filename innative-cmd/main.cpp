@@ -510,7 +510,7 @@ int main(int argc, char* argv[])
         env->log = stdout;
       return env;
     };
-    exports.AddModule = [](Environment* env, const void* data, uint64_t size, const char* name, int* err) {
+    exports.AddModule = [](Environment* env, const void* data, size_t size, const char* name, int* err) {
       if(!size)
       {
         long sz   = 0;
@@ -534,7 +534,7 @@ int main(int argc, char* argv[])
       }
       return ERR_SUCCESS;
     };
-    exports.AddEmbedding = [](Environment* env, int tag, const void* data, uint64_t size,
+    exports.AddEmbedding = [](Environment* env, int tag, const void* data, size_t size,
                               const char* name_override) -> IN_ERROR {
       char buf[20];
       _itoa_s(tag, buf, 10);

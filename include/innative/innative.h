@@ -86,6 +86,14 @@ limitations under the License.
     #define IN_CPU_POWERPC
     #define IN_32BIT
   #endif
+#elif defined(__wasm64) || defined(__wasm64__)
+  #define IN_CPU_WASM64
+  #define IN_CPU_WASM
+  #define IN_64BIT
+#elif defined(__wasm32) || defined(__wasm32__) || defined(__wasm) || defined(__wasm__)
+  #define IN_CPU_WASM32
+  #define IN_CPU_WASM
+  #define IN_32BIT
 #else
   #define IN_CPU_UNKNOWN // Unknown CPU architecture (should force architecture independent C implementations)
 #endif
@@ -93,7 +101,11 @@ limitations under the License.
 // Compiler detection and macro generation
 #if defined(__clang__) // Clang (must be before GCC, because clang also pretends it's GCC)
   #define IN_COMPILER_CLANG
-  #define IN_COMPILER_DLLEXPORT __attribute__((dllexport))
+  #ifdef IN_CPU_WASM
+    #define IN_COMPILER_DLLEXPORT __attribute__((visibility("default")))
+  #else
+    #define IN_COMPILER_DLLEXPORT __attribute__((dllexport))
+  #endif
   #define IN_COMPILER_DLLIMPORT __attribute__((dllimport))
   #define IN_COMPILER_FASTCALL  __attribute__((fastcall))
   #define IN_COMPILER_NAKED     __attribute__((naked))
@@ -157,11 +169,17 @@ limitations under the License.
 
 #if !(defined(IN_PLATFORM_WIN32) || defined(IN_PLATFORM_POSIX) || defined(IN_PLATFORM_WIN32_CE) || \
       defined(IN_PLATFORM_APPLE))
-  #error "Unknown Platform"
+  #ifdef IN_CPU_WASM // On webassembly we assume the WASI platform
+    #define IN_PLATFORM_WASI
+  #else
+    #error "Unknown Platform"
+  #endif
 #endif
 
 // Endianness detection
-#if defined(IN_PLATFORM_WIN32) || defined(IN_PLATFORM_WIN32_CE) || defined(IN_CPU_x86_64) || defined(IN_CPU_x86) || \
+#ifdef IN_CPU_WASM
+  #define IN_ENDIAN_LITTLE
+#elif defined(IN_PLATFORM_WIN32) || defined(IN_PLATFORM_WIN32_CE) || defined(IN_CPU_x86_64) || defined(IN_CPU_x86) || \
   defined(IN_CPU_IA_64) // Windows, x86, x86_64 and itanium all only run in little-endian (except on HP-UX but we don't
                         // support that)
   #define IN_ENDIAN_LITTLE

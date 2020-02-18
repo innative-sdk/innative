@@ -132,7 +132,7 @@ llvm::DIType* DebugPDB::StructOffsetType(llvm::DIType* ty, llvm::DIScope* scope,
     else
     {
       _context->natvis +=
-        FormatString(true, "<Type Name = \"{0}\"><DisplayString>{*({1}*)({2}.m0 + {3} + {4})}</DisplayString></Type>",
+        FormatString(true, "<Type Name=\"{0}\"><DisplayString>{*({1}*)({2}.m0 + {3} + {4})}</DisplayString></Type>",
                      offset->getName(), ty->getName(), mem, global, indice);
     }
   }
@@ -207,8 +207,13 @@ llvm::DIType* DebugPDB::GetDebugType(size_t index, llvm::DIType* parent)
 {
   auto& type = sourcemap->x_innative_types[index];
 
-  if(type.tag != DW_TAG_pointer_type)
-    return DebugSourceMap::GetDebugType(index, parent);
+  switch(type.tag)
+  {
+  case DW_TAG_rvalue_reference_type:
+  case DW_TAG_reference_type:
+  case DW_TAG_pointer_type: break;
+  default: return DebugSourceMap::GetDebugType(index, parent);
+  }
 
   if(index < types.size() && !types[index])
   {
@@ -217,13 +222,15 @@ llvm::DIType* DebugPDB::GetDebugType(size_t index, llvm::DIType* parent)
 
     switch(type.tag)
     {
+    case DW_TAG_rvalue_reference_type:
+    case DW_TAG_reference_type:
     case DW_TAG_pointer_type:
       if(auto ty = GetDebugType(type.type_index))
       {
         if(!name)
           name = ty->getName().str().c_str();
         auto pname = std::string("p<") + name;
-        if(pname.back() == '*') // strip one pointer indirection layer off
+        if(pname.back() == '*' || pname.back() == '&') // strip one pointer indirection layer off
           pname.pop_back();
 
         auto member =
@@ -232,20 +239,6 @@ llvm::DIType* DebugPDB::GetDebugType(size_t index, llvm::DIType* parent)
                                                    llvm::DINode::FlagZero, 0, _dbuilder->getOrCreateArray({ member }));
         int r;
         kh_put_intset(_deferred, index, &r);
-      }
-      break;
-    case DW_TAG_rvalue_reference_type:
-    case DW_TAG_reference_type:
-      if(auto ty = GetDebugType(type.type_index))
-        types[index] = _dbuilder->createReferenceType(type.tag, ty, type.bit_size, type.byte_align << 3, llvm::None);
-      break;
-    case DW_TAG_ptr_to_member_type:
-      if(type.n_types == 2)
-      {
-        auto base = GetDebugType(type.types[1]);
-        auto cls  = GetDebugType(type.types[0]);
-        if(base && cls)
-          types[index] = _dbuilder->createMemberPointerType(base, cls, type.bit_size, type.byte_align << 3);
       }
       break;
     }
@@ -268,17 +261,19 @@ void DebugPDB::Finalize()
     auto& type = sourcemap->x_innative_types[index];
     if(auto ty = GetDebugType(type.type_index))
     {
+      // We cannot rely on the base type actually having a name, so we strip p<> from the name we know we have.
+      auto name = types[index]->getName().str();
+      name      = name.substr(2, name.size() - 3);
       std::string aux;
       _context->natvis +=
-        FormatString(true,
-                     "<Type Name = \"{0}\"><DisplayString>{*({2}*)({1}.m0+(unsigned int)this)}</DisplayString><Expand>",
-                     types[index]->getName(), expr[0]->getVariable()->getName(), ty->getName());
+        FormatString(true, "<Type Name=\"{0}\"><DisplayString>{*({2}*)({1}.m0+(unsigned int)this)}</DisplayString><Expand>",
+                     types[index]->getName(), expr[0]->getVariable()->getName(), name);
 
       if(auto composite = llvm::dyn_cast<llvm::DICompositeType>(ty))
       {
         std::string expansion = "<Expand>";
-        aux += FormatString(true, "<Type Name = \"{2}\"><DisplayString>{{", types[index]->getName(),
-                            expr[0]->getVariable()->getName(), ty->getName());
+        aux += FormatString(true, "<Type Name=\"{2}\"><DisplayString>{{", types[index]->getName(),
+                            expr[0]->getVariable()->getName(), name);
         for(const auto& e : composite->getElements())
           if(auto element = llvm::dyn_cast<llvm::DIDerivedType>(e))
           {
@@ -286,7 +281,8 @@ void DebugPDB::Finalize()
             {
               if(auto basetype = llvm::dyn_cast<llvm::DICompositeType>(element->getBaseType());
                  basetype->getElements().size() > 0)
-                if(auto baseelement = llvm::dyn_cast<llvm::DIType>(basetype->getElements()[0]); !baseelement->getName().empty())
+                if(auto baseelement = llvm::dyn_cast<llvm::DIType>(basetype->getElements()[0]);
+                   !baseelement->getName().empty())
                   aux += FormatString(true, "{0}:{({1})({2}.m0 + *(unsigned int*)(&amp;this->{0}))}}", element->getName(),
                                       baseelement->getName(), expr[0]->getVariable()->getName(),
                                       element->getOffsetInBits() / 8);
@@ -295,6 +291,12 @@ void DebugPDB::Finalize()
                 FormatString(true, "<Item Name=\"{0}\">({1}*)(*(unsigned int*)({2}.m0+(unsigned int)this+{3}))</Item>",
                              element->getName(), element->getBaseType()->getName(), expr[0]->getVariable()->getName(),
                              element->getOffsetInBits() / 8);
+            }
+            else if(element->getTag() == DW_TAG_inheritance)
+            {
+              _context->natvis += FormatString(true, "<Item Name=\"[{0}]\">*({0}*)({1}.m0+(unsigned int)this+{2})</Item>",
+                                               element->getBaseType()->getName(), expr[0]->getVariable()->getName(),
+                                               element->getOffsetInBits() / 8);
             }
             else
             {
@@ -313,8 +315,8 @@ void DebugPDB::Finalize()
         aux += "</Expand></Type>";
       }
       else
-        _context->natvis += FormatString(true, "<ExpandedItem>*({0}*)({1}.m0+(unsigned int)this)</ExpandedItem>",
-                                         ty->getName(), expr[0]->getVariable()->getName());
+        _context->natvis += FormatString(true, "<ExpandedItem>*({0}*)({1}.m0+(unsigned int)this)</ExpandedItem>", name,
+                                         expr[0]->getVariable()->getName());
       _context->natvis += "</Expand></Type>";
       _context->natvis += aux;
     }

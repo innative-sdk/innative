@@ -22,7 +22,7 @@ void Benchmarks::Run(FILE* out)
   fprintf(out, "%-*s %-*s %-*s %-*s %-*s %-*s\n", COLUMNS[0], "---------", COLUMNS[1], "-----", COLUMNS[2], "-----",
           COLUMNS[3], "------", COLUMNS[4], "-------", COLUMNS[5], "------");
 
-  DoBenchmark<int, int>(out, "../scripts/benchmark_debug.wasm", "debug", COLUMNS, &Benchmarks::debug, 20);
+  //DoBenchmark<int, int>(out, "../scripts/benchmark_debug.wasm", "debug", COLUMNS, &Benchmarks::debug, 20);
   DoBenchmark<int, int>(out, "../scripts/benchmark_n-body.wasm", "nbody", COLUMNS, &Benchmarks::nbody, 11);
   DoBenchmark<int64_t, int64_t>(out, "../scripts/benchmark_fib.wasm", "fib", COLUMNS, &Benchmarks::fib, 37);
   DoBenchmark<int, int>(out, "../scripts/benchmark_fannkuch-redux.wasm", "fannkuch_redux", COLUMNS,

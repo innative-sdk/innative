@@ -35,6 +35,10 @@ using BB   = llvm::BasicBlock;
 using std::string;
 using std::vector;
 
+// In order to directly call external functions we default to C
+// static const llvm::CallingConv::ID InternalConvention = llvm::CallingConv::Fast;
+static const llvm::CallingConv::ID InternalConvention = llvm::CallingConv::C;
+
 llvmTy* GetLLVMType(varsint7 type, code::Context& context)
 {
   switch(type)
@@ -94,12 +98,12 @@ Func* CompileFunction(FunctionType& signature, const Twine& name, code::Context&
   Func* fn = Func::Create(GetFunctionType(signature, context),
                           ((context.env.flags & ENV_DEBUG) ? Func::ExternalLinkage : Func::InternalLinkage), name,
                           context.llvm);
-  fn->setCallingConv(llvm::CallingConv::Fast);
+  fn->setCallingConv(InternalConvention);
   return fn;
 }
 
 Func* HomogenizeFunction(Func* fn, llvm::StringRef name, const Twine& canonical, code::Context& context,
-                         llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv = llvm::CallingConv::C)
+                         llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv)
 {
   vector<llvmTy*> types; // Replace the entire function with just i64
   for(auto& arg : fn->args())
@@ -163,9 +167,22 @@ Func* HomogenizeFunction(Func* fn, llvm::StringRef name, const Twine& canonical,
   return wrap;
 }
 
+Func* PassFunction(Func* fn, llvm::StringRef name, const Twine& canonical, code::Context& context,
+                   llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv)
+{
+  // fn->setCallingConv(callconv);
+  fn->setLinkage(linkage);
+  fn->setName(canonical);
+  if(fn->getSubprogram())
+    context.debugger->FunctionDebugInfo(fn, name, context.env.optimize != 0, true, true, fn->getSubprogram()->getFile(),
+                                        fn->getSubprogram()->getLine(), 0);
+
+  context.debugger->SetSPLocation(context.builder, fn->getSubprogram());
+  return fn;
+}
+
 Func* WrapFunction(Func* fn, llvm::StringRef name, const Twine& canonical, code::Context& context,
-                   llvm::GlobalValue::LinkageTypes linkage = Func::ExternalLinkage,
-                   llvm::CallingConv::ID callconv          = llvm::CallingConv::Fast)
+                   llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv)
 {
   Func* wrap = Func::Create(fn->getFunctionType(), linkage, canonical, context.llvm);
   wrap->setCallingConv(callconv);
@@ -900,8 +917,8 @@ IN_ERROR CompileIndirectCall(varuint32 index, code::Context& context)
 
   if(context.env.flags & ENV_DISABLE_TAIL_CALL) // In strict mode, tail call optimization is not allowed
     call->setTailCallKind(CallInst::TCK_NoTail);
-  call->setCallingConv(llvm::CallingConv::Fast); // Always pick the fast convention, because the table is always set to
-                                                 // the internal wrapping function
+  call->setCallingConv(InternalConvention); // Always pick the fast convention, because the table is always set to
+                                            // the internal wrapping function
 
   if(!ty->getReturnType()->isVoidTy()) // Only push a value if there is one to push
     return PushReturn(context, call);
@@ -2081,7 +2098,8 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
         auto canonical  = !(debugname.get()) ? context.functions.back().imported->getName() + DIVIDER "internal" :
                                               debugname.str() + ("_" + std::to_string(i));
         auto name = !(debugname.get()) ? std::string(imp.export_name.str()) + DIVIDER "internal" : debugname.str();
-        WrapFunction(context.functions.back().imported, name, canonical, context);
+        WrapFunction(context.functions.back().imported, name, canonical, context, Func::ExternalLinkage,
+                     InternalConvention);
       }
     }
   }
@@ -2184,7 +2202,7 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
     context.debugger->FuncDecl(context.functions.back().internal, context.m.code.funcbody[i].column, decl.debug.line,
                                context.env.optimize != 0);
     auto name      = context.functions.back().internal->getName() + DIVIDER "external";
-    auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &HomogenizeFunction : &WrapFunction;
+    auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &HomogenizeFunction : &PassFunction;
     ExportFunction(context.functions.back(), wrapperfn, &context, name.str(), name, context.context);
   }
 
@@ -2528,7 +2546,7 @@ void AddMemLocalCaching(code::Context& ctx)
 void ResolveModuleExports(const Environment* env, Module* root, llvm::LLVMContext& context)
 {
   // Set ENV_HOMOGENIZE_FUNCTIONS flag appropriately.
-  auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &HomogenizeFunction : &WrapFunction;
+  auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &HomogenizeFunction : &PassFunction;
 
   for(varuint32 j = 0; j < root->exportsection.n_exports; ++j)
   {

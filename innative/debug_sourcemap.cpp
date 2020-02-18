@@ -362,7 +362,7 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
       llvm::SmallVector<llvm::Metadata*, 8> params;
       for(size_t i = 0; i < type.n_types; ++i)
         params.push_back(GetDebugType(type.types[i]));
-
+      
       types[index] = _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(params), GetFlags(type.flags));
       break;
     }

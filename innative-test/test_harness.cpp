@@ -16,6 +16,7 @@ TestHarness::~TestHarness()
 size_t TestHarness::Run(FILE* out)
 {
   std::pair<const char*, void (TestHarness::*)()> tests[] = { { "wasm_malloc.c", &TestHarness::test_malloc },
+                                                              { "funcreplace.c", &TestHarness::test_funcreplace },
                                                               { "internal.c", &TestHarness::test_environment },
                                                               { "queue.h", &TestHarness::test_queue },
                                                               { "stack.h", &TestHarness::test_stack },

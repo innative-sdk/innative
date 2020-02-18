@@ -104,7 +104,7 @@ typedef struct IN__EXPORTS
   /// \param name A name to use for the module. If the module data does not contain a name, this will be used.
   /// \param err A pointer to an integer that receives an error code should the function fail. Not valid until
   /// FinalizeEnvironment() is called.
-  void (*AddModule)(Environment* env, const void* data, uint64_t size, const char* name, int* err);
+  void (*AddModule)(Environment* env, const void* data, size_t size, const char* name, int* err);
 
   /// Adds a prebuilt module object to the environment. This happens synchronously, regardless of multithreading flags.
   /// \param env The environment to modify.
@@ -128,7 +128,7 @@ typedef struct IN__EXPORTS
   /// \param size The length of the memory that the
   /// data pointer points to. If size is 0, the data pointer is actually a null terminated UTF8 encoded file path.
   /// \param name_override Resolves all functions in this embedded library as raw C functions with the given module name.
-  enum IN_ERROR (*AddEmbedding)(Environment* env, int tag, const void* data, uint64_t size, const char* name_override);
+  enum IN_ERROR (*AddEmbedding)(Environment* env, int tag, const void* data, size_t size, const char* name_override);
 
   /// Tells the linker to export the given symbol from the resulting binary.
   /// \param env The environment to modify.
@@ -203,6 +203,15 @@ typedef struct IN__EXPORTS
   /// \param module_index The index of the module the table is exported from.
   /// \param global_index The index of the linear memory to retrieve.
   INGlobal* (*LoadMemoryIndex)(void* assembly, uint32_t module_index, uint32_t memory_index);
+
+  /// Searches for an exported function with the given name in a table and replaces the function pointer with another.
+  /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
+  /// \param module_index The index of the module the table is exported from.
+  /// \param table_index The index of the table to search through.
+  /// \param function Name of the exported function to search the table for.
+  /// \param replace function pointer to another function that should replace the function's table entry
+  int (*ReplaceTableFuncPtr)(void* assembly, uint32_t module_index, uint32_t table_index, const char* function,
+                                     IN_Entrypoint replace);
 
   /// Clears the environment's cached compilation of a given module, or clears the entire cache if the module is a null
   /// pointer.
