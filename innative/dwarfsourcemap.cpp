@@ -172,7 +172,7 @@ size_t GetSourceMapName(Environment* env, kh_mapname_t* h, const char* name, siz
     int r;
     iter = kh_put_mapname(h, innative::utility::AllocString(*env, name), &r);
     if(r < 0)
-      return false;
+      return (size_t)~0;
     kh_value(h, iter) = index++;
 
     if(index > map->n_names)
@@ -236,10 +236,18 @@ size_t GetSourceMapTypeRef(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t
   return (size_t)~0;
 }
 
+const char* GetDieName(const DWARFDie& die, kh_maptype_t* maptype, size_t n_names, SourceMap* map)
+{
+  if(auto iter = kh_get_maptype(maptype, SourceMapType{ die.getOffset() }); kh_exist2(maptype, iter))
+    if(kh_key(maptype, iter).name_index < n_names)
+      return map->names[kh_key(maptype, iter).name_index];
+  return 0;
+}
+
 size_t GetSourceMapType(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t* maptype, size_t& n_types,
                         const DWARFDie& die, kh_mapname_t* mapname, size_t& n_names, SourceMap* map)
 {
-  if(!isType(die.getTag()) && die.getTag() != DW_TAG_template_value_parameter &&
+  if(!isType(die.getTag()) && die.getTag() != DW_TAG_template_value_parameter && die.getTag() != DW_TAG_formal_parameter &&
      die.getTag() != DW_TAG_template_type_parameter && die.getTag() != DW_TAG_member && die.getTag() != DW_TAG_inheritance)
     return (size_t)~0;
   int r;
@@ -248,7 +256,6 @@ size_t GetSourceMapType(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t* m
   {
     kh_value(maptype, iter)            = n_types++;
     kh_key(maptype, iter).tag          = die.getTag();
-    auto tag                           = die.getTag();
     kh_key(maptype, iter).bit_size     = 0;
     kh_key(maptype, iter).byte_align   = 0;
     kh_key(maptype, iter).name_index   = (size_t)~0;
@@ -310,9 +317,8 @@ size_t GetSourceMapType(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t* m
         if(DWARFDie innerdie = AsReferencedDIE(innertype.getValue(), unit))
         {
           kh_key(maptype, iter).type_index = GetSourceMapType(env, unit, maptype, n_types, innerdie, mapname, n_names, map);
-          if(auto iter = kh_get_maptype(maptype, SourceMapType{ innerdie.getOffset() }); kh_exist2(maptype, iter))
-            if(kh_key(maptype, iter).name_index < n_names)
-              basename = map->names[kh_key(maptype, iter).name_index];
+          if(auto diename = GetDieName(innerdie, maptype, n_names, map); diename != nullptr)
+            basename = diename;
         }
       } // If this is false, it's a void type, like const void*
 
@@ -373,6 +379,55 @@ size_t GetSourceMapType(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t* m
       map->n_innative_enumerators = n_enumerators;
       break;
     }
+    case DW_TAG_subroutine_type:
+    {
+      std::string funcptr = "void";
+
+      if(auto innertype = die.find(DW_AT_type))
+      {
+        if(DWARFDie innerdie = AsReferencedDIE(innertype.getValue(), unit))
+        {
+          kh_key(maptype, iter).type_index = GetSourceMapType(env, unit, maptype, n_types, innerdie, mapname, n_names, map);
+          if(auto diename = GetDieName(innerdie, maptype, n_names, map); diename != nullptr)
+            funcptr = diename;
+        }
+      }
+      funcptr += '(';
+
+      size_t count = 0;
+      for(auto& child : die.children())
+        count++;
+
+      kh_key(maptype, iter).types = innative::utility::tmalloc<size_t>(*env, count);
+      if(!kh_key(maptype, iter).types)
+        return (size_t)~0;
+
+      bool first = true;
+      for(auto& child : die.children())
+      {
+        if(!first)
+          funcptr += ", ";
+        auto ty = GetSourceMapType(env, unit, maptype, n_types, child, mapname, n_names, map);
+        if(ty != (size_t)~0)
+          kh_key(maptype, iter).types[kh_key(maptype, iter).n_types++] = ty;
+
+        if(auto innertype = child.find(DW_AT_type))
+          if(DWARFDie innerdie = AsReferencedDIE(innertype.getValue(), unit))
+            if(auto diename = GetDieName(innerdie, maptype, n_names, map); diename != nullptr)
+              funcptr += diename;
+
+        if(auto diename = GetDieName(child, maptype, n_names, map); diename != nullptr)
+        {
+          funcptr += ' ';
+          funcptr += diename;
+        }
+      }
+      funcptr += ')';
+
+      if(kh_key(maptype, iter).name_index == (size_t)~0)
+        kh_key(maptype, iter).name_index = GetSourceMapName(env, mapname, funcptr.c_str(), n_names, map);
+      break;
+    }
     case DW_TAG_class_type:
     case DW_TAG_structure_type:
     case DW_TAG_union_type:
@@ -396,6 +451,7 @@ size_t GetSourceMapType(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t* m
       }
       break;
     }
+    case DW_TAG_formal_parameter:
     case DW_TAG_template_value_parameter:
     case DW_TAG_template_type_parameter:
       if(auto innertype = die.find(DW_AT_type))
@@ -460,7 +516,7 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
     }
     if(auto location = die.find(DW_AT_location))
     {
-      auto fn_parse_expr = [](Environment* env, llvm::DWARFExpression& expr, SourceMapVariable& v) {
+      auto fn_parse_expr = [](Environment* env, llvm::DWARFExpression& expr, SourceMapVariable& v) -> bool {
         v.n_expr = 0;
         for(auto& op : expr)
           v.n_expr += 1 + (op.getDescription().Op[0] != llvm::DWARFExpression::Operation::SizeNA) +
@@ -478,6 +534,8 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
             if(op.getDescription().Op[i] != llvm::DWARFExpression::Operation::SizeNA)
               v.p_expr[v.n_expr++] = op.getRawOperand(i);
         }
+
+        return true;
       };
 
       if(Optional<llvm::ArrayRef<uint8_t>> block = location->getAsBlock())
@@ -525,7 +583,7 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
           assert(a.SectionIndex == ~0ULL);
           if(a.valid() && a.LowPC != 0)
             map->x_innative_ranges[n_ranges++] =
-              SourceMapRange{ n_scopes, a.LowPC + code_section_offset, a.HighPC + code_section_offset };
+              SourceMapRange{ n_scopes, (size_t)a.LowPC + code_section_offset, (size_t)a.HighPC + code_section_offset };
         }
       }
       ++n_scopes;
@@ -551,8 +609,9 @@ bool ParseDWARFChild(Environment* env, DWARFContext& DICtx, SourceMap* map, Sour
         {
           assert(a.SectionIndex == ~0ULL);
           if(a.valid())
-            map->x_innative_functions[n_functions].range =
-              SourceMapRange{ die.getOffset(), a.LowPC + code_section_offset, a.HighPC + code_section_offset };
+            map->x_innative_functions[n_functions].range = SourceMapRange{ die.getOffset(),
+                                                                           (size_t)a.LowPC + code_section_offset,
+                                                                           (size_t)a.HighPC + code_section_offset };
         }
       }
 

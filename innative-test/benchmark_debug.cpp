@@ -9,9 +9,6 @@ struct Complex
 
   Complex() : a(0), b(1.0) {}
   explicit Complex(int i) : a(i), b(1.0) {}
-  // virtual ~Complex() {}
-  // virtual float get() { return a + b; }
-  // virtual float get2() { return c->b + b; }
 };
 
 /*struct Foo : virtual Complex
@@ -30,9 +27,13 @@ struct FooBar : Foo, Bar
 {
   FooBar(int i) { a = i; }
   virtual ~FooBar() {}
-  float get3() { return get2(); }
   virtual float get() { return Foo::get(); }
 };*/
+
+struct FooBar : Complex
+{
+  long long d;
+};
 
 extern "C" int converti(Complex* p) { return (int)p; }
 extern "C" float convertf(int p) { return (float)p; }
@@ -42,9 +43,13 @@ extern "C" int addi(int a, int b) { return a + b; }
   #include "benchmark.h"
   #include <stdint.h>
 
+float (*testfn)(int) = nullptr;
+
 int Benchmarks::debug(int n)
 #else
   #include <stdint.h>
+
+__attribute__((visibility("default"))) float (*testfn)(int) = nullptr;
 
 extern "C" void* malloc(uintptr_t n);
 extern "C" __attribute__((visibility("default"))) int debug(int n)
@@ -55,7 +60,14 @@ extern "C" __attribute__((visibility("default"))) int debug(int n)
   f[1].a     = n * n;
   f[2].a     = n * n * n;
 
-  f[0].b = convertf(converti(&f[1]));
+  testfn = &convertf;
+  f[0].b = (*testfn)(converti(&f[1]));
+
+  auto& f1 = f[1].a;
+  f1       = n * n + 1;
+
+  FooBar* foobar = (FooBar*)malloc(sizeof(FooBar));
+  f[0].c         = foobar;
 
   f[0].c = &f[1];
   f[1].c = &f[2];

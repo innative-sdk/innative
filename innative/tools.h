@@ -29,6 +29,8 @@ namespace innative {
   IN_Entrypoint LoadTableIndex(void* assembly, uint32_t module_index, uint32_t table_index, varuint32 function_index);
   INGlobal* LoadGlobalIndex(void* assembly, uint32_t module_index, uint32_t global_index);
   INGlobal* LoadMemoryIndex(void* assembly, uint32_t module_index, uint32_t memory_index);
+  int ReplaceTableFuncPtr(void* assembly, uint32_t module_index, uint32_t table_index, const char* function,
+                          IN_Entrypoint replace);
   void* LoadAssembly(const char* file);
   void FreeAssembly(void* assembly);
   const char* GetTypeEncodingString(int type_encoding);
