@@ -204,7 +204,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>llvm.h</PrecompiledHeaderFile>
-      <PrecompiledHeaderOutputFile>%(PrecompiledHeaderFile)-$(Platform)-d.pch</PrecompiledHeaderOutputFile>
+      <PrecompiledHeaderOutputFile>%(PrecompiledHeaderFile)-$(Platform)-d-s.pch</PrecompiledHeaderOutputFile>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ProgramDataBaseFileName>$(OutDir)$(TargetName).pdb</ProgramDataBaseFileName>
     </ClCompile>
@@ -253,7 +253,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>llvm.h</PrecompiledHeaderFile>
-      <PrecompiledHeaderOutputFile>%(PrecompiledHeaderFile)-$(Platform)-d.pch</PrecompiledHeaderOutputFile>
+      <PrecompiledHeaderOutputFile>%(PrecompiledHeaderFile)-$(Platform)-d-s.pch</PrecompiledHeaderOutputFile>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ProgramDataBaseFileName>$(OutDir)$(TargetName).pdb</ProgramDataBaseFileName>
     </ClCompile>
@@ -309,7 +309,7 @@
       <ExceptionHandling>false</ExceptionHandling>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>llvm.h</PrecompiledHeaderFile>
-      <PrecompiledHeaderOutputFile>%(PrecompiledHeaderFile)-$(Platform).pch</PrecompiledHeaderOutputFile>
+      <PrecompiledHeaderOutputFile>%(PrecompiledHeaderFile)-$(Platform)-s.pch</PrecompiledHeaderOutputFile>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ProgramDataBaseFileName>$(OutDir)$(TargetName).pdb</ProgramDataBaseFileName>
     </ClCompile>
@@ -370,7 +370,7 @@
       <ExceptionHandling>false</ExceptionHandling>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>llvm.h</PrecompiledHeaderFile>
-      <PrecompiledHeaderOutputFile>%(PrecompiledHeaderFile)-$(Platform).pch</PrecompiledHeaderOutputFile>
+      <PrecompiledHeaderOutputFile>%(PrecompiledHeaderFile)-$(Platform)-s.pch</PrecompiledHeaderOutputFile>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ProgramDataBaseFileName>$(OutDir)$(TargetName).pdb</ProgramDataBaseFileName>
     </ClCompile>

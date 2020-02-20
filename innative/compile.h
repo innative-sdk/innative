@@ -132,10 +132,10 @@ namespace innative {
     {
       if(sizeof...(Args) == (N - i))
       {
-        if constexpr(std::is_base_of_v<llvm::StringRef, std::decay_t<Arg>> ||
-                     std::is_base_of_v<std::string, std::decay_t<Arg>>)
+        if constexpr(std::is_base_of<llvm::StringRef, std::decay_t<Arg>>::value ||
+                     std::is_base_of<std::string, std::decay_t<Arg>>::value)
           return PrintReplacement(xml, out, n, arg.data(), arg.size());
-        else if constexpr(std::is_integral_v<std::decay_t<Arg>>)
+        else if constexpr(std::is_integral<std::decay_t<Arg>>::value)
         {
           char format[5] = { '%' };
           switch(sizeof(Arg))
@@ -147,12 +147,12 @@ namespace innative {
             format[2] = 'l';
             break;
           }
-          strcat(format, std::is_unsigned_v<std::decay_t<Arg>> ? "u" : "i");
+          strcat(format, std::is_unsigned<std::decay_t<Arg>>::value ? "u" : "i");
           return snprintf(out, n, format, std::forward<Arg>(arg));
         }
-        else if constexpr(std::is_floating_point_v<Arg>)
+        else if constexpr(std::is_floating_point<Arg>::value)
           return snprintf(out, n, "%f", std::forward<Arg>(arg));
-        else if constexpr(std::is_same_v<std::decay_t<Arg>, const char*>)
+        else if constexpr(std::is_same<std::decay_t<Arg>::value, const char*>)
           return PrintReplacement(xml, out, n, std::forward<Arg>(arg), 0);
         else
           return snprintf(out, n, "{INVALID TYPE %i}", i);
