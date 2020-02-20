@@ -35,7 +35,7 @@ struct FooBar : Complex
   long long d;
 };
 
-extern "C" int converti(Complex* p) { return (int)p; }
+extern "C" int converti(Complex* p) { return (int)(long long)p; }
 extern "C" float convertf(int p) { return (float)p; }
 extern "C" int addi(int a, int b) { return a + b; }
 

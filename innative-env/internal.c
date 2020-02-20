@@ -311,6 +311,7 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
   {
     if(max > 0 && (i + *size) > max)
       return 0;
+#ifdef IN_PLATFORM_WIN32
     if(max > 0) // If a maximum was specified, the memory should've been reserved already
     {
       // It's fine if we aren't aligned on page bounderies because the function won't fail on already committed pages.
@@ -340,7 +341,6 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
 
       i += sz;
     }
-#ifdef IN_PLATFORM_WIN32
 #elif defined(IN_PLATFORM_POSIX)
     i += *size;
     info = _innative_syscall(SYSCALL_MREMAP, info, *size, i, MREMAP_MAYMOVE, 0, 0);
