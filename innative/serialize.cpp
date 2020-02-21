@@ -1,4 +1,4 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "serialize.h"
@@ -568,8 +568,11 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out, bool 
       out << GetTokenString(tokens[i].id);
       break;
     case WatTokens::DEBUG_INFO:
-      out << "\n";
-      out << '[' << tokens[i].line << ':' << tokens[i].column << ']';
+      if(emitdebug)
+      {
+        out << "\n";
+        out << '[' << tokens[i].line << ':' << tokens[i].column << ']';
+      }
       break;
     case WatTokens::CLOSE: --depth;
     default: out << GetTokenString(tokens[i].id); break;

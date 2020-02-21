@@ -1,5 +1,7 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
+
+#include <stdint.h>
 
 struct Complex
 {
@@ -35,25 +37,20 @@ struct FooBar : Complex
   long long d;
 };
 
+enum FOOENUM
+{
+  ENUM_FAKE = 0,
+  ENUM_USED = 1,
+};
+
 extern "C" int converti(Complex* p) { return (int)(long long)p; }
 extern "C" float convertf(int p) { return (float)p; }
 extern "C" int addi(int a, int b) { return a + b; }
 
-#ifdef TESTING_WASM
-  #include "benchmark.h"
-  #include <stdint.h>
-
 float (*testfn)(int) = nullptr;
-
-int Benchmarks::debug(int n)
-#else
-  #include <stdint.h>
-
-__attribute__((visibility("default"))) float (*testfn)(int) = nullptr;
 
 extern "C" void* malloc(uintptr_t n);
 extern "C" __attribute__((visibility("default"))) int debug(int n)
-#endif
 {
   Complex* f = (Complex*)malloc(sizeof(Complex) * 3);
   f[0].a     = n + 1;
@@ -64,7 +61,7 @@ extern "C" __attribute__((visibility("default"))) int debug(int n)
   f[0].b = (*testfn)(converti(&f[1]));
 
   auto& f1 = f[1].a;
-  f1       = n * n + 1;
+  f1       = n * n + ENUM_USED;
 
   FooBar* foobar = (FooBar*)malloc(sizeof(FooBar));
   f[0].c         = foobar;
