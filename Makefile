@@ -69,7 +69,7 @@ uninstall:
 	$(RM) -r $(DESTDIR)$(PREFIX)/include/innative
 	$(RM) $(DESTDIR)$(PREFIX)/lib/libinnative.so
 
-benchmarks: benchmark_n-body.wasm benchmark_fib.wasm benchmark_fannkuch-redux.wasm
+benchmarks: benchmark_n-body.wasm benchmark_fib.wasm benchmark_fannkuch-redux.wasm debugging.wasm funcreplace.wasm
 
 %.wasm: innative-test/%.cpp
 	$(CC) $< -g -o scripts/$@ wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 -Xlinker --no-entry -Xlinker --export-dynamic

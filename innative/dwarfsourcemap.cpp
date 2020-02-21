@@ -1,4 +1,4 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "llvm.h"
@@ -186,19 +186,25 @@ size_t GetSourceMapName(Environment* env, kh_mapname_t* h, const char* name, siz
   return kh_value(h, iter);
 };
 
+template<llvm::dwarf::Attribute Attr1, llvm::dwarf::Attribute Attr2, typename T>
+void ResolveBitAttribute(const DWARFDie& die, T& target)
+{
+  if(auto attr = die.find(Attr1))
+    target = attr->getAsUnsignedConstant().getValueOr(0);
+  if(auto attr = die.find(Attr2))
+    target = attr->getAsUnsignedConstant().getValueOr(0) << 3;
+}
+
 void ResolveDWARFBitSize(const DWARFDie& die, kh_maptype_t* maptype, khint_t iter)
 {
-  if(auto line = die.find(DW_AT_bit_size))
-    kh_key(maptype, iter).bit_size = (unsigned short)line->getAsUnsignedConstant().getValue();
-  if(auto line = die.find(DW_AT_byte_size))
-    kh_key(maptype, iter).bit_size = (unsigned short)(line->getAsUnsignedConstant().getValue() << 3);
+  return ResolveBitAttribute<DW_AT_bit_size, DW_AT_byte_size>(die, kh_key(maptype, iter).bit_size);
 }
 
 void ResolveDWARFTypeFlags(const DWARFDie& die, kh_maptype_t* maptype, khint_t iter)
 {
   if(auto flag = die.find(DW_AT_accessibility))
   {
-    switch(flag->getAsUnsignedConstant().getValue())
+    switch(flag->getAsUnsignedConstant().getValueOr(0))
     {
     case DW_ACCESS_public: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PUBLIC; break;
     case DW_ACCESS_private: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PRIVATE; break;
@@ -207,7 +213,7 @@ void ResolveDWARFTypeFlags(const DWARFDie& die, kh_maptype_t* maptype, khint_t i
   }
   if(auto flag = die.find(DW_AT_virtuality))
   {
-    switch(flag->getAsUnsignedConstant().getValue())
+    switch(flag->getAsUnsignedConstant().getValueOr(0))
     {
     case DW_VIRTUALITY_virtual: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_VIRTUAL; break;
     case DW_VIRTUALITY_pure_virtual: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PURE_VIRTUAL; break;
@@ -296,17 +302,17 @@ size_t GetSourceMapType(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t* m
     if(auto file = die.find(DW_AT_decl_file))
     {
       if(const auto* LT = unit.getContext().getLineTableForUnit(&unit))
-        kh_key(maptype, iter).source_index = file->getAsUnsignedConstant().getValue() - 1;
+        kh_key(maptype, iter).source_index = file->getAsUnsignedConstant().getValueOr(0) - 1;
     }
     if(auto line = die.find(DW_AT_decl_line))
-      kh_key(maptype, iter).original_line = line->getAsUnsignedConstant().getValue();
+      kh_key(maptype, iter).original_line = line->getAsUnsignedConstant().getValueOr(0);
     if(auto name = die.find(DW_AT_name))
     {
       if(auto attr = name->getAsCString())
         kh_key(maptype, iter).name_index = GetSourceMapName(env, mapname, attr.getValue(), n_names, map);
     }
     if(auto align = die.find(DW_AT_alignment))
-      kh_key(maptype, iter).byte_align = (unsigned short)align->getAsUnsignedConstant().getValue();
+      kh_key(maptype, iter).byte_align = (unsigned short)align->getAsUnsignedConstant().getValueOr(0);
     ResolveDWARFTypeFlags(die, maptype, iter);
 
     // Figure out what kind of type this is
@@ -318,14 +324,11 @@ size_t GetSourceMapType(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t* m
       ResolveDWARFBitSize(die, maptype, iter);
 
       if(auto line = die.find(DW_AT_encoding))
-        kh_key(maptype, iter).encoding = (unsigned short)line->getAsUnsignedConstant().getValue();
+        kh_key(maptype, iter).encoding = (unsigned short)line->getAsUnsignedConstant().getValueOr(0);
 
       break;
     case DW_TAG_array_type:
-      if(auto stride = die.find(DW_AT_bit_stride))
-        kh_key(maptype, iter).bit_stride = stride->getAsUnsignedConstant().getValue();
-      if(auto stride = die.find(DW_AT_byte_stride))
-        kh_key(maptype, iter).bit_stride = (stride->getAsUnsignedConstant().getValue() << 3);
+      ResolveBitAttribute<DW_AT_bit_stride, DW_AT_byte_stride>(die, kh_key(maptype, iter).bit_stride);
       ResolveDWARFBitSize(die, maptype, iter);
     case DW_TAG_atomic_type:
     case DW_TAG_const_type:
@@ -401,7 +404,11 @@ size_t GetSourceMapType(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t* m
 
         auto& e = map->x_innative_enumerators[n_enumerators];
         if(auto value = child.find(DW_AT_const_value))
-          e.val = value->getAsUnsignedConstant().getValue();
+          if(auto constant = value->getAsUnsignedConstant())
+            e.val = constant.getValue();
+          else
+            e.val = value->getAsSignedConstant().getValueOr(0);
+
         if(auto name = child.find(DW_AT_name))
         {
           if(auto attr = name->getAsCString())
@@ -502,11 +509,7 @@ size_t GetSourceMapType(Environment* env, llvm::DWARFUnit& unit, kh_maptype_t* m
     case DW_TAG_member:
     case DW_TAG_inheritance:
       ResolveDWARFBitSize(die, maptype, iter);
-
-      if(auto offset = die.find(DW_AT_bit_offset))
-        kh_key(maptype, iter).bit_offset = offset->getAsUnsignedConstant().getValue();
-      if(auto offset = die.find(DW_AT_data_member_location))
-        kh_key(maptype, iter).bit_offset = offset->getAsUnsignedConstant().getValue() << 3;
+      ResolveBitAttribute<DW_AT_bit_offset, DW_AT_data_member_location>(die, kh_key(maptype, iter).bit_offset);
       if(auto innertype = die.find(DW_AT_type))
       {
         kh_key(maptype, iter).n_types = 1;

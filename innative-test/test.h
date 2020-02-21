@@ -1,4 +1,4 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef IN__TEST_H
@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <vector>
 #include <string.h>
+#include <functional>
 #include "../innative/filesys.h"
 
 class TestHarness
@@ -20,6 +21,7 @@ public:
   size_t Run(FILE* out);
   void test_allocator();
   void test_environment();
+  void test_debug();
   void test_queue();
   void test_stack();
   void test_stream();
@@ -33,7 +35,11 @@ public:
   void test_embedding();
   void test_errors();
   void test_funcreplace();
-  int CompileWASM(const path& file);
+  int CompileWASM(const path& file, int (TestHarness::*fn)(void*), const char* system = nullptr,
+                  std::function<int(Environment*)> preprocess = std::function<int(Environment*)>());
+  int do_debug(void* assembly);
+  int do_funcreplace(void* assembly);
+  int do_embedding(void* assembly);
 
   inline std::pair<uint32_t, uint32_t> Results()
   {

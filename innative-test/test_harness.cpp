@@ -1,4 +1,4 @@
-// Copyright (c)2019 Black Sphere Studios
+// Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "test.h"
@@ -16,6 +16,7 @@ TestHarness::~TestHarness()
 size_t TestHarness::Run(FILE* out)
 {
   std::pair<const char*, void (TestHarness::*)()> tests[] = { { "wasm_malloc.c", &TestHarness::test_malloc },
+                                                              { "debugging.cpp", &TestHarness::test_debug },
                                                               { "funcreplace.c", &TestHarness::test_funcreplace },
                                                               { "internal.c", &TestHarness::test_environment },
                                                               { "queue.h", &TestHarness::test_queue },
@@ -51,13 +52,13 @@ size_t TestHarness::Run(FILE* out)
   }
 
   {
-    TEST(CompileWASM("../scripts/test-h.wat") == ERR_SUCCESS);
+    TEST(CompileWASM("../scripts/test-h.wat", nullptr) == ERR_SUCCESS);
 #ifdef IN_PLATFORM_WIN32
   #ifdef IN_32BIT
-    TEST(CompileWASM("../scripts/test-win32-cref.wat") == ERR_SUCCESS);
+    TEST(CompileWASM("../scripts/test-win32-cref.wat", nullptr) == ERR_SUCCESS);
   #else
-    TEST(CompileWASM("../scripts/test-win64.wat") == ERR_SUCCESS);
-    TEST(CompileWASM("../scripts/test-win64-cref.wat") == ERR_SUCCESS);
+    TEST(CompileWASM("../scripts/test-win64.wat", nullptr) == ERR_SUCCESS);
+    TEST(CompileWASM("../scripts/test-win64-cref.wat", nullptr) == ERR_SUCCESS);
   #endif
 #endif
 
@@ -72,7 +73,8 @@ size_t TestHarness::Run(FILE* out)
   return failures;
 }
 
-int TestHarness::CompileWASM(const path& file)
+int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), const char* system,
+                             std::function<int(Environment*)> preprocess)
 {
   Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);
   env->flags       = ENV_ENABLE_WAT | ENV_LIBRARY;
@@ -80,11 +82,18 @@ int TestHarness::CompileWASM(const path& file)
   env->features    = ENV_FEATURE_ALL;
   env->log         = stdout;
   env->loglevel    = _loglevel;
+  if(system)
+    env->system = system;
 
 #ifdef IN_DEBUG
   env->flags |= ENV_DEBUG;
   env->optimize = ENV_OPTIMIZE_O0;
 #endif
+
+  if(preprocess)
+    if(int err = preprocess(env); err < 0)
+      return err;
+
   int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
   if(err < 0)
   {
@@ -92,7 +101,7 @@ int TestHarness::CompileWASM(const path& file)
     return err;
   }
 
-  (*_exports.AddModule)(env, file.u8string().c_str(), 0, file.filename().u8string().c_str(), &err);
+  (*_exports.AddModule)(env, file.u8string().c_str(), 0, file.stem().u8string().c_str(), &err);
   if(err < 0)
   {
     (*_exports.DestroyEnvironment)(env);
@@ -118,7 +127,9 @@ int TestHarness::CompileWASM(const path& file)
   void* m = (*_exports.LoadAssembly)(out.u8string().c_str());
   if(!m)
     return ERR_FATAL_INVALID_MODULE;
+  if(fn)
+    err = (this->*fn)(m);
   (*_exports.FreeAssembly)(m);
 
-  return ERR_SUCCESS;
+  return err;
 }
