@@ -216,6 +216,7 @@ IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, siz
   embed->tag      = tag;
   embed->data     = data;
   embed->size     = size;
+  embed->name     = name_override;
   embed->next     = env->embeddings;
   env->embeddings = embed;
 
@@ -309,7 +310,24 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
           return ERR_FATAL_OUT_OF_MEMORY;
 
         memcpy(id.get(), symbol.data(), symbol.size());
-        kh_put_cimport(env->cimports, id, &r);
+        Identifier key = id;
+        if(embed->name) // if we have a name, we are pretending all functions have name_WASM_function formatting
+        {
+          std::string s(key.str()); // check if the function name already has name_WASM_
+          if(s.compare(0, strlen(embed->name), embed->name) || s.compare(strlen(embed->name), 6, "_WASM_"))
+          {
+            // if not, allocate a new identifier and append it
+            s = embed->name + ("_WASM_" + s);
+            key.resize((varuint32)s.size(), true, *env);
+            if(!key.get() || s.size() > std::numeric_limits<varuint32>::max())
+              return ERR_FATAL_OUT_OF_MEMORY;
+
+            memcpy(key.get(), s.data(), s.size());
+          }
+        }
+
+        auto iter                     = kh_put_cimport(env->cimports, key, &r);
+        kh_value(env->cimports, iter) = key.get() != id.get();
         // On windows, because .lib files map to DLLs, they can have duplicate symbols from the dependent DLLs
         // that the DLL itself depends on. As a result, we cannot enforce this check until the linker resolves the symbols.
 #ifndef IN_PLATFORM_WIN32
@@ -788,7 +806,7 @@ INGlobal* innative::LoadMemoryIndex(void* assembly, uint32_t module_index, uint3
   return (INGlobal*)metadata->memories[memory_index];
 }
 int innative::ReplaceTableFuncPtr(void* assembly, uint32_t module_index, uint32_t table_index, const char* function,
-                                          IN_Entrypoint replace)
+                                  IN_Entrypoint replace)
 {
   auto metadata = GetModuleMetadata(assembly, module_index);
   if(!metadata)

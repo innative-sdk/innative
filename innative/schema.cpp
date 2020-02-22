@@ -4,6 +4,13 @@
 #include "innative/schema.h"
 #include "util.h"
 
+#define str_pair_hash_equal(a, b) ((strcmp(a, b) == 0) && (strcmp(strchr(a, 0) + 1, strchr(b, 0) + 1) == 0))
+
+__KHASH_IMPL(exports, , Identifier, varuint32, 1, innative::internal::__ac_X31_hash_bytearray, kh_int_hash_equal);
+__KHASH_IMPL(cimport, , Identifier, char, 1, innative::internal::__ac_X31_hash_bytearray, kh_int_hash_equal);
+__KHASH_IMPL(modules, , Identifier, size_t, 1, innative::internal::__ac_X31_hash_bytearray, kh_int_hash_equal);
+__KHASH_IMPL(modulepair, , kh_cstr_t, FunctionType, 1, innative::internal::__ac_X31_hash_string_pair, str_pair_hash_equal);
+
 bool IN_WASM_BYTE_ARRAY::operator==(const IN_WASM_BYTE_ARRAY& r) const
 {
   if(r.n_bytes != n_bytes)

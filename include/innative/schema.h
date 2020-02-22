@@ -230,6 +230,7 @@ typedef struct IN_WASM_IMPORT
   Identifier export_name;
   varuint7 kind;  // WASM_KIND
   bool alternate; // Internal flag - if true, this import's canonical name always includes the module name
+  bool ignore;
   union
   {
     FunctionDesc func_desc;
