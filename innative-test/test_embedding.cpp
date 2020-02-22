@@ -13,8 +13,8 @@ using namespace innative;
 #endif
 int TestHarness::do_embedding(void* assembly)
 {
-  constexpr int i       = 4;
-  constexpr int j       = 2;
+  constexpr int i = 4;
+  constexpr int j = 2;
 
   int (*test)(int, int) = (int (*)(int, int))(*_exports.LoadFunction)(assembly, "embedded", "test");
   TEST(test != nullptr);
@@ -28,20 +28,28 @@ int TestHarness::do_embedding(void* assembly)
 void TestHarness::test_embedding()
 {
   const char* embed = TEST_EMBEDDING;
-  size_t embedsz        = 0;
-
-  auto lambda = [&](Environment* env) -> int {
+  size_t embedsz    = 0;
+  const char* sys   = "env";
+  auto lambda       = [&](Environment* env) -> int {
     int err = (*_exports.AddWhitelist)(env, "env", "my_factorial");
     TEST(!err);
 
-    err = (*_exports.AddEmbedding)(env, 0, embed, embedsz, 0);
+    err = (*_exports.AddEmbedding)(env, 0, embed, embedsz, sys);
     TEST(!err);
 
     return err;
   };
-  CompileWASM("../scripts/embedded.wat", &TestHarness::do_embedding, "env", lambda);
+
+  TEST(CompileWASM("../scripts/embedded.wat", &TestHarness::do_embedding, "", lambda) == ERR_SUCCESS);
+  sys = "env2";
+  TEST(CompileWASM("../scripts/embedded.wat", &TestHarness::do_embedding, "", lambda) != ERR_SUCCESS);
+  sys = "";
+  TEST(CompileWASM("../scripts/embedded.wat", &TestHarness::do_embedding, "", lambda) != ERR_SUCCESS);
+
+  sys = 0;
+  TEST(CompileWASM("../scripts/embedded.wat", &TestHarness::do_embedding, "env", lambda) == ERR_SUCCESS);
 
   auto embedfile = utility::LoadFile(TEST_EMBEDDING, embedsz);
   embed          = (const char*)embedfile.get();
-  CompileWASM("../scripts/embedded.wat", &TestHarness::do_embedding, "env", lambda);
+  TEST(CompileWASM("../scripts/embedded.wat", &TestHarness::do_embedding, "env", lambda) == ERR_SUCCESS);
 }

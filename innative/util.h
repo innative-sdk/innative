@@ -286,7 +286,7 @@ namespace innative {
     // Generates the correct mangled C function name
     inline std::string CanonImportName(const Import& imp, const char* system)
     {
-      if(IsSystemImport(imp.module_name, system) && !imp.alternate) // system module imports are always raw function names
+      if(imp.ignore || (IsSystemImport(imp.module_name, system) && !imp.alternate)) // system module imports are always raw function names
         return CanonicalName(StringSpan{ 0, 0 }, StringSpan::From(imp.export_name));
       return CanonicalName(StringSpan::From(imp.module_name), StringSpan::From(imp.export_name));
     }

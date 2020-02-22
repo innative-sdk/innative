@@ -12,9 +12,6 @@ using namespace innative;
 using namespace utility;
 using namespace internal;
 
-__KHASH_IMPL(exports, , Identifier, varuint32, 1, __ac_X31_hash_bytearray, kh_int_hash_equal);
-__KHASH_IMPL(modules, , Identifier, size_t, 1, __ac_X31_hash_bytearray, kh_int_hash_equal);
-
 namespace innative {
   namespace internal {
     IN_FORCEINLINE IN_ERROR ParseVarUInt32(Stream& s, varuint32& target)
