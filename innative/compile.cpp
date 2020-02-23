@@ -7,9 +7,7 @@
 #include "optimize.h"
 #include "intrinsic.h"
 #include "compile.h"
-#include "debug_pdb.h"
-#include "debug_sourcemap.h"
-#include "debug_wat.h"
+#include "debug.h"
 #include "link.h"
 #include "innative/export.h"
 #include "stack.h"
@@ -2012,18 +2010,9 @@ IN_ERROR CompileModule(Environment* env, code::Context& context, varuint32 m_idx
   context.llvm->setDataLayout(context.machine->createDataLayout());
   context.intptrty = context.builder.getIntPtrTy(context.llvm->getDataLayout(), 0);
 
-  if(env->flags & ENV_DEBUG)
-  {
-    if(!context.m.filepath)
-      return ERR_FATAL_FILE_ERROR;
-    if(context.m.sourcemap)
-      context.debugger.reset(
-        new code::DebugPDB(context.m.sourcemap, &context, *context.llvm, context.m.name.str(), context.m.filepath));
-    else
-      context.debugger.reset(new code::DebugWat(&context, *context.llvm, context.m.name.str(), context.m.filepath));
-  }
-  else
-    context.debugger.reset(new code::Debugger());
+  context.debugger.reset(code::Debugger::Create(context));
+  if(!context.debugger)
+    return ERR_FATAL_FILE_ERROR;
 
   // Define a unique init function for performing module initialization
   context.init =

@@ -26,7 +26,7 @@ using namespace llvm::dwarf;
 #define XML(x)  TEXT(#x)
 
 DebugPDB::DebugPDB(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath) :
-  DebugSourceMap(s, context, m, name, filepath), _uid(0), _deferred(kh_init_intset())
+  DebugSourceMap(s, context, m, name, filepath, ENV_DEBUG_PDB), _uid(0), _deferred(kh_init_intset())
 {}
 DebugPDB::~DebugPDB() { kh_destroy_intset(_deferred); }
 

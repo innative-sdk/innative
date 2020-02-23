@@ -34,6 +34,7 @@ namespace innative {
                              llvm::DIFile* file, unsigned int line, unsigned int col, llvm::DISubroutineType* subtype = 0);
       void SetSPLocation(llvm::IRBuilder<>& builder, llvm::DISubprogram* sp);
 
+      static Debugger* Create(code::Context& context);
       static llvm::DIFile::ChecksumKind ComputeChecksum(llvm::StringRef data, llvm::SmallString<32>& Checksum);
       static llvm::DILocation* GetSPLocation(llvm::LLVMContext& context, llvm::DISubprogram* sp);
       static std::string GenFlagString(const Environment& env);
@@ -46,7 +47,7 @@ namespace innative {
       llvm::DILocalScope* _curscope;
 
     protected:
-      Debugger(Context* context, llvm::Module& m, const char* name, const char* filepath);
+      Debugger(Context* context, llvm::Module& m, const char* name, const char* filepath, char target);
 
       Context* _context;
       llvm::DIBuilder* _dbuilder;

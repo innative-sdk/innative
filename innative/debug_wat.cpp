@@ -9,7 +9,7 @@ using namespace innative;
 using namespace code;
 
 DebugWat::DebugWat(Context* context, llvm::Module& m, const char* name, const char* filepath) :
-  Debugger(context, m, name, filepath)
+  Debugger(context, m, name, filepath, context->env.flags & ENV_DEBUG)
 {}
 
 void DebugWat::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized)

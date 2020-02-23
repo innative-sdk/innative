@@ -12,7 +12,7 @@ namespace innative {
     class DebugSourceMap : public Debugger
     {
     public:
-      DebugSourceMap(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath);
+      DebugSourceMap(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath, char target);
       virtual void FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized) override;
       virtual void FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body) override;
       virtual void PostFuncBody(llvm::Function* fn, FunctionBody& body) override;

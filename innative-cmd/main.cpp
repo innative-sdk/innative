@@ -49,6 +49,8 @@ const static std::initializer_list<std::pair<const char*, unsigned int>> FLAG_MA
   { "whitelist", ENV_WHITELIST },
   { "multithreaded", ENV_MULTITHREADED },
   { "debug", ENV_DEBUG },
+  { "debug_pdb", ENV_DEBUG_PDB },
+  { "debug_dwarf", ENV_DEBUG_DWARF },
   { "library", ENV_LIBRARY },
   { "llvm", ENV_EMIT_LLVM },
   { "homogenize", ENV_HOMOGENIZE_FUNCTIONS },
@@ -616,7 +618,7 @@ int main(int argc, char* argv[])
     SourceMap map = { 0 };
     for(auto& input : commandline.inputs)
     {
-      err = DWARFSourceMap(env, &map, commandline.inputs[0], 0);
+      err = ParseDWARF(env, &map, commandline.inputs[0], 0);
       if(err < 0)
         printerr(exports, stderr, "Error parsing file ", commandline.inputs[0], err);
     }
