@@ -5,6 +5,7 @@
 #include "validate.h"
 #include "stream.h"
 #include "util.h"
+#include "DWARFParser.h"
 #include <assert.h>
 #include <algorithm>
 
@@ -867,7 +868,8 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
             return ERR_FATAL_OUT_OF_MEMORY;
           *m.sourcemap = { 0 };
 
-          err = DWARFSourceMap(const_cast<Environment*>(&env), m.sourcemap, externalDebugURL.str(), 0);
+          DWARFParser parser(const_cast<Environment*>(&env), m.sourcemap);
+          err = parser.ParseDWARF(externalDebugURL.str(), 0);
           if(err)
             return err;
         }
@@ -878,7 +880,8 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
             return ERR_FATAL_OUT_OF_MEMORY;
           *m.sourcemap = { 0 };
 
-          err = DWARFSourceMap(const_cast<Environment*>(&env), m.sourcemap, (char*)s.data, s.size);
+          DWARFParser parser(const_cast<Environment*>(&env), m.sourcemap);
+          err = parser.ParseDWARF((char*)s.data, s.size);
           if(m.filepath)
             m.sourcemap->file = m.filepath;
           if(err)

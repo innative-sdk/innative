@@ -13,7 +13,7 @@ using namespace code;
 using namespace llvm::dwarf;
 
 code::DebugDWARF::DebugDWARF(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath) :
-  DebugSourceMap(s, context, m, name, filepath)
+  DebugSourceMap(s, context, m, name, filepath, ENV_DEBUG_DWARF)
 {
 }
 

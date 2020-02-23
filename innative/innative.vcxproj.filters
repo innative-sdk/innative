@@ -75,9 +75,6 @@
     <ClCompile Include="sourcemap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="dwarfsourcemap.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="debug.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -94,6 +91,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="debug_dwarf.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DWARFParser.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -195,6 +195,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="debug_dwarf.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DWARFParser.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -2,7 +2,9 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "llvm.h"
-#include "debug.h"
+#include "debug_pdb.h"
+#include "debug_dwarf.h"
+#include "debug_wat.h"
 #include "constants.h"
 #include "util.h"
 #include "compile.h"
@@ -14,17 +16,19 @@ using namespace utility;
 Debugger::~Debugger() {}
 Debugger::Debugger() : _dbuilder(0), _context(0) {}
 
-Debugger::Debugger(Context* context, llvm::Module& m, const char* name, const char* filepath) :
+Debugger::Debugger(Context* context, llvm::Module& m, const char* name, const char* filepath, char target) :
   _context(context), _dbuilder(new llvm::DIBuilder(m))
 {
+  if(target == ENV_DEBUG)
+    target = llvm::Triple(m.getTargetTriple()).isOSWindows() ? ENV_DEBUG_PDB : ENV_DEBUG_DWARF;
+
   m.addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
-  if(llvm::Triple(m.getTargetTriple()).isOSWindows())
+  if(target == ENV_DEBUG_PDB)
   {
     m.addModuleFlag(llvm::Module::Warning, "CodeView", 1);
     m.addModuleFlag(llvm::Module::Warning, "CodeViewGHash", 1);
   }
-
-  if(llvm::Triple(m.getTargetTriple()).isOSDarwin())
+  else if(llvm::Triple(m.getTargetTriple()).isOSDarwin())
     m.addModuleFlag(llvm::Module::Warning, "Dwarf Version", 2);
 
   path abspath = GetAbsolutePath(GetPath(filepath));
@@ -53,8 +57,7 @@ Debugger::Debugger(Context* context, llvm::Module& m, const char* name, const ch
   diVoid = _dbuilder->createUnspecifiedType("void");
 }
 void Debugger::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized) {}
-void Debugger::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body)
-{}
+void Debugger::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body) {}
 void Debugger::FuncParam(llvm::Function* fn, size_t indice, FunctionDesc& desc) {}
 void Debugger::FuncLocal(llvm::Function* fn, size_t indice, FunctionDesc& desc) {}
 void Debugger::DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t line) {}
@@ -67,7 +70,8 @@ llvm::DIType* Debugger::CreateDebugType(llvm::Type* t)
   if(t->isPointerTy())
   {
     auto base = CreateDebugType(t->getPointerElementType());
-    return _dbuilder->createPointerType(base, _context->intptrty->getBitWidth(), 0U, llvm::None, std::string(base->getName()) + "*");
+    return _dbuilder->createPointerType(base, _context->intptrty->getBitWidth(), 0U, llvm::None,
+                                        std::string(base->getName()) + "*");
   }
 
   if(t->isFloatTy())
@@ -96,19 +100,20 @@ llvm::DIType* Debugger::CreateDebugType(llvm::Type* t)
       auto elem = CreateDebugType(t->getStructElementType(i));
       offset    = Align<uint64_t>(offset, elem->getAlignInBits());
       members.push_back(_dbuilder->createMemberType(dcu, "m" + std::to_string(i), dunit, 0, elem->getSizeInBits(),
-                                                 elem->getAlignInBits(), offset, llvm::DINode::FlagZero, elem));
+                                                    elem->getAlignInBits(), offset, llvm::DINode::FlagZero, elem));
       offset += elem->getSizeInBits();
       align = std::max(align, elem->getAlignInBits());
     }
 
     return _dbuilder->createStructType(dcu, t->getStructName(), dunit, 0, offset, align, llvm::DINode::FlagZero, nullptr,
-                                      _dbuilder->getOrCreateArray(members));
+                                       _dbuilder->getOrCreateArray(members));
   }
   if(t->isArrayTy())
   {
-    auto elem = CreateDebugType(t->getArrayElementType());
+    auto elem               = CreateDebugType(t->getArrayElementType());
     llvm::Metadata* range[] = { _dbuilder->getOrCreateSubrange(0, t->getArrayNumElements()) };
-    return _dbuilder->createArrayType(elem->getSizeInBits() * t->getArrayNumElements(), elem->getAlignInBits(), elem, _dbuilder->getOrCreateArray(range));
+    return _dbuilder->createArrayType(elem->getSizeInBits() * t->getArrayNumElements(), elem->getAlignInBits(), elem,
+                                      _dbuilder->getOrCreateArray(range));
   }
 
   assert(false);
@@ -122,8 +127,8 @@ llvm::DISubroutineType* Debugger::CreateFunctionDebugType(llvm::FunctionType* fn
     dwarfTys.push_back(CreateDebugType(fn->getParamType(i)));
 
   return _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(dwarfTys), llvm::DINode::FlagZero,
-                                        (callconv == llvm::CallingConv::C) ? llvm::dwarf::DW_CC_normal :
-                                                                             llvm::dwarf::DW_CC_nocall);
+                                         (callconv == llvm::CallingConv::C) ? llvm::dwarf::DW_CC_normal :
+                                                                              llvm::dwarf::DW_CC_nocall);
 }
 
 void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool optimized, bool definition, bool artificial,
@@ -264,4 +269,23 @@ std::string Debugger::GenFlagString(const Environment& env)
   }
 
   return f;
+}
+
+Debugger* Debugger::Create(code::Context& context)
+{
+  if(auto target = context.env.flags & ENV_DEBUG)
+  {
+    if(!context.m.filepath)
+      return 0;
+    if(context.m.sourcemap)
+    {
+      if(target == ENV_DEBUG)
+        target = llvm::Triple(context.llvm->getTargetTriple()).isOSWindows() ? ENV_DEBUG_PDB : ENV_DEBUG_DWARF;
+      if(target == ENV_DEBUG_PDB)
+        return new code::DebugPDB(context.m.sourcemap, &context, *context.llvm, context.m.name.str(), context.m.filepath);
+      return new code::DebugDWARF(context.m.sourcemap, &context, *context.llvm, context.m.name.str(), context.m.filepath);
+    }
+    return new code::DebugWat(&context, *context.llvm, context.m.name.str(), context.m.filepath);
+  }
+  return new code::Debugger();
 }

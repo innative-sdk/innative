@@ -12,8 +12,8 @@ using namespace utility;
 using namespace code;
 using namespace llvm::dwarf;
 
-DebugSourceMap::DebugSourceMap(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath) :
-  sourcemap(s), Debugger(context, m, name, filepath), curscopeindex(0), cursegment(0)
+DebugSourceMap::DebugSourceMap(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath, char target) :
+  sourcemap(s), Debugger(context, m, name, filepath, target), curscopeindex(0), cursegment(0)
 {
   // If we have a sourcemap, check to see if the files exist. If they don't, see if we can reconstruct them
   path root      = GetPath(sourcemap->sourceRoot);
