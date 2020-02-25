@@ -116,7 +116,7 @@ namespace innative {
             *out = str[i];
           break;
         }
-        n = (n > diff) ? n - diff : 0;
+        n = (static_cast<ptrdiff_t>(n) > diff) ? n - diff : 0;
         out += diff;
       }
       return out - start;

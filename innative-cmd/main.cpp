@@ -653,7 +653,7 @@ int main(int argc, char* argv[])
   for(auto item : commandline.whitelist.values)
   {
     char* ctx;
-    char* first  = STRTOK(item.data(), ":", &ctx);
+    char* first  = STRTOK(const_cast<char*>(item.data()), ":", &ctx);
     char* second = STRTOK(NULL, ":", &ctx);
 
     if(!second)

@@ -343,7 +343,7 @@ IN_ERROR sourcemap::ParseRoot(const Environment& env, SourceMap* map, const char
   else if(!STRNICMP(keybegin, "mappings", keyend - keybegin))
     return ParseMapping(env, map, data, end);
   else if(!STRNICMP(keybegin, "x_google_linecount", keyend - keybegin))
-    map->x_google_linecount = ParseNumber(data, end);
+    map->x_google_linecount = static_cast<decltype(map->x_google_linecount)>(ParseNumber(data, end));
   else
     return ERR_MAP_UNKNOWN_KEY;
 

@@ -496,7 +496,7 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, cons
   IN_ERROR err  = ParseVarUInt32(s, f.body_size);
   size_t end    = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
   ptrdiff_t idx = &f - m.code.funcbody;
-  if(idx >= m.function.n_funcdecl)
+  if(idx >= static_cast<ptrdiff_t>(m.function.n_funcdecl))
     return ERR_FUNCTION_BODY_MISMATCH;
 
   auto& sig = m.type.functypes[m.function.funcdecl[idx].type_index];

@@ -1555,7 +1555,7 @@ int WatParser::ParseModule(Environment& env, Module& m, const char* file, Queue<
     case -static_cast<int>(WatTokens::ELEM):
     {
       size_t cache = tokens.GetPosition();
-      tokens.SetPosition(state.deferred[0].func);
+      tokens.SetPosition(static_cast<size_t>(state.deferred[0].func));
 
       TableInit init = { 0 };
       init.index     = static_cast<decltype(init.index)>(state.deferred[0].index);

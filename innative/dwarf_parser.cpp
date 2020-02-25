@@ -594,7 +594,7 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
       if(auto file = die.find(DW_AT_decl_file))
       {
         if(const auto* LT = CU->getContext().getLineTableForUnit(CU))
-          v.source_index = file->getAsUnsignedConstant().getValue() - 1;
+          v.source_index = static_cast<decltype(v.source_index)>(file->getAsUnsignedConstant().getValue() - 1);
       }
 
       if(auto addresses = die.getAddressRanges())

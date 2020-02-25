@@ -315,7 +315,7 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
     if(max > 0) // If a maximum was specified, the memory should've been reserved already
     {
       // It's fine if we aren't aligned on page bounderies because the function won't fail on already committed pages.
-      if(!VirtualAlloc(info + *size, i, MEM_COMMIT, PAGE_READWRITE))
+      if(!VirtualAlloc(info + *size, (size_t)i, MEM_COMMIT, PAGE_READWRITE))
         return 0;
       i += *size;
     }
@@ -325,13 +325,13 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
       SYSTEM_INFO sysinfo;
       GetSystemInfo(&sysinfo);
       size_t sz = *size % sysinfo.dwPageSize;
-      sz        = !sz ? *size : *size + sysinfo.dwPageSize - sz;
+      sz        = (size_t)(!sz ? *size : *size + sysinfo.dwPageSize - sz);
       i -= sz - *size; // Modify i by the difference
 
-      if(!VirtualAlloc(info + sz, i, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE))
+      if(!VirtualAlloc(info + sz, (size_t)i, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE))
       {
         // If this fails, we ran into someone else's memory, so we need to move the entire allocation.
-        void* mem = VirtualAlloc(0, i + sz, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        void* mem = VirtualAlloc(0, (size_t)(i + sz), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
         if(!mem)
           return 0;
         _innative_internal_env_memcpy(mem, info, *size);
@@ -355,10 +355,10 @@ IN_COMPILER_DLLEXPORT extern void* _innative_internal_env_grow_memory(void* p, u
     if(max > 0 && i > max)
       return 0;
 #ifdef IN_PLATFORM_WIN32
-    info = VirtualAlloc(0, !max ? i : max, MEM_RESERVE, PAGE_READWRITE);
+    info = VirtualAlloc(0, (size_t)(!max ? i : max), MEM_RESERVE, PAGE_READWRITE);
     if(!info)
       return 0;
-    if(!VirtualAlloc(info, i, MEM_COMMIT, PAGE_READWRITE))
+    if(!VirtualAlloc(info, (size_t)i, MEM_COMMIT, PAGE_READWRITE))
       return 0;
 
 #elif defined(IN_PLATFORM_POSIX)
