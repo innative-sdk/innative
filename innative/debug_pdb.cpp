@@ -147,7 +147,7 @@ void DebugPDB::UpdateVariables(llvm::Function* fn, SourceMapScope& scope)
       expr = _dbuilder->createExpression(llvm::SmallVector<int64_t, 3>{ DW_OP_deref, DW_OP_stack_value });
 
       if(static_cast<unsigned long long>(v.p_expr[2]) < _context->locals.size())
-        _dbuilder->insertDbgValueIntrinsic(_context->locals[v.p_expr[2]], dparam, expr,
+        _dbuilder->insertDbgValueIntrinsic(_context->locals[static_cast<size_t>(v.p_expr[2])], dparam, expr,
                                            llvm::DILocation::get(_context->context, v.original_line, v.original_column,
                                                                  _curscope),
                                            _context->builder.GetInsertBlock());
@@ -157,7 +157,7 @@ void DebugPDB::UpdateVariables(llvm::Function* fn, SourceMapScope& scope)
       expr = _dbuilder->createExpression(llvm::SmallVector<int64_t, 3>{ DW_OP_deref, DW_OP_stack_value });
 
       if(static_cast<unsigned long long>(v.p_expr[2]) < _context->globals.size())
-        _dbuilder->insertDbgValueIntrinsic(_context->globals[v.p_expr[2]], dparam, expr,
+        _dbuilder->insertDbgValueIntrinsic(_context->globals[static_cast<size_t>(v.p_expr[2])], dparam, expr,
                                            llvm::DILocation::get(_context->context, v.original_line, v.original_column,
                                                                  _curscope),
                                            _context->builder.GetInsertBlock());

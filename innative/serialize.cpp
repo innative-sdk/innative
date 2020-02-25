@@ -547,7 +547,7 @@ void innative::wat::WriteTokens(Queue<WatToken> tokens, std::ostream& out, bool 
           out.put(' ');
       }
       if(tokens[i].u < OPNAMES.size())
-        out << OPNAMES[tokens[i].u];
+        out << OPNAMES[static_cast<size_t>(tokens[i].u)];
       else
         out << "[UNKNOWN OPERATOR: " << tokens[i].u << "]";
       break;
