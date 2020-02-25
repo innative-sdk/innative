@@ -36,7 +36,7 @@ void DebugWat::FuncParam(llvm::Function* fn, size_t index, FunctionDesc& desc)
 
   llvm::DILocalVariable* dparam =
     _dbuilder->createParameterVariable(fn->getSubprogram(), _context->locals.back()->getName(),
-                                       index + 1, // the arg index starts at 1
+                                       static_cast<unsigned int>(index + 1), // the arg index starts at 1
                                        loc->getFile(), loc->getLine(),
                                        CreateDebugType(_context->locals.back()->getAllocatedType()), true);
 
@@ -65,7 +65,7 @@ void DebugWat::DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t
 {
   auto expr = _dbuilder->createExpression(llvm::SmallVector<uint64_t, 1>{ llvm::dwarf::DW_OP_deref });
 
-  v->addDebugInfo(_dbuilder->createGlobalVariableExpression(dcu, name, v->getName(), dunit, (unsigned int)line,
+  v->addDebugInfo(_dbuilder->createGlobalVariableExpression(dcu, name, v->getName(), dunit, static_cast<unsigned int>(line),
                                                             CreateDebugType(v->getType()), !v->hasValidDeclarationLinkage(),
                                                             expr));
 }

@@ -28,7 +28,7 @@ void IN_WASM_BYTE_ARRAY::resize(varuint32 sz, bool terminator, const Environment
       bytes[n_bytes] = 0;
   }
   else
-    bytes = terminator ? (uint8_t*)"" : nullptr;
+    bytes = terminator ? reinterpret_cast<uint8_t*>(const_cast<char*>("")) : nullptr;
 }
 
 void IN_WASM_BYTE_ARRAY::discard(varuint32 sz, bool terminator)

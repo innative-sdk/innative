@@ -134,7 +134,10 @@ limitations under the License.
   #define IN_ALIGN(n)           __declspec(align(n))
   #define IN_ALIGNED(sn, n)     IN_ALIGN(n) sn
   #define IN_SSE_ENABLED
-  #define IN_ASSUME(x)    __assume(x)
+  #define IN_ASSUME(x) __assume(x)
+  #ifdef _HAS_EXCEPTIONS
+    #undef _HAS_EXCEPTIONS
+  #endif
   #define _HAS_EXCEPTIONS 0
 #endif
 
@@ -221,6 +224,7 @@ limitations under the License.
   #define FPRINTF(f, ...)             fprintf_s(f, __VA_ARGS__)
   #define SPRINTF(b, c, f, ...)       sprintf_s(b, c, f, __VA_ARGS__)
   #define STRNICMP(a, b, n)           _strnicmp(a, b, n)
+  #define STRCATx0(a, b)              strcat_s(a, b)
 #else
   #define FOPEN(f, path, mode)        f = fopen(path, mode)
   #define STRICMP(a, b)               strcasecmp(a, b)
@@ -228,6 +232,7 @@ limitations under the License.
   #define FPRINTF(f, ...)             fprintf(f, __VA_ARGS__)
   #define SPRINTF(b, c, f, ...)       sprintf(b, f, __VA_ARGS__)
   #define STRNICMP(a, b, n)           strncasecmp(a, b, n)
+  #define STRCATx0(a, b)              strcat(a, b)
 #endif
 
 #endif

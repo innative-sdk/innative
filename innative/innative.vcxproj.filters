@@ -93,7 +93,7 @@
     <ClCompile Include="debug_dwarf.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="DWARFParser.cpp">
+    <ClCompile Include="dwarf_parser.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -197,7 +197,7 @@
     <ClInclude Include="debug_dwarf.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="DWARFParser.h">
+    <ClInclude Include="dwarf_parser.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

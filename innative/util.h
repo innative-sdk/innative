@@ -106,7 +106,7 @@ namespace innative {
 
     inline khint_t __ac_X31_hash_bytearray(const ByteArray& id)
     {
-      const char* s   = (const char*)id.get();
+      const char* s   = reinterpret_cast<const char*>(id.get());
       const char* end = s + id.size();
       khint_t h       = 0;
       if(s < end)
@@ -294,19 +294,19 @@ namespace innative {
     // Generates a whitelist string for a module and export name, which includes calling convention information
     inline size_t CanonWhitelist(const void* module_name, const void* export_name, const char* system, char* out)
     {
-      if(!module_name || !strcmp((const char*)module_name, system)) // system name is normalized to an empty module name
+      if(!module_name || !strcmp(reinterpret_cast<const char*>(module_name), system)) // system name is normalized to an empty module name
         module_name = "";
-      size_t module_len = strlen((const char*)module_name);
-      const char* call  = strchr((const char*)module_name, '!');
+      size_t module_len = strlen(reinterpret_cast<const char*>(module_name));
+      const char* call  = strchr(reinterpret_cast<const char*>(module_name), '!');
       if(call && !strcmp(call, "!C")) // !C is the same as having no calling convention, so we remove it
         module_len -= 2;
 
-      size_t export_len = strlen((const char*)export_name) + 1;
+      size_t export_len = strlen(reinterpret_cast<const char*>(export_name)) + 1;
       if(out)
       {
-        tmemcpy<char>(out, module_len + 1 + export_len, (const char*)module_name, module_len);
+        tmemcpy<char>(out, module_len + 1 + export_len, reinterpret_cast<const char*>(module_name), module_len);
         out[module_len] = 0;
-        tmemcpy<char>(out + module_len + 1, export_len, (const char*)export_name, export_len);
+        tmemcpy<char>(out + module_len + 1, export_len, reinterpret_cast<const char*>(export_name), export_len);
       }
       return module_len + export_len + 1;
     }

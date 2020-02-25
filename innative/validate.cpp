@@ -168,8 +168,8 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
   if(!ValidateIdentifier(imp.export_name))
     AppendError(env, env.errors, m, ERR_INVALID_UTF8_ENCODING, "Identifier not valid UTF8: %s", imp.export_name.str());
 
-  const_cast<Import&>(imp).alternate = false;
-  khint_t iter                       = kh_get_modules(
+  imp.alternate = false;
+  khint_t iter  = kh_get_modules(
     env.modulemap,
     imp.module_name); // WASM modules do not understand !CALL convention appendings, so we use the full name no matter what
   if(iter == kh_end(env.modulemap))
@@ -177,12 +177,13 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
     if(env.cimports)
     {
     RESTART_IMPORT_CHECK:
-      std::string name    = ABIMangle(CanonImportName(imp, env.system), CURRENT_ABI, GetCallingConvention(imp),
+      std::string name = ABIMangle(CanonImportName(imp, env.system), CURRENT_ABI, GetCallingConvention(imp),
                                    !m ? 0 : GetParameterBytes(*m, imp));
-      khiter_t iterimport = kh_get_cimport(env.cimports, Identifier((uint8_t*)name.c_str(), (varuint32)name.size()));
+      khiter_t iterimport =
+        kh_get_cimport(env.cimports, ByteArray::Identifier(name.c_str(), name.size()));
       if(kh_exist2(env.cimports, iterimport))
       {
-        const_cast<Import&>(imp).ignore = kh_value(env.cimports, iterimport); // if true, this is a fake symbol
+        imp.ignore = kh_value(env.cimports, iterimport); // if true, this is a fake symbol
 
         if(env.flags & ENV_WHITELIST)
         {
@@ -209,7 +210,7 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
       }
       else if(!imp.alternate)
       {
-        const_cast<Import&>(imp).alternate = true;
+        imp.alternate = true;
         // We use goto here because the return keywords prevent us from wrapping the whitelist check in a function
         goto RESTART_IMPORT_CHECK;
       }
@@ -1098,7 +1099,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
   n_local = sig.n_params;
   for(varuint32 i = 0; i < body.n_locals; ++i)
     for(varuint32 j = 0; j < body.locals[i].count; ++j)
-    locals[n_local++] = body.locals[i].type;
+      locals[n_local++] = body.locals[i].type;
 
   control.Push({ values.Limit(), ret, OP_block }); // Push the function body block with the function signature
 

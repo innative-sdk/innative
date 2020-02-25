@@ -2,7 +2,7 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "llvm.h"
-#include "DWARFParser.h"
+#include "dwarf_parser.h"
 #include "stream.h"
 
 using llvm::DWARFContext;
@@ -54,7 +54,7 @@ bool DWARFParser::handleBuffer(StringRef Filename, MemoryBufferRef Buffer, Handl
   size_t code_section_offset = 0;
   if(Buffer.getBufferSize() > 8)
   {
-    innative::utility::Stream s = { (uint8_t*)Buffer.getBufferStart(), Buffer.getBufferSize(), 0 };
+    innative::utility::Stream s = { reinterpret_cast<const uint8_t*>(Buffer.getBufferStart()), Buffer.getBufferSize(), 0 };
 
     IN_ERROR err = ERR_SUCCESS;
     if(s.ReadUInt32(err) == INNATIVE_WASM_MAGIC_COOKIE && s.ReadUInt32(err) == INNATIVE_WASM_MAGIC_VERSION)
@@ -133,9 +133,9 @@ DWARFDie DWARFParser::AsReferencedDIE(const DWARFFormValue& V, const llvm::DWARF
   if(auto SpecRef = V.getAsRelativeReference())
   {
     if(SpecRef->Unit)
-      return SpecRef->Unit->getDIEForOffset(SpecRef->Unit->getOffset() + SpecRef->Offset);
-    if(auto SpecUnit = unit.getUnitVector().getUnitForOffset(SpecRef->Offset))
-      return SpecUnit->getDIEForOffset(SpecRef->Offset);
+      return SpecRef->Unit->getDIEForOffset(SpecRef->Unit->getOffset() + static_cast<uint32_t>(SpecRef->Offset));
+    if(auto SpecUnit = unit.getUnitVector().getUnitForOffset(static_cast<uint32_t>(SpecRef->Offset)))
+      return SpecUnit->getDIEForOffset(static_cast<uint32_t>(SpecRef->Offset));
   }
   return DWARFDie();
 }
@@ -167,7 +167,7 @@ void DWARFParser::ResolveDWARFTypeFlags(const DWARFDie& die, khint_t iter)
 {
   if(auto flag = die.find(DW_AT_accessibility))
   {
-    switch(flag->getAsUnsignedConstant().getValueOr(0))
+    switch(flag->getAsUnsignedConstant().getValueOr(0ULL))
     {
     case DW_ACCESS_public: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PUBLIC; break;
     case DW_ACCESS_private: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PRIVATE; break;
@@ -176,7 +176,7 @@ void DWARFParser::ResolveDWARFTypeFlags(const DWARFDie& die, khint_t iter)
   }
   if(auto flag = die.find(DW_AT_virtuality))
   {
-    switch(flag->getAsUnsignedConstant().getValueOr(0))
+    switch(flag->getAsUnsignedConstant().getValueOr(0ULL))
     {
     case DW_VIRTUALITY_virtual: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_VIRTUAL; break;
     case DW_VIRTUALITY_pure_virtual: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PURE_VIRTUAL; break;
@@ -260,17 +260,17 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
     if(auto file = die.find(DW_AT_decl_file))
     {
       if(const auto* LT = unit.getContext().getLineTableForUnit(&unit))
-        kh_key(maptype, iter).source_index = file->getAsUnsignedConstant().getValueOr(0) - 1;
+        kh_key(maptype, iter).source_index = static_cast<size_t>(file->getAsUnsignedConstant().getValueOr(0ULL) - 1);
     }
     if(auto line = die.find(DW_AT_decl_line))
-      kh_key(maptype, iter).original_line = line->getAsUnsignedConstant().getValueOr(0);
+      kh_key(maptype, iter).original_line = static_cast<unsigned int>(line->getAsUnsignedConstant().getValueOr(0ULL));
     if(auto name = die.find(DW_AT_name))
     {
       if(auto attr = name->getAsCString())
         kh_key(maptype, iter).name_index = GetSourceMapName(attr.getValue());
     }
     if(auto align = die.find(DW_AT_alignment))
-      kh_key(maptype, iter).byte_align = (unsigned short)align->getAsUnsignedConstant().getValueOr(0);
+      kh_key(maptype, iter).byte_align = static_cast<unsigned short>(align->getAsUnsignedConstant().getValueOr(0ULL));
     ResolveDWARFTypeFlags(die, iter);
 
     // Figure out what kind of type this is
@@ -282,7 +282,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
       ResolveDWARFBitSize(die, iter);
 
       if(auto line = die.find(DW_AT_encoding))
-        kh_key(maptype, iter).encoding = (unsigned short)line->getAsUnsignedConstant().getValueOr(0);
+        kh_key(maptype, iter).encoding = static_cast<unsigned short>(line->getAsUnsignedConstant().getValueOr(0ULL));
 
       break;
     case DW_TAG_array_type:
@@ -364,7 +364,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
           if(auto constant = value->getAsUnsignedConstant())
             e.val = constant.getValue();
           else
-            e.val = value->getAsSignedConstant().getValueOr(0);
+            e.val = static_cast<uint64_t>(value->getAsSignedConstant().getValueOr(0LL));
 
         if(auto name = child.find(DW_AT_name))
         {
@@ -500,13 +500,13 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
         v.name_index = GetSourceMapName(attr.getValue());
     }
     if(auto line = die.find(DW_AT_decl_line))
-      v.original_line = line->getAsUnsignedConstant().getValue();
+      v.original_line = static_cast<decltype(v.original_line)>(line->getAsUnsignedConstant().getValue());
     if(auto col = die.find(DW_AT_decl_column))
-      v.original_column = col->getAsUnsignedConstant().getValue();
+      v.original_column = static_cast<decltype(v.original_column)>(col->getAsUnsignedConstant().getValue());
     if(auto file = die.find(DW_AT_decl_file))
     {
       if(const auto* LT = CU->getContext().getLineTableForUnit(CU))
-        v.source_index = file->getAsUnsignedConstant().getValue() - 1;
+        v.source_index = static_cast<decltype(v.source_index)>(file->getAsUnsignedConstant().getValue() - 1);
     }
     if(auto location = die.find(DW_AT_location))
     {
@@ -588,7 +588,7 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
       scope   = &v.scope;
 
       if(auto line = die.find(DW_AT_decl_line))
-        v.original_line = line->getAsUnsignedConstant().getValue();
+        v.original_line = static_cast<decltype(v.original_line)>(line->getAsUnsignedConstant().getValue());
       if(auto type = die.find(DW_AT_type))
         v.type_index = GetSourceMapTypeRef(*CU, type.getValue());
       if(auto file = die.find(DW_AT_decl_file))
@@ -794,7 +794,8 @@ enum IN_ERROR DWARFParser::ParseDWARF(const char* obj, size_t len)
   return success ? ERR_SUCCESS : ERR_FATAL_FILE_ERROR;
 }
 
-enum IN_ERROR ParseDWARF(struct IN_WASM_ENVIRONMENT* env, SourceMap* map, const char* obj, size_t len) {
+enum IN_ERROR ParseDWARF(struct IN_WASM_ENVIRONMENT* env, SourceMap* map, const char* obj, size_t len)
+{
   DWARFParser parser(env, map);
   return parser.ParseDWARF(obj, len);
 }

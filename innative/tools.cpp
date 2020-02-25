@@ -18,7 +18,7 @@ using namespace utility;
 
 Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxthreads, const char* arg0)
 {
-  Environment* env = (Environment*)calloc(1, sizeof(Environment));
+  Environment* env = reinterpret_cast<Environment*>(calloc(1, sizeof(Environment)));
   if(env)
   {
     env->modulemap = kh_init_modules();
@@ -90,7 +90,7 @@ void innative::DestroyEnvironment(Environment* env)
 void innative::LoadModule(Environment* env, size_t index, const void* data, size_t size, const char* name, const char* file,
                           int* err)
 {
-  Stream s = { (uint8_t*)data, size, 0 };
+  Stream s = { reinterpret_cast<const uint8_t*>(data), size, 0 };
   std::string fallback;
   if(!name)
   {
@@ -104,7 +104,7 @@ void innative::LoadModule(Environment* env, size_t index, const void* data, size
     *err = innative::ParseWatModule(*env, file, env->modules[index], s.data, size, StringSpan{ name, strlen(name) });
   }
   else
-    *err = ParseModule(s, file, *env, env->modules[index], ByteArray((uint8_t*)name, (varuint32)strlen(name)), env->errors);
+    *err = ParseModule(s, file, *env, env->modules[index], ByteArray::Identifier(name, strlen(name)), env->errors);
 
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
 }
@@ -151,7 +151,7 @@ void innative::AddModule(Environment* env, const void* data, size_t size, const 
   std::unique_ptr<uint8_t[]> data_module;
   if(!size)
   {
-    file        = (const char*)data;
+    file        = reinterpret_cast<const char*>(data);
     data_module = LoadFile(file, size);
     if(data_module.get() == nullptr)
     {
@@ -253,7 +253,7 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
 #endif
 
       if(embed->size)
-        symbols = GetSymbols((const char*)embed->data, (size_t)embed->size, env->log, format);
+        symbols = GetSymbols(reinterpret_cast<const char*>(embed->data), (size_t)embed->size, env->log, format);
       else
       {
         auto testpath = [](FILE* f, const path& file, path& out) -> FILE* {
@@ -267,7 +267,7 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
 
         path envpath(GetPath(env->libpath));
         path rootpath(GetPath(env->rootpath));
-        path src(GetPath((const char*)embed->data));
+        path src(GetPath(reinterpret_cast<const char*>(embed->data)));
         path out;
         FILE* f = 0;
 
@@ -305,7 +305,7 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
       for(auto symbol : symbols)
       {
         Identifier id;
-        id.resize((varuint32)symbol.size(), true, *env);
+        id.resize(static_cast<varuint32>(symbol.size()), true, *env);
         if(!id.get() || symbol.size() > std::numeric_limits<varuint32>::max())
           return ERR_FATAL_OUT_OF_MEMORY;
 
@@ -318,7 +318,7 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
           {
             // if not, allocate a new identifier and append it
             s = embed->name + ("_WASM_" + s);
-            key.resize((varuint32)s.size(), true, *env);
+            key.resize(static_cast<varuint32>(s.size()), true, *env);
             if(!key.get() || s.size() > std::numeric_limits<varuint32>::max())
               return ERR_FATAL_OUT_OF_MEMORY;
 
@@ -391,7 +391,7 @@ IN_Entrypoint innative::LoadFunction(void* assembly, const char* module_name, co
 IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const char* table, varuint32 index)
 {
   INGlobal* ref =
-    (INGlobal*)LoadDLLFunction(assembly, CanonicalName(StringSpan::From(module_name), StringSpan::From(table)).c_str());
+    reinterpret_cast<INGlobal*>(LoadDLLFunction(assembly, CanonicalName(StringSpan::From(module_name), StringSpan::From(table)).c_str()));
   if(ref != nullptr && index < (ref->table.size / sizeof(INTableEntry)))
     return ref->table.entries[index].func;
   return nullptr;
@@ -399,8 +399,8 @@ IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const
 
 INGlobal* innative::LoadGlobal(void* assembly, const char* module_name, const char* export_name)
 {
-  return (INGlobal*)LoadDLLFunction(assembly,
-                                    CanonicalName(StringSpan::From(module_name), StringSpan::From(export_name)).c_str());
+  return reinterpret_cast<INGlobal*>(LoadDLLFunction(assembly,
+                                    CanonicalName(StringSpan::From(module_name), StringSpan::From(export_name)).c_str()));
 }
 
 void* innative::LoadAssembly(const char* file)
@@ -692,8 +692,8 @@ int innative::SetIdentifier(Environment* env, Identifier* identifier, const char
   if(!env || !identifier)
     return ERR_FATAL_NULL_POINTER;
   size_t len = strlen(str);
-  identifier->resize(len, true, *env);
-  tmemcpy<char>((char*)identifier->get(), identifier->size(), str, len);
+  identifier->resize(static_cast<varuint32>(len), true, *env);
+  tmemcpy<char>(reinterpret_cast<char*>(identifier->get()), identifier->size(), str, len);
   return ERR_SUCCESS;
 }
 
@@ -777,8 +777,8 @@ int innative::RemoveModuleReturn(Environment* env, FunctionType* func, varuint32
 
 INModuleMetadata* innative::GetModuleMetadata(void* assembly, uint32_t module_index)
 {
-  return (INModuleMetadata*)LoadDLLFunction(
-    assembly, CanonicalName(StringSpan(), StringSpan::From(IN_METADATA_PREFIX), module_index).c_str());
+  return reinterpret_cast<INModuleMetadata*>(LoadDLLFunction(
+    assembly, CanonicalName(StringSpan(), StringSpan::From(IN_METADATA_PREFIX), module_index).c_str()));
 }
 IN_Entrypoint innative::LoadTableIndex(void* assembly, uint32_t module_index, uint32_t table_index,
                                        varuint32 function_index)
@@ -786,7 +786,7 @@ IN_Entrypoint innative::LoadTableIndex(void* assembly, uint32_t module_index, ui
   auto metadata = GetModuleMetadata(assembly, module_index);
   if(!metadata || table_index >= metadata->n_tables)
     return nullptr;
-  INGlobal* table = (INGlobal*)metadata->tables[table_index];
+  INGlobal* table = reinterpret_cast<INGlobal*>(metadata->tables[table_index]);
   if(function_index < (table->table.size / sizeof(INTableEntry)))
     return table->table.entries[function_index].func;
   return nullptr;
@@ -803,7 +803,7 @@ INGlobal* innative::LoadMemoryIndex(void* assembly, uint32_t module_index, uint3
   auto metadata = GetModuleMetadata(assembly, module_index);
   if(!metadata || memory_index >= metadata->n_memories)
     return nullptr;
-  return (INGlobal*)metadata->memories[memory_index];
+  return reinterpret_cast<INGlobal*>(metadata->memories[memory_index]);
 }
 int innative::ReplaceTableFuncPtr(void* assembly, uint32_t module_index, uint32_t table_index, const char* function,
                                   IN_Entrypoint replace)

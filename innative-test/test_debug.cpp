@@ -21,4 +21,17 @@ int TestHarness::do_debug(void* assembly)
   return ERR_SUCCESS;
 }
 
-void TestHarness::test_debug() { CompileWASM("../scripts/debugging.wasm", &TestHarness::do_debug, "env"); }
+void TestHarness::test_debug()
+{
+  int flags   = ENV_DEBUG_PDB;
+  auto lambda = [&](Environment* env) -> int {
+    env->flags &= ~ENV_DEBUG;
+    env->flags |= flags;
+    return ERR_SUCCESS;
+  };
+
+  CompileWASM("../scripts/debugging.wasm", &TestHarness::do_debug, "env", lambda);
+
+  flags = ENV_DEBUG_DWARF;
+  CompileWASM("../scripts/debugging.wasm", &TestHarness::do_debug, "env", lambda);
+}

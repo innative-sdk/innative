@@ -61,33 +61,7 @@ void DebugPDB::PostFuncBody(llvm::Function* fn, FunctionBody& body)
 
   if(f)
     UpdateVariables(fn, f->scope);
-
-  // clang-format off
-    /*_context->natvis +=  XML(
-          <Type Name="$_n">
-            <DisplayString>{(int*)(benchmark_debug::linearmemory_0.m0 + benchmark_debug::globalvariable_0 + 0xc)}</DisplayString>
-          </Type>
-          <Type Name="$_f">
-            <DisplayString>{(p&lt;Complex&gt;*)(*(unsigned int*)(benchmark_debug::linearmemory_0.m0+benchmark_debug::globalvariable_0+0x8))}</DisplayString>
-            <Expand>
-              <ExpandedItem>(p&lt;Complex&gt;*)(*(unsigned int*)(benchmark_debug::linearmemory_0.m0+benchmark_debug::globalvariable_0+0x8))</ExpandedItem>
-            </Expand>
-          </Type>
-          <Type Name="p&lt;Complex&gt;">
-            <DisplayString>p&lt;Complex&gt;: {(unsigned int)this} | {(benchmark_debug::linearmemory_0.m0+(unsigned int)this)}</DisplayString>
-            <Expand>
-              <Item Name="a">*(int*)(benchmark_debug::linearmemory_0.m0+(unsigned int)this)</Item>
-              <Item Name="b">*(float*)(benchmark_debug::linearmemory_0.m0+(unsigned int)this+4)</Item>
-              <Item Name="c">(p&lt;Complex&gt;*)(*(unsigned int*)(benchmark_debug::linearmemory_0.m0+(unsigned int)this+8))</Item>
-            </Expand>
-          </Type>
-      );*/
-  // clang-format on
 }
-
-void DebugPDB::FuncParam(llvm::Function* fn, size_t index, FunctionDesc& desc) {}
-
-void DebugPDB::FuncLocal(llvm::Function* fn, size_t indice, FunctionDesc& desc) {}
 
 enum
 {

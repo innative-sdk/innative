@@ -18,8 +18,11 @@
 #include <assert.h>
 
 #define kh_exist2(h, x) ((x < kh_end(h)) && kh_exist(h, x))
+#define MUTABLE
 
 #ifdef __cplusplus
+  #undef MUTABLE
+  #define MUTABLE mutable
   #include <string>
 extern "C" {
 #endif
@@ -98,7 +101,7 @@ typedef struct IN_WASM_BYTE_ARRAY
   IN_WASM_BYTE_ARRAY(uint8_t* b, varuint32 n) : n_bytes(n), bytes(b) {}
   inline uint8_t* get() { return bytes; }
   inline const uint8_t* get() const { return bytes; }
-  inline const char* str() const { return !bytes ? "" : (char*)bytes; }
+  inline const char* str() const { return !bytes ? "" : reinterpret_cast<const char*>(bytes); }
   inline varuint32 size() const { return n_bytes; }
   void resize(varuint32 sz, bool terminator, const struct IN_WASM_ENVIRONMENT& env);
   void discard(varuint32 sz, bool terminator);
@@ -114,6 +117,11 @@ typedef struct IN_WASM_BYTE_ARRAY
   {
     assert(i < n_bytes);
     return bytes[i];
+  }
+
+  static IN_WASM_BYTE_ARRAY Identifier(const char* s, size_t l)
+  {
+    return IN_WASM_BYTE_ARRAY(reinterpret_cast<uint8_t*>(const_cast<char*>(s)), static_cast<varuint32>(l));
   }
 
 protected:
@@ -228,9 +236,9 @@ typedef struct IN_WASM_IMPORT
 {
   Identifier module_name;
   Identifier export_name;
-  varuint7 kind;  // WASM_KIND
-  bool alternate; // Internal flag - if true, this import's canonical name always includes the module name
-  bool ignore;
+  varuint7 kind;          // WASM_KIND
+  MUTABLE bool alternate; // Internal flag - if true, this import's canonical name always includes the module name
+  MUTABLE bool ignore;
   union
   {
     FunctionDesc func_desc;
@@ -292,7 +300,7 @@ typedef struct IN_WASM_CUSTOM_SECTION
   varuint7 opcode;
   varuint32 payload;
   Identifier name; // The first thing in a custom section must always be a legal identifier
-  uint8_t* data;
+  const uint8_t* data;
 } CustomSection;
 
 #ifdef __cplusplus
