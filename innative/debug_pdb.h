@@ -19,8 +19,6 @@ namespace innative {
       ~DebugPDB();
       virtual void FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized) override;
       virtual void PostFuncBody(llvm::Function* fn, FunctionBody& body) override;
-      virtual void FuncParam(llvm::Function* fn, size_t indice, FunctionDesc& desc) override;
-      virtual void FuncLocal(llvm::Function* fn, size_t indice, FunctionDesc& desc) override;
       virtual llvm::DIType* GetDebugType(size_t index, llvm::DIType* parent = 0) override;
       virtual void UpdateVariables(llvm::Function* fn, SourceMapScope& scope) override;
       llvm::DIType* StructOffsetType(llvm::DIType* ty, llvm::DIScope* scope, llvm::DIFile* file, llvm::StringRef name,

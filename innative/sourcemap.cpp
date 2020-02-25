@@ -295,8 +295,8 @@ IN_ERROR sourcemap::ParseMapping(const Environment& env, SourceMap* map, const c
 
     map->segments[n].linecolumn      = (line << 32) | (last_column += DecodeVLQ(data));
     map->segments[n].source_index    = last_source_index += DecodeVLQ(data);
-    map->segments[n].original_line   = last_original_line += DecodeVLQ(data);
-    map->segments[n].original_column = last_original_column += DecodeVLQ(data);
+    map->segments[n].original_line   = static_cast<decltype(map->segments[n].original_line)>(last_original_line += DecodeVLQ(data));
+    map->segments[n].original_column = static_cast<decltype(map->segments[n].original_column)>(last_original_column += DecodeVLQ(data));
     map->segments[n].name_index      = last_name_index += DecodeVLQ(data);
 
     if(data >= end)
@@ -327,7 +327,7 @@ IN_ERROR sourcemap::ParseRoot(const Environment& env, SourceMap* map, const char
                               const char*& data, const char* end)
 {
   if(!STRNICMP(keybegin, "version", keyend - keybegin))
-    map->version = ParseNumber(data, end);
+    map->version = static_cast<decltype(map->version)>(ParseNumber(data, end));
   else if(!STRNICMP(keybegin, "file", keyend - keybegin))
     map->file = ParseString(env, data, end);
   else if(!STRNICMP(keybegin, "sourceRoot", keyend - keybegin))
@@ -360,7 +360,7 @@ IN_ERROR ParseSourceMap(const Environment* env, SourceMap* map, const char* data
     f = utility::LoadFile(utility::GetPath(data), sz);
     if(!f)
       return ERR_FATAL_FILE_ERROR;
-    data = (char*)f.get();
+    data = reinterpret_cast<char*>(f.get());
     end  = data + sz;
   }
   else
@@ -483,10 +483,10 @@ void sourcemap::SerializeMapping(const SourceMap* map, FILE* f)
     comma = true;
 
     int32_t diff_column          = (map->segments[i].linecolumn & 0xFFFFFFFF) - last_column;
-    int32_t diff_source_index    = map->segments[i].source_index - last_source_index;
-    int32_t diff_original_line   = map->segments[i].original_line - 1 - last_original_line;
-    int32_t diff_original_column = map->segments[i].original_column - last_original_column;
-    int32_t diff_name_index      = map->segments[i].name_index - last_name_index;
+    int32_t diff_source_index    = static_cast<int32_t>(map->segments[i].source_index - last_source_index);
+    int32_t diff_original_line   = static_cast<int32_t>(map->segments[i].original_line - 1 - last_original_line);
+    int32_t diff_original_column = static_cast<int32_t>(map->segments[i].original_column - last_original_column);
+    int32_t diff_name_index      = static_cast<int32_t>(map->segments[i].name_index - last_name_index);
     last_column                  = (map->segments[i].linecolumn & 0xFFFFFFFF);
     last_source_index            = map->segments[i].source_index;
     last_original_line           = map->segments[i].original_line - 1;

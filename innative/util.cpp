@@ -39,11 +39,11 @@ void* IN_WASM_ALLOCATOR::allocate(size_t n)
         ; // Spin until all reads are done
 
       size_t len = std::max<size_t>(end, 4096) * 2;
-      void* prev = malloc(len);
+      char* prev = reinterpret_cast<char*>(malloc(len));
       if(prev != nullptr)
       {
         list.push_back({ prev, len }); // Add real pointer and size to our destructor list
-        mem.exchange((char*)prev - index,
+        mem.exchange(prev - index,
                      std::memory_order_release); // backtrack to trick the current index into pointing to the right address
       }
       else // If malloc failed, set the memory pointer to NULL, but increase sz anyway to unblock other threads
@@ -58,7 +58,7 @@ void* IN_WASM_ALLOCATOR::allocate(size_t n)
   if(!m) // mem can be NULL if we ran out of memory
     return nullptr;
   commit.fetch_add(n, std::memory_order_acq_rel);
-  return (char*)m + index;
+  return reinterpret_cast<char*>(m) + index;
 }
 
 IN_WASM_ALLOCATOR::~IN_WASM_ALLOCATOR()
@@ -284,7 +284,8 @@ namespace innative {
 #elif defined(IN_PLATFORM_POSIX)
       string buf;
       buf.resize(PATH_MAX);
-      getcwd(const_cast<char*>(buf.data()), buf.capacity());
+      if(!getcwd(const_cast<char*>(buf.data()), buf.capacity()))
+        return path();
       buf.resize(strlen(buf.data()));
 #else
   #error unknown platform
@@ -359,7 +360,7 @@ namespace innative {
     int AddCImport(const Environment& env, const char* id)
     {
       int r;
-      kh_put_cimport(env.cimports, Identifier((uint8_t*)id, (varuint32)strlen(id)), &r);
+      kh_put_cimport(env.cimports, ByteArray::Identifier(id, strlen(id)), &r);
       return r;
     }
 

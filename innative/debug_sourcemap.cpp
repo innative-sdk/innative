@@ -12,7 +12,8 @@ using namespace utility;
 using namespace code;
 using namespace llvm::dwarf;
 
-DebugSourceMap::DebugSourceMap(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath, char target) :
+DebugSourceMap::DebugSourceMap(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath,
+                               char target) :
   sourcemap(s), Debugger(context, m, name, filepath, target), curscopeindex(0), cursegment(0)
 {
   // If we have a sourcemap, check to see if the files exist. If they don't, see if we can reconstruct them
@@ -215,7 +216,7 @@ void DebugSourceMap::DebugIns(llvm::Function* fn, Instruction& i)
 
 void DebugSourceMap::DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t line)
 {
-  v->addDebugInfo(_dbuilder->createGlobalVariableExpression(dcu, name, v->getName(), dunit, (unsigned int)line,
+  v->addDebugInfo(_dbuilder->createGlobalVariableExpression(dcu, name, v->getName(), dunit, static_cast<unsigned int>(line),
                                                             CreateDebugType(v->getType()->getElementType()),
                                                             !v->hasValidDeclarationLinkage(),
                                                             _dbuilder->createExpression()));
@@ -362,7 +363,7 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
       llvm::SmallVector<llvm::Metadata*, 8> params;
       for(size_t i = 0; i < type.n_types; ++i)
         params.push_back(GetDebugType(type.types[i]));
-      
+
       types[index] = _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(params), GetFlags(type.flags));
       break;
     }

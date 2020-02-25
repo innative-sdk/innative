@@ -127,7 +127,8 @@ namespace innative {
   if((t).Size() == 0 || (t).Pop().id != (e)) \
   return (err)
 
-  int ParseWatModule(Environment& env, const char* file, Module& m, uint8_t* data, size_t sz, utility::StringSpan name);
+  int ParseWatModule(Environment& env, const char* file, Module& m, const uint8_t* data, size_t sz,
+                     utility::StringSpan name);
   void WatSkipSection(Queue<WatToken>& tokens, ptrdiff_t count = 1);
   size_t WatLineNumber(const char* start, const char* pos);
 }

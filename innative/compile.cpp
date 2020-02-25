@@ -1242,7 +1242,7 @@ llvm::Value* GetLocal(code::Context& context, varuint32 index)
     return nullptr;
   auto offset = GetLocalOffset(*--i);
   assert(index >= offset);
-  index -= offset;
+  index -= static_cast<decltype(index)>(offset);
   if(!index)
     return *i;
   auto size = llvm::cast<llvm::ConstantInt>((*i)->getArraySize())->getZExtValue();
@@ -2750,8 +2750,6 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   {
     if(env->modules[i].cache->start != nullptr)
     {
-      auto check = env->modules[i].cache->start->getName();
-
       // Catch the case where an import from this module is being called from another module
       Func* stub = mainctx.llvm->getFunction(env->modules[i].cache->start->getName());
       if(!stub)

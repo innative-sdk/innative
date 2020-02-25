@@ -38,7 +38,7 @@ Debugger::Debugger(Context* context, llvm::Module& m, const char* name, const ch
   if(debugfile.get())
   {
     llvm::SmallString<32> checksum;
-    llvm::DIFile::ChecksumKind CSKind = ComputeChecksum(llvm::StringRef((const char*)debugfile.get(), sz), checksum);
+    llvm::DIFile::ChecksumKind CSKind = ComputeChecksum(llvm::StringRef(reinterpret_cast<char*>(debugfile.get()), sz), checksum);
     llvm::DIFile::ChecksumInfo<llvm::StringRef> CSInfo(CSKind, checksum);
     dunit = _dbuilder->createFile(abspath.filename().u8string(), abspath.parent_path().u8string(), CSInfo);
   }

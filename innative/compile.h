@@ -96,7 +96,7 @@ namespace innative {
       if(!str)
         return 0;
       if(!xml)
-        return !len ? snprintf(out, n, "%s", str) : snprintf(out, n, "%.*s", (unsigned int)len, str);
+        return !len ? snprintf(out, n, "%s", str) : snprintf(out, n, "%.*s", static_cast<unsigned int>(len), str);
       if(!len)
         len = strlen(str);
 
@@ -147,12 +147,12 @@ namespace innative {
             format[2] = 'l';
             break;
           }
-          strcat(format, std::is_unsigned<std::decay_t<Arg>>::value ? "u" : "i");
+          STRCATx0(format, std::is_unsigned<std::decay_t<Arg>>::value ? "u" : "i");
           return snprintf(out, n, format, std::forward<Arg>(arg));
         }
         else if constexpr(std::is_floating_point<Arg>::value)
           return snprintf(out, n, "%f", std::forward<Arg>(arg));
-        else if constexpr(std::is_same<std::decay_t<Arg>::value, const char*>)
+        else if constexpr(std::is_same<std::decay_t<Arg>, const char*>::value)
           return PrintReplacement(xml, out, n, std::forward<Arg>(arg), 0);
         else
           return snprintf(out, n, "{INVALID TYPE %i}", i);

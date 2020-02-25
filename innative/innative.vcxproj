@@ -400,7 +400,7 @@
     <ClCompile Include="debug_pdb.cpp" />
     <ClCompile Include="debug_sourcemap.cpp" />
     <ClCompile Include="debug_wat.cpp" />
-    <ClCompile Include="DWARFParser.cpp" />
+    <ClCompile Include="dwarf_parser.cpp" />
     <ClCompile Include="export.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug Static|Win32'">NotUsing</PrecompiledHeader>
@@ -563,7 +563,7 @@
     <ClInclude Include="debug_pdb.h" />
     <ClInclude Include="debug_sourcemap.h" />
     <ClInclude Include="debug_wat.h" />
-    <ClInclude Include="DWARFParser.h" />
+    <ClInclude Include="dwarf_parser.h" />
     <ClInclude Include="filesys.h" />
     <ClInclude Include="intrinsic.h" />
     <ClInclude Include="lexer.h" />

@@ -256,7 +256,7 @@ void innative::AppendIntrinsics(Environment& env)
   int r;
   if(env.cimports)
     for(auto intrinsic : code::intrinsics)
-      kh_put_cimport(env.cimports, Identifier((uint8_t*)intrinsic.name, (varuint32)strlen(intrinsic.name)), &r);
+      kh_put_cimport(env.cimports, ByteArray::Identifier(intrinsic.name, strlen(intrinsic.name)), &r);
 }
 
 int innative::GetParameterBytes(const IN_WASM_MODULE& m, const Import& imp)
@@ -450,7 +450,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
         garbage.emplace_back(embed);
       }
       else
-        cache.emplace_back((const char*)cur->data);
+        cache.emplace_back(reinterpret_cast<const char*>(cur->data));
 
 #ifdef IN_PLATFORM_POSIX
       if(cur->tag == 2)

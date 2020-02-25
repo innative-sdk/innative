@@ -195,7 +195,7 @@ void innative::wat::PushExportToken(Queue<WatToken>& tokens, const Module& m, va
         if(outside)
         {
           tokens.Push(WatToken{ WatTokens::OPEN });
-          tokens.Push(WatToken{ WatTokens((int)WatTokens::FUNC + kind) });
+          tokens.Push(WatToken{ WatTokens(static_cast<int>(WatTokens::FUNC) + kind) });
           tokens.Push(WatToken{ WatTokens::INTEGER, 0, 0, 0, index });
           tokens.Push(
             WatToken{ WatTokens::CLOSE }); // do NOT break here, because you can export a function under multiple names

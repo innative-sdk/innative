@@ -507,7 +507,7 @@ int main(int argc, char* argv[])
     }
 #ifdef IN_PLATFORM_WIN32
     exports.CreateEnvironment = [](unsigned int modules, unsigned int maxthreads, const char* arg0) -> Environment* {
-      Environment* env = (Environment*)calloc(1, sizeof(Environment));
+      Environment* env = reinterpret_cast<Environment*>(calloc(1, sizeof(Environment)));
       if(env)
         env->log = stdout;
       return env;
@@ -516,19 +516,19 @@ int main(int argc, char* argv[])
       if(!size)
       {
         long sz   = 0;
-        auto file = LoadFile((const char*)data, sz);
+        auto file = LoadFile(reinterpret_cast<const char*>(data), sz);
         if(!sz)
           *err = ERR_FATAL_FILE_ERROR;
-        else if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_MODULE, name, 0, file.get(), sz))
+        else if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_MODULE, name, 0, file.get(), static_cast<DWORD>(sz)))
           *err = ERR_FATAL_RESOURCE_ERROR;
       }
-      else if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_MODULE, name, 0, (void*)data, size))
+      else if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_MODULE, name, 0, const_cast<void*>(data), static_cast<DWORD>(size)))
         *err = ERR_FATAL_RESOURCE_ERROR;
     };
 
     exports.AddWhitelist = [](Environment* env, const char* module_name, const char* export_name) -> IN_ERROR {
-      if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_WHITELIST, module_name, 0, (void*)export_name,
-                          strlen(export_name) + 1))
+      if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_WHITELIST, module_name, 0, const_cast<char*>(export_name),
+                          static_cast<DWORD>(strlen(export_name) + 1)))
       {
         std::cout << "Failed to add whitelist entry: " << (!module_name ? "" : module_name) << "|" << export_name
                   << std::endl;
@@ -543,7 +543,7 @@ int main(int argc, char* argv[])
       if(!size)
       {
         long sz  = 0;
-        path src = u8path((const char*)data);
+        path src = u8path(reinterpret_cast<const char*>(data));
         FILE* f;
         FOPEN(f, src.c_str(), "rb");
 
@@ -557,25 +557,25 @@ int main(int argc, char* argv[])
         auto file = LoadFile(src.c_str(), sz);
         if(!sz)
           return ERR_FATAL_FILE_ERROR;
-        if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, file.get(), sz))
+        if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_EMBEDDING, buf, 0, file.get(), sz))
           return ERR_FATAL_RESOURCE_ERROR;
       }
-      else if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_EMBEDDING, buf, 0, (void*)data, size))
+      else if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_EMBEDDING, buf, 0, const_cast<void*>(data), static_cast<DWORD>(size)))
         return ERR_FATAL_RESOURCE_ERROR;
       return ERR_SUCCESS;
     };
     exports.FinalizeEnvironment = [](Environment* env) -> IN_ERROR {
-      if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_FLAGS, "flags", 0, &env->flags, sizeof(env->flags)))
+      if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_FLAGS, "flags", 0, &env->flags, sizeof(env->flags)))
         return ERR_FATAL_RESOURCE_ERROR;
-      if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_FLAGS, "optimize", 0, &env->optimize, sizeof(env->optimize)))
+      if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_FLAGS, "optimize", 0, &env->optimize, sizeof(env->optimize)))
         return ERR_FATAL_RESOURCE_ERROR;
-      if(!UpdateResourceA((HANDLE)env->alloc, WIN32_RESOURCE_FLAGS, "features", 0, &env->features, sizeof(env->features)))
+      if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_FLAGS, "features", 0, &env->features, sizeof(env->features)))
         return ERR_FATAL_RESOURCE_ERROR;
       return ERR_SUCCESS;
     };
     exports.Compile            = [](Environment* env, const char* file) -> IN_ERROR { return ERR_SUCCESS; };
     exports.DestroyEnvironment = [](Environment* env) {
-      if(!EndUpdateResourceA((HANDLE)env->alloc, FALSE))
+      if(!EndUpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), FALSE))
         std::cout << "Failed to end resource update!" << std::endl;
     };
 
@@ -601,7 +601,7 @@ int main(int argc, char* argv[])
     return ERR_UNKNOWN_ENVIRONMENT_ERROR;
 
   // Then create the runtime environment with the module count.
-  Environment* env = (*exports.CreateEnvironment)(commandline.inputs.size(), 0, (!argc ? 0 : argv[0]));
+  Environment* env = (*exports.CreateEnvironment)(static_cast<unsigned int>(commandline.inputs.size()), 0, (!argc ? 0 : argv[0]));
   env->flags       = commandline.flags.value;
   env->features    = ENV_FEATURE_ALL;
   env->optimize    = commandline.flags.optimize;
@@ -630,7 +630,7 @@ int main(int argc, char* argv[])
 
 #ifdef IN_PLATFORM_WIN32
   if(commandline.generate_loader.value)
-    env->alloc = (IN_WASM_ALLOCATOR*)BeginUpdateResourceA(commandline.output_file.value.u8string().c_str(), TRUE);
+    env->alloc = reinterpret_cast<IN_WASM_ALLOCATOR*>(BeginUpdateResourceA(commandline.output_file.value.u8string().c_str(), TRUE));
   if(!env->alloc)
   {
     std::cout << "Failed to begin resource update!" << std::endl;
@@ -653,7 +653,7 @@ int main(int argc, char* argv[])
   for(auto item : commandline.whitelist.values)
   {
     char* ctx;
-    char* first  = STRTOK((char*)item.data(), ":", &ctx);
+    char* first  = STRTOK(item.data(), ":", &ctx);
     char* second = STRTOK(NULL, ":", &ctx);
 
     if(!second)
@@ -753,7 +753,7 @@ int main(int argc, char* argv[])
   if(commandline.wast.size() > 0)
   {
     for(size_t i = 0; i < commandline.wast.size() && !err; ++i)
-      err = (*exports.CompileScript)((const uint8_t*)commandline.wast[i], 0, env, true,
+      err = (*exports.CompileScript)(reinterpret_cast<const uint8_t*>(commandline.wast[i]), 0, env, true,
                                      commandline.output_file.value.parent_path().u8string().c_str());
   }
   else // Attempt to compile. If an error happens, output it and any validation errors to stderr

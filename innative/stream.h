@@ -14,7 +14,7 @@ namespace innative {
     // overhead
     struct Stream
     {
-      uint8_t* data;
+      const uint8_t* data;
       size_t size;
       size_t pos;
 

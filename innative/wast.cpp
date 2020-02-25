@@ -110,12 +110,12 @@ namespace innative {
       {
         switch(result.type)
         {
-        case TE_i32: result.i32 = ((int32_t(*)(Args...))(f))(args...); break;
-        case TE_i64: result.i64 = ((int64_t(*)(Args...))(f))(args...); break;
-        case TE_f32: result.f32 = ((float (*)(Args...))(f))(args...); break;
-        case TE_f64: result.f64 = ((double (*)(Args...))(f))(args...); break;
+        case TE_i32: result.i32 = reinterpret_cast<int32_t (*)(Args...)>(f)(args...); break;
+        case TE_i64: result.i64 = reinterpret_cast<int64_t (*)(Args...)>(f)(args...); break;
+        case TE_f32: result.f32 = reinterpret_cast<float (*)(Args...)>(f)(args...); break;
+        case TE_f64: result.f64 = reinterpret_cast<double (*)(Args...)>(f)(args...); break;
         default: assert(false); result.type = TE_NONE;
-        case TE_void: ((void (*)(Args...))(f))(args...); break;
+        case TE_void: reinterpret_cast<void (*)(Args...)>(f)(args...); break;
         }
       }
     };
@@ -259,11 +259,11 @@ int wat::SetTempName(Environment& env, Module& m)
   static std::atomic_size_t modcount(1); // We can't use n_modules in case a module is malformed
 
   auto buf = std::string(IN_TEMP_PREFIX) + std::to_string(modcount.fetch_add(1, std::memory_order::memory_order_relaxed));
-  m.name.resize((varuint32)buf.size(), true, env);
+  m.name.resize(static_cast<varuint32>(buf.size()), true, env);
   if(!m.name.get())
     return ERR_FATAL_OUT_OF_MEMORY;
 
-  tmemcpy((char*)m.name.get(), m.name.size(), buf.data(), buf.size());
+  tmemcpy(reinterpret_cast<char*>(m.name.get()), m.name.size(), buf.data(), buf.size());
   return ERR_SUCCESS;
 }
 
@@ -291,8 +291,7 @@ int wat::ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname
       if(err = WatParser::WatString(env, binary, tokens.Pop()))
         return err;
     Stream s = { binary.get(), binary.size(), 0 };
-    if(err =
-         ParseModule(s, file.u8string().c_str(), env, m, ByteArray((uint8_t*)name.pos, (varuint32)name.len), env.errors))
+    if(err = ParseModule(s, file.u8string().c_str(), env, m, ByteArray::Identifier(name.pos, name.len), env.errors))
       return err;
     if(name.id == WatTokens::NAME) // Override name if it exists
       if(err = WatParser::ParseName(env, m.name, name))
@@ -329,7 +328,7 @@ int wat::ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname
     khiter_t iter = kh_put_indexname(mapping, { name.pos, name.len }, &r);
     if(!r)
       return ERR_FATAL_DUPLICATE_MODULE_NAME;
-    kh_val(mapping, iter) = (varuint32)env.n_modules - 1;
+    kh_val(mapping, iter) = static_cast<varuint32>(env.n_modules) - 1;
   }
   else // If the module has no name, we must assign a temporary one
     return SetTempName(env, m);
@@ -591,19 +590,19 @@ int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname
     switch(g->type)
     {
     case TE_i32:
-      result.i32  = *(int32_t*)f;
+      result.i32  = *reinterpret_cast<int32_t*>(f);
       result.type = TE_i32;
       break;
     case TE_i64:
-      result.i64  = *(int64_t*)f;
+      result.i64  = *reinterpret_cast<int64_t*>(f);
       result.type = TE_i64;
       break;
     case TE_f32:
-      result.f32  = *(float*)f;
+      result.f32  = *reinterpret_cast<float*>(f);
       result.type = TE_f32;
       break;
     case TE_f64:
-      result.f64  = *(double*)f;
+      result.f64  = *reinterpret_cast<double*>(f);
       result.type = TE_f64;
       break;
     default: return ERR_INVALID_TYPE;
@@ -672,8 +671,8 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
                         const path& output)
 {
   Queue<WatToken> tokens;
-  const char* start = (const char*)data;
-  TokenizeWAT(tokens, start, (const char*)data + sz);
+  const char* start = reinterpret_cast<const char*>(data);
+  TokenizeWAT(tokens, start, start + sz);
   ValidationError* errors = nullptr;
   int counter = 0; // Even if we unload wast.dll, visual studio will keep the .pdb open forever, so we have to generate new
                    // DLLs for each new test section.

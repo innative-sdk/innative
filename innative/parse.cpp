@@ -5,7 +5,7 @@
 #include "validate.h"
 #include "stream.h"
 #include "util.h"
-#include "DWARFParser.h"
+#include "dwarf_parser.h"
 #include <assert.h>
 #include <algorithm>
 
@@ -75,7 +75,7 @@ namespace innative {
     IN_ERROR ParseFunctionLocal(Stream& s, FunctionLocal& entry)
     {
       entry.debug.line   = 1;
-      entry.debug.column = s.pos;
+      entry.debug.column = static_cast<decltype(entry.debug.column)>(s.pos);
       IN_ERROR err       = ParseVarUInt32(s, entry.count);
 
       if(err >= 0)
@@ -162,19 +162,19 @@ IN_ERROR innative::ParseResizableLimits(Stream& s, ResizableLimits& limits)
 IN_ERROR innative::ParseFunctionDesc(utility::Stream& s, FunctionDesc& desc)
 {
   desc.debug.line   = 1;
-  desc.debug.column = s.pos;
+  desc.debug.column = static_cast<decltype(desc.debug.column)>(s.pos);
   return ParseVarUInt32(s, desc.type_index);
 }
 
 IN_ERROR innative::ParseMemoryDesc(Stream& s, MemoryDesc& mem)
 {
-  mem.debug = { 1, (unsigned int)s.pos };
+  mem.debug = { 1, static_cast<decltype(mem.debug.line)>(s.pos) };
   return ParseResizableLimits(s, mem.limits);
 }
 
 IN_ERROR innative::ParseTableDesc(Stream& s, TableDesc& t)
 {
-  t.debug      = { 1, (unsigned int)s.pos };
+  t.debug      = { 1, static_cast<decltype(t.debug.line)>(s.pos) };
   IN_ERROR err = ParseVarSInt7(s, t.element_type);
 
   if(err >= 0)
@@ -185,7 +185,7 @@ IN_ERROR innative::ParseTableDesc(Stream& s, TableDesc& t)
 
 IN_ERROR innative::ParseGlobalDesc(Stream& s, GlobalDesc& g)
 {
-  g.debug      = { 1, (unsigned int)s.pos };
+  g.debug      = { 1, static_cast<decltype(g.debug.line)>(s.pos) };
   IN_ERROR err = ParseVarSInt7(s, g.type);
 
   if(err >= 0 && (err = ParseVarUInt1(s, g.mutability)))
@@ -226,7 +226,7 @@ IN_ERROR innative::ParseImport(Stream& s, Import& i, const Environment& env)
   switch(i.kind)
   {
   case WASM_KIND_FUNCTION:
-    i.func_desc.debug       = { 1, (unsigned int)s.pos };
+    i.func_desc.debug       = { 1, static_cast<decltype(i.func_desc.debug.line)>(s.pos) };
     i.func_desc.param_debug = 0;
     return ParseVarUInt32(s, i.func_desc.type_index);
   case WASM_KIND_TABLE: return ParseTableDesc(s, i.table_desc);
@@ -254,7 +254,7 @@ IN_ERROR innative::ParseExport(Stream& s, Export& e, const Environment& env)
 IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environment& env)
 {
   ins.line     = 1;
-  ins.column   = (unsigned int)s.pos;
+  ins.column   = static_cast<decltype(ins.column)>(s.pos);
   IN_ERROR err = ParseByte(s, ins.opcode);
   if(err < 0)
     return err;
@@ -492,10 +492,10 @@ IN_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const E
 IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, const Environment& env)
 {
   f.line        = 1;
-  f.column      = (unsigned int)s.pos;
+  f.column      = static_cast<decltype(f.column)>(s.pos);
   IN_ERROR err  = ParseVarUInt32(s, f.body_size);
   size_t end    = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
-  varuint32 idx = &f - m.code.funcbody;
+  ptrdiff_t idx = &f - m.code.funcbody;
   if(idx >= m.function.n_funcdecl)
     return ERR_FUNCTION_BODY_MISMATCH;
 
@@ -562,7 +562,7 @@ IN_ERROR innative::ParseNameSectionParam(Stream& s, size_t num, Module& m, Funct
       return ERR_INVALID_LOCAL_INDEX;
 
     debug->line   = 1;
-    debug->column = s.pos;
+    debug->column = static_cast<decltype(debug->column)>(s.pos);
 
     err = ParseByteArray(s, debug->name, true, env);
   }
@@ -881,7 +881,7 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
           *m.sourcemap = { 0 };
 
           DWARFParser parser(const_cast<Environment*>(&env), m.sourcemap);
-          err = parser.ParseDWARF((char*)s.data, s.size);
+          err = parser.ParseDWARF(reinterpret_cast<const char*>(s.data), s.size);
           if(m.filepath)
             m.sourcemap->file = m.filepath;
           if(err)
