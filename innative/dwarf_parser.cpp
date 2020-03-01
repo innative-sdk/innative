@@ -239,6 +239,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
   case DW_TAG_template_value_parameter:
   case DW_TAG_template_type_parameter:
   case DW_TAG_formal_parameter:
+  case DW_TAG_unspecified_parameters:
   case DW_TAG_member:
   case DW_TAG_inheritance:
   case DW_TAG_typedef: break;
@@ -461,7 +462,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
         kh_key(maptype, iter).n_types    = 1;
         kh_key(maptype, iter).type_index = GetSourceMapTypeRef(unit, innertype.getValue());
       }
-      break;
+    case DW_TAG_unspecified_parameters: break;
     case DW_TAG_member:
     case DW_TAG_inheritance:
       ResolveDWARFBitSize(die, iter);
@@ -482,16 +483,18 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
 bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, const DWARFDie& die, llvm::DWARFUnit* CU,
                                   size_t code_section_offset)
 {
-  if(die.getTag() == DW_TAG_variable || die.getTag() == DW_TAG_formal_parameter)
+  auto tag = die.getTag();
+  if(tag == DW_TAG_variable || tag == DW_TAG_formal_parameter || tag == DW_TAG_unspecified_parameters)
   {
     assert(parent != 0);
+    assert(n_variables < map->n_innative_variables);
     parent->variables[parent->n_variables++] = n_variables;
     auto& v                                  = map->x_innative_variables[n_variables];
     v.offset                                 = die.getOffset();
     v.type_index                             = (size_t)~0;
     v.source_index                           = (size_t)~0;
     v.name_index                             = (size_t)~0;
-    v.tag                                    = die.getTag();
+    v.tag                                    = tag;
 
     // Resolve standard attributes for variables or formal parameters
     if(auto name = die.find(DW_AT_name))
@@ -567,8 +570,9 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
   else
   {
     SourceMapScope* scope = 0;
-    if(die.getTag() == DW_TAG_lexical_block)
+    if(tag == DW_TAG_lexical_block)
     {
+      assert(n_functions < map->n_innative_scopes);
       scope = &map->x_innative_scopes[n_scopes];
       if(auto addresses = die.getAddressRanges())
       {
@@ -576,16 +580,23 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
         {
           assert(a.SectionIndex == ~0ULL);
           if(a.valid() && a.LowPC != 0)
+          {
+            assert(n_ranges < map->n_innative_ranges);
             map->x_innative_ranges[n_ranges++] =
               SourceMapRange{ n_scopes, (size_t)a.LowPC + code_section_offset, (size_t)a.HighPC + code_section_offset };
+          }
         }
       }
       ++n_scopes;
     }
-    else
+    else if(tag == DW_TAG_subprogram)
     {
+      assert(n_functions < map->n_innative_functions);
       auto& v = map->x_innative_functions[n_functions];
-      scope   = &v.scope;
+      assert(n_functions < map->n_innative_scopes);
+      scope = &map->x_innative_scopes[n_scopes];
+
+      map->x_innative_functions[n_functions].range.scope = n_scopes;
 
       if(auto line = die.find(DW_AT_decl_line))
         v.original_line = static_cast<decltype(v.original_line)>(line->getAsUnsignedConstant().getValue());
@@ -603,14 +614,16 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
         {
           assert(a.SectionIndex == ~0ULL);
           if(a.valid())
-            map->x_innative_functions[n_functions].range = SourceMapRange{ die.getOffset(),
-                                                                           (size_t)a.LowPC + code_section_offset,
-                                                                           (size_t)a.HighPC + code_section_offset };
+            map->x_innative_functions[n_functions].range =
+              SourceMapRange{ n_scopes, (size_t)a.LowPC + code_section_offset, (size_t)a.HighPC + code_section_offset };
         }
       }
 
+      ++n_scopes;
       ++n_functions;
     }
+    else
+      return false;
 
     scope->name_index = (size_t)~0;
     if(auto name = die.find(DW_AT_name))
@@ -621,7 +634,8 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
 
     scope->n_variables = 0;
     for(auto& child : die.children())
-      scope->n_variables += child.getTag() == DW_TAG_variable || child.getTag() == DW_TAG_formal_parameter;
+      scope->n_variables += child.getTag() == DW_TAG_variable || child.getTag() == DW_TAG_formal_parameter ||
+                            child.getTag() == DW_TAG_unspecified_parameters;
 
     scope->variables   = innative::utility::tmalloc<size_t>(*env, scope->n_variables);
     scope->n_variables = 0;
@@ -698,12 +712,14 @@ bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
 
     for(auto& die : CU->dies())
     {
-      variablecount += die.getTag() == DW_TAG_variable || die.getTag() == DW_TAG_formal_parameter;
+      variablecount += die.getTag() == DW_TAG_variable || die.getTag() == DW_TAG_formal_parameter ||
+                       die.getTag() == DW_TAG_unspecified_parameters;
       globalcount += die.getTag() == DW_TAG_variable && die.getDepth() == 1;
       if(die.getTag() == DW_TAG_lexical_block) // || DW_TAG_inlined_subroutine
         if(auto addresses = DWARFDie(CU.get(), &die).getAddressRanges())
           rangecount += addresses->size();
-      scopecount += die.getTag() == DW_TAG_lexical_block; // || DW_TAG_inlined_subroutine
+      scopecount += die.getTag() == DW_TAG_lexical_block ||
+                    die.getTag() == DW_TAG_subprogram; // || DW_TAG_inlined_subroutine
       functioncount += die.getTag() == DW_TAG_subprogram;
     }
 
@@ -741,10 +757,6 @@ bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
     map->n_innative_ranges    = n_ranges;
   }
 
-  /*resizeSourceMap(env, map->names, map->n_names, n_names);
-  for(khint_t i = 0; i < kh_end(mapname); ++i)
-    if(kh_exist(mapname, i))
-      map->names[kh_value(mapname, i)] = kh_key(mapname, i);*/
   map->n_names = n_names;
 
   resizeSourceMap(map->x_innative_types, map->n_innative_types, n_types);

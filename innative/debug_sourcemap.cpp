@@ -82,12 +82,16 @@ void DebugSourceMap::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned 
     return;
   }
 
-  auto name = (f->scope.name_index < sourcemap->n_names) ? fn->getName() : sourcemap->names[f->scope.name_index];
+  assert(f->range.scope < sourcemap->n_innative_scopes);
+  if(f->range.scope >= sourcemap->n_innative_scopes)
+    return;
+  auto& scope = sourcemap->x_innative_scopes[f->range.scope];
+  auto name = (scope.name_index < sourcemap->n_names) ? fn->getName() : sourcemap->names[scope.name_index];
 
   llvm::SmallVector<llvm::Metadata*, 8> dwarfTys = { GetDebugType(f->type_index) };
-  for(unsigned int i = 0; i < f->scope.n_variables; ++i)
-    if(sourcemap->x_innative_variables[f->scope.variables[i]].tag == DW_TAG_formal_parameter)
-      dwarfTys.push_back(GetDebugType(sourcemap->x_innative_variables[f->scope.variables[i]].type_index));
+  for(unsigned int i = 0; i < scope.n_variables; ++i)
+    if(sourcemap->x_innative_variables[scope.variables[i]].tag == DW_TAG_formal_parameter)
+      dwarfTys.push_back(GetDebugType(sourcemap->x_innative_variables[scope.variables[i]].type_index));
 
   auto subtype =
     _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(dwarfTys), llvm::DINode::FlagZero,

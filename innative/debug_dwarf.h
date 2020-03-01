@@ -13,7 +13,6 @@ namespace innative {
     {
     public:
       DebugDWARF(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath);
-      virtual void FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized) override;
       virtual void PostFuncBody(llvm::Function* fn, FunctionBody& body) override;
       virtual llvm::DIType* GetDebugType(size_t index, llvm::DIType* parent = 0) override;
       virtual void UpdateVariables(llvm::Function* fn, SourceMapScope& scope) override;

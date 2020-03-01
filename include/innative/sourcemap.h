@@ -105,7 +105,6 @@ typedef struct IN_SOURCE_SCOPE
 
 typedef struct IN_SOURCE_FUNCTION
 {
-  SourceMapScope scope;
   SourceMapRange range;
   size_t source_index;
   unsigned int original_line;
