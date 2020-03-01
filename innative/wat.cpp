@@ -1616,7 +1616,8 @@ int innative::ParseWatModule(Environment& env, const char* file, Module& m, cons
   }
 
   if(err < 0)
-    AppendError(env, env.errors, &m, err, "[%s:%zu]", m.name.str(), WatLineNumber(reinterpret_cast<const char*>(data), tokens.Peek().pos));
+    AppendError(env, env.errors, &m, err, "[%s:%zu]", m.name.str(),
+                WatLineNumber(reinterpret_cast<const char*>(data), tokens.Peek().pos));
   return err;
 }
 

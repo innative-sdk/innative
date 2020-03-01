@@ -246,8 +246,15 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
 
   if(index < types.size() && !types[index])
   {
-    const char* name   = type.name_index < sourcemap->n_names ? sourcemap->names[type.name_index] : "";
+    const char* name   = type.name_index < sourcemap->n_names ? sourcemap->names[type.name_index] : 0;
     llvm::DIFile* file = GetSourceFile(type.source_index);
+
+    char namebuf[20] = { 0 };
+    if(!name)
+    {
+      SPRINTF(namebuf, 20, "t#%zu", index);
+      name = namebuf;
+    }
 
     switch(type.tag)
     {

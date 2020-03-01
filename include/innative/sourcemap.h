@@ -57,7 +57,7 @@ typedef struct IN_SOURCE_TYPE
   size_t type_index; // Used for single types or a base type
   union
   {
-    size_t* types;             // Child type indexes
+    size_t* types; // Child type indexes
     size_t* enumerators;
     unsigned short encoding;   // For base types, this is the type encoding
     unsigned short bit_stride; // Used for arrays and some certain other types
@@ -145,7 +145,7 @@ typedef struct IN_SOURCE_MAP
 } SourceMap;
 
 extern IN_COMPILER_DLLEXPORT enum IN_ERROR ParseDWARF(struct IN_WASM_ENVIRONMENT* env, SourceMap* map, const char* obj,
-                                                          size_t len);
+                                                      size_t len);
 enum IN_ERROR ParseSourceMap(const struct IN_WASM_ENVIRONMENT* env, SourceMap* map, const char* data, size_t len);
 enum IN_ERROR SerializeSourceMap(const SourceMap* map, const char* out);
 enum IN_ERROR DumpSourceMap(const SourceMap* map, const char* out);

@@ -30,8 +30,8 @@ void TestHarness::test_debug()
     return ERR_SUCCESS;
   };
 
-  CompileWASM("../scripts/debugging.wasm", &TestHarness::do_debug, "env", lambda);
+  TEST(CompileWASM("../scripts/debugging.wasm", &TestHarness::do_debug, "env", lambda) == ERR_SUCCESS);
 
   flags = ENV_DEBUG_DWARF;
-  CompileWASM("../scripts/debugging.wasm", &TestHarness::do_debug, "env", lambda);
+  TEST(CompileWASM("../scripts/debugging.wasm", &TestHarness::do_debug, "env", lambda) == ERR_SUCCESS);
 }

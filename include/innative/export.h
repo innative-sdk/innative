@@ -211,7 +211,7 @@ typedef struct IN__EXPORTS
   /// \param function Name of the exported function to search the table for.
   /// \param replace function pointer to another function that should replace the function's table entry
   int (*ReplaceTableFuncPtr)(void* assembly, uint32_t module_index, uint32_t table_index, const char* function,
-                                     IN_Entrypoint replace);
+                             IN_Entrypoint replace);
 
   /// Clears the environment's cached compilation of a given module, or clears the entire cache if the module is a null
   /// pointer.

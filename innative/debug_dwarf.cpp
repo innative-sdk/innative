@@ -14,8 +14,7 @@ using namespace llvm::dwarf;
 
 code::DebugDWARF::DebugDWARF(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath) :
   DebugSourceMap(s, context, m, name, filepath, ENV_DEBUG_DWARF)
-{
-}
+{}
 
 void DebugDWARF::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized)
 {
@@ -48,12 +47,11 @@ void DebugDWARF::PostFuncBody(llvm::Function* fn, FunctionBody& body)
 
   if(_context->globals.size() > 0)
   {
-    _dbuilder->insertDeclare(_context->memlocal,
-                             _dbuilder->createAutoVariable(_curscope, "MEMLOCAL", GetSourceFile(f->source_index), 0,
-                                                           _dbuilder->createPointerType(diI32, _context->intptrty->getBitWidth()),
-                                                           true),
-                             _dbuilder->createExpression(), _context->builder.getCurrentDebugLocation(),
-                             _context->builder.GetInsertBlock());
+    _dbuilder->insertDeclare(
+      _context->memlocal,
+      _dbuilder->createAutoVariable(_curscope, "MEMLOCAL", GetSourceFile(f->source_index), 0,
+                                    _dbuilder->createPointerType(diI32, _context->intptrty->getBitWidth()), true),
+      _dbuilder->createExpression(), _context->builder.getCurrentDebugLocation(), _context->builder.GetInsertBlock());
   }
 }
 
@@ -143,14 +141,13 @@ void DebugDWARF::UpdateVariables(llvm::Function* fn, SourceMapScope& scope)
       _dbuilder->insertDbgValueIntrinsic(_context->memlocal, dparam, expr,
                                          llvm::DILocation::get(_context->context, v.original_line, v.original_column,
                                                                _curscope),
-        _context->builder.GetInsertBlock());
+                                         _context->builder.GetInsertBlock());
   }
 
   {
-    auto dparam =
-      _dbuilder->createAutoVariable(_curscope, "scopeoffset", _curscope->getFile(), 0,
-      StructOffsetType(diI32, dunit, dunit, "scopeoffset", 0, _context->intptrty->getBitWidth(), 1),
-                                    true);
+    auto dparam = _dbuilder->createAutoVariable(
+      _curscope, "scopeoffset", _curscope->getFile(), 0,
+      StructOffsetType(diI32, dunit, dunit, "scopeoffset", 0, _context->intptrty->getBitWidth(), 1), true);
 
     _dbuilder->insertDeclare(_context->memlocal, dparam, _dbuilder->createExpression(),
                              llvm::DILocation::get(_context->context, 0, 0, _curscope), _context->builder.GetInsertBlock());
