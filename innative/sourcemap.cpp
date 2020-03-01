@@ -293,11 +293,13 @@ IN_ERROR sourcemap::ParseMapping(const Environment& env, SourceMap* map, const c
     if(n >= map->n_segments)
       return ERR_MAP_UNEXPECTED_BASE64;
 
-    map->segments[n].linecolumn      = (line << 32) | (last_column += DecodeVLQ(data));
-    map->segments[n].source_index    = last_source_index += DecodeVLQ(data);
-    map->segments[n].original_line   = static_cast<decltype(map->segments[n].original_line)>(last_original_line += DecodeVLQ(data));
-    map->segments[n].original_column = static_cast<decltype(map->segments[n].original_column)>(last_original_column += DecodeVLQ(data));
-    map->segments[n].name_index      = last_name_index += DecodeVLQ(data);
+    map->segments[n].linecolumn   = (line << 32) | (last_column += DecodeVLQ(data));
+    map->segments[n].source_index = last_source_index += DecodeVLQ(data);
+    map->segments[n].original_line =
+      static_cast<decltype(map->segments[n].original_line)>(last_original_line += DecodeVLQ(data));
+    map->segments[n].original_column =
+      static_cast<decltype(map->segments[n].original_column)>(last_original_column += DecodeVLQ(data));
+    map->segments[n].name_index = last_name_index += DecodeVLQ(data);
 
     if(data >= end)
       return ERR_MAP_UNEXPECTED_END;

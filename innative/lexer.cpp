@@ -96,7 +96,9 @@ namespace innative {
     const char* GetTokenString(WatTokens token)
     {
       constexpr int len = sizeof(tokenlist) / sizeof(decltype(tokenlist[0]));
-      return ((token != WatTokens::NONE) && (static_cast<decltype(len)>(token) < len)) ? tokenlist[static_cast<decltype(len)>(token)] : 0;
+      return ((token != WatTokens::NONE) && (static_cast<decltype(len)>(token) < len)) ?
+               tokenlist[static_cast<decltype(len)>(token)] :
+               0;
     }
 
     const char* CheckTokenINF(const char* s, const char* end, std::string* target)
@@ -527,7 +529,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
           IncToken(s, end, line, column);
 
         StringSpan ref = { begin, static_cast<size_t>(s - begin) };
-        khiter_t iter = kh_get_tokens(tokenhash, ref);
+        khiter_t iter  = kh_get_tokens(tokenhash, ref);
         if(kh_exist2(tokenhash, iter))
           tokens.Push(WatToken{ kh_val(tokenhash, iter), begin, line, column });
         else

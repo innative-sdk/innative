@@ -11,8 +11,8 @@ extern "C" {
 enum WASM_ENVIRONMENT_FLAGS
 {
   // Adds debugging information to the webassembly module, either as a PDB file or as a DWARF file, depending on platform.
-  ENV_DEBUG = (3 << 0),
-  ENV_DEBUG_PDB = (2 << 0), // Forces PDB generation
+  ENV_DEBUG       = (3 << 0),
+  ENV_DEBUG_PDB   = (2 << 0), // Forces PDB generation
   ENV_DEBUG_DWARF = (1 << 0), // Forces DWARF generation
 
   // Specifies that the result should be a dynamic library instead of an executable. Any start function will be ignored, and

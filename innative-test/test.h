@@ -33,6 +33,7 @@ public:
   void test_whitelist();
   void test_malloc();
   void test_embedding();
+  void test_variadic();
   void test_errors();
   void test_funcreplace();
   int CompileWASM(const path& file, int (TestHarness::*fn)(void*), const char* system = nullptr,
@@ -40,6 +41,7 @@ public:
   int do_debug(void* assembly);
   int do_funcreplace(void* assembly);
   int do_embedding(void* assembly);
+  int do_variadic(void* assembly);
 
   inline std::pair<uint32_t, uint32_t> Results()
   {

@@ -286,7 +286,8 @@ namespace innative {
     // Generates the correct mangled C function name
     inline std::string CanonImportName(const Import& imp, const char* system)
     {
-      if(imp.ignore || (IsSystemImport(imp.module_name, system) && !imp.alternate)) // system module imports are always raw function names
+      if(imp.ignore ||
+         (IsSystemImport(imp.module_name, system) && !imp.alternate)) // system module imports are always raw function names
         return CanonicalName(StringSpan{ 0, 0 }, StringSpan::From(imp.export_name));
       return CanonicalName(StringSpan::From(imp.module_name), StringSpan::From(imp.export_name));
     }
@@ -294,7 +295,8 @@ namespace innative {
     // Generates a whitelist string for a module and export name, which includes calling convention information
     inline size_t CanonWhitelist(const void* module_name, const void* export_name, const char* system, char* out)
     {
-      if(!module_name || !strcmp(reinterpret_cast<const char*>(module_name), system)) // system name is normalized to an empty module name
+      if(!module_name ||
+         !strcmp(reinterpret_cast<const char*>(module_name), system)) // system name is normalized to an empty module name
         module_name = "";
       size_t module_len = strlen(reinterpret_cast<const char*>(module_name));
       const char* call  = strchr(reinterpret_cast<const char*>(module_name), '!');

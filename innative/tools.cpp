@@ -390,8 +390,8 @@ IN_Entrypoint innative::LoadFunction(void* assembly, const char* module_name, co
 
 IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const char* table, varuint32 index)
 {
-  INGlobal* ref =
-    reinterpret_cast<INGlobal*>(LoadDLLFunction(assembly, CanonicalName(StringSpan::From(module_name), StringSpan::From(table)).c_str()));
+  INGlobal* ref = reinterpret_cast<INGlobal*>(
+    LoadDLLFunction(assembly, CanonicalName(StringSpan::From(module_name), StringSpan::From(table)).c_str()));
   if(ref != nullptr && index < (ref->table.size / sizeof(INTableEntry)))
     return ref->table.entries[index].func;
   return nullptr;
@@ -399,8 +399,8 @@ IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const
 
 INGlobal* innative::LoadGlobal(void* assembly, const char* module_name, const char* export_name)
 {
-  return reinterpret_cast<INGlobal*>(LoadDLLFunction(assembly,
-                                    CanonicalName(StringSpan::From(module_name), StringSpan::From(export_name)).c_str()));
+  return reinterpret_cast<INGlobal*>(
+    LoadDLLFunction(assembly, CanonicalName(StringSpan::From(module_name), StringSpan::From(export_name)).c_str()));
 }
 
 void* innative::LoadAssembly(const char* file)
@@ -484,9 +484,9 @@ int innative::SerializeModule(Environment* env, size_t m, const char* out, size_
   if(m >= env->n_modules)
     return ERR_FATAL_INVALID_MODULE;
 
-  Queue<WatToken> tokens;
-  wat::TokenizeModule(*env, tokens, env->modules[m]);
-  int err = CheckWatTokens(*env, env->errors, tokens, "");
+  Serializer serializer(*env, env->modules[m]);
+  serializer.TokenizeModule(emitdebug);
+  int err = CheckWatTokens(*env, env->errors, serializer.tokens, "");
   if(err < 0)
     return err;
 
@@ -501,7 +501,7 @@ int innative::SerializeModule(Environment* env, size_t m, const char* out, size_
   else
   {
     std::ostringstream ss;
-    wat::WriteTokens(tokens, ss, emitdebug);
+    serializer.WriteTokens(ss);
     if(ss.tellp() < 0)
       return ERR_FATAL_FILE_ERROR;
 
@@ -521,8 +521,7 @@ int innative::SerializeModule(Environment* env, size_t m, const char* out, size_
   if(f.bad())
     return ERR_FATAL_FILE_ERROR;
 
-  wat::WriteTokens(tokens, f, emitdebug);
-  DumpSourceMap(env->modules[m].sourcemap, (name + ".dump").c_str());
+  serializer.WriteTokens(f);
   return ERR_SUCCESS;
 }
 int innative::LoadSourceMap(Environment* env, unsigned int m, const char* path, size_t len)
@@ -777,8 +776,8 @@ int innative::RemoveModuleReturn(Environment* env, FunctionType* func, varuint32
 
 INModuleMetadata* innative::GetModuleMetadata(void* assembly, uint32_t module_index)
 {
-  return reinterpret_cast<INModuleMetadata*>(LoadDLLFunction(
-    assembly, CanonicalName(StringSpan(), StringSpan::From(IN_METADATA_PREFIX), module_index).c_str()));
+  return reinterpret_cast<INModuleMetadata*>(
+    LoadDLLFunction(assembly, CanonicalName(StringSpan(), StringSpan::From(IN_METADATA_PREFIX), module_index).c_str()));
 }
 IN_Entrypoint innative::LoadTableIndex(void* assembly, uint32_t module_index, uint32_t table_index,
                                        varuint32 function_index)

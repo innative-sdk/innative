@@ -21,7 +21,7 @@ namespace innative {
       virtual void DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t line) override;
       virtual void PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc) override;
       virtual void PopBlock() override;
-      
+
       Stack<llvm::DILocalScope*> scopes;
     };
   }

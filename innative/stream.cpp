@@ -8,9 +8,9 @@ using namespace utility;
 
 uint64_t Stream::DecodeLEB128(IN_ERROR& err, unsigned int maxbits, bool sign)
 {
-  size_t shift    = 0;
-  int byte        = 0;
-  uint64_t result = 0;
+  unsigned int shift = 0;
+  int byte           = 0;
+  uint64_t result    = 0;
   do
   {
     if(shift >= maxbits)
@@ -25,7 +25,7 @@ uint64_t Stream::DecodeLEB128(IN_ERROR& err, unsigned int maxbits, bool sign)
       return 0;
     }
 
-    result |= ((byte & 0x7F) << shift);
+    result |= (static_cast<uint64_t>(byte & 0x7F) << shift);
     shift += 7;
   } while((byte & 0x80) != 0);
 
@@ -35,7 +35,7 @@ uint64_t Stream::DecodeLEB128(IN_ERROR& err, unsigned int maxbits, bool sign)
   {
     // If our encoding is potentially overlong, we must correct the sign bit to the final legal bit
     signbit  = (1 << (maxbits + 6 - shift)) & byte;
-    int bits = (~0 << (maxbits + 7 - shift)) & 0x7F; // Gets the illegal bits of this byte
+    int bits = (~0U << (maxbits + 7 - shift)) & 0x7F; // Gets the illegal bits of this byte
 
     if(sign && signbit) // If the sign bit is set, we need to check (~byte)&bits instead of byte&bits
       byte = ~byte;
@@ -48,7 +48,7 @@ uint64_t Stream::DecodeLEB128(IN_ERROR& err, unsigned int maxbits, bool sign)
   }
 
   // assert(!(((~0ULL) << maxbits) & result));
-  if(sign && signbit != 0)
+  if(sign && signbit != 0 && shift < 64)
     result |= (~0ULL << shift);
 
   err = ERR_SUCCESS;
