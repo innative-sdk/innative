@@ -16,31 +16,6 @@ code::DebugDWARF::DebugDWARF(SourceMap* s, Context* context, llvm::Module& m, co
   DebugSourceMap(s, context, m, name, filepath, ENV_DEBUG_DWARF)
 {}
 
-void DebugDWARF::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized)
-{
-  // Use function low_PC to find the debug entry
-  SourceMapFunction* f = GetSourceFunction(offset);
-
-  if(!f)
-  {
-    FunctionDebugInfo(fn, fn->getName(), optimized, true, false, dunit, line, 0);
-    return;
-  }
-
-  auto name = (f->scope.name_index < sourcemap->n_names) ? fn->getName() : sourcemap->names[f->scope.name_index];
-
-  llvm::SmallVector<llvm::Metadata*, 8> dwarfTys = { GetDebugType(f->type_index) };
-  for(unsigned int i = 0; i < f->scope.n_variables; ++i)
-    if(sourcemap->x_innative_variables[f->scope.variables[i]].tag == DW_TAG_formal_parameter)
-      dwarfTys.push_back(GetDebugType(sourcemap->x_innative_variables[f->scope.variables[i]].type_index));
-
-  auto subtype =
-    _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(dwarfTys), llvm::DINode::FlagZero,
-                                    (fn->getCallingConv() == llvm::CallingConv::C) ? DW_CC_normal : DW_CC_nocall);
-
-  FunctionDebugInfo(fn, name, optimized, true, false, GetSourceFile(f->source_index), f->original_line, 0, subtype);
-}
-
 void DebugDWARF::PostFuncBody(llvm::Function* fn, FunctionBody& body)
 {
   SourceMapFunction* f = GetSourceFunction(_curbody->column);
