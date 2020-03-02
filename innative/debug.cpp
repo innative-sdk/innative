@@ -6,18 +6,17 @@
 #include "debug_dwarf.h"
 #include "debug_wat.h"
 #include "constants.h"
-#include "util.h"
+#include "utility.h"
 #include "compile.h"
 
 using namespace innative;
-using namespace code;
 using namespace utility;
 
 Debugger::~Debugger() {}
-Debugger::Debugger() : _dbuilder(0), _context(0) {}
+Debugger::Debugger() : _dbuilder(0), _compiler(0) {}
 
-Debugger::Debugger(Context* context, llvm::Module& m, const char* name, const char* filepath, char target) :
-  _context(context), _dbuilder(new llvm::DIBuilder(m))
+Debugger::Debugger(Compiler* compiler, llvm::Module& m, const char* name, const char* filepath, char target) :
+  _compiler(compiler), _dbuilder(new llvm::DIBuilder(m))
 {
   if(target == ENV_DEBUG)
     target = llvm::Triple(m.getTargetTriple()).isOSWindows() ? ENV_DEBUG_PDB : ENV_DEBUG_DWARF;
@@ -47,7 +46,7 @@ Debugger::Debugger(Context* context, llvm::Module& m, const char* name, const ch
     dunit = _dbuilder->createFile(abspath.filename().u8string(), abspath.parent_path().u8string());
 
   dcu = _dbuilder->createCompileUnit(llvm::dwarf::DW_LANG_C89, dunit, "inNative Runtime v" IN_VERSION_STRING,
-                                     _context->env.optimize != 0, GenFlagString(_context->env), WASM_MAGIC_VERSION, name);
+                                     _compiler->env.optimize != 0, GenFlagString(_compiler->env), WASM_MAGIC_VERSION, name);
 
   diF32  = _dbuilder->createBasicType("f32", 32, llvm::dwarf::DW_ATE_float);
   diF64  = _dbuilder->createBasicType("f64", 64, llvm::dwarf::DW_ATE_float);
@@ -71,7 +70,7 @@ llvm::DIType* Debugger::CreateDebugType(llvm::Type* t)
   if(t->isPointerTy())
   {
     auto base = CreateDebugType(t->getPointerElementType());
-    return _dbuilder->createPointerType(base, _context->intptrty->getBitWidth(), 0U, llvm::None,
+    return _dbuilder->createPointerType(base, _compiler->intptrty->getBitWidth(), 0U, llvm::None,
                                         std::string(base->getName()) + "*");
   }
 
@@ -272,21 +271,23 @@ std::string Debugger::GenFlagString(const Environment& env)
   return f;
 }
 
-Debugger* Debugger::Create(code::Context& context)
+Debugger* Debugger::Create(Compiler& compiler)
 {
-  if(auto target = context.env.flags & ENV_DEBUG)
+  if(auto target = compiler.env.flags & ENV_DEBUG)
   {
-    if(!context.m.filepath)
+    if(!compiler.m.filepath)
       return 0;
-    if(context.m.sourcemap)
+    if(compiler.m.sourcemap)
     {
       if(target == ENV_DEBUG)
-        target = llvm::Triple(context.llvm->getTargetTriple()).isOSWindows() ? ENV_DEBUG_PDB : ENV_DEBUG_DWARF;
+        target = llvm::Triple(compiler.mod->getTargetTriple()).isOSWindows() ? ENV_DEBUG_PDB : ENV_DEBUG_DWARF;
       if(target == ENV_DEBUG_PDB)
-        return new code::DebugPDB(context.m.sourcemap, &context, *context.llvm, context.m.name.str(), context.m.filepath);
-      return new code::DebugDWARF(context.m.sourcemap, &context, *context.llvm, context.m.name.str(), context.m.filepath);
+        return new DebugPDB(compiler.m.sourcemap, &compiler, *compiler.mod, compiler.m.name.str(),
+                                  compiler.m.filepath);
+      return new DebugDWARF(compiler.m.sourcemap, &compiler, *compiler.mod, compiler.m.name.str(),
+                                  compiler.m.filepath);
     }
-    return new code::DebugWat(&context, *context.llvm, context.m.name.str(), context.m.filepath);
+    return new DebugWat(&compiler, *compiler.mod, compiler.m.name.str(), compiler.m.filepath);
   }
-  return new code::Debugger();
+  return new Debugger();
 }

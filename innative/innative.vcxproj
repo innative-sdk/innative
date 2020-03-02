@@ -411,6 +411,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release Static|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="instructions.cpp" />
     <ClCompile Include="intrinsic.cpp" />
     <ClCompile Include="lexer.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
@@ -505,7 +506,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release Static|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="util.cpp">
+    <ClCompile Include="utility.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug Static|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release Static|Win32'">NotUsing</PrecompiledHeader>
@@ -565,7 +566,6 @@
     <ClInclude Include="debug_wat.h" />
     <ClInclude Include="dwarf_parser.h" />
     <ClInclude Include="filesys.h" />
-    <ClInclude Include="intrinsic.h" />
     <ClInclude Include="lexer.h" />
     <ClInclude Include="link.h" />
     <ClInclude Include="llvm.h" />
@@ -576,7 +576,7 @@
     <ClInclude Include="stack.h" />
     <ClInclude Include="stream.h" />
     <ClInclude Include="tools.h" />
-    <ClInclude Include="util.h" />
+    <ClInclude Include="utility.h" />
     <ClInclude Include="validate.h" />
     <ClInclude Include="wast.h" />
     <ClInclude Include="wat.h" />

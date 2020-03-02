@@ -1,7 +1,7 @@
 // Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#include "../innative/util.h"
+#include "../innative/utility.h"
 #include "test.h"
 #include <thread>
 #include <algorithm>

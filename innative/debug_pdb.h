@@ -9,26 +9,24 @@
 #include <unordered_set>
 
 namespace innative {
-  namespace code {
-    KHASH_DECLARE(intset, size_t, char);
+  KHASH_DECLARE(intset, size_t, char);
 
-    class DebugPDB : public DebugSourceMap
-    {
-    public:
-      DebugPDB(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath);
-      ~DebugPDB();
-      virtual void PostFuncBody(llvm::Function* fn, FunctionBody& body) override;
-      virtual llvm::DIType* GetDebugType(size_t index, llvm::DIType* parent = 0) override;
-      virtual void UpdateVariables(llvm::Function* fn, SourceMapScope& scope) override;
-      llvm::DIType* StructOffsetType(llvm::DIType* ty, llvm::DIScope* scope, llvm::DIFile* file, llvm::StringRef name,
-                                     uint64_t indice, llvm::Function* fn);
-      virtual void Finalize() override;
+  class DebugPDB : public DebugSourceMap
+  {
+  public:
+    DebugPDB(SourceMap* s, Compiler* compiler, llvm::Module& m, const char* name, const char* filepath);
+    ~DebugPDB();
+    virtual void PostFuncBody(llvm::Function* fn, FunctionBody& body) override;
+    virtual llvm::DIType* GetDebugType(size_t index, llvm::DIType* parent = 0) override;
+    virtual void UpdateVariables(llvm::Function* fn, SourceMapScope& scope) override;
+    llvm::DIType* StructOffsetType(llvm::DIType* ty, llvm::DIScope* scope, llvm::DIFile* file, llvm::StringRef name,
+                                   uint64_t indice, llvm::Function* fn);
+    virtual void Finalize() override;
 
-    protected:
-      uint64_t _uid;
-      kh_intset_t* _deferred;
-    };
-  }
+  protected:
+    uint64_t _uid;
+    kh_intset_t* _deferred;
+  };
 }
 
 #endif

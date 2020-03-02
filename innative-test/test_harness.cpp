@@ -23,7 +23,7 @@ size_t TestHarness::Run(FILE* out)
                                                               { "queue.h", &TestHarness::test_queue },
                                                               { "stack.h", &TestHarness::test_stack },
                                                               { "stream.h", &TestHarness::test_stream },
-                                                              { "util.h", &TestHarness::test_util },
+                                                              { "utility.h", &TestHarness::test_util },
                                                               { "manual", &TestHarness::test_manual },
                                                               //{ "assemblyscript", &TestHarness::test_assemblyscript },
                                                               { "allocator", &TestHarness::test_allocator },

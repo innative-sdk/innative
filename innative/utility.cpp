@@ -1,7 +1,7 @@
 // Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#include "util.h"
+#include "utility.h"
 #include "innative/export.h"
 #include <assert.h>
 #include <stdexcept>

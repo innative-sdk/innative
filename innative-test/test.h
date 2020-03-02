@@ -39,6 +39,7 @@ public:
   int CompileWASM(const path& file, int (TestHarness::*fn)(void*), const char* system = nullptr,
                   std::function<int(Environment*)> preprocess = std::function<int(Environment*)>());
   int do_debug(void* assembly);
+  int do_debug_2(void* assembly);
   int do_funcreplace(void* assembly);
   int do_embedding(void* assembly);
   int do_variadic(void* assembly);

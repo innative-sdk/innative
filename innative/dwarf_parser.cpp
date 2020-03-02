@@ -332,6 +332,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
         case DW_TAG_shared_type: modifier = modifier + "shared "; break;
         case DW_TAG_volatile_type: modifier = "volatile " + modifier; break;
         case DW_TAG_ptr_to_member_type: modifier = "(*" + modifier + ")"; break;
+        case DW_TAG_array_type: modifier = modifier + "[]"; break;
         }
         kh_key(maptype, iter).name_index = GetSourceMapName(modifier.c_str());
       }

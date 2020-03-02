@@ -22,6 +22,7 @@ namespace innative {
   path GetLinkerObjectPath(const Environment& env, Module& m, const path& outfile);
   IN_ERROR CompileEnvironment(Environment* env, const char* file);
   int GetCallingConvention(const Import& imp);
+  IN_ERROR OutputObjectFile(Compiler& context, const path& out);
 }
 
 #endif

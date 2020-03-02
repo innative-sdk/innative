@@ -4,7 +4,7 @@
 #include "parse.h"
 #include "validate.h"
 #include "stream.h"
-#include "util.h"
+#include "utility.h"
 #include "dwarf_parser.h"
 #include <assert.h>
 #include <algorithm>

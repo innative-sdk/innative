@@ -5,7 +5,7 @@
 #define IN__LEXER_H
 
 #include "innative/schema.h"
-#include "util.h"
+#include "utility.h"
 #include "queue.h"
 
 namespace innative {

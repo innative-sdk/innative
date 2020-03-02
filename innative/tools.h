@@ -52,6 +52,7 @@ namespace innative {
   int RemoveModuleParam(Environment* env, FunctionType* func, FunctionDesc* desc, varuint32 index);
   int InsertModuleReturn(Environment* env, FunctionType* func, varuint32 index, varsint7 result);
   int RemoveModuleReturn(Environment* env, FunctionType* func, varuint32 index);
+  size_t ReserveModule(Environment* env, int* err);
 }
 
 #endif
