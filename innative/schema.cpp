@@ -2,7 +2,7 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "innative/schema.h"
-#include "util.h"
+#include "utility.h"
 
 #define str_pair_hash_equal(a, b) ((strcmp(a, b) == 0) && (strcmp(strchr(a, 0) + 1, strchr(b, 0) + 1) == 0))
 

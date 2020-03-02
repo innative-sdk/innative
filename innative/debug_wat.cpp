@@ -6,10 +6,9 @@
 #include "compile.h"
 
 using namespace innative;
-using namespace code;
 
-DebugWat::DebugWat(Context* context, llvm::Module& m, const char* name, const char* filepath) :
-  Debugger(context, m, name, filepath, context->env.flags & ENV_DEBUG)
+DebugWat::DebugWat(Compiler* compiler, llvm::Module& m, const char* name, const char* filepath) :
+  Debugger(compiler, m, name, filepath, compiler->env.flags & ENV_DEBUG)
 {}
 
 void DebugWat::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized)
@@ -23,42 +22,42 @@ void DebugWat::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, F
   auto line   = body.line;
   auto column = body.column;
 
-  FunctionDebugInfo(fn, name + "|" + _context->m.name.str(), _context->env.optimize != 0, true, false, dunit, line, column);
-  _context->builder.SetCurrentDebugLocation(llvm::DILocation::get(_context->context, line, column, fn->getSubprogram()));
+  FunctionDebugInfo(fn, name + "|" + _compiler->m.name.str(), _compiler->env.optimize != 0, true, false, dunit, line, column);
+  _compiler->builder.SetCurrentDebugLocation(llvm::DILocation::get(_compiler->ctx, line, column, fn->getSubprogram()));
 }
 
 void DebugWat::FuncParam(llvm::Function* fn, size_t index, FunctionDesc& desc)
 {
-  llvm::DILocation* loc = _context->builder.getCurrentDebugLocation();
+  llvm::DILocation* loc = _compiler->builder.getCurrentDebugLocation();
   if(desc.param_debug && desc.param_debug[index].line > 0)
-    loc = llvm::DILocation::get(_context->context, desc.param_debug[index].line, desc.param_debug[index].column,
+    loc = llvm::DILocation::get(_compiler->ctx, desc.param_debug[index].line, desc.param_debug[index].column,
                                 fn->getSubprogram());
 
   llvm::DILocalVariable* dparam =
-    _dbuilder->createParameterVariable(fn->getSubprogram(), _context->locals.back()->getName(),
+    _dbuilder->createParameterVariable(fn->getSubprogram(), _compiler->locals.back()->getName(),
                                        static_cast<unsigned int>(index + 1), // the arg index starts at 1
                                        loc->getFile(), loc->getLine(),
-                                       CreateDebugType(_context->locals.back()->getAllocatedType()), true);
+                                       CreateDebugType(_compiler->locals.back()->getAllocatedType()), true);
 
-  _dbuilder->insertDeclare(_context->locals.back(), dparam, _dbuilder->createExpression(), loc,
-                           _context->builder.GetInsertBlock());
+  _dbuilder->insertDeclare(_compiler->locals.back(), dparam, _dbuilder->createExpression(), loc,
+                           _compiler->builder.GetInsertBlock());
 }
 
 void DebugWat::FuncLocal(llvm::Function* fn, size_t indice, FunctionDesc& desc)
 {
-  llvm::DILocation* loc = _context->builder.getCurrentDebugLocation();
+  llvm::DILocation* loc = _compiler->builder.getCurrentDebugLocation();
 
   llvm::DILocalVariable* dparam =
-    _dbuilder->createAutoVariable(fn->getSubprogram(), _context->locals.back()->getName(), loc->getFile(), loc->getLine(),
-                                  CreateDebugType(_context->locals.back()->getAllocatedType()), true);
+    _dbuilder->createAutoVariable(fn->getSubprogram(), _compiler->locals.back()->getName(), loc->getFile(), loc->getLine(),
+                                  CreateDebugType(_compiler->locals.back()->getAllocatedType()), true);
 
-  _dbuilder->insertDeclare(_context->locals.back(), dparam, _dbuilder->createExpression(), loc,
-                           _context->builder.GetInsertBlock());
+  _dbuilder->insertDeclare(_compiler->locals.back(), dparam, _dbuilder->createExpression(), loc,
+                           _compiler->builder.GetInsertBlock());
 }
 
 void DebugWat::DebugIns(llvm::Function* fn, Instruction& i)
 {
-  _context->builder.SetCurrentDebugLocation(llvm::DILocation::get(_context->context, i.line, i.column, _curscope));
+  _compiler->builder.SetCurrentDebugLocation(llvm::DILocation::get(_compiler->ctx, i.line, i.column, _curscope));
 }
 
 void DebugWat::DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t line)

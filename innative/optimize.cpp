@@ -79,7 +79,7 @@ IN_ERROR innative::OptimizeModules(const Environment* env)
 
   // Optimize all modules
   for(size_t i = 0; i < env->n_modules; ++i)
-    modulePassManager.run(*env->modules[i].cache->llvm, moduleAnalysisManager);
+    modulePassManager.run(*env->modules[i].cache->mod, moduleAnalysisManager);
 
   /*{
     auto manager = llvm::make_unique<llvm::legacy::FunctionPassManager>(context[i].llvm);

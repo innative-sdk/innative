@@ -305,18 +305,16 @@ typedef struct IN_WASM_CUSTOM_SECTION
 
 #ifdef __cplusplus
 namespace innative {
-  namespace code {
-    struct Context;
-  }
+  struct Compiler;
 }
-typedef innative::code::Context IN_CODE_CONTEXT;
+typedef innative::Compiler IN_CODE_compiler;
 namespace llvm {
   class LLVMContext;
 }
-typedef llvm::LLVMContext LLVM_LLVM_CONTEXT;
+typedef llvm::LLVMContext LLVM_LLVM_compiler;
 #else
-typedef void IN_CODE_CONTEXT;
-typedef void LLVM_LLVM_CONTEXT;
+typedef void IN_CODE_compiler;
+typedef void LLVM_LLVM_compiler;
 #endif
 
 // Represents a single webassembly module
@@ -403,7 +401,7 @@ typedef struct IN_WASM_MODULE
 
   struct kh_exports_s* exports;
   const char* filepath;   // For debugging purposes, store path to the original file, if it exists
-  IN_CODE_CONTEXT* cache; // If non-zero, points to a cached compilation of this module
+  IN_CODE_compiler* cache; // If non-zero, points to a cached compilation of this module
 } Module;
 
 // Represents a single validation error node in a singly-linked list.
@@ -469,7 +467,7 @@ typedef struct IN_WASM_ENVIRONMENT
   struct kh_modules_s* modulemap;
   struct kh_modulepair_s* whitelist;
   struct kh_cimport_s* cimports;
-  LLVM_LLVM_CONTEXT* context;
+  LLVM_LLVM_compiler* context;
 } Environment;
 
 #ifdef __cplusplus

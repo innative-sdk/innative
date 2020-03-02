@@ -2,7 +2,7 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "test.h"
-#include "../innative/util.h"
+#include "../innative/utility.h"
 #include <signal.h>
 #include <setjmp.h>
 

@@ -4,29 +4,26 @@
 #include "llvm.h"
 #include "debug_pdb.h"
 #include "compile.h"
-#include "util.h"
+#include "utility.h"
 #include <algorithm>
 
 namespace innative {
-  namespace code {
 #ifdef IN_64BIT
-    __KHASH_IMPL(intset, , size_t, char, 0, kh_int64_hash_func, kh_int64_hash_equal);
+  __KHASH_IMPL(intset, , size_t, char, 0, kh_int64_hash_func, kh_int64_hash_equal);
 #else
-    __KHASH_IMPL(intset, , size_t, char, 0, kh_int_hash_func, kh_int_hash_equal);
+  __KHASH_IMPL(intset, , size_t, char, 0, kh_int_hash_func, kh_int_hash_equal);
 #endif
-  }
 }
 
 using namespace innative;
 using namespace utility;
-using namespace code;
 using namespace llvm::dwarf;
 
 #define TEXT(x) x
 #define XML(x)  TEXT(#x)
 
-DebugPDB::DebugPDB(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath) :
-  DebugSourceMap(s, context, m, name, filepath, ENV_DEBUG_PDB), _uid(0), _deferred(kh_init_intset())
+DebugPDB::DebugPDB(SourceMap* s, Compiler* compiler, llvm::Module& m, const char* name, const char* filepath) :
+  DebugSourceMap(s, compiler, m, name, filepath, ENV_DEBUG_PDB), _uid(0), _deferred(kh_init_intset())
 {}
 DebugPDB::~DebugPDB() { kh_destroy_intset(_deferred); }
 
@@ -56,21 +53,21 @@ llvm::DIType* DebugPDB::StructOffsetType(llvm::DIType* ty, llvm::DIScope* scope,
   auto member = _dbuilder->createMemberType(scope, name, file, 0, ty->getSizeInBits(), 1, 0, llvm::DINode::FlagZero, ty);
   auto offset = _dbuilder->createStructType(
     scope,
-    FormatString(false, "{0}::${1}{2}", code::Context::CppString(_context->m.name.str()), name, _uid++, ty->getName()),
+    FormatString(false, "{0}::${1}{2}", Compiler::CppString(_compiler->m.name.str()), name, _uid++, ty->getName()),
     file, 0, ty->getSizeInBits(), 1, llvm::DINode::FlagZero, 0, _dbuilder->getOrCreateArray({ member }));
 
-  if(_context->globals.size() > 0 && _context->memories.size() > 0)
+  if(_compiler->globals.size() > 0 && _compiler->memories.size() > 0)
   {
     llvm::SmallVector<llvm::DIGlobalVariableExpression*, 1> expr;
-    _context->globals[0]->getDebugInfo(expr);
+    _compiler->globals[0]->getDebugInfo(expr);
     auto global = expr[0]->getVariable()->getName();
     expr.clear();
-    _context->memories[0]->getDebugInfo(expr);
+    _compiler->memories[0]->getDebugInfo(expr);
     auto mem = expr[0]->getVariable()->getName();
 
     if(ty->getName().startswith("p<"))
     {
-      _context->natvis +=
+      _compiler->natvis +=
         FormatString(true,
                      "<Type Name=\"{0}\">"
                      "<DisplayString>{({1}*)(*(unsigned int*)({2}.m0 + {3} + {4}))}</DisplayString>"
@@ -80,7 +77,11 @@ llvm::DIType* DebugPDB::StructOffsetType(llvm::DIType* ty, llvm::DIScope* scope,
     }
     else
     {
-      _context->natvis +=
+      auto view = FormatString(true,
+                               "<Type Name=\"{0}\"><DisplayString>{*({1}*)({2}.m0 + {3} + {4})}</DisplayString></Type>",
+                               offset->getName(), ty->getName(), mem, global, indice);
+      
+      _compiler->natvis +=
         FormatString(true, "<Type Name=\"{0}\"><DisplayString>{*({1}*)({2}.m0 + {3} + {4})}</DisplayString></Type>",
                      offset->getName(), ty->getName(), mem, global, indice);
     }
@@ -113,41 +114,41 @@ void DebugPDB::UpdateVariables(llvm::Function* fn, SourceMapScope& scope)
     auto expr = _dbuilder->createExpression();
     if(v.n_expr > 1 && v.p_expr[0] == DW_OP_plus_uconst)
     {
-      _dbuilder->insertDeclare(_context->memlocal, dparam, expr,
-                               llvm::DILocation::get(_context->context, v.original_line, v.original_column, _curscope),
-                               _context->builder.GetInsertBlock());
+      _dbuilder->insertDeclare(_compiler->memlocal, dparam, expr,
+                               llvm::DILocation::get(_compiler->ctx, v.original_line, v.original_column, _curscope),
+                               _compiler->builder.GetInsertBlock());
     }
     else if(v.n_expr > 2 && v.p_expr[0] == DW_OP_WASM_location && v.p_expr[1] == DW_WASM_OP_LOCAL)
     {
       expr = _dbuilder->createExpression(llvm::SmallVector<int64_t, 3>{ DW_OP_deref, DW_OP_stack_value });
 
-      if(static_cast<unsigned long long>(v.p_expr[2]) < _context->locals.size())
-        _dbuilder->insertDbgValueIntrinsic(_context->locals[static_cast<size_t>(v.p_expr[2])], dparam, expr,
-                                           llvm::DILocation::get(_context->context, v.original_line, v.original_column,
+      if(static_cast<unsigned long long>(v.p_expr[2]) < _compiler->locals.size())
+        _dbuilder->insertDbgValueIntrinsic(_compiler->locals[static_cast<size_t>(v.p_expr[2])], dparam, expr,
+                                           llvm::DILocation::get(_compiler->ctx, v.original_line, v.original_column,
                                                                  _curscope),
-                                           _context->builder.GetInsertBlock());
+                                           _compiler->builder.GetInsertBlock());
     }
     else if(v.n_expr > 2 && v.p_expr[0] == DW_OP_WASM_location && v.p_expr[1] == DW_WASM_OP_GLOBAL)
     {
       expr = _dbuilder->createExpression(llvm::SmallVector<int64_t, 3>{ DW_OP_deref, DW_OP_stack_value });
 
-      if(static_cast<unsigned long long>(v.p_expr[2]) < _context->globals.size())
-        _dbuilder->insertDbgValueIntrinsic(_context->globals[static_cast<size_t>(v.p_expr[2])], dparam, expr,
-                                           llvm::DILocation::get(_context->context, v.original_line, v.original_column,
+      if(static_cast<unsigned long long>(v.p_expr[2]) < _compiler->globals.size())
+        _dbuilder->insertDbgValueIntrinsic(_compiler->globals[static_cast<size_t>(v.p_expr[2])], dparam, expr,
+                                           llvm::DILocation::get(_compiler->ctx, v.original_line, v.original_column,
                                                                  _curscope),
-                                           _context->builder.GetInsertBlock());
+                                           _compiler->builder.GetInsertBlock());
     }
     else if(v.n_expr > 2 && v.p_expr[0] == DW_OP_WASM_location && v.p_expr[1] == DW_WASM_OP_STACK)
     {
       expr = _dbuilder->createExpression(llvm::SmallVector<int64_t, 3>{ DW_OP_stack_value });
 
       if(static_cast<unsigned long long>(v.p_expr[2]) <
-         _context->values
+         _compiler->values
            .Size()) // TODO: we're going from the bottom of the limit, but it may be the bottom of the entire values stack
-        _dbuilder->insertDbgValueIntrinsic(_context->values.Get()[_context->values.Limit() + v.p_expr[2]], dparam, expr,
-                                           llvm::DILocation::get(_context->context, v.original_line, v.original_column,
+        _dbuilder->insertDbgValueIntrinsic(_compiler->values.Get()[_compiler->values.Limit() + v.p_expr[2]], dparam, expr,
+                                           llvm::DILocation::get(_compiler->ctx, v.original_line, v.original_column,
                                                                  _curscope),
-                                           _context->builder.GetInsertBlock());
+                                           _compiler->builder.GetInsertBlock());
     }
   }
 }
@@ -200,7 +201,7 @@ llvm::DIType* DebugPDB::GetDebugType(size_t index, llvm::DIType* parent)
 void DebugPDB::Finalize()
 {
   llvm::SmallVector<llvm::DIGlobalVariableExpression*, 1> expr;
-  _context->memories[0]->getDebugInfo(expr);
+  _compiler->memories[0]->getDebugInfo(expr);
 
   for(auto iter = kh_begin(_deferred); iter < kh_end(_deferred); ++iter)
   {
@@ -214,7 +215,7 @@ void DebugPDB::Finalize()
       auto name = types[index]->getName().str();
       name      = name.substr(2, name.size() - 3);
       std::string aux;
-      _context->natvis +=
+      _compiler->natvis +=
         FormatString(true, "<Type Name=\"{0}\"><DisplayString>{*({2}*)({1}.m0+(unsigned int)this)}</DisplayString><Expand>",
                      types[index]->getName(), expr[0]->getVariable()->getName(), name);
 
@@ -236,21 +237,21 @@ void DebugPDB::Finalize()
                                       baseelement->getName(), expr[0]->getVariable()->getName(),
                                       element->getOffsetInBits() / 8);
 
-              _context->natvis +=
+              _compiler->natvis +=
                 FormatString(true, "<Item Name=\"{0}\">({1}*)(*(unsigned int*)({2}.m0+(unsigned int)this+{3}))</Item>",
                              element->getName(), element->getBaseType()->getName(), expr[0]->getVariable()->getName(),
                              element->getOffsetInBits() / 8);
             }
             else if(element->getTag() == DW_TAG_inheritance)
             {
-              _context->natvis += FormatString(true, "<Item Name=\"[{0}]\">*({0}*)({1}.m0+(unsigned int)this+{2})</Item>",
+              _compiler->natvis += FormatString(true, "<Item Name=\"[{0}]\">*({0}*)({1}.m0+(unsigned int)this+{2})</Item>",
                                                element->getBaseType()->getName(), expr[0]->getVariable()->getName(),
                                                element->getOffsetInBits() / 8);
             }
             else
             {
               aux += FormatString(true, "{0}:{this->{0}} ", element->getName());
-              _context->natvis += FormatString(true, "<Item Name=\"{0}\">*({1}*)({2}.m0+(unsigned int)this+{3})</Item>",
+              _compiler->natvis += FormatString(true, "<Item Name=\"{0}\">*({1}*)({2}.m0+(unsigned int)this+{3})</Item>",
                                                element->getName(), element->getBaseType()->getName(),
                                                expr[0]->getVariable()->getName(), element->getOffsetInBits() / 8);
             }
@@ -264,10 +265,10 @@ void DebugPDB::Finalize()
         aux += "</Expand></Type>";
       }
       else
-        _context->natvis += FormatString(true, "<ExpandedItem>*({0}*)({1}.m0+(unsigned int)this)</ExpandedItem>", name,
+        _compiler->natvis += FormatString(true, "<ExpandedItem>*({0}*)({1}.m0+(unsigned int)this)</ExpandedItem>", name,
                                          expr[0]->getVariable()->getName());
-      _context->natvis += "</Expand></Type>";
-      _context->natvis += aux;
+      _compiler->natvis += "</Expand></Type>";
+      _compiler->natvis += aux;
     }
   }
   DebugSourceMap::Finalize();

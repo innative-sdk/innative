@@ -4,17 +4,16 @@
 #include "llvm.h"
 #include "debug_sourcemap.h"
 #include "compile.h"
-#include "util.h"
+#include "utility.h"
 #include <algorithm>
 
 using namespace innative;
 using namespace utility;
-using namespace code;
 using namespace llvm::dwarf;
 
-DebugSourceMap::DebugSourceMap(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath,
+DebugSourceMap::DebugSourceMap(SourceMap* s, Compiler* compiler, llvm::Module& m, const char* name, const char* filepath,
                                char target) :
-  sourcemap(s), Debugger(context, m, name, filepath, target), curscopeindex(0), cursegment(0)
+  sourcemap(s), Debugger(compiler, m, name, filepath, target), curscopeindex(0), cursegment(0)
 {
   // If we have a sourcemap, check to see if the files exist. If they don't, see if we can reconstruct them
   path root      = GetPath(sourcemap->sourceRoot);
@@ -36,18 +35,18 @@ DebugSourceMap::DebugSourceMap(SourceMap* s, Context* context, llvm::Module& m, 
   {
     path source = GetPath(sourcemap->sources[i]);
     if(check(root / source))
-      sourcemap->sources[i] = AllocString(_context->env, (root / source).u8string());
+      sourcemap->sources[i] = AllocString(_compiler->env, (root / source).u8string());
     else if(check(source))
-      sourcemap->sources[i] = AllocString(_context->env, GetAbsolutePath(source).u8string());
+      sourcemap->sources[i] = AllocString(_compiler->env, GetAbsolutePath(source).u8string());
     else if(check(workdir / source))
-      sourcemap->sources[i] = AllocString(_context->env, (workdir / source).u8string());
+      sourcemap->sources[i] = AllocString(_compiler->env, (workdir / source).u8string());
     else if(check(parentdir / source))
-      sourcemap->sources[i] = AllocString(_context->env, (parentdir / source).u8string());
+      sourcemap->sources[i] = AllocString(_compiler->env, (parentdir / source).u8string());
     else if(i < sourcemap->n_sourcesContent && sourcemap->sourcesContent[i] != 0 && sourcemap->sourcesContent[i][0] != 0)
     {
       source = temp_directory_path() / source.filename();
       if(DumpFile(source, sourcemap->sourcesContent[i], strlen(sourcemap->sourcesContent[i])))
-        sourcemap->sources[i] = AllocString(_context->env, source.u8string());
+        sourcemap->sources[i] = AllocString(_compiler->env, source.u8string());
     }
   }
 
@@ -86,13 +85,17 @@ void DebugSourceMap::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned 
   if(f->range.scope >= sourcemap->n_innative_scopes)
     return;
   auto& scope = sourcemap->x_innative_scopes[f->range.scope];
-  auto name = (scope.name_index < sourcemap->n_names) ? fn->getName() : sourcemap->names[scope.name_index];
+  auto name   = (scope.name_index < sourcemap->n_names) ? fn->getName() : sourcemap->names[scope.name_index];
 
   llvm::SmallVector<llvm::Metadata*, 8> dwarfTys = { GetDebugType(f->type_index) };
   for(unsigned int i = 0; i < scope.n_variables; ++i)
-    if(sourcemap->x_innative_variables[scope.variables[i]].tag == DW_TAG_formal_parameter)
-      dwarfTys.push_back(GetDebugType(sourcemap->x_innative_variables[scope.variables[i]].type_index));
-
+  {
+    auto& v = sourcemap->x_innative_variables[scope.variables[i]];
+    if(v.tag == DW_TAG_formal_parameter)
+      dwarfTys.push_back(GetDebugType(v.type_index));
+    else if(v.tag == DW_TAG_unspecified_parameters)
+      dwarfTys.push_back(_dbuilder->createUnspecifiedParameter());
+  }
   auto subtype =
     _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(dwarfTys), llvm::DINode::FlagZero,
                                     (fn->getCallingConv() == llvm::CallingConv::C) ? DW_CC_normal : DW_CC_nocall);
@@ -125,8 +128,8 @@ void DebugSourceMap::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& d
     cursegment   = segment - sourcemap->segments;
   }
 
-  _context->builder.SetCurrentDebugLocation(
-    llvm::DILocation::get(_context->context, fn->getSubprogram()->getLine(), 0, fn->getSubprogram()));
+  _compiler->builder.SetCurrentDebugLocation(
+    llvm::DILocation::get(_compiler->ctx, fn->getSubprogram()->getLine(), 0, fn->getSubprogram()));
 
   // Unfortunately we can't actually gaurantee all the scopes will pop due to imprecise debug information
   while(scopes.Size() > 0)
@@ -154,12 +157,12 @@ void DebugSourceMap::UpdateLocation(Instruction& i)
         sourcemap->segments[cursegment].linecolumn < ((i.line - 1ULL) << 32 | i.column))
   {
     if(loc) // If we have a pending location, we need to create a nop instruction to hold it
-      _context->builder.CreateIntrinsic(llvm::Intrinsic::donothing, {}, {})->setDebugLoc(loc);
+      _compiler->builder.CreateIntrinsic(llvm::Intrinsic::donothing, {}, {})->setDebugLoc(loc);
 
     auto& s = sourcemap->segments[cursegment++];
 
     if(files[s.source_index] == _curscope->getFile() || s.source_index >= subprograms.size())
-      loc = llvm::DILocation::get(_context->context, s.original_line, s.original_column, _curscope);
+      loc = llvm::DILocation::get(_compiler->ctx, s.original_line, s.original_column, _curscope);
     else
     {
       if(!subprograms[s.source_index])
@@ -171,15 +174,15 @@ void DebugSourceMap::UpdateLocation(Instruction& i)
                                     original->getScopeLine(), original->getFlags(), original->getSPFlags());
       }
 
-      loc = _context->builder.getCurrentDebugLocation();
+      loc = _compiler->builder.getCurrentDebugLocation();
       if(loc->getInlinedAt())
         loc = loc->getInlinedAt();
-      loc = llvm::DILocation::get(_context->context, s.original_line, s.original_column, subprograms[s.source_index], loc);
+      loc = llvm::DILocation::get(_compiler->ctx, s.original_line, s.original_column, subprograms[s.source_index], loc);
     }
   }
 
   if(loc)
-    _context->builder.SetCurrentDebugLocation(loc);
+    _compiler->builder.SetCurrentDebugLocation(loc);
 }
 
 void DebugSourceMap::UpdateVariables(llvm::Function* fn, SourceMapScope& scope) {}
@@ -202,7 +205,7 @@ void DebugSourceMap::DebugIns(llvm::Function* fn, Instruction& i)
       scopes.Push(curscopeindex);
       if(!scopecache[cur.scope])
       {
-        llvm::DILocation* l   = _context->builder.getCurrentDebugLocation();
+        llvm::DILocation* l   = _compiler->builder.getCurrentDebugLocation();
         auto file             = GetSourceFile(sourcemap->segments[cursegment].source_index);
         scopecache[cur.scope] = _dbuilder->createLexicalBlock(_curscope, file, l->getLine(), l->getColumn());
       }
@@ -263,6 +266,10 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
     switch(type.tag)
     {
     case DW_TAG_base_type: types[index] = _dbuilder->createBasicType(name, type.bit_size, type.encoding); break;
+    case DW_TAG_array_type:
+      if(auto ty = GetDebugType(type.type_index))
+        types[index] = _dbuilder->createArrayType(type.bit_size, type.byte_align << 3, ty, llvm::DINodeArray());
+      break;
     case DW_TAG_const_type:
     case DW_TAG_volatile_type:
     case DW_TAG_restrict_type:

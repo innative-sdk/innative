@@ -2,7 +2,7 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "validate.h"
-#include "util.h"
+#include "utility.h"
 #include "stack.h"
 #include "link.h"
 #include <stdio.h>

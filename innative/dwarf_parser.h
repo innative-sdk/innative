@@ -7,22 +7,22 @@
 #include "innative/schema.h"
 #include "innative/sourcemap.h"
 #include "llvm.h"
-#include "util.h"
-
-static kh_inline khint_t kh_type_hash(const SourceMapType& s)
-{
-#ifdef IN_64BIT // if constexpr still generates a false warning about size_t
-  return kh_int64_hash_func(s.offset);
-#else
-  return kh_int_hash_func(s.offset);
-#endif
-}
-static kh_inline khint_t kh_type_equal(const SourceMapType& a, const SourceMapType& b) { return a.offset == b.offset; }
+#include "utility.h"
 
 KHASH_DECLARE(mapname, const char*, size_t);
 KHASH_DECLARE(maptype, SourceMapType, size_t);
 
 namespace innative {
+  static kh_inline khint_t kh_type_hash(const SourceMapType& s)
+  {
+#ifdef IN_64BIT // if constexpr still generates a false warning about size_t
+    return kh_int64_hash_func(s.offset);
+#else
+    return kh_int_hash_func(s.offset);
+#endif
+  }
+  static kh_inline khint_t kh_type_equal(const SourceMapType& a, const SourceMapType& b) { return a.offset == b.offset; }
+
   class DWARFParser
   {
   public:

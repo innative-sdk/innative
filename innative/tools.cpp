@@ -109,7 +109,7 @@ void innative::LoadModule(Environment* env, size_t index, const void* data, size
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
 }
 
-size_t ReserveModule(Environment* env, int* err)
+size_t innative::ReserveModule(Environment* env, int* err)
 {
   if((env->flags & ENV_MULTITHREADED) != 0 && env->maxthreads > 0)
   {

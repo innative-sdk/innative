@@ -4,29 +4,28 @@
 #include "llvm.h"
 #include "debug_dwarf.h"
 #include "compile.h"
-#include "util.h"
+#include "utility.h"
 #include <algorithm>
 
 using namespace innative;
 using namespace utility;
-using namespace code;
 using namespace llvm::dwarf;
 
-code::DebugDWARF::DebugDWARF(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath) :
-  DebugSourceMap(s, context, m, name, filepath, ENV_DEBUG_DWARF)
+DebugDWARF::DebugDWARF(SourceMap* s, Compiler* compiler, llvm::Module& m, const char* name, const char* filepath) :
+  DebugSourceMap(s, compiler, m, name, filepath, ENV_DEBUG_DWARF)
 {}
 
 void DebugDWARF::PostFuncBody(llvm::Function* fn, FunctionBody& body)
 {
   SourceMapFunction* f = GetSourceFunction(_curbody->column);
 
-  if(_context->globals.size() > 0)
+  if(_compiler->globals.size() > 0)
   {
     _dbuilder->insertDeclare(
-      _context->memlocal,
+      _compiler->memlocal,
       _dbuilder->createAutoVariable(_curscope, "MEMLOCAL", GetSourceFile(f->source_index), 0,
-                                    _dbuilder->createPointerType(diI32, _context->intptrty->getBitWidth()), true),
-      _dbuilder->createExpression(), _context->builder.getCurrentDebugLocation(), _context->builder.GetInsertBlock());
+                                    _dbuilder->createPointerType(diI32, _compiler->intptrty->getBitWidth()), true),
+      _dbuilder->createExpression(), _compiler->builder.getCurrentDebugLocation(), _compiler->builder.GetInsertBlock());
   }
 }
 
@@ -65,10 +64,10 @@ void DebugDWARF::UpdateVariables(llvm::Function* fn, SourceMapScope& scope)
     auto ty            = GetDebugType(v.type_index);
 
     if(v.n_expr > 1 && v.p_expr[0] == DW_OP_plus_uconst)
-      ty = StructOffsetType(ty, file, file, name, v.p_expr[1], _context->intptrty->getBitWidth(), 1);
+      ty = StructOffsetType(ty, file, file, name, v.p_expr[1], _compiler->intptrty->getBitWidth(), 1);
 
     llvm::DILocalVariable* dparam;
-    if(v.tag == DW_TAG_formal_parameter)
+    if(v.tag == DW_TAG_formal_parameter || v.tag == DW_TAG_unspecified_parameters)
       dparam = _dbuilder->createParameterVariable(_curscope, name, ++params, file, v.original_line, ty, true);
     else
       dparam = _dbuilder->createAutoVariable(_curscope, name, file, v.original_line, ty, true);
@@ -76,56 +75,56 @@ void DebugDWARF::UpdateVariables(llvm::Function* fn, SourceMapScope& scope)
     auto expr = _dbuilder->createExpression();
     if(v.n_expr > 1 && v.p_expr[0] == DW_OP_plus_uconst)
     {
-      _dbuilder->insertDeclare(_context->memlocal, dparam, expr,
-                               llvm::DILocation::get(_context->context, v.original_line, v.original_column, _curscope),
-                               _context->builder.GetInsertBlock());
+      _dbuilder->insertDeclare(_compiler->memlocal, dparam, expr,
+                               llvm::DILocation::get(_compiler->ctx, v.original_line, v.original_column, _curscope),
+                               _compiler->builder.GetInsertBlock());
     }
     else if(v.n_expr > 2 && v.p_expr[0] == DW_OP_WASM_location && v.p_expr[1] == DW_WASM_OP_LOCAL)
     {
       expr = _dbuilder->createExpression(llvm::SmallVector<int64_t, 3>{ DW_OP_deref, DW_OP_stack_value });
 
-      if(static_cast<unsigned long long>(v.p_expr[2]) < _context->locals.size())
-        _dbuilder->insertDbgValueIntrinsic(_context->locals[static_cast<size_t>(v.p_expr[2])], dparam, expr,
-                                           llvm::DILocation::get(_context->context, v.original_line, v.original_column,
+      if(static_cast<unsigned long long>(v.p_expr[2]) < _compiler->locals.size())
+        _dbuilder->insertDbgValueIntrinsic(_compiler->locals[static_cast<size_t>(v.p_expr[2])], dparam, expr,
+                                           llvm::DILocation::get(_compiler->ctx, v.original_line, v.original_column,
                                                                  _curscope),
-                                           _context->builder.GetInsertBlock());
+                                           _compiler->builder.GetInsertBlock());
     }
     else if(v.n_expr > 2 && v.p_expr[0] == DW_OP_WASM_location && v.p_expr[1] == DW_WASM_OP_GLOBAL)
     {
       expr = _dbuilder->createExpression(llvm::SmallVector<int64_t, 3>{ DW_OP_deref, DW_OP_stack_value });
 
-      if(static_cast<unsigned long long>(v.p_expr[2]) < _context->globals.size())
-        _dbuilder->insertDbgValueIntrinsic(_context->globals[static_cast<size_t>(v.p_expr[2])], dparam, expr,
-                                           llvm::DILocation::get(_context->context, v.original_line, v.original_column,
+      if(static_cast<unsigned long long>(v.p_expr[2]) < _compiler->globals.size())
+        _dbuilder->insertDbgValueIntrinsic(_compiler->globals[static_cast<size_t>(v.p_expr[2])], dparam, expr,
+                                           llvm::DILocation::get(_compiler->ctx, v.original_line, v.original_column,
                                                                  _curscope),
-                                           _context->builder.GetInsertBlock());
+                                           _compiler->builder.GetInsertBlock());
     }
     else if(v.n_expr > 2 && v.p_expr[0] == DW_OP_WASM_location && v.p_expr[1] == DW_WASM_OP_STACK)
     {
       expr = _dbuilder->createExpression(llvm::SmallVector<int64_t, 3>{ DW_OP_stack_value });
 
       if(static_cast<unsigned long long>(v.p_expr[2]) <
-         _context->values
+         _compiler->values
            .Size()) // TODO: we're going from the bottom of the limit, but it may be the bottom of the entire values stack
-        _dbuilder->insertDbgValueIntrinsic(_context->values.Get()[_context->values.Limit() + v.p_expr[2]], dparam, expr,
-                                           llvm::DILocation::get(_context->context, v.original_line, v.original_column,
+        _dbuilder->insertDbgValueIntrinsic(_compiler->values.Get()[_compiler->values.Limit() + v.p_expr[2]], dparam, expr,
+                                           llvm::DILocation::get(_compiler->ctx, v.original_line, v.original_column,
                                                                  _curscope),
-                                           _context->builder.GetInsertBlock());
+                                           _compiler->builder.GetInsertBlock());
     }
     else
-      _dbuilder->insertDbgValueIntrinsic(_context->memlocal, dparam, expr,
-                                         llvm::DILocation::get(_context->context, v.original_line, v.original_column,
+      _dbuilder->insertDbgValueIntrinsic(_compiler->memlocal, dparam, expr,
+                                         llvm::DILocation::get(_compiler->ctx, v.original_line, v.original_column,
                                                                _curscope),
-                                         _context->builder.GetInsertBlock());
+                                         _compiler->builder.GetInsertBlock());
   }
 
   {
     auto dparam = _dbuilder->createAutoVariable(
       _curscope, "scopeoffset", _curscope->getFile(), 0,
-      StructOffsetType(diI32, dunit, dunit, "scopeoffset", 0, _context->intptrty->getBitWidth(), 1), true);
+      StructOffsetType(diI32, dunit, dunit, "scopeoffset", 0, _compiler->intptrty->getBitWidth(), 1), true);
 
-    _dbuilder->insertDeclare(_context->memlocal, dparam, _dbuilder->createExpression(),
-                             llvm::DILocation::get(_context->context, 0, 0, _curscope), _context->builder.GetInsertBlock());
+    _dbuilder->insertDeclare(_compiler->memlocal, dparam, _dbuilder->createExpression(),
+                             llvm::DILocation::get(_compiler->ctx, 0, 0, _curscope), _compiler->builder.GetInsertBlock());
   }
 }
 

@@ -2,15 +2,14 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "llvm.h"
-#include "util.h"
+#include "utility.h"
 #include "link.h"
 #include "compile.h"
-#include "intrinsic.h"
 #include "innative/export.h"
 
 using namespace innative;
 
-IN_ERROR OutputObjectFile(code::Context& context, const path& out)
+IN_ERROR innative::OutputObjectFile(Compiler& context, const path& out)
 {
   std::error_code EC;
   llvm::raw_fd_ostream dest(out.u8string(), EC, llvm::sys::fs::F_None);
@@ -38,7 +37,7 @@ IN_ERROR OutputObjectFile(code::Context& context, const path& out)
     return ERR_FATAL_FILE_ERROR;
   }
 
-  pass.run(*context.llvm);
+  pass.run(*context.mod);
   dest.flush();
   return ERR_SUCCESS;
 }
@@ -192,9 +191,9 @@ void innative::DeleteCache(const Environment& env, Module& m)
 
   if(m.cache != nullptr)
   {
-    auto context = static_cast<code::Context*>(m.cache);
+    auto context = static_cast<Compiler*>(m.cache);
     kh_destroy_importhash(context->importhash);
-    delete context->llvm;
+    delete context->mod;
     delete context;
     m.cache = nullptr;
   }
@@ -255,7 +254,7 @@ void innative::AppendIntrinsics(Environment& env)
 {
   int r;
   if(env.cimports)
-    for(auto intrinsic : code::intrinsics)
+    for(auto intrinsic : Compiler::intrinsics)
       kh_put_cimport(env.cimports, ByteArray::Identifier(intrinsic.name, strlen(intrinsic.name)), &r);
 }
 
@@ -318,14 +317,14 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
     if(env->flags & ENV_EMIT_LLVM)
     {
       std::error_code EC;
-      llvm::raw_fd_ostream dest(((file.parent_path() / env->modules[i].cache->llvm->getName().str()) += ".llvm").u8string(),
+      llvm::raw_fd_ostream dest(((file.parent_path() / env->modules[i].cache->mod->getName().str()) += ".llvm").u8string(),
                                 EC, llvm::sys::fs::F_None);
-      env->modules[i].cache->llvm->print(dest, nullptr);
+      env->modules[i].cache->mod->print(dest, nullptr);
     }
 
     // Verify module
     llvm::raw_fd_ostream dest(1, false, true);
-    if(llvm::verifyModule(*env->modules[i].cache->llvm, &dest))
+    if(llvm::verifyModule(*env->modules[i].cache->mod, &dest))
       return ERR_FATAL_INVALID_MODULE;
   }
 

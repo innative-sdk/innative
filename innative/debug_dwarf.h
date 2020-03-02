@@ -8,18 +8,16 @@
 #include "stack.h"
 
 namespace innative {
-  namespace code {
-    class DebugDWARF : public DebugSourceMap
-    {
-    public:
-      DebugDWARF(SourceMap* s, Context* context, llvm::Module& m, const char* name, const char* filepath);
-      virtual void PostFuncBody(llvm::Function* fn, FunctionBody& body) override;
-      virtual llvm::DIType* GetDebugType(size_t index, llvm::DIType* parent = 0) override;
-      virtual void UpdateVariables(llvm::Function* fn, SourceMapScope& scope) override;
-      llvm::DIType* StructOffsetType(llvm::DIType* ty, llvm::DIScope* scope, llvm::DIFile* file, llvm::StringRef name,
-                                     uint64_t indice, unsigned int bitsize, unsigned int bytealign);
-    };
-  }
+  class DebugDWARF : public DebugSourceMap
+  {
+  public:
+    DebugDWARF(SourceMap* s, Compiler* compiler, llvm::Module& m, const char* name, const char* filepath);
+    virtual void PostFuncBody(llvm::Function* fn, FunctionBody& body) override;
+    virtual llvm::DIType* GetDebugType(size_t index, llvm::DIType* parent = 0) override;
+    virtual void UpdateVariables(llvm::Function* fn, SourceMapScope& scope) override;
+    llvm::DIType* StructOffsetType(llvm::DIType* ty, llvm::DIScope* scope, llvm::DIFile* file, llvm::StringRef name,
+                                   uint64_t indice, unsigned int bitsize, unsigned int bytealign);
+  };
 }
 
 #endif
