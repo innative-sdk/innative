@@ -257,6 +257,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
     kh_key(maptype, iter).name_index   = (size_t)~0;
     kh_key(maptype, iter).source_index = (size_t)~0;
     kh_key(maptype, iter).type_index   = (size_t)~0;
+    kh_key(maptype, iter).n_types      = 0;
 
     if(auto file = die.find(DW_AT_decl_file))
     {
@@ -289,6 +290,13 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
     case DW_TAG_array_type:
       ResolveBitAttribute<DW_AT_bit_stride, DW_AT_byte_stride>(die, kh_key(maptype, iter).bit_stride);
       ResolveDWARFBitSize(die, iter);
+
+      for(auto& child : die.children())
+        if(child.getTag() == DW_TAG_subrange_type)
+        {
+          if(auto count = child.find(DW_AT_count))
+            kh_key(maptype, iter).n_types = count->getAsUnsignedConstant().getValueOr(0ULL);
+        }
     case DW_TAG_atomic_type:
     case DW_TAG_const_type:
     case DW_TAG_immutable_type:
@@ -302,7 +310,8 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
     case DW_TAG_ptr_to_member_type:
     case DW_TAG_typedef:
     {
-      kh_key(maptype, iter).n_types = 1;
+      if(!kh_key(maptype, iter).n_types)
+        kh_key(maptype, iter).n_types = 1;
       const char* basename          = "void";
 
       if(auto innertype = die.find(DW_AT_type))
@@ -332,7 +341,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
         case DW_TAG_shared_type: modifier = modifier + "shared "; break;
         case DW_TAG_volatile_type: modifier = "volatile " + modifier; break;
         case DW_TAG_ptr_to_member_type: modifier = "(*" + modifier + ")"; break;
-        case DW_TAG_array_type: modifier = modifier + "[]"; break;
+        case DW_TAG_array_type: modifier = modifier + "[" + std::to_string(kh_key(maptype, iter).n_types) + "]"; break;
         }
         kh_key(maptype, iter).name_index = GetSourceMapName(modifier.c_str());
       }

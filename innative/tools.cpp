@@ -484,7 +484,7 @@ int innative::SerializeModule(Environment* env, size_t m, const char* out, size_
   if(m >= env->n_modules)
     return ERR_FATAL_INVALID_MODULE;
 
-  Serializer serializer(*env, env->modules[m]);
+  Serializer serializer(*env, env->modules[m], 0);
   serializer.TokenizeModule(emitdebug);
   int err = CheckWatTokens(*env, env->errors, serializer.tokens, "");
   if(err < 0)
@@ -502,6 +502,7 @@ int innative::SerializeModule(Environment* env, size_t m, const char* out, size_
   {
     std::ostringstream ss;
     serializer.WriteTokens(ss);
+    ss << std::endl;
     if(ss.tellp() < 0)
       return ERR_FATAL_FILE_ERROR;
 
@@ -522,6 +523,7 @@ int innative::SerializeModule(Environment* env, size_t m, const char* out, size_
     return ERR_FATAL_FILE_ERROR;
 
   serializer.WriteTokens(f);
+  f << std::endl;
   return ERR_SUCCESS;
 }
 int innative::LoadSourceMap(Environment* env, unsigned int m, const char* path, size_t len)

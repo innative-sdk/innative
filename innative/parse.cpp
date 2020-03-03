@@ -6,8 +6,10 @@
 #include "stream.h"
 #include "utility.h"
 #include "dwarf_parser.h"
+#include "serialize.h"
 #include <assert.h>
 #include <algorithm>
+#include <fstream>
 
 using namespace innative;
 using namespace utility;
@@ -911,6 +913,21 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
 
   if(m.code.n_funcbody != m.function.n_funcdecl)
     return ERR_FUNCTION_BODY_MISMATCH;
+
+  // If we are requesting debug information but none exists, generate a .wat file
+  if(!m.sourcemap && (env.flags & ENV_DEBUG) != 0)
+  {
+    auto path = temp_directory_path() / m.name.str();
+    path += ".wat";
+    m.filepath = utility::AllocString(const_cast<Environment&>(env), path.generic_u8string());
+    std::ofstream f(m.filepath, std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
+    if(!f.bad())
+    {
+      Serializer serializer(env, m, &f);
+      serializer.TokenizeModule(false);
+      f << std::endl;
+    }
+  }
 
   return ParseExportFixup(m, errors, env);
 }

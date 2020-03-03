@@ -9,7 +9,9 @@ using namespace innative;
 using namespace utility;
 using namespace wat;
 
-Serializer::Serializer(const Environment& _env, const Module& _m) : env(_env), m(_m) {}
+Serializer::Serializer(const Environment& _env, Module& _m, std::ostream* out) :
+  env(_env), m(_m), _line(0), _lastp(0), _dump(out), _stack(0), _depth(0), _localbreak(false)
+{}
 
 WatTokens Serializer::TypeEncodingToken(varsint7 type_encoding)
 {
@@ -136,8 +138,8 @@ void Serializer::PushBlockToken(int index)
     tokens.Push(WatToken{ WatTokens::INTEGER, 0, 0, 0, index });
 }
 
-void Serializer::TokenizeInstruction(const Instruction& ins, const FunctionBody* body, const FunctionDesc* desc,
-                                     size_t& block, bool emitdebug)
+void Serializer::TokenizeInstruction(Instruction& ins, const FunctionBody* body, const FunctionDesc* desc, size_t& block,
+                                     bool emitdebug)
 {
   if(ins.opcode >= OPNAMES.size())
   {
@@ -147,6 +149,8 @@ void Serializer::TokenizeInstruction(const Instruction& ins, const FunctionBody*
 
   if(emitdebug && ins.line > 0)
     tokens.Push(WatToken{ WatTokens::DEBUG_INFO, 0, ins.line, ins.column });
+
+  DumpTokens(ins.line, ins.column);
   tokens.Push(WatToken{ WatTokens::OPERATOR, 0, 0, 0, ins.opcode });
 
   switch(ins.opcode)
@@ -376,6 +380,7 @@ void Serializer::TokenizeModule(bool emitdebug)
       switch(imp.kind)
       {
       case WASM_KIND_FUNCTION:
+      {
         tokens.Push(WatToken{ WatTokens::FUNC });
         PushFunctionName(i);
 
@@ -384,46 +389,53 @@ void Serializer::TokenizeModule(bool emitdebug)
         PushNewNameToken("t%u", imp.func_desc.type_index);
         tokens.Push(WatToken{ WatTokens::CLOSE });
 
-        if(imp.func_desc.param_debug)
+        auto& fn  = m.type.functypes[imp.func_desc.type_index];
+        bool open = false;
+
+        if(_dump && !imp.func_desc.param_debug)
         {
-          auto& fn  = m.type.functypes[imp.func_desc.type_index];
-          bool open = false;
-          for(varuint32 j = 0; j < fn.n_params; ++j)
-          {
-            if(emitdebug && imp.func_desc.param_debug != 0 && imp.func_desc.param_debug[j].line > 0)
-              tokens.Push(WatToken{ WatTokens::DEBUG_INFO, 0, imp.func_desc.param_debug[j].line,
-                                    imp.func_desc.param_debug[j].column });
-            if(!open)
-            {
-              tokens.Push(WatToken{ WatTokens::OPEN });
-              tokens.Push(WatToken{ WatTokens::PARAM });
-              open = true;
-            }
+          imp.func_desc.param_debug = tmalloc<DebugInfo>(env, fn.n_params);
+          memset(imp.func_desc.param_debug, 0, sizeof(DebugInfo) * fn.n_params);
+        }
 
-            if(imp.func_desc.param_debug[j].name.size() > 0)
-            {
-              PushIdentifierToken(imp.func_desc.param_debug[j].name, WatTokens::NAME);
-              tokens.Push(WatToken{ TypeEncodingToken(fn.params[j]) });
-              tokens.Push(WatToken{ WatTokens::CLOSE });
-              open = false;
-            }
-            else
-              tokens.Push(WatToken{ TypeEncodingToken(fn.params[j]) });
-          }
-
-          if(open)
-            tokens.Push(WatToken{ WatTokens::CLOSE });
-
-          if(auto n_returns = m.type.functypes[imp.func_desc.type_index].n_returns; n_returns > 0)
+        for(varuint32 j = 0; j < fn.n_params; ++j)
+        {
+          if(imp.func_desc.param_debug)
+            DumpTokens(imp.func_desc.param_debug[j].line, imp.func_desc.param_debug[j].column);
+          if(emitdebug && imp.func_desc.param_debug != 0 && imp.func_desc.param_debug[j].line > 0)
+            tokens.Push(
+              WatToken{ WatTokens::DEBUG_INFO, 0, imp.func_desc.param_debug[j].line, imp.func_desc.param_debug[j].column });
+          if(!open)
           {
             tokens.Push(WatToken{ WatTokens::OPEN });
-            tokens.Push(WatToken{ WatTokens::RESULT });
-            for(varuint32 j = 0; j < n_returns; ++j)
-              tokens.Push(WatToken{ TypeEncodingToken(fn.returns[j]) });
-            tokens.Push(WatToken{ WatTokens::CLOSE });
+            tokens.Push(WatToken{ WatTokens::PARAM });
+            open = true;
           }
+
+          if(imp.func_desc.param_debug && imp.func_desc.param_debug[j].name.size() > 0)
+          {
+            PushIdentifierToken(imp.func_desc.param_debug[j].name, WatTokens::NAME);
+            tokens.Push(WatToken{ TypeEncodingToken(fn.params[j]) });
+            tokens.Push(WatToken{ WatTokens::CLOSE });
+            open = false;
+          }
+          else
+            tokens.Push(WatToken{ TypeEncodingToken(fn.params[j]) });
+        }
+
+        if(open)
+          tokens.Push(WatToken{ WatTokens::CLOSE });
+
+        if(auto n_returns = m.type.functypes[imp.func_desc.type_index].n_returns; n_returns > 0)
+        {
+          tokens.Push(WatToken{ WatTokens::OPEN });
+          tokens.Push(WatToken{ WatTokens::RESULT });
+          for(varuint32 j = 0; j < n_returns; ++j)
+            tokens.Push(WatToken{ TypeEncodingToken(fn.returns[j]) });
+          tokens.Push(WatToken{ WatTokens::CLOSE });
         }
         break;
+      }
       case WASM_KIND_TABLE:
         tokens.Push(WatToken{ WatTokens::TABLE });
         tokenize_limits(tokens, imp.table_desc.resizable);
@@ -449,6 +461,7 @@ void Serializer::TokenizeModule(bool emitdebug)
 
   for(varuint32 i = 0; i < m.function.n_funcdecl && i < m.code.n_funcbody; ++i)
   {
+    DumpTokens(m.function.funcdecl[i].debug.line, m.function.funcdecl[i].debug.column);
     if(emitdebug && m.function.funcdecl[i].debug.line > 0)
       tokens.Push(
         WatToken{ WatTokens::DEBUG_INFO, 0, m.function.funcdecl[i].debug.line, m.function.funcdecl[i].debug.column });
@@ -468,13 +481,23 @@ void Serializer::TokenizeModule(bool emitdebug)
       continue;
     }
 
+    DumpTokens(m.code.funcbody[i].line, m.code.funcbody[i].column);
     if(emitdebug && m.code.funcbody[i].line > 0)
       tokens.Push(WatToken{ WatTokens::DEBUG_INFO, 0, m.code.funcbody[i].line, m.code.funcbody[i].column });
 
     auto& decl = m.function.funcdecl[i];
     auto& fn   = m.type.functypes[decl.type_index];
+
+    if(_dump && !decl.param_debug)
+    {
+      decl.param_debug = tmalloc<DebugInfo>(env, fn.n_params);
+      memset(decl.param_debug, 0, sizeof(DebugInfo) * fn.n_params);
+    }
+
     for(varuint32 j = 0; j < fn.n_params; ++j)
     {
+      if(decl.param_debug)
+        DumpTokens(decl.param_debug[j].line, decl.param_debug[j].column);
       if(emitdebug && decl.param_debug && decl.param_debug[j].line > 0)
         tokens.Push(WatToken{ WatTokens::DEBUG_INFO, 0, decl.param_debug[j].line, decl.param_debug[j].column });
       tokens.Push(WatToken{ WatTokens::OPEN });
@@ -497,6 +520,7 @@ void Serializer::TokenizeModule(bool emitdebug)
     for(varuint32 j = 0; j < m.code.funcbody[i].n_locals; ++j)
     {
       auto& local = m.code.funcbody[i].locals[j];
+      DumpTokens(local.debug.line, local.debug.column);
       if(emitdebug && local.debug.line > 0)
         tokens.Push(WatToken{ WatTokens::DEBUG_INFO, 0, local.debug.line, local.debug.column });
 
@@ -521,6 +545,7 @@ void Serializer::TokenizeModule(bool emitdebug)
   if(m.knownsections & (1 << WASM_SECTION_TABLE))
     for(varuint32 i = 0; i < m.table.n_tables; ++i)
     {
+      DumpTokens(m.table.tables[i].debug.line, m.table.tables[i].debug.column);
       if(emitdebug && m.table.tables[i].debug.line > 0)
         tokens.Push(WatToken{ WatTokens::DEBUG_INFO, 0, m.table.tables[i].debug.line, m.table.tables[i].debug.column });
       tokens.Push(WatToken{ WatTokens::OPEN });
@@ -534,6 +559,7 @@ void Serializer::TokenizeModule(bool emitdebug)
   if(m.knownsections & (1 << WASM_SECTION_MEMORY))
     for(varuint32 i = 0; i < m.memory.n_memories; ++i)
     {
+      DumpTokens(m.memory.memories[i].debug.line, m.memory.memories[i].debug.column);
       if(emitdebug && m.memory.memories[i].debug.line > 0)
         tokens.Push(
           WatToken{ WatTokens::DEBUG_INFO, 0, m.memory.memories[i].debug.line, m.memory.memories[i].debug.column });
@@ -547,6 +573,7 @@ void Serializer::TokenizeModule(bool emitdebug)
   if(m.knownsections & (1 << WASM_SECTION_GLOBAL))
     for(varuint32 i = 0; i < m.global.n_globals; ++i)
     {
+      DumpTokens(m.global.globals[i].desc.debug.line, m.global.globals[i].desc.debug.column);
       if(emitdebug && m.global.globals[i].desc.debug.line > 0)
         tokens.Push(
           WatToken{ WatTokens::DEBUG_INFO, 0, m.global.globals[i].desc.debug.line, m.global.globals[i].desc.debug.column });
@@ -611,32 +638,29 @@ void Serializer::TokenizeModule(bool emitdebug)
 
 void Serializer::WriteTokens(std::ostream& out)
 {
-  size_t depth    = 0;
-  size_t stack    = 0;
-  size_t line     = 0;
-  bool localbreak = false;
-
-  auto pushline = [](size_t& line, size_t stack, std::ostream& out) {
+  auto pushline = [](size_t& line, std::streampos& lastp, size_t stack, std::ostream& out) {
+    out << "\n";
+    lastp = out.tellp();
     ++line;
-    out << "\n    ";
+    out << "    ";
     for(size_t k = 0; k < stack * 2; ++k)
       out.put(' ');
   };
 
   for(size_t i = 0; i < tokens.Size(); ++i)
   {
-    assert(depth != (size_t)~0);
-    assert(stack != (size_t)~0);
+    assert(_depth != (size_t)~0);
+    assert(_stack != (size_t)~0);
 
     if(i > 0 && (tokens[i - 1].id == WatTokens::OFFSET || tokens[i - 1].id == WatTokens::ALIGN))
       out << '=';
     else if(i > 0 && tokens[i - 1].id != WatTokens::OPEN && tokens[i].id != WatTokens::CLOSE)
       out << ' ';
 
-    if(((i + 1) < tokens.Size()) && (tokens[i + 1].id == WatTokens::LOCAL) && !localbreak)
+    if(((i + 1) < tokens.Size()) && (tokens[i + 1].id == WatTokens::LOCAL) && !_localbreak)
     {
-      localbreak = true;
-      pushline(line, stack, out);
+      _localbreak = true;
+      pushline(_line, _lastp, _stack, out);
     }
 
     switch(tokens[i].id)
@@ -674,21 +698,21 @@ void Serializer::WriteTokens(std::ostream& out)
       out.write(tokens[i].pos, tokens[i].len);
       break;
     case WatTokens::OPERATOR:
-      if(!stack && tokens[i].u == OP_end)
+      if(!_stack && tokens[i].u == OP_end)
         break; // Skip the final end in the function
       switch(tokens[i].u)
       {
-      case OP_end: --stack;
+      case OP_end: --_stack;
       default:
-        if(depth == 2)
-          pushline(line, stack, out);
+        if(_depth == 2)
+          pushline(_line, _lastp, _stack, out);
         break;
       case OP_block:
       case OP_if:
       case OP_loop:
-        if(depth == 2)
-          pushline(line, stack, out);
-        ++stack;
+        if(_depth == 2)
+          pushline(_line, _lastp, _stack, out);
+        ++_stack;
         break;
       }
 
@@ -705,10 +729,10 @@ void Serializer::WriteTokens(std::ostream& out)
     case WatTokens::INTEGER: out << std::to_string(tokens[i].i); break;
     case WatTokens::FLOAT: out << std::to_string(tokens[i].f); break;
     case WatTokens::OPEN:
-      ++depth;
-      if(depth == 2)
+      ++_depth;
+      if(_depth == 2)
       {
-        ++line;
+        ++_line;
         out << "\n  ";
       }
       out << GetTokenString(tokens[i].id);
@@ -718,13 +742,22 @@ void Serializer::WriteTokens(std::ostream& out)
       out << '[' << tokens[i].line << ':' << tokens[i].column << ']';
       break;
     case WatTokens::FUNC:
-      localbreak = false;
+      _localbreak = false;
       out << GetTokenString(tokens[i].id);
       break;
-    case WatTokens::CLOSE: --depth;
+    case WatTokens::CLOSE: --_depth;
     default: out << GetTokenString(tokens[i].id); break;
     }
   }
+}
 
-  out << "\n";
+void Serializer::DumpTokens(unsigned int& line, unsigned int& column)
+{
+  if(_dump)
+  {
+    WriteTokens(*_dump);
+    column = _dump->tellp() - _lastp;
+    line   = _line;
+    tokens.Clear();
+  }
 }
