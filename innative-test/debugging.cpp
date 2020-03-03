@@ -8,7 +8,8 @@ struct Complex
   int a;
   float b;
   struct Complex* c;
-
+  short z[3];
+  
   Complex() : a(0), b(1.0) {}
   explicit Complex(int i) : a(i), b(1.0) {}
 };
@@ -53,7 +54,10 @@ extern "C" void* malloc(uintptr_t n);
 extern "C" __attribute__((visibility("default"))) int debug(int n)
 {
   Complex* f = (Complex*)malloc(sizeof(Complex) * 3);
-  f[0].a     = n + 1;
+  f->z[0] = 1;
+  f->z[1] = 2;
+  f->z[2] = 3;
+  f[0].a     = n + f->z[0];
   f[1].a     = n * n;
   f[2].a     = n * n * n;
 

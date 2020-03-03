@@ -47,14 +47,18 @@ enum DW_WASM_OP
   DW_WASM_OP_STACK  = 0x02,
 };
 
-llvm::DIType* DebugPDB::StructOffsetType(llvm::DIType* ty, llvm::DIScope* scope, llvm::DIFile* file, llvm::StringRef name,
+llvm::DIType* DebugPDB::StructOffsetType(size_t index, llvm::DIScope* scope, llvm::DIFile* file, llvm::StringRef name,
                                          uint64_t indice, llvm::Function* fn)
 {
+  llvm::DIType* ty          = GetDebugType(index);
+  llvm::StringRef type_name = sourcemap->x_innative_types[index].name_index < sourcemap->n_names ?
+                                sourcemap->names[sourcemap->x_innative_types[index].name_index] :
+                                ty->getName();
+
   auto member = _dbuilder->createMemberType(scope, name, file, 0, ty->getSizeInBits(), 1, 0, llvm::DINode::FlagZero, ty);
   auto offset = _dbuilder->createStructType(
-    scope,
-    FormatString(false, "{0}::${1}{2}", Compiler::CppString(_compiler->m.name.str()), name, _uid++, ty->getName()),
-    file, 0, ty->getSizeInBits(), 1, llvm::DINode::FlagZero, 0, _dbuilder->getOrCreateArray({ member }));
+    scope, FormatString(false, "{0}::${1}{2}", Compiler::CppString(_compiler->m.name.str()), name, _uid++, type_name), file,
+    0, ty->getSizeInBits(), 1, llvm::DINode::FlagZero, 0, _dbuilder->getOrCreateArray({ member }));
 
   if(_compiler->globals.size() > 0 && _compiler->memories.size() > 0)
   {
@@ -65,8 +69,11 @@ llvm::DIType* DebugPDB::StructOffsetType(llvm::DIType* ty, llvm::DIScope* scope,
     _compiler->memories[0]->getDebugInfo(expr);
     auto mem = expr[0]->getVariable()->getName();
 
-    if(ty->getName().startswith("p<"))
+    switch(sourcemap->x_innative_types[index].tag)
     {
+    case DW_TAG_rvalue_reference_type:
+    case DW_TAG_reference_type:
+    case DW_TAG_pointer_type:
       _compiler->natvis +=
         FormatString(true,
                      "<Type Name=\"{0}\">"
@@ -74,16 +81,28 @@ llvm::DIType* DebugPDB::StructOffsetType(llvm::DIType* ty, llvm::DIScope* scope,
                      "<Expand><ExpandedItem>({1}*)(*(unsigned int*)({2}.m0 + {3} + {4}))</ExpandedItem></Expand>"
                      "</Type>",
                      offset->getName(), ty->getName(), mem, global, indice);
-    }
-    else
+      break;
+    case DW_TAG_array_type:
     {
-      auto view = FormatString(true,
-                               "<Type Name=\"{0}\"><DisplayString>{*({1}*)({2}.m0 + {3} + {4})}</DisplayString></Type>",
-                               offset->getName(), ty->getName(), mem, global, indice);
-      
+      size_t base_index = index;
+      while(sourcemap->x_innative_types[base_index].type_index != (size_t)~0)
+        base_index = sourcemap->x_innative_types[base_index].type_index;
+
+      _compiler->natvis +=
+        FormatString(true,
+                     "<Type Name=\"{0}\"><DisplayString>{{{*({1}*)({2}.m0 + {3} + {4})}}}</DisplayString>"
+                     "<Expand><Item Name=\"[size]\">{5}</Item>"
+                     "<ArrayItems><Size>{5}</Size><ValuePointer>({1}*)({2}.m0 + {3} + {4})</ValuePointer></ArrayItems>"
+                     "</Expand></Type>",
+                     offset->getName(), GetDebugType(base_index)->getName(), mem, global, indice,
+                     sourcemap->x_innative_types[index].n_types);
+    }
+    break;
+    default:
       _compiler->natvis +=
         FormatString(true, "<Type Name=\"{0}\"><DisplayString>{*({1}*)({2}.m0 + {3} + {4})}</DisplayString></Type>",
-                     offset->getName(), ty->getName(), mem, global, indice);
+                     offset->getName(), type_name, mem, global, indice);
+      break;
     }
   }
 
@@ -97,13 +116,15 @@ void DebugPDB::UpdateVariables(llvm::Function* fn, SourceMapScope& scope)
   for(size_t i = 0; i < scope.n_variables; ++i)
   {
     assert(scope.variables[i] < sourcemap->n_innative_variables);
-    auto& v            = sourcemap->x_innative_variables[scope.variables[i]];
-    const char* name   = v.name_index < sourcemap->n_names ? sourcemap->names[v.name_index] : "";
-    llvm::DIFile* file = GetSourceFile(v.source_index);
-    auto ty            = GetDebugType(v.type_index);
+    auto& v = sourcemap->x_innative_variables[scope.variables[i]];
+    llvm::DIType* ty;
+    llvm::StringRef name = v.name_index < sourcemap->n_names ? sourcemap->names[v.name_index] : "";
+    llvm::DIFile* file   = GetSourceFile(v.source_index);
 
     if(v.n_expr > 1 && v.p_expr[0] == DW_OP_plus_uconst)
-      ty = StructOffsetType(ty, file, file, name, v.p_expr[1], fn);
+      ty = StructOffsetType(v.type_index, file, file, name, v.p_expr[1], fn);
+    else
+      ty = GetDebugType(v.type_index);
 
     llvm::DILocalVariable* dparam;
     if(v.tag == DW_TAG_formal_parameter)
@@ -245,15 +266,34 @@ void DebugPDB::Finalize()
             else if(element->getTag() == DW_TAG_inheritance)
             {
               _compiler->natvis += FormatString(true, "<Item Name=\"[{0}]\">*({0}*)({1}.m0+(unsigned int)this+{2})</Item>",
-                                               element->getBaseType()->getName(), expr[0]->getVariable()->getName(),
-                                               element->getOffsetInBits() / 8);
+                                                element->getBaseType()->getName(), expr[0]->getVariable()->getName(),
+                                                element->getOffsetInBits() / 8);
+            }
+            else if(element->getBaseType()->getTag() == DW_TAG_array_type)
+            {
+              auto composite = llvm::cast<llvm::DICompositeType>(element->getBaseType());
+              auto base      = composite->getBaseType();
+              while(base->getName().empty())
+              {
+                if(auto derived = llvm::dyn_cast<llvm::DIDerivedType>(base))
+                  base = derived->getBaseType();
+                else if(auto comp = llvm::dyn_cast<llvm::DICompositeType>(base))
+                  base = comp->getBaseType();
+              }
+              auto count = composite->getSizeInBits() / base->getSizeInBits(); // TODO: replace with actual subrange count
+
+              aux += FormatString(true, "{0}:{this->{0}} ", element->getName());
+              _compiler->natvis += FormatString(true,
+                                                "<Item Name=\"{0}\">*({1}*)({2}.m0+(unsigned int)this+{3})</Item>",
+                                                element->getName(), base->getName(), expr[0]->getVariable()->getName(),
+                                                element->getOffsetInBits() / 8, count);
             }
             else
             {
               aux += FormatString(true, "{0}:{this->{0}} ", element->getName());
               _compiler->natvis += FormatString(true, "<Item Name=\"{0}\">*({1}*)({2}.m0+(unsigned int)this+{3})</Item>",
-                                               element->getName(), element->getBaseType()->getName(),
-                                               expr[0]->getVariable()->getName(), element->getOffsetInBits() / 8);
+                                                element->getName(), element->getBaseType()->getName(),
+                                                expr[0]->getVariable()->getName(), element->getOffsetInBits() / 8);
             }
           }
 
@@ -266,7 +306,7 @@ void DebugPDB::Finalize()
       }
       else
         _compiler->natvis += FormatString(true, "<ExpandedItem>*({0}*)({1}.m0+(unsigned int)this)</ExpandedItem>", name,
-                                         expr[0]->getVariable()->getName());
+                                          expr[0]->getVariable()->getName());
       _compiler->natvis += "</Expand></Type>";
       _compiler->natvis += aux;
     }

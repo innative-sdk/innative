@@ -38,6 +38,11 @@ namespace innative {
     inline size_t Size() const { return _array.size() - _pos; }
     inline void SetPosition(size_t pos) { _pos = pos; }
     inline size_t GetPosition() const { return _pos; }
+    inline void Clear()
+    {
+      _pos = 0;
+      _array.clear();
+    }
 
     const T& operator[](size_t i) const
     {

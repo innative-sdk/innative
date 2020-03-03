@@ -268,7 +268,12 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
     case DW_TAG_base_type: types[index] = _dbuilder->createBasicType(name, type.bit_size, type.encoding); break;
     case DW_TAG_array_type:
       if(auto ty = GetDebugType(type.type_index))
-        types[index] = _dbuilder->createArrayType(type.bit_size, type.byte_align << 3, ty, llvm::DINodeArray());
+      {
+        llvm::Metadata* range[] = { _dbuilder->getOrCreateSubrange(0, type.n_types) };
+        types[index] = _dbuilder->createArrayType(!type.bit_size ? ty->getSizeInBits() * type.n_types : type.bit_size,
+                                                  !type.byte_align ? ty->getAlignInBits() : (type.byte_align << 3), ty,
+                                                  !type.n_types ? llvm::DINodeArray() : _dbuilder->getOrCreateArray(range));
+      }
       break;
     case DW_TAG_const_type:
     case DW_TAG_volatile_type:
