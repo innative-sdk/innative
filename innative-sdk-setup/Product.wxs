@@ -10,7 +10,7 @@
   <?error Unknown value for Platform variable ?>
   <?endif ?>
 
-  <?define Version="0.1.5" ?>
+  <?define Version="0.1.6" ?>
   <Product 
     Id="25A4AE98-4F30-4735-B29B-37B6EDC5A9E9"
     Name="inNative SDK v$(var.Version)" 

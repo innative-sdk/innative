@@ -632,8 +632,12 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
       ++n_scopes;
       ++n_functions;
     }
+    else if(tag == DW_TAG_label)
+      return true; // Ignored
+    else if(tag == DW_TAG_inlined_subroutine)
+      return true; // not currently handled
     else
-      return false;
+      return true; // We don't throw an error here so unexpected debug entries can simply be ignored
 
     scope->name_index = (size_t)~0;
     if(auto name = die.find(DW_AT_name))
