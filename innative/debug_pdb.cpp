@@ -280,7 +280,13 @@ void DebugPDB::Finalize()
                 else if(auto comp = llvm::dyn_cast<llvm::DICompositeType>(base))
                   base = comp->getBaseType();
               }
-              auto count = composite->getSizeInBits() / base->getSizeInBits(); // TODO: replace with actual subrange count
+              auto count = !base->getSizeInBits() ? 0 : (composite->getSizeInBits() / base->getSizeInBits());
+              for(auto* e : composite->getElements())
+              {
+                if(auto* subrange = llvm::dyn_cast<llvm::DISubrange>(e))
+                  if(auto* data = subrange->getCount().dyn_cast<llvm::ConstantInt*>(); true)
+                    count = data->getSExtValue();
+              }
 
               aux += FormatString(true, "{0}:{this->{0}} ", element->getName());
               _compiler->natvis += FormatString(true,

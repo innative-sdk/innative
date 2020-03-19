@@ -262,7 +262,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
     if(auto file = die.find(DW_AT_decl_file))
     {
       if(const auto* LT = unit.getContext().getLineTableForUnit(&unit))
-        kh_key(maptype, iter).source_index = static_cast<size_t>(file->getAsUnsignedConstant().getValueOr(0ULL) - 1);
+        kh_key(maptype, iter).source_index = static_cast<size_t>(file->getAsUnsignedConstant().getValueOr(0ULL) - 1) + file_offset;
     }
     if(auto line = die.find(DW_AT_decl_line))
       kh_key(maptype, iter).original_line = static_cast<unsigned int>(line->getAsUnsignedConstant().getValueOr(0ULL));
@@ -312,7 +312,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
     {
       if(!kh_key(maptype, iter).n_types)
         kh_key(maptype, iter).n_types = 1;
-      const char* basename          = "void";
+      const char* basename = "void";
 
       if(auto innertype = die.find(DW_AT_type))
       {
@@ -519,7 +519,7 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
     if(auto file = die.find(DW_AT_decl_file))
     {
       if(const auto* LT = CU->getContext().getLineTableForUnit(CU))
-        v.source_index = static_cast<decltype(v.source_index)>(file->getAsUnsignedConstant().getValue() - 1);
+        v.source_index = static_cast<decltype(v.source_index)>(file->getAsUnsignedConstant().getValue() - 1) + file_offset;
     }
     if(auto location = die.find(DW_AT_location))
     {
@@ -603,7 +603,7 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
     {
       assert(n_functions < map->n_innative_functions);
       auto& v = map->x_innative_functions[n_functions];
-      assert(n_functions < map->n_innative_scopes);
+      assert(n_scopes < map->n_innative_scopes);
       scope = &map->x_innative_scopes[n_scopes];
 
       map->x_innative_functions[n_functions].range.scope = n_scopes;
@@ -615,7 +615,8 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
       if(auto file = die.find(DW_AT_decl_file))
       {
         if(const auto* LT = CU->getContext().getLineTableForUnit(CU))
-          v.source_index = static_cast<decltype(v.source_index)>(file->getAsUnsignedConstant().getValue() - 1);
+          v.source_index =
+            static_cast<decltype(v.source_index)>(file->getAsUnsignedConstant().getValue() - 1) + file_offset;
       }
 
       if(auto addresses = die.getAddressRanges())
@@ -669,9 +670,9 @@ bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
 {
   for(auto& CU : DICtx.compile_units())
   {
-    size_t file_offset    = map->n_sources;
-    size_t content_offset = map->n_sourcesContent;
-    size_t mapping_offset = map->n_segments;
+    file_offset    = map->n_sources;
+    content_offset = map->n_sourcesContent;
+    mapping_offset = map->n_segments;
 
     auto linetable  = DICtx.getLineTableForUnit(CU.get());
     auto& filenames = linetable->Prologue.FileNames;
@@ -683,9 +684,14 @@ bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
 
     for(size_t i = 0; i < filenames.size(); ++i)
     {
-      map->sources[file_offset + i] = filenames[i].Name.getAsCString().hasValue() ?
-                                        innative::utility::AllocString(*env, filenames[i].Name.getAsCString().getValue()) :
-                                        "";
+      map->sources[file_offset + i] = "";
+      std::string File;
+      if(linetable->getFileNameByIndex(i + 1, CU->getCompilationDir(),
+                                       llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath, File))
+      {
+        map->sources[file_offset + i] = innative::utility::AllocString(*env, std::filesystem::absolute(File).u8string());
+      }
+
       map->sourcesContent[content_offset + i] =
         filenames[i].Source.getAsCString().hasValue() ?
           innative::utility::AllocString(*env, filenames[i].Source.getAsCString().getValue()) :
@@ -799,7 +805,10 @@ DWARFParser::DWARFParser(struct IN_WASM_ENVIRONMENT* env, SourceMap* map) :
   n_scopes(0),
   n_functions(0),
   mapname(kh_init_mapname()),
-  maptype(kh_init_maptype())
+  maptype(kh_init_maptype()),
+  file_offset(0),
+  content_offset(0),
+  mapping_offset(0)
 {}
 
 DWARFParser::~DWARFParser()

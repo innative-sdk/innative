@@ -37,8 +37,6 @@ namespace innative {
     bool handleFile(llvm::StringRef Filename, HandlerFn HandleObj);
     llvm::DWARFDie AsReferencedDIE(const llvm::DWARFFormValue& V, const llvm::DWARFUnit& unit);
     size_t GetSourceMapName(const char* name);
-    size_t GetSourceMapType(llvm::DWARFUnit& unit, const llvm::DWARFDie& die);
-    size_t GetSourceMapTypeRef(llvm::DWARFUnit& unit, const llvm::DWARFFormValue& type);
     const char* GetDieName(const llvm::DWARFDie& die);
     bool DumpSourceMap(llvm::DWARFContext& DICtx, size_t code_section_offset);
     void ResolveDWARFBitSize(const llvm::DWARFDie& die, khint_t iter);
@@ -72,6 +70,9 @@ namespace innative {
     }
 
   protected:
+    size_t GetSourceMapType(llvm::DWARFUnit& unit, const llvm::DWARFDie& die);
+    size_t GetSourceMapTypeRef(llvm::DWARFUnit& unit, const llvm::DWARFFormValue& type);
+
     Environment* env;
     SourceMap* map;
     kh_maptype_t* maptype;
@@ -82,6 +83,9 @@ namespace innative {
     size_t n_ranges;
     size_t n_scopes;
     size_t n_functions;
+    size_t file_offset;
+    size_t content_offset;
+    size_t mapping_offset;
   };
 }
 
