@@ -85,7 +85,7 @@ void DebugSourceMap::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned 
   if(f->range.scope >= sourcemap->n_innative_scopes)
     return;
   auto& scope = sourcemap->x_innative_scopes[f->range.scope];
-  auto name   = (scope.name_index < sourcemap->n_names) ? fn->getName() : sourcemap->names[scope.name_index];
+  auto name   = (scope.name_index < sourcemap->n_names) ? sourcemap->names[scope.name_index] : fn->getName();
 
   llvm::SmallVector<llvm::Metadata*, 8> dwarfTys = { GetDebugType(f->type_index) };
   for(unsigned int i = 0; i < scope.n_variables; ++i)
