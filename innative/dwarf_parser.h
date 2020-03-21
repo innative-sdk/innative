@@ -10,18 +10,18 @@
 #include "utility.h"
 
 KHASH_DECLARE(mapname, const char*, size_t);
-KHASH_DECLARE(maptype, SourceMapType, size_t);
+KHASH_DECLARE(maptype, SourceMapType*, size_t);
 
 namespace innative {
-  static kh_inline khint_t kh_type_hash(const SourceMapType& s)
+  static kh_inline khint_t kh_type_hash(const SourceMapType* s)
   {
 #ifdef IN_64BIT // if constexpr still generates a false warning about size_t
-    return kh_int64_hash_func(s.offset);
+    return kh_int64_hash_func(s->offset);
 #else
-    return kh_int_hash_func(s.offset);
+    return kh_int_hash_func(s->offset);
 #endif
   }
-  static kh_inline khint_t kh_type_equal(const SourceMapType& a, const SourceMapType& b) { return a.offset == b.offset; }
+  static kh_inline khint_t kh_type_equal(const SourceMapType* a, const SourceMapType* b) { return a->offset == b->offset; }
 
   class DWARFParser
   {
@@ -39,8 +39,8 @@ namespace innative {
     size_t GetSourceMapName(const char* name);
     const char* GetDieName(const llvm::DWARFDie& die);
     bool DumpSourceMap(llvm::DWARFContext& DICtx, size_t code_section_offset);
-    void ResolveDWARFBitSize(const llvm::DWARFDie& die, khint_t iter);
-    void ResolveDWARFTypeFlags(const llvm::DWARFDie& die, khint_t iter);
+    void ResolveDWARFBitSize(const llvm::DWARFDie& die, SourceMapType* ptype);
+    void ResolveDWARFTypeFlags(const llvm::DWARFDie& die, SourceMapType* ptype);
 
     bool ParseDWARFChild(llvm::DWARFContext& DICtx, SourceMapScope* parent, const llvm::DWARFDie& die, llvm::DWARFUnit* CU,
                          size_t code_section_offset);

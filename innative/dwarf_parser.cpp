@@ -21,7 +21,7 @@ using namespace llvm::dwarf;
 using namespace innative;
 
 __KHASH_IMPL(mapname, , const char*, size_t, 1, kh_str_hash_func, kh_str_hash_equal)
-__KHASH_IMPL(maptype, , SourceMapType, size_t, 1, kh_type_hash, kh_type_equal)
+__KHASH_IMPL(maptype, , SourceMapType*, size_t, 1, kh_type_hash, kh_type_equal)
 
 bool DWARFParser::error(llvm::StringRef Prefix, std::error_code EC)
 {
@@ -158,44 +158,44 @@ size_t DWARFParser::GetSourceMapName(const char* name)
   return kh_value(mapname, iter);
 };
 
-void DWARFParser::ResolveDWARFBitSize(const DWARFDie& die, khint_t iter)
+void DWARFParser::ResolveDWARFBitSize(const DWARFDie& die, SourceMapType* ptype)
 {
-  return ResolveBitAttribute<DW_AT_bit_size, DW_AT_byte_size>(die, kh_key(maptype, iter).bit_size);
+  return ResolveBitAttribute<DW_AT_bit_size, DW_AT_byte_size>(die, ptype->bit_size);
 }
 
-void DWARFParser::ResolveDWARFTypeFlags(const DWARFDie& die, khint_t iter)
+void DWARFParser::ResolveDWARFTypeFlags(const DWARFDie& die, SourceMapType* ptype)
 {
   if(auto flag = die.find(DW_AT_accessibility))
   {
     switch(flag->getAsUnsignedConstant().getValueOr(0ULL))
     {
-    case DW_ACCESS_public: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PUBLIC; break;
-    case DW_ACCESS_private: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PRIVATE; break;
-    case DW_ACCESS_protected: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PROTECTED; break;
+    case DW_ACCESS_public: ptype->flags |= IN_SOURCE_TYPE_PUBLIC; break;
+    case DW_ACCESS_private: ptype->flags |= IN_SOURCE_TYPE_PRIVATE; break;
+    case DW_ACCESS_protected: ptype->flags |= IN_SOURCE_TYPE_PROTECTED; break;
     }
   }
   if(auto flag = die.find(DW_AT_virtuality))
   {
     switch(flag->getAsUnsignedConstant().getValueOr(0ULL))
     {
-    case DW_VIRTUALITY_virtual: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_VIRTUAL; break;
-    case DW_VIRTUALITY_pure_virtual: kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_PURE_VIRTUAL; break;
+    case DW_VIRTUALITY_virtual: ptype->flags |= IN_SOURCE_TYPE_VIRTUAL; break;
+    case DW_VIRTUALITY_pure_virtual: ptype->flags |= IN_SOURCE_TYPE_PURE_VIRTUAL; break;
     }
   }
   if(auto flag = die.find(DW_AT_friend))
-    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_FRIEND;
+    ptype->flags |= IN_SOURCE_TYPE_FRIEND;
   if(auto flag = die.find(DW_AT_artificial))
-    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_ARTIFICIAL;
+    ptype->flags |= IN_SOURCE_TYPE_ARTIFICIAL;
   if(auto flag = die.find(DW_AT_declaration))
-    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_DECLARATION;
+    ptype->flags |= IN_SOURCE_TYPE_DECLARATION;
   if(auto flag = die.find(DW_AT_default_value))
-    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_DEFAULT;
+    ptype->flags |= IN_SOURCE_TYPE_DEFAULT;
   if(auto flag = die.find(DW_AT_export_symbols))
-    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_EXPORT;
+    ptype->flags |= IN_SOURCE_TYPE_EXPORT;
   if(auto flag = die.find(DW_AT_mutable))
-    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_MUTABLE;
+    ptype->flags |= IN_SOURCE_TYPE_MUTABLE;
   if(auto flag = die.find(DW_AT_enum_class))
-    kh_key(maptype, iter).flags |= IN_SOURCE_TYPE_ENUM_CLASS;
+    ptype->flags |= IN_SOURCE_TYPE_ENUM_CLASS;
 }
 
 size_t DWARFParser::GetSourceMapTypeRef(llvm::DWARFUnit& unit, const DWARFFormValue& type)
@@ -207,9 +207,10 @@ size_t DWARFParser::GetSourceMapTypeRef(llvm::DWARFUnit& unit, const DWARFFormVa
 
 const char* DWARFParser::GetDieName(const DWARFDie& die)
 {
-  if(auto iter = kh_get_maptype(maptype, SourceMapType{ die.getOffset() }); kh_exist2(maptype, iter))
-    if(kh_key(maptype, iter).name_index < n_names)
-      return map->names[kh_key(maptype, iter).name_index];
+  SourceMapType key = { die.getOffset() };
+  if(auto iter = kh_get_maptype(maptype, &key); kh_exist2(maptype, iter))
+    if(kh_key(maptype, iter)->name_index < n_names)
+      return map->names[kh_key(maptype, iter)->name_index];
   return 0;
 }
 
@@ -246,56 +247,64 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
   default: return (size_t)~0;
   }
 
-  int r;
-  auto iter = kh_put_maptype(maptype, SourceMapType{ die.getOffset() }, &r);
-  if(r > 0)
+  SourceMapType key = { die.getOffset() };
+  auto iter         = kh_get_maptype(maptype, &key);
+  if(!kh_exist2(maptype, iter))
   {
+    // This can waste a significant chunk of memory for large debugging payloads, but trying to keep track
+    // of the hash iterator while modifying itself is way too error-prone.
+    SourceMapType* ptype = utility::tmalloc<SourceMapType>(*env, 1);
+    ptype->offset        = die.getOffset();
+    int r;
+    if(iter = kh_put_maptype(maptype, ptype, &r); r < 0)
+      return (size_t)~0;
+
     kh_value(maptype, iter)            = n_types++;
-    kh_key(maptype, iter).tag          = die.getTag();
-    kh_key(maptype, iter).bit_size     = 0;
-    kh_key(maptype, iter).byte_align   = 0;
-    kh_key(maptype, iter).name_index   = (size_t)~0;
-    kh_key(maptype, iter).source_index = (size_t)~0;
-    kh_key(maptype, iter).type_index   = (size_t)~0;
-    kh_key(maptype, iter).n_types      = 0;
+    ptype->tag          = die.getTag();
+    ptype->bit_size     = 0;
+    ptype->byte_align   = 0;
+    ptype->name_index   = (size_t)~0;
+    ptype->source_index = (size_t)~0;
+    ptype->type_index   = (size_t)~0;
+    ptype->n_types      = 0;
 
     if(auto file = die.find(DW_AT_decl_file))
     {
       if(const auto* LT = unit.getContext().getLineTableForUnit(&unit))
-        kh_key(maptype, iter).source_index = static_cast<size_t>(file->getAsUnsignedConstant().getValueOr(0ULL) - 1) + file_offset;
+        ptype->source_index = static_cast<size_t>(file->getAsUnsignedConstant().getValueOr(0ULL) - 1) + file_offset;
     }
     if(auto line = die.find(DW_AT_decl_line))
-      kh_key(maptype, iter).original_line = static_cast<unsigned int>(line->getAsUnsignedConstant().getValueOr(0ULL));
+      ptype->original_line = static_cast<unsigned int>(line->getAsUnsignedConstant().getValueOr(0ULL));
     if(auto name = die.find(DW_AT_name))
     {
       if(auto attr = name->getAsCString())
-        kh_key(maptype, iter).name_index = GetSourceMapName(attr.getValue());
+        ptype->name_index = GetSourceMapName(attr.getValue());
     }
     if(auto align = die.find(DW_AT_alignment))
-      kh_key(maptype, iter).byte_align = static_cast<unsigned short>(align->getAsUnsignedConstant().getValueOr(0ULL));
-    ResolveDWARFTypeFlags(die, iter);
+      ptype->byte_align = static_cast<unsigned short>(align->getAsUnsignedConstant().getValueOr(0ULL));
+    ResolveDWARFTypeFlags(die, ptype);
 
     // Figure out what kind of type this is
     switch(die.getTag())
     {
     case DW_TAG_base_type:
-      kh_key(maptype, iter).n_types  = 0;
-      kh_key(maptype, iter).encoding = 0;
-      ResolveDWARFBitSize(die, iter);
+      ptype->n_types  = 0;
+      ptype->encoding = 0;
+      ResolveDWARFBitSize(die, ptype);
 
       if(auto line = die.find(DW_AT_encoding))
-        kh_key(maptype, iter).encoding = static_cast<unsigned short>(line->getAsUnsignedConstant().getValueOr(0ULL));
+        ptype->encoding = static_cast<unsigned short>(line->getAsUnsignedConstant().getValueOr(0ULL));
 
       break;
     case DW_TAG_array_type:
-      ResolveBitAttribute<DW_AT_bit_stride, DW_AT_byte_stride>(die, kh_key(maptype, iter).bit_stride);
-      ResolveDWARFBitSize(die, iter);
+      ResolveBitAttribute<DW_AT_bit_stride, DW_AT_byte_stride>(die, ptype->bit_stride);
+      ResolveDWARFBitSize(die, ptype);
 
       for(auto& child : die.children())
         if(child.getTag() == DW_TAG_subrange_type)
         {
           if(auto count = child.find(DW_AT_count))
-            kh_key(maptype, iter).n_types = count->getAsUnsignedConstant().getValueOr(0ULL);
+            ptype->n_types = count->getAsUnsignedConstant().getValueOr(0ULL);
         }
     case DW_TAG_atomic_type:
     case DW_TAG_const_type:
@@ -310,22 +319,21 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
     case DW_TAG_ptr_to_member_type:
     case DW_TAG_typedef:
     {
-      if(!kh_key(maptype, iter).n_types)
-        kh_key(maptype, iter).n_types = 1;
+      if(!ptype->n_types)
+        ptype->n_types = 1;
       const char* basename = "void";
 
       if(auto innertype = die.find(DW_AT_type))
       {
         if(DWARFDie innerdie = AsReferencedDIE(innertype.getValue(), unit))
         {
-          kh_key(maptype, iter).type_index = GetSourceMapType(unit, innerdie);
-          iter                             = kh_get_maptype(maptype, SourceMapType{ die.getOffset() });
+          ptype->type_index = GetSourceMapType(unit, innerdie);
           if(auto diename = GetDieName(innerdie); diename != nullptr)
             basename = diename;
         }
       } // If this is false, it's a void type, like const void*
 
-      if(kh_key(maptype, iter).name_index == (size_t)~0)
+      if(ptype->name_index == (size_t)~0)
       {
         std::string modifier = basename;
         switch(die.getTag())
@@ -341,27 +349,24 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
         case DW_TAG_shared_type: modifier = modifier + "shared "; break;
         case DW_TAG_volatile_type: modifier = "volatile " + modifier; break;
         case DW_TAG_ptr_to_member_type: modifier = "(*" + modifier + ")"; break;
-        case DW_TAG_array_type: modifier = modifier + "[" + std::to_string(kh_key(maptype, iter).n_types) + "]"; break;
+        case DW_TAG_array_type: modifier = modifier + "[" + std::to_string(ptype->n_types) + "]"; break;
         }
-        kh_key(maptype, iter).name_index = GetSourceMapName(modifier.c_str());
+        ptype->name_index = GetSourceMapName(modifier.c_str());
       }
 
       break;
     }
     case DW_TAG_enumeration_type:
     {
-      ResolveDWARFBitSize(die, iter);
+      ResolveDWARFBitSize(die, ptype);
       if(auto enumtype = die.find(DW_AT_type))
-      {
-        kh_key(maptype, iter).type_index = GetSourceMapTypeRef(unit, enumtype.getValue());
-        iter                             = kh_get_maptype(maptype, SourceMapType{ die.getOffset() });
-      }
+        ptype->type_index = GetSourceMapTypeRef(unit, enumtype.getValue());
 
       size_t count = 0;
       for(auto& child : die.children())
         count += child.getTag() == DW_TAG_enumerator;
 
-      kh_key(maptype, iter).enumerators = innative::utility::tmalloc<size_t>(*env, count);
+      ptype->enumerators = innative::utility::tmalloc<size_t>(*env, count);
       size_t n_enumerators              = map->n_innative_enumerators;
       resizeSourceMap(map->x_innative_enumerators, map->n_innative_enumerators, n_enumerators + count);
 
@@ -383,7 +388,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
             e.name_index = GetSourceMapName(attr.getValue());
         }
 
-        kh_key(maptype, iter).enumerators[kh_key(maptype, iter).n_types++] = n_enumerators++;
+        ptype->enumerators[ptype->n_types++] = n_enumerators++;
       }
 
       map->n_innative_enumerators = n_enumerators;
@@ -397,8 +402,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
       {
         if(DWARFDie innerdie = AsReferencedDIE(innertype.getValue(), unit))
         {
-          kh_key(maptype, iter).type_index = GetSourceMapType(unit, innerdie);
-          iter                             = kh_get_maptype(maptype, SourceMapType{ die.getOffset() });
+          ptype->type_index = GetSourceMapType(unit, innerdie);
           if(auto diename = GetDieName(innerdie); diename != nullptr)
             funcptr = diename;
         }
@@ -409,8 +413,8 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
       for(auto& child : die.children())
         count++;
 
-      kh_key(maptype, iter).types = innative::utility::tmalloc<size_t>(*env, count);
-      if(!kh_key(maptype, iter).types)
+      ptype->types = innative::utility::tmalloc<size_t>(*env, count);
+      if(!ptype->types)
         return (size_t)~0;
 
       bool first = true;
@@ -419,9 +423,8 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
         if(!first)
           funcptr += ", ";
         auto ty = GetSourceMapType(unit, child);
-        iter    = kh_get_maptype(maptype, SourceMapType{ die.getOffset() });
         if(ty != (size_t)~0)
-          kh_key(maptype, iter).types[kh_key(maptype, iter).n_types++] = ty;
+          ptype->types[ptype->n_types++] = ty;
 
         if(auto innertype = child.find(DW_AT_type))
           if(DWARFDie innerdie = AsReferencedDIE(innertype.getValue(), unit))
@@ -436,8 +439,8 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
       }
       funcptr += ')';
 
-      if(kh_key(maptype, iter).name_index == (size_t)~0)
-        kh_key(maptype, iter).name_index = GetSourceMapName(funcptr.c_str());
+      if(ptype->name_index == (size_t)~0)
+        ptype->name_index = GetSourceMapName(funcptr.c_str());
       break;
     }
     case DW_TAG_class_type:
@@ -445,22 +448,21 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
     case DW_TAG_union_type:
     case DW_TAG_interface_type:
     {
-      ResolveDWARFBitSize(die, iter);
+      ResolveDWARFBitSize(die, ptype);
 
       size_t count = 0;
       for(auto& child : die.children())
         count++;
 
-      kh_key(maptype, iter).types = innative::utility::tmalloc<size_t>(*env, count);
-      if(!kh_key(maptype, iter).types)
+      ptype->types = innative::utility::tmalloc<size_t>(*env, count);
+      if(!ptype->types)
         return (size_t)~0;
 
       for(auto& child : die.children())
       {
         auto ty = GetSourceMapType(unit, child);
-        iter    = kh_get_maptype(maptype, SourceMapType{ die.getOffset() });
         if(ty != (size_t)~0)
-          kh_key(maptype, iter).types[kh_key(maptype, iter).n_types++] = ty;
+          ptype->types[ptype->n_types++] = ty;
       }
       break;
     }
@@ -469,18 +471,18 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
     case DW_TAG_template_type_parameter:
       if(auto innertype = die.find(DW_AT_type))
       {
-        kh_key(maptype, iter).n_types    = 1;
-        kh_key(maptype, iter).type_index = GetSourceMapTypeRef(unit, innertype.getValue());
+        ptype->n_types    = 1;
+        ptype->type_index = GetSourceMapTypeRef(unit, innertype.getValue());
       }
     case DW_TAG_unspecified_parameters: break;
     case DW_TAG_member:
     case DW_TAG_inheritance:
-      ResolveDWARFBitSize(die, iter);
-      ResolveBitAttribute<DW_AT_bit_offset, DW_AT_data_member_location>(die, kh_key(maptype, iter).bit_offset);
+      ResolveDWARFBitSize(die, ptype);
+      ResolveBitAttribute<DW_AT_bit_offset, DW_AT_data_member_location>(die, ptype->bit_offset);
       if(auto innertype = die.find(DW_AT_type))
       {
-        kh_key(maptype, iter).n_types    = 1;
-        kh_key(maptype, iter).type_index = GetSourceMapTypeRef(unit, innertype.getValue());
+        ptype->n_types    = 1;
+        ptype->type_index = GetSourceMapTypeRef(unit, innertype.getValue());
       }
       break;
     default: return (size_t)~0;
@@ -782,7 +784,7 @@ bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
   resizeSourceMap(map->x_innative_types, map->n_innative_types, n_types);
   for(khint_t i = 0; i < kh_end(maptype); ++i)
     if(kh_exist(maptype, i))
-      map->x_innative_types[kh_value(maptype, i)] = kh_key(maptype, i);
+      map->x_innative_types[kh_value(maptype, i)] = *kh_key(maptype, i);
 
   std::sort(map->segments, map->segments + map->n_segments,
             [](SourceMapSegment& a, SourceMapSegment& b) { return a.linecolumn < b.linecolumn; });
