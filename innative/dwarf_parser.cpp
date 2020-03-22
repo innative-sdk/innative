@@ -691,7 +691,7 @@ bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
       if(linetable->getFileNameByIndex(i + 1, CU->getCompilationDir(),
                                        llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath, File))
       {
-        map->sources[file_offset + i] = innative::utility::AllocString(*env, std::filesystem::absolute(File).u8string());
+        map->sources[file_offset + i] = innative::utility::AllocString(*env, absolute(File).u8string());
       }
 
       map->sourcesContent[content_offset + i] =
