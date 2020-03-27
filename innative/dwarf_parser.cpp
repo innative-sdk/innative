@@ -259,14 +259,14 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
     if(iter = kh_put_maptype(maptype, ptype, &r); r < 0)
       return (size_t)~0;
 
-    kh_value(maptype, iter)            = n_types++;
-    ptype->tag          = die.getTag();
-    ptype->bit_size     = 0;
-    ptype->byte_align   = 0;
-    ptype->name_index   = (size_t)~0;
-    ptype->source_index = (size_t)~0;
-    ptype->type_index   = (size_t)~0;
-    ptype->n_types      = 0;
+    kh_value(maptype, iter) = n_types++;
+    ptype->tag              = die.getTag();
+    ptype->bit_size         = 0;
+    ptype->byte_align       = 0;
+    ptype->name_index       = (size_t)~0;
+    ptype->source_index     = (size_t)~0;
+    ptype->type_index       = (size_t)~0;
+    ptype->n_types          = 0;
 
     if(auto file = die.find(DW_AT_decl_file))
     {
@@ -366,8 +366,8 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
       for(auto& child : die.children())
         count += child.getTag() == DW_TAG_enumerator;
 
-      ptype->enumerators = innative::utility::tmalloc<size_t>(*env, count);
-      size_t n_enumerators              = map->n_innative_enumerators;
+      ptype->enumerators   = innative::utility::tmalloc<size_t>(*env, count);
+      size_t n_enumerators = map->n_innative_enumerators;
       resizeSourceMap(map->x_innative_enumerators, map->n_innative_enumerators, n_enumerators + count);
 
       for(auto& child : die.children())
@@ -705,14 +705,26 @@ bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
       return false;
 
     // If clang encounters an unused function that wasn't removed (because you compiled in debug mode), it generates
-    // invalid debug information by restarting at address 0x0, so if we detect this, we skip the rest of the line table.
-    bool first = false;
+    // invalid debug information by restarting at address 0x0, so if we detect this, we skip to the next file.
+    bool first    = false;
+    uint16_t skip = 0; // Start skip at 0, which can never be a valid file index
+    uint16_t last = 0;
     for(auto& row : linetable->Rows)
     {
+      if(row.File == skip)
+        continue;
+      if(row.File != last)
+      {
+        first = false; // If we encounter a new file, restart our zero address detection.
+        last  = row.File;
+      }
       if(!first) // record first non-zero address
         first = row.Address.Address != 0;
-      else if(!row.Address.Address)
-        break; // Bail if this linetable is invalid
+      else if(!row.Address.Address) // If this linetable is invalid, skip the entire file
+      {
+        skip = row.File;
+        continue;
+      }
 
       if(!row.Line)
         continue;
