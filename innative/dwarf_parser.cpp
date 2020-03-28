@@ -705,28 +705,19 @@ bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
       return false;
 
     // If clang encounters an unused function that wasn't removed (because you compiled in debug mode), it generates
-    // invalid debug information by restarting at address 0x0, so if we detect this, we skip to the next file.
-    bool first    = false;
-    uint16_t skip = 0; // Start skip at 0, which can never be a valid file index
-    uint16_t last = 0;
+    // invalid debug information by restarting at address 0x0, so if we detect this, we skip to the next function.
+    bool skip = false;
     for(auto& row : linetable->Rows)
     {
-      if(row.File == skip)
-        continue;
-      if(row.File != last)
+      if(skip)
       {
-        first = false; // If we encounter a new file, restart our zero address detection.
-        last  = row.File;
+        if(row.EndSequence)
+          skip = false;
       }
-      if(!first) // record first non-zero address
-        first = row.Address.Address != 0;
-      else if(!row.Address.Address) // If this linetable is invalid, skip the entire file
-      {
-        skip = row.File;
-        continue;
-      }
+      else
+        skip = (row.Address.Address == 0);
 
-      if(!row.Line)
+      if(skip || !row.Line)
         continue;
       map->segments[mapping_offset].linecolumn      = row.Address.Address + code_section_offset;
       map->segments[mapping_offset].original_column = row.Column;
