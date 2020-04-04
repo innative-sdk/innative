@@ -43,12 +43,11 @@ int TestHarness::do_debug_2(void* assembly)
     return ERR_SUCCESS;
   };
 
-  flags = ENV_DEBUG;
-  TEST(CompileWASM("../scripts/constparse.wasm", &TestHarness::do_debug_2, "") == ERR_SUCCESS);
-
   flags = ENV_DEBUG_PDB;
   TEST(CompileWASM("../scripts/debugging.wasm", &TestHarness::do_debug, "env", lambda) == ERR_SUCCESS);
 
   flags = ENV_DEBUG_DWARF;
   TEST(CompileWASM("../scripts/debugging.wasm", &TestHarness::do_debug, "env", lambda) == ERR_SUCCESS);
+
+  TEST(CompileWASM("../scripts/constparse.wasm", &TestHarness::do_debug_2, "") == ERR_SUCCESS);
 }

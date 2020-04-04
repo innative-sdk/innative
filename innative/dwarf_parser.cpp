@@ -668,6 +668,25 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
   return true;
 }
 
+bool DWARFParser::HasIsStmt(size_t i, const llvm::DWARFDebugLine::LineTable::RowVector& rows)
+{
+  if(env->flags & ENV_DEBUG_IGNORE_IS_STMT)
+    return false;
+  if(env->flags & ENV_DEBUG_USE_IS_STMT)
+    return true;
+  if(i >= rows.size())
+    return false;
+
+  do
+  {
+    if(rows[i].IsStmt != 0) // The first line of a function could have the EndSequence marker for the previous function set.
+      return true;
+    ++i;
+  } while(i < rows.size() && !rows[i].EndSequence);
+
+  return false;
+}
+
 bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
 {
   for(auto& CU : DICtx.compile_units())
@@ -707,18 +726,23 @@ bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
     // If clang encounters an unused function that wasn't removed (because you compiled in debug mode), it generates
     // invalid debug information by restarting at address 0x0, so if we detect this, we skip to the next function.
     bool skip = false;
-    for(auto& row : linetable->Rows)
+    bool only_stmt = HasIsStmt(0, linetable->Rows);
+    for(size_t i = 0; i < linetable->Rows.size(); ++i)
     {
+      auto& row = linetable->Rows[i];
+      if(row.EndSequence)
+        only_stmt = HasIsStmt(i, linetable->Rows);
+
       if(skip)
-      {
-        if(row.EndSequence)
-          skip = false;
-      }
+        skip = (row.EndSequence != 0);
       else
         skip = (row.Address.Address == 0);
 
       if(skip || !row.Line)
         continue;
+      if(only_stmt && !row.IsStmt)
+        continue;
+
       map->segments[mapping_offset].linecolumn      = row.Address.Address + code_section_offset;
       map->segments[mapping_offset].original_column = row.Column;
       map->segments[mapping_offset].original_line   = row.Line;

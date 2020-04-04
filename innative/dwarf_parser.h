@@ -72,6 +72,7 @@ namespace innative {
   protected:
     size_t GetSourceMapType(llvm::DWARFUnit& unit, const llvm::DWARFDie& die);
     size_t GetSourceMapTypeRef(llvm::DWARFUnit& unit, const llvm::DWARFFormValue& type);
+    bool HasIsStmt(size_t i, const llvm::DWARFDebugLine::LineTable::RowVector& rows);
 
     Environment* env;
     SourceMap* map;
