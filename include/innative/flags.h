@@ -81,6 +81,11 @@ enum WASM_ENVIRONMENT_FLAGS
   // that lock up a web browser. This option is provided purely for compatibility with the standard.
   ENV_DISABLE_TAIL_CALL = (1 << 15),
 
+  // DWARF's "is_stmt" flag marks which assembly lines are actually source code statements, but it is not always reliable.
+  ENV_DEBUG_DETECT_IS_STMT = 0, // By default, we check if there are is_stmt flags anywhere and if they exist we use them.
+  ENV_DEBUG_USE_IS_STMT    = (1 << 20), // ONLY generates debug information for lines marked with is_stmt, no matter what.
+  ENV_DEBUG_IGNORE_IS_STMT = (2 << 20), // ALWAYS generates debug information for all assembly lines, ignoring is_stmt.
+
   // Strictly adheres to the standard, provided the optimization level does not exceed ENV_OPTIMIZE_STRICT.
   ENV_STRICT = ENV_CHECK_STACK_OVERFLOW | ENV_CHECK_FLOAT_TRUNC | ENV_CHECK_MEMORY_ACCESS | ENV_CHECK_INDIRECT_CALL |
                ENV_DISABLE_TAIL_CALL | ENV_CHECK_INT_DIVISION | ENV_WHITELIST,
