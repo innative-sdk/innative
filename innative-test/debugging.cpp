@@ -66,10 +66,13 @@ extern "C" __attribute__((visibility("default"))) int debug(int n)
 
   auto& f1 = f[1].a;
   f1       = n * n + ENUM_USED;
-
+ 
+  auto lambda = [&](){
   FooBar* foobar = (FooBar*)malloc(sizeof(FooBar));
   f[0].c         = foobar;
-
+  };
+  lambda();
+  
   f[0].c = &f[1];
   f[1].c = &f[2];
   f[2].c = &f[0];
