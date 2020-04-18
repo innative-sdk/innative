@@ -130,6 +130,8 @@ void DebugDWARF::UpdateVariables(llvm::Function* fn, SourceMapScope& scope)
 
 llvm::DIType* DebugDWARF::GetDebugType(size_t index, llvm::DIType* parent)
 {
+  if(index == (size_t)~0)
+    return diVoid;
   auto& type = sourcemap->x_innative_types[index];
 
   switch(type.tag)
