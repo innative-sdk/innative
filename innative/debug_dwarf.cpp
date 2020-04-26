@@ -29,11 +29,6 @@ void DebugDWARF::PostFuncBody(llvm::Function* fn, FunctionBody& body)
   }
 }
 
-enum
-{
-  DW_OP_WASM_location = 0xEB,
-};
-
 enum DW_WASM_OP
 {
   DW_WASM_OP_LOCAL  = 0x00,
