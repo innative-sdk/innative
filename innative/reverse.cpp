@@ -77,7 +77,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
   }
 
   llvm::legacy::PassManager pass;
-  auto FileType = llvm::TargetMachine::CGFT_ObjectFile;
+  auto FileType = llvm::CGFT_ObjectFile;
 
   if(machine->addPassesToEmitFile(pass, dest, nullptr, FileType))
   {
@@ -98,7 +98,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
 
   {
     llvm::raw_fd_ostream fdo(1, false, true);
-    if(!lld::wasm::link(args, false, fdo))
+    if(!lld::wasm::link(args, false, fdo, fdo))
       return ERR_FATAL_LINK_ERROR;
   }
 

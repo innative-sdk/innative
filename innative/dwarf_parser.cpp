@@ -558,18 +558,15 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
         // Location list.
         if(const DWARFDebugLoc* DebugLoc = DICtx.getDebugLoc())
         {
-          if(const DWARFDebugLoc::LocationList* LocList = DebugLoc->getLocationListAtOffset(*Offset))
-          {
-            for(auto& entry : LocList->Entries)
+          DebugLoc->visitLocationList(Offset.getPointer(), [&](const llvm::DWARFLocationEntry& entry) -> bool {
+            if(entry.Loc.size() > 0)
             {
-              if(entry.Loc.size() > 0)
-              {
-                llvm::DataExtractor data(StringRef(entry.Loc.data(), entry.Loc.size()), DICtx.isLittleEndian(), 0);
-                llvm::DWARFExpression expr(data, CU->getVersion(), CU->getAddressByteSize());
-                fn_parse_expr(env, expr, v);
-              }
+              llvm::DataExtractor data(StringRef(reinterpret_cast<const char*>(entry.Loc.data()), entry.Loc.size()), DICtx.isLittleEndian(), 0);
+              llvm::DWARFExpression expr(data, CU->getVersion(), CU->getAddressByteSize());
+              fn_parse_expr(env, expr, v);
             }
-          }
+            return true;
+          });
         }
       }
     }

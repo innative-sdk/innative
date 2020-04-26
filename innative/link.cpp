@@ -25,7 +25,7 @@ IN_ERROR innative::OutputObjectFile(Compiler& context, const path& out)
   }
 
   llvm::legacy::PassManager pass;
-  auto FileType = llvm::TargetMachine::CGFT_ObjectFile;
+  auto FileType = llvm::CGFT_ObjectFile;
   llvm::TargetLibraryInfoImpl TLII(context.machine->getTargetTriple());
   pass.add(new llvm::TargetLibraryInfoWrapperPass(TLII));
   pass.add(createTargetTransformInfoWrapperPass(context.machine->getTargetIRAnalysis()));
@@ -167,8 +167,8 @@ int innative::CallLinker(const Environment* env, std::vector<const char*>& linka
     bool result = false;
     switch(format)
     {
-    case LLD_FORMAT::COFF: result = lld::coff::link(linkargs, false, llvm_stream); break;
-    case LLD_FORMAT::ELF: result = lld::elf::link(linkargs, false, llvm_stream); break;
+    case LLD_FORMAT::COFF: result = lld::coff::link(linkargs, false, llvm_stream, llvm_stream); break;
+    case LLD_FORMAT::ELF: result = lld::elf::link(linkargs, false, llvm_stream, llvm_stream); break;
     }
 
     if(!result)
@@ -225,7 +225,7 @@ std::vector<std::string> innative::GetSymbols(const char* file, size_t size, FIL
   case LLD_FORMAT::COFF:
     lld::coff::iterateSymbols(
       file, size, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); },
-      &symbols, sso);
+      &symbols, sso, sso);
     break;
   case LLD_FORMAT::ELF:
     switch(CURRENT_ARCH_BITS | (CURRENT_LITTLE_ENDIAN << 15))
@@ -240,7 +240,7 @@ std::vector<std::string> innative::GetSymbols(const char* file, size_t size, FIL
     lld::elf::iterateSymbols(
       file, size, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); },
       &symbols,
-      std::make_tuple(kind, (uint16_t)CURRENT_ARCH, (CURRENT_ABI == ABI::FreeBSD) ? (uint8_t)CURRENT_ABI : (uint8_t)0),
+      std::make_tuple(kind, (uint16_t)CURRENT_ARCH, (CURRENT_ABI == ABI::FreeBSD) ? (uint8_t)CURRENT_ABI : (uint8_t)0), sso,
       sso);
     break;
   }
