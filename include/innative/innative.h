@@ -19,7 +19,7 @@ limitations under the License.
 
 #define INNATIVE_VERSION_MAJOR       0
 #define INNATIVE_VERSION_MINOR       1
-#define INNATIVE_VERSION_REVISION    6
+#define INNATIVE_VERSION_REVISION    7
 #define INNATIVE_WASM_MAGIC_COOKIE   0x6d736100
 #define INNATIVE_WASM_MAGIC_VERSION  0x01
 #define INNATIVE_VERSION(v, m, r, b) (((v | 0ULL) << 48) | ((m | 0ULL) << 32) | ((r | 0ULL) << 16) | (b | 0ULL))

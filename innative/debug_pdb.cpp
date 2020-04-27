@@ -247,13 +247,15 @@ void DebugPDB::Finalize()
           {
             if(element->getBaseType()->getName().startswith("p<"))
             {
-              if(auto basetype = llvm::dyn_cast<llvm::DICompositeType>(element->getBaseType());
-                 basetype->getElements().size() > 0)
-                if(auto baseelement = llvm::dyn_cast<llvm::DIType>(basetype->getElements()[0]);
-                   !baseelement->getName().empty())
+              auto basetype = llvm::dyn_cast<llvm::DICompositeType>(element->getBaseType());
+              if(basetype->getElements().size() > 0)
+              {
+                auto baseelement = llvm::dyn_cast<llvm::DIType>(basetype->getElements()[0]);
+                if(!baseelement->getName().empty())
                   aux += FormatString(true, "{0}:{({1})({2}.m0 + *(unsigned int*)(&amp;this->{0}))}}", element->getName(),
                                       baseelement->getName(), expr[0]->getVariable()->getName(),
                                       element->getOffsetInBits() / 8);
+              }
 
               _compiler->natvis +=
                 FormatString(true, "<Item Name=\"{0}\">({1}*)(*(unsigned int*)({2}.m0+(unsigned int)this+{3}))</Item>",
@@ -281,8 +283,11 @@ void DebugPDB::Finalize()
               for(auto* e : composite->getElements())
               {
                 if(auto* subrange = llvm::dyn_cast<llvm::DISubrange>(e))
-                  if(auto* data = subrange->getCount().dyn_cast<llvm::ConstantInt*>(); true)
+                {
+                  auto* data = subrange->getCount().dyn_cast<llvm::ConstantInt*>(); 
+                  if(data != nullptr)
                     count = data->getSExtValue();
+                }
               }
 
               aux += FormatString(true, "{0}:{this->{0}} ", element->getName());

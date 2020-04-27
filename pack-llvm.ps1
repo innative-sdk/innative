@@ -1,4 +1,4 @@
-param([string]$llvm="llvm", [string]$arch="x64")
+param([string]$arch="x64")
 
 switch ($arch) {
   "x86-64" {$bin = "bin"}
@@ -7,14 +7,14 @@ switch ($arch) {
   "arm" {$bin = "bin-ARM"}
 }
 
-$target = "$llvm-9.0.0-$arch-windows"
+$target = "llvm-10.0.0-$arch-windows"
+New-Item -Force "$target\" -Type Directory
 New-Item -Force "$target\lib\" -Type Directory
 New-Item -Force "$target\include\" -Type Directory
 New-Item -Force "$target\bin\" -Type Directory
-robocopy "$bin\$llvm\include" "$target\include" *.h *.inc *.def *.td *.modulemap /S
-Copy-Item "$bin\$llvm\bin\*" -Destination "$target\bin\"
-Copy-Item "$bin\$llvm\MinSizeRel\bin\*" -Destination "$target\bin\"
-Copy-Item "$bin\$llvm\MinSizeRel\lib\*.lib" -Destination "$target\lib\" 
+robocopy "$bin\llvm\include" "$target\include" *.h *.inc *.def *.td *.modulemap /S
+Copy-Item "$bin\llvm\bin\*" -Destination "$target\bin\"
+Copy-Item "$bin\llvm\lib\*.lib" -Destination "$target\lib\"
 
 Compress-Archive -Force -Path $target -CompressionLevel Optimal -DestinationPath "$target.zip"
 Remove-Item $target -Recurse

@@ -33,6 +33,7 @@
 #endif
 
 #if INCLUDE_STD_FILESYSTEM_EXPERIMENTAL
+  #define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING
   #include <experimental/filesystem>
 using namespace std::experimental::filesystem;
 #else

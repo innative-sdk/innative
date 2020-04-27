@@ -208,9 +208,12 @@ size_t DWARFParser::GetSourceMapTypeRef(llvm::DWARFUnit& unit, const DWARFFormVa
 const char* DWARFParser::GetDieName(const DWARFDie& die)
 {
   SourceMapType key = { die.getOffset() };
-  if(auto iter = kh_get_maptype(maptype, &key); kh_exist2(maptype, iter))
+  auto iter         = kh_get_maptype(maptype, &key);
+
+  if(kh_exist2(maptype, iter))
     if(kh_key(maptype, iter)->name_index < n_names)
       return map->names[kh_key(maptype, iter)->name_index];
+
   return 0;
 }
 
@@ -256,7 +259,9 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
     SourceMapType* ptype = utility::tmalloc<SourceMapType>(*env, 1);
     ptype->offset        = die.getOffset();
     int r;
-    if(iter = kh_put_maptype(maptype, ptype, &r); r < 0)
+    iter = kh_put_maptype(maptype, ptype, &r); 
+
+    if(r < 0)
       return (size_t)~0;
 
     kh_value(maptype, iter) = n_types++;
@@ -328,7 +333,8 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
         if(DWARFDie innerdie = AsReferencedDIE(innertype.getValue(), unit))
         {
           ptype->type_index = GetSourceMapType(unit, innerdie);
-          if(auto diename = GetDieName(innerdie); diename != nullptr)
+          auto diename      = GetDieName(innerdie); 
+          if(diename != nullptr)
             basename = diename;
         }
       } // If this is false, it's a void type, like const void*
@@ -403,7 +409,8 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
         if(DWARFDie innerdie = AsReferencedDIE(innertype.getValue(), unit))
         {
           ptype->type_index = GetSourceMapType(unit, innerdie);
-          if(auto diename = GetDieName(innerdie); diename != nullptr)
+          auto diename      = GetDieName(innerdie); 
+          if(diename != nullptr)
             funcptr = diename;
         }
       }
@@ -428,10 +435,10 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
 
         if(auto innertype = child.find(DW_AT_type))
           if(DWARFDie innerdie = AsReferencedDIE(innertype.getValue(), unit))
-            if(auto diename = GetDieName(innerdie); diename != nullptr)
+            if(auto diename = GetDieName(innerdie))
               funcptr += diename;
 
-        if(auto diename = GetDieName(child); diename != nullptr)
+        if(auto diename = GetDieName(child))
         {
           funcptr += ' ';
           funcptr += diename;
