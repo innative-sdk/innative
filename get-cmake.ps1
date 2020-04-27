@@ -1,4 +1,4 @@
-$cmakever = "3.15.4"
+$cmakever = "3.17.1"
 
 # If we can't find CMake, download it
 if(!(Test-Path "./cmake/bin/cmake.exe" -PathType Leaf))

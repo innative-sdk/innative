@@ -3,6 +3,7 @@
 
 #include "benchmark.h"
 #include <chrono>
+#include <iterator>
 
 Benchmarks::Benchmarks(const INExports& exports, const char* arg0, int loglevel, const path& folder) :
   _exports(exports), _arg0(arg0), _loglevel(loglevel), _folder(folder)
