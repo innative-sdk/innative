@@ -12,7 +12,7 @@
 
   <?define Version="0.1.7" ?>
   <Product 
-    Id="6A27F179-BADF-4580-821D-2892F229F335"
+    Id="74E8CCF9-5FC8-42DF-A446-544070822BA0"
     Name="inNative Runtime v$(var.Version)" 
     Language="1033" 
     Version="$(var.Version).0"
