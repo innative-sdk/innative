@@ -608,7 +608,9 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
     else if(tag == DW_TAG_subprogram)
     {
       assert(n_functions < map->n_innative_functions);
-      auto& v = map->x_innative_functions[n_functions];
+      auto& v        = map->x_innative_functions[n_functions];
+      v.type_index   = (size_t)~0;
+      v.source_index = (size_t)~0;
       assert(n_scopes < map->n_innative_scopes);
       scope = &map->x_innative_scopes[n_scopes];
 
