@@ -141,7 +141,7 @@ void Serializer::PushBlockToken(int index)
 void Serializer::TokenizeInstruction(Instruction& ins, const FunctionBody* body, const FunctionDesc* desc, size_t& block,
                                      bool emitdebug)
 {
-  if(ins.opcode >= OPNAMES.size())
+  if(!OP::NAMES[ins.opcode])
   {
     tokens.Push(WatToken{ WatTokens::NONE });
     return;
@@ -151,9 +151,9 @@ void Serializer::TokenizeInstruction(Instruction& ins, const FunctionBody* body,
     tokens.Push(WatToken{ WatTokens::DEBUG_INFO, 0, ins.line, ins.column });
 
   DumpTokens(ins.line, ins.column);
-  tokens.Push(WatToken{ WatTokens::OPERATOR, 0, 0, 0, ins.opcode });
+  tokens.Push(WatToken{ WatTokens::OPERATOR, 0, 0, 0, OP::ToInt(ins.opcode) });
 
-  switch(ins.opcode)
+  switch(ins.opcode[0])
   {
   case OP_local_get:
   case OP_local_set:
@@ -243,7 +243,7 @@ void Serializer::TokenizeInstruction(Instruction& ins, const FunctionBody* body,
     if(ins.immediates[0]._varuint32 != 0)
     {
       size_t s = 0;
-      switch(ins.opcode)
+      switch(ins.opcode[0])
       {
       case OP_i32_load8_s:
       case OP_i64_load8_s:
@@ -716,8 +716,8 @@ void Serializer::WriteTokens(std::ostream& out)
         break;
       }
 
-      if(tokens[i].u < OPNAMES.size())
-        out << OPNAMES[static_cast<size_t>(tokens[i].u)];
+      if(const char* opname = OP::NAMES.Get(tokens[i].u); opname != nullptr)
+        out << opname;
       else
         out << "[UNKNOWN OPERATOR: " << tokens[i].u << "]";
       break;

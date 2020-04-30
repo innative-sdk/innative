@@ -45,18 +45,18 @@ void TestHarness::test_manual()
   m.element.elements[0].n_elements    = 1;
   varuint32 elems[]                   = { 1 };
   m.element.elements[0].elements      = elems;
-  m.element.elements[0].offset.opcode = OP_i32_const;
+  m.element.elements[0].offset.opcode[0] = OP_i32_const;
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_GLOBAL, 0);
   TEST(!err);
   m.global.globals[0].desc.type                     = TE_i64;
-  m.global.globals[0].init.opcode                   = OP_i64_const;
+  m.global.globals[0].init.opcode[0]                = OP_i64_const;
   m.global.globals[0].init.immediates[0]._varuint64 = 15;
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_GLOBAL, 1);
   TEST(!err);
   m.global.globals[1].desc.type                   = TE_f32;
-  m.global.globals[1].init.opcode                 = OP_f32_const;
+  m.global.globals[1].init.opcode[0]              = OP_f32_const;
   m.global.globals[1].init.immediates[0]._float32 = 3.6f;
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_TYPE, 0);

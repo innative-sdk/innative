@@ -123,7 +123,7 @@ IN_ERROR innative::ParseInitializer(Stream& s, Instruction& ins, const Environme
   if(err >= 0)
     err = ParseInstruction(s, end, env);
 
-  if(err >= 0 && end.opcode != OP_end)
+  if(err >= 0 && end.opcode[0] != OP_end)
     err = ERR_FATAL_EXPECTED_END_INSTRUCTION;
 
   return err;
@@ -257,11 +257,14 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
 {
   ins.line     = 1;
   ins.column   = static_cast<decltype(ins.column)>(s.pos);
-  IN_ERROR err = ParseByte(s, ins.opcode);
+  // Parse only the first instruction byte - multibyte instructions parse additional bytes
+  IN_ERROR err = ParseByte(s, ins.opcode[0]); 
+  for(int i = 1; i < MAX_OPCODE_BYTES; ++i)
+    ins.opcode[i] = 0;
   if(err < 0)
     return err;
 
-  switch(ins.opcode)
+  switch(ins.opcode[0])
   {
   case OP_block:
   case OP_loop:

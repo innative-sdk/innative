@@ -76,20 +76,17 @@ IN_WASM_ALLOCATOR::~IN_WASM_ALLOCATOR()
 
 namespace innative {
   namespace utility {
-    KHASH_INIT(opnames, StringSpan, uint8_t, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
+    KHASH_INIT(opnames, StringSpan, int, 1, internal::__ac_X31_hash_stringrefins, kh_int_hash_equal);
 
     kh_opnames_t* GenOpNames()
     {
       kh_opnames_t* h = kh_init_opnames();
       int r;
 
-      for(size_t i = 0; i < OPNAMES.size(); ++i)
+      for(const auto& op : OP::LIST)
       {
-        if(strcmp(OPNAMES[i], "RESERVED") != 0)
-        {
-          khiter_t iter   = kh_put_opnames(h, StringSpan{ OPNAMES[i], strlen(OPNAMES[i]) }, &r);
-          kh_val(h, iter) = (uint8_t)i;
-        }
+        khiter_t iter   = kh_put_opnames(h, StringSpan{ op.second, strlen(op.second) }, &r);
+        kh_val(h, iter) = OP::ToInt(op.first);
       }
 
       std::pair<const char*, const char*> legacy[] = {

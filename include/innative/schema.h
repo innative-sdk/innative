@@ -168,7 +168,7 @@ typedef union IN_WASM_IMMEDIATE
 // Encodes a single webassembly instruction and it's associated immediate values, plus it's location in the source.
 typedef struct IN_WASM_INSTRUCTION
 {
-  uint8_t opcode;
+  uint8_t opcode[MAX_OPCODE_BYTES];
   Immediate immediates[MAX_IMMEDIATES];
   unsigned int line; // To keep the size small, we ONLY store line/column on instructions
   unsigned int column;
