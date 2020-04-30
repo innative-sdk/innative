@@ -8,6 +8,9 @@
 extern "C" {
 #endif
 
+// Maximum number of bytes used by any instruction
+#define MAX_OPCODE_BYTES 2
+
 enum WASM_INSTRUCTION_OPCODES
 {
   OP_unreachable = 0x00,
@@ -200,7 +203,6 @@ enum WASM_INSTRUCTION_OPCODES
   OP_i64_reinterpret_f64 = 0xbd,
   OP_f32_reinterpret_i32 = 0xbe,
   OP_f64_reinterpret_i64 = 0xbf,
-  OP_CODE_COUNT,
 };
 
 #ifdef __cplusplus
