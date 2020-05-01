@@ -574,7 +574,7 @@ namespace innative {
   void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<internal::ControlBlock>& control,
                            varuint32 n_locals, varsint7* locals, Environment& env, Module* m)
   {
-    switch(ins.opcode)
+    switch(ins.opcode[0])
     {
     case OP_unreachable: PolymorphStack(values);
     case OP_nop: break;
@@ -910,7 +910,7 @@ namespace innative {
 
 varsint7 innative::ValidateInitializer(const Instruction& ins, Environment& env, Module* m)
 {
-  switch(ins.opcode)
+  switch(ins.opcode[0])
   {
   case OP_i32_const: return TE_i32;
   case OP_i64_const: return TE_i64;
@@ -981,7 +981,7 @@ void innative::ValidateExport(const Export& e, Environment& env, Module* m)
 
 varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env, Module* m)
 {
-  switch(ins.opcode)
+  switch(ins.opcode[0])
   {
   case OP_i32_const: return ins.immediates[0]._varsint32;
   case OP_global_get:
@@ -1014,7 +1014,7 @@ varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env,
   case OP_f32_const:
   case OP_f64_const:
     AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER_TYPE, "[%u] Expected i32 type but got %s", ins.line,
-                OPNAMES[ins.opcode]);
+                OP::NAMES[ins.opcode]);
     break;
   default: break; // If this isn't even a valid instruction, don't bother emitting an error because it will be redundant.
   }
@@ -1109,12 +1109,12 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
   {
     ValidateInstruction(cur[i], values, control, n_local, locals, env, m);
 
-    switch(cur[i].opcode)
+    switch(cur[i].opcode[0])
     {
     case OP_block:
     case OP_loop:
     case OP_if:
-      control.Push({ values.Limit(), cur[i].immediates[0]._varsint7, cur[i].opcode });
+      control.Push({ values.Limit(), cur[i].immediates[0]._varsint7, cur[i].opcode[0] });
       values.SetLimit(values.Size() + values.Limit());
       break;
     case OP_end:
@@ -1160,7 +1160,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
     AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK, "Value stack not fully empty, off by %zu",
                 values.Size() + values.Limit());
 
-  if(cur[body.n_body - 1].opcode != OP_end)
+  if(cur[body.n_body - 1].opcode[0] != OP_end)
     AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY,
                 "Expected end instruction to terminate function body, got %hhu instead.", cur[body.n_body - 1].opcode);
 }
