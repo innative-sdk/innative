@@ -444,7 +444,7 @@ varuint32 WatParser::GetLocal(FunctionBody& f, FunctionDesc& desc, varuint32 n_p
 int WatParser::ParseConstantOperator(Queue<WatToken>& tokens, Instruction& op)
 {
   int err = ERR_SUCCESS;
-  switch(op.opcode)
+  switch(op.opcode[0])
   {
   case OP_i32_const: err = ResolveTokeni32(tokens.Pop(), numbuf, op.immediates[0]._varsint32); break;
   case OP_i64_const: err = ResolveTokeni64(tokens.Pop(), numbuf, op.immediates[0]._varsint64); break;
@@ -474,7 +474,7 @@ int WatParser::ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionB
   op.line   = tokens.Peek().line;
   op.column = tokens.Pop().column;
 
-  switch(op.opcode)
+  switch(op.opcode[0])
   {
   case 0xFF: return ERR_FATAL_UNKNOWN_INSTRUCTION;
   case OP_br:
@@ -498,7 +498,7 @@ int WatParser::ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionB
       break;
     }
   case OP_global_set:
-  case OP_call: defer = WatParser::DeferWatAction{ op.opcode, tokens.Pop(), 0, 0 }; break;
+  case OP_call: defer = WatParser::DeferWatAction{ op.opcode[0], tokens.Pop(), 0, 0 }; break;
   case OP_i32_const:
   case OP_i64_const:
   case OP_f32_const:
@@ -1100,7 +1100,7 @@ int WatParser::ParseInitializerInstruction(Queue<WatToken>& tokens, Instruction&
                      // instructions that would otherwise be valid.
     for(; i < blank.n_body; ++i)
     {
-      switch(blank.body[i].opcode)
+      switch(blank.body[i].opcode[0])
       {
       case OP_i32_const:
       case OP_i64_const:

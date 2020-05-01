@@ -1204,6 +1204,18 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
     return ERR_FATAL_UNKNOWN_TARGET;
   }
 
+  for(varuint32 i = 0; i < env->n_modules; ++i)
+    if(env->modules[i].knownsections & (1 << WASM_SECTION_START))
+      has_start = true;
+
+  if((!has_start || env->flags & ENV_NO_INIT) && !(env->flags & ENV_LIBRARY))
+  {
+    env->flags |= ENV_LIBRARY; // Attempting to compile a library as an EXE is a common error, so we fix it for you.
+    fprintf(
+      env->log,
+      "WARNING: Compiling dynamic library because no start function was found! If this was intended, use '-f library' next time.\n");
+  }
+
   // Detect current CPU feature set and create machine target for LLVM
   llvm::TargetOptions opt;
   auto RM = llvm::Optional<llvm::Reloc::Model>();
@@ -1247,6 +1259,7 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   }
 
   std::vector<Module*> new_modules;
+  has_start = false;
 
   // Compile all modules
   for(varuint32 i = 0; i < env->n_modules; ++i)
@@ -1268,19 +1281,14 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
     has_start |= env->modules[i].cache->start != nullptr;
   }
 
+  if((!has_start || env->flags & ENV_NO_INIT) && !(env->flags & ENV_LIBRARY))
+    return ERR_INVALID_START_FUNCTION;
+
   for(auto m : new_modules)
     Compiler::ResolveModuleExports(env, m, *env->context);
 
   for(auto m : new_modules)
     m->cache->AddMemLocalCaching();
-
-  if((!has_start || env->flags & ENV_NO_INIT) && !(env->flags & ENV_LIBRARY))
-  {
-    env->flags |= ENV_LIBRARY; // Attempting to compile a library as an EXE is a common error, so we fix it for you.
-    fprintf(
-      env->log,
-      "WARNING: Compiling dynamic library because no start function was found! If this was intended, use '-f library' next time.\n");
-  }
 
   // Create cleanup function
   Compiler& mainctx = *env->modules[0].cache;

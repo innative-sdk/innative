@@ -85,7 +85,7 @@ namespace innative {
     {
       inline static void Call(void* f, WastResult& result, const Instruction* param, Args... args)
       {
-        switch(param[I - 1].opcode)
+        switch(param[I - 1].opcode[0])
         {
         case OP_i32_const:
           return GenWastFunction<I - 1, int32_t, Args...>::Call(f, result, param, param[I - 1].immediates[0]._varsint32,
@@ -337,7 +337,7 @@ int wat::ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname
 
 int64_t wat::Homogenize(const Instruction& i)
 {
-  switch(i.opcode)
+  switch(i.opcode[0])
   {
   case OP_i32_const: return i.immediates[0]._varsint32;
   case OP_i64_const: return i.immediates[0]._varsint64;
@@ -496,7 +496,7 @@ int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname
     for(varuint32 i = 0; i < ftype->n_params; ++i)
     {
       varsint7 ty = TE_NONE;
-      switch(params[i].opcode)
+      switch(params[i].opcode[0])
       {
       case OP_i32_const: ty = TE_i32; break;
       case OP_i64_const: ty = TE_i64; break;
@@ -817,14 +817,14 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
                     WatLineNumber(start, t.pos), EnumToString(ERR_ENUM_MAP, err, buf, 10));
       }
       EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
-      Instruction value;
+      Instruction value = {};
       WatParser state(env, *last);
 
       switch(t.id)
       {
       case WatTokens::ASSERT_RETURN:
         if(tokens[0].id == WatTokens::CLOSE) // This is valid because it represents a return of nothing
-          value.opcode = OP_nop;
+          value.opcode[0] = OP_nop;
         else
         {
           EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
@@ -834,7 +834,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
         }
 
         char typebuf[10];
-        switch(value.opcode)
+        switch(value.opcode[0])
         {
         case OP_nop:
           if(result.type != TE_void)
