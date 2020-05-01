@@ -21,9 +21,15 @@
     <ClCompile Include="win32_x86.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="atomics.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="internal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="atomics.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
