@@ -206,6 +206,7 @@
   <ItemGroup>
     <ClCompile Include="atomics.c" />
     <ClCompile Include="internal.c" />
+    <ClCompile Include="wait_list.c" />
     <ClCompile Include="win32_x86.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
@@ -216,6 +217,7 @@
   <ItemGroup>
     <ClInclude Include="atomics.h" />
     <ClInclude Include="internal.h" />
+    <ClInclude Include="wait_list.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
