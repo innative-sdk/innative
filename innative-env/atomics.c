@@ -235,7 +235,7 @@ static size_t in_wait_map_lookup(struct in_wait_map* map, void* key)
 
     if(entry->hash == 0 || dist > PROBE_DISTANCE(map, entry->hash, pos))
     {
-      return map->len;
+      return map->cap;
     }
     else if(entry->hash == hash && entry->key == key)
     {
@@ -292,7 +292,6 @@ static void in_wait_map_grow(struct in_wait_map* map)
   size_t old_cap                = map->cap;
   map->cap                      = max(map->cap * 2, 32);
   map->entries                  = grow_array(NULL, map->cap * sizeof(*old)); // Unfortunately it can't be reused
-  map->len                      = 0;
 
   for(size_t i = 0; i < old_cap; ++i)
   {
@@ -326,13 +325,14 @@ static size_t in_wait_map_insert(struct in_wait_map* map, void* key)
     in_platform_mutex_init(&list->lock);
   }
 
+  map->len++;
   return in_wait_map_insert_helper(map, key, list);
 }
 
 static struct in_wait_list* in_wait_map_get_inner(struct in_wait_map* map, void* address, int create)
 {
   size_t idx = in_wait_map_lookup(map, address);
-  if(idx == map->len)
+  if(idx == map->cap)
   {
     if(create)
       idx = in_wait_map_insert(map, address);
@@ -360,6 +360,7 @@ static void in_wait_map_return(struct in_wait_map* map, void* address, struct in
   {
     size_t idx = in_wait_map_lookup(map, address);
     map->entries[idx].hash |= TOMB_MASK;
+    map->len--;
 
     list->next_free_list = map->free_lists;
     map->free_lists      = list;
