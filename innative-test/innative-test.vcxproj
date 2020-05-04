@@ -350,6 +350,7 @@
     <ClCompile Include="test.cpp" />
     <ClCompile Include="test_allocator.cpp" />
     <ClCompile Include="test_assemblyscript.cpp" />
+    <ClCompile Include="test_atomic_waitnotify.cpp" />
     <ClCompile Include="test_debug.cpp" />
     <ClCompile Include="test_embedding.cpp" />
     <ClCompile Include="test_environment.cpp" />

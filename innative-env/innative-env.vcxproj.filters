@@ -39,4 +39,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="wait_list.natvis">
+      <Filter>Resource Files</Filter>
+    </Natvis>
+  </ItemGroup>
 </Project>

@@ -90,6 +90,9 @@
     <ClCompile Include="debugging.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="test_atomic_waitnotify.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="benchmark.h">
