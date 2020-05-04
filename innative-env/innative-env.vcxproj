@@ -219,6 +219,9 @@
     <ClInclude Include="internal.h" />
     <ClInclude Include="wait_list.h" />
   </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="wait_list.natvis" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />

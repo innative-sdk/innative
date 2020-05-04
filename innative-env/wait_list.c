@@ -4,71 +4,15 @@
 #include "wait_list.h"
 #include "internal.h"
 
-#ifdef IN_PLATFORM_WIN32
-  #include "../innative/win32.h"
-#elif defined(IN_PLATFORM_POSIX)
-// TODO: POSIX
-#else
-  #error unknown platform!
-#endif
-
-#ifdef IN_PLATFORM_WIN32
-typedef SRWLOCK in_platform_mutex;
-typedef CONDITION_VARIABLE in_platform_condvar;
-#elif defined(IN_PLATFORM_POSIX)
-typedef pthread_mutex_t in_platform_mutex;
-// TODO
-#endif
-
-struct in_wait_entry
-{
-  in_platform_condvar condvar;
-  union
-  {
-    int32_t signaled;
-    in_wait_entry* next_free_node;
-  };
-};
-
-struct in_wait_list
-{
-  in_platform_mutex lock;
-
-  in_wait_entry** entries;
-  size_t cap;
-  union
-  {
-    size_t len;
-    in_wait_list* next_free_list;
-  };
-
-  size_t outstanding_signals;
-
-  // Reuse the nodes
-  in_wait_entry* free_list;
-};
-
-struct in_wait_map
-{
-  in_platform_mutex lock;
-  size_t len, cap;
-  struct in_wait_map_entry* entries;
-
-  in_wait_list* free_lists;
-};
-
-struct in_wait_map_entry
-{
-  uint64_t hash;
-  void* key;
-  in_wait_list* value;
-};
+static void in_wait_map_entries_cleanup(in_wait_map* map);
 
 static uint64_t in_addr_hash(void* address);
 
 static void in_platform_mutex_init(in_platform_mutex* mutex);
 static void in_platform_mutex_lock(in_platform_mutex* mutex);
 static void in_platform_mutex_unlock(in_platform_mutex* mutex);
+static void in_platform_mutex_shared_lock(in_platform_mutex* mutex);
+static void in_platform_mutex_shared_unlock(in_platform_mutex* mutex);
 static void in_platform_mutex_free(in_platform_mutex* mutex);
 
 static void in_platform_condvar_init(in_platform_condvar* condvar);
@@ -77,8 +21,11 @@ static void in_platform_condvar_notify(in_platform_condvar* condvar);
 static void in_platform_condvar_free(in_platform_condvar* condvar);
 
 // Memory stuff
-static void* grow_array(void* array, size_t new_size);
+static void* grow_array(void* array, size_t elem_size, size_t new_count);
 static void free_array(void* array);
+
+static size_t in_atomic_incr(size_t* value);
+static size_t in_atomic_decr(size_t* value);
 
 // Wait map
 #define TOMB_MASK                      (1ULL << 63)
@@ -91,7 +38,7 @@ static size_t in_wait_map_lookup(in_wait_map* map, void* key)
 {
   if(map->len == 0)
   {
-    return 0;
+    return map->cap;
   }
 
   uint64_t hash = in_addr_hash(key);
@@ -160,7 +107,7 @@ static void in_wait_map_grow(in_wait_map* map)
   struct in_wait_map_entry* old = map->entries;
   size_t old_cap                = map->cap;
   map->cap                      = max(map->cap * 2, 32);
-  map->entries                  = grow_array(NULL, map->cap * sizeof(*old)); // Unfortunately it can't be reused
+  map->entries                  = grow_array(NULL, sizeof(*old), map->cap); // Unfortunately it can't be reused
 
   for(size_t i = 0; i < old_cap; ++i)
   {
@@ -187,10 +134,11 @@ static size_t in_wait_map_insert(in_wait_map* map, void* key)
     list            = map->free_lists;
     map->free_lists = list->next_free_list;
     list->len       = 0;
+    map->free_count--;
   }
   else
   {
-    list = grow_array(NULL, sizeof(*list));
+    list = grow_array(NULL, sizeof(*list), 1);
     in_platform_mutex_init(&list->lock);
   }
 
@@ -209,31 +157,115 @@ static in_wait_list* in_wait_map_get_inner(in_wait_map* map, void* address, int 
       return 0;
   }
 
-  return map->entries[idx].value;
+  in_wait_list* value = map->entries[idx].value;
+  in_atomic_incr(&value->refs);
+  return value;
 }
 
 in_wait_list* _innative_internal_env_wait_map_get(in_wait_map* map, void* address, int create)
 {
-  in_platform_mutex_lock(&map->lock);
-  in_wait_list* result = in_wait_map_get_inner(map, address, create);
-  in_platform_mutex_unlock(&map->lock);
+  in_wait_list* result;
+
+  // First try to extract the list with just a read lock
+  in_platform_mutex_shared_lock(&map->lock);
+  result = in_wait_map_get_inner(map, address, 0);
+  in_platform_mutex_shared_unlock(&map->lock);
+
+  // If we don't get one and we need to create a new one, now get an exclusive lock
+  if(!result && create)
+  {
+    in_platform_mutex_lock(&map->lock);
+    result = in_wait_map_get_inner(map, address, 1);
+    in_platform_mutex_unlock(&map->lock);
+  }
+
   return result;
 }
 
 void _innative_internal_env_wait_map_return(in_wait_map* map, void* address, in_wait_list* list)
 {
-  in_platform_mutex_lock(&map->lock);
-
   // Put this entry on the free list if it's no longer being used
   if(list->len == 0 && list->outstanding_signals == 0)
   {
-    size_t idx = in_wait_map_lookup(map, address);
-    map->entries[idx].hash |= TOMB_MASK;
-    map->len--;
+    in_platform_mutex_lock(&map->lock);
 
-    list->next_free_list = map->free_lists;
-    map->free_lists      = list;
+    if(in_atomic_decr(&list->refs) == 0)
+    {
+      size_t idx = in_wait_map_lookup(map, address);
+      map->entries[idx].hash |= TOMB_MASK;
+      map->len--;
+
+      if(map->free_count < 64)
+      {
+        list->next_free_list = map->free_lists;
+        map->free_lists      = list;
+        map->free_count++;
+      }
+      else
+      {
+        _innative_internal_env_wait_list_shrink(list);
+        free_array(list);
+      }
+
+      in_wait_map_entries_cleanup(map);
+    }
+
+    in_platform_mutex_unlock(&map->lock);
   }
+  else
+  {
+    in_atomic_decr(&list->refs);
+  }
+}
+
+static void in_wait_map_free_list_cleanup(in_wait_map* map)
+{
+  in_wait_list* temp;
+  while(temp = map->free_lists)
+  {
+    _innative_internal_env_wait_list_shrink(temp);
+    map->free_lists = temp->next_free_list;
+    free_array(temp);
+  }
+}
+
+static void in_wait_map_entries_cleanup(in_wait_map* map)
+{
+  if(map->len > 0)
+  {
+    if(map->cap > 64 && map->cap > map->len * 2)
+    {
+      struct in_wait_map_entry* old = map->entries;
+      size_t old_cap                = map->cap;
+
+      map->cap     = max(map->len * 2, 32);
+      map->entries = grow_array(NULL, sizeof(*old), map->cap);
+
+      for(size_t i = 0; i < old_cap; ++i)
+      {
+        if(IS_ALIVE(old[i].hash))
+        {
+          in_wait_map_insert_helper(map, old[i].key, old[i].value);
+        }
+      }
+
+      free_array(old);
+    }
+  }
+  else
+  {
+    free_array(map->entries);
+    map->cap     = 0;
+    map->entries = 0;
+  }
+}
+
+void _innative_internal_env_wait_map_cleanup(in_wait_map* map)
+{
+  in_platform_mutex_lock(&map->lock);
+
+  in_wait_map_free_list_cleanup(map);
+  in_wait_map_entries_cleanup(map);
 
   in_platform_mutex_unlock(&map->lock);
 }
@@ -241,12 +273,14 @@ void _innative_internal_env_wait_map_return(in_wait_map* map, void* address, in_
 // Wait list
 void _innative_internal_env_wait_list_enter(in_wait_list* list) { in_platform_mutex_lock(&list->lock); }
 
+void _innative_internal_env_wait_list_exit(in_wait_list* list) { in_platform_mutex_unlock(&list->lock); }
+
 in_wait_entry* _innative_internal_env_wait_list_push(in_wait_list* list)
 {
   if(list->len == list->cap)
   {
     list->cap     = max(list->cap * 2, 1);
-    list->entries = grow_array(list->entries, list->cap * sizeof(void*));
+    list->entries = grow_array(list->entries, sizeof(void*), list->cap);
   }
 
   in_wait_entry* entry;
@@ -258,7 +292,7 @@ in_wait_entry* _innative_internal_env_wait_list_push(in_wait_list* list)
   }
   else
   {
-    entry = grow_array(NULL, sizeof(*entry));
+    entry = grow_array(NULL, sizeof(*entry), 1);
     in_platform_condvar_init(&entry->condvar);
   }
 
@@ -321,7 +355,18 @@ uint32_t _innative_internal_env_wait_list_notify(in_wait_list* list, uint32_t nu
   return (uint32_t)count; // can't be bigger than `num` so cast is fine
 }
 
-void _innative_internal_env_wait_list_exit(in_wait_list* list) { in_platform_mutex_unlock(&list->lock); }
+void _innative_internal_env_wait_list_shrink(in_wait_list* list)
+{
+  in_wait_entry* temp;
+
+  list->cap     = list->len;
+  list->entries = grow_array(list->entries, sizeof(void*), list->cap);
+  while(temp = list->free_list)
+  {
+    list->free_list = temp->next_free_node;
+    free_array(temp);
+  }
+}
 
 // Wait entry
 int32_t _innative_internal_env_wait_entry_wait(in_wait_list* list, in_wait_entry* entry, int64_t timeoutns)
@@ -330,10 +375,10 @@ int32_t _innative_internal_env_wait_entry_wait(in_wait_list* list, in_wait_entry
   {
     if(in_platform_condvar_wait(&entry->condvar, &list->lock, timeoutns))
     {
-      return 2; // timeout
+      break; // timeout
     }
   }
-  return 0;
+  return entry->signaled ? 0 : 2;
 }
 
 // Basic fnv1a hash
@@ -347,16 +392,18 @@ static uint64_t in_addr_hash(void* address)
     hash = hash * 1099511628211ULL;
     value >>= 8;
   }
-  return max(hash, 1); // 0 is reserved. I feel very sorry for the value that has a hash of 0 anyways lmao
+  return max(hash, 1) & ~TOMB_MASK; // 0 is reserved. I feel very sorry for the value that has a hash of 0 anyways lmao
 }
 
 #ifdef IN_PLATFORM_WIN32
 
-in_wait_map global_wait_map = { SRWLOCK_INIT };
+in_wait_map _innative_internal_env_global_wait_map = { SRWLOCK_INIT };
 
 static void in_platform_mutex_init(in_platform_mutex* mutex) { InitializeSRWLock(mutex); }
 static void in_platform_mutex_lock(in_platform_mutex* mutex) { AcquireSRWLockExclusive(mutex); }
 static void in_platform_mutex_unlock(in_platform_mutex* mutex) { ReleaseSRWLockExclusive(mutex); }
+static void in_platform_mutex_shared_lock(in_platform_mutex* mutex) { AcquireSRWLockShared(mutex); }
+static void in_platform_mutex_shared_unlock(in_platform_mutex* mutex) { ReleaseSRWLockShared(mutex); }
 static void in_platform_mutex_free(in_platform_mutex* mutex) {}
 
 static void in_platform_condvar_init(in_platform_condvar* condvar) { InitializeConditionVariable(condvar); }
@@ -366,6 +413,8 @@ static int in_platform_condvar_wait(in_platform_condvar* condvar, in_platform_mu
   DWORD timeout;
   if(timeoutns < 0)
     timeout = INFINITE;
+  else if(timeoutns < 1'000'000)
+    timeout = 1; // timeout 0 would be worse than timeout 1ms if any timeout was requested
   else
     timeout = min((DWORD)(timeoutns / 1'000'000), INFINITE - 1);
 
@@ -377,19 +426,29 @@ static void in_platform_condvar_notify(in_platform_condvar* condvar) { WakeCondi
 static void in_platform_condvar_free(in_platform_condvar* condvar) {}
 
 // Memory stuff
-static void* grow_array(void* array, size_t new_size)
+static void* grow_array(void* array, size_t elem_size, size_t new_count)
 {
+  if(new_count == 0)
+  {
+    if(array)
+      free_array(array);
+    return 0;
+  }
+
   if(array == 0)
   {
-    return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, new_size);
+    return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, elem_size * new_count);
   }
   else
   {
-    return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, array, new_size);
+    return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, array, elem_size * new_count);
   }
 }
 
 static void free_array(void* array) { HeapFree(GetProcessHeap(), 0, array); }
+
+static size_t in_atomic_incr(size_t* value) { return InterlockedExchangeAdd64(value, 1) + 1; }
+static size_t in_atomic_decr(size_t* value) { return InterlockedExchangeAdd64(value, -1) - 1; }
 
 #elif defined(IN_PLATFORM_POSIX)
 

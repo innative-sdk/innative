@@ -30,7 +30,9 @@ size_t TestHarness::Run(FILE* out)
                                                               { "parallel parsing", &TestHarness::test_parallel_parsing },
                                                               { "whitelist", &TestHarness::test_whitelist },
                                                               { "serializer", &TestHarness::test_serializer },
-                                                              { "errors", &TestHarness::test_errors } };
+                                                              { "errors", &TestHarness::test_errors },
+                                                              { "atomic_waitnotify",
+                                                                &TestHarness::test_atomic_waitnotify } };
 
   static const size_t NUMTESTS    = sizeof(tests) / sizeof(decltype(tests[0]));
   static constexpr int COLUMNS[3] = { 24, 11, 8 };
