@@ -156,7 +156,6 @@ IN_ERROR Compiler::CompileBinaryShiftOp(llvmVal* (llvm::IRBuilder<>::*op)(llvmVa
   return PushReturn((builder.*op)(val1, MaskShiftBits(val2), args...));
 }
 
-
 IN_ERROR Compiler::CompileIfBlock(varsint7 sig)
 {
   IN_ERROR err;
@@ -274,7 +273,6 @@ void Compiler::CompileTrap()
   call->setDoesNotReturn();
   builder.CreateUnreachable();
 }
-
 
 IN_ERROR Compiler::CompileBranch(varuint32 depth)
 {
@@ -671,7 +669,6 @@ IN_ERROR Compiler::CompileFloatCmp(llvm::Intrinsic::ID id, const llvm::Twine& na
   return PushReturn(builder.CreateSelect(nancheck, llvm::ConstantFP::getNaN(val1->getType()), compare));
 }
 
-
 IN_ERROR Compiler::CompileInstruction(Instruction& ins)
 {
   // fputs(OP::NAMES[ins.opcode], env.log);
@@ -978,14 +975,17 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return CompileDiv<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(false, &llvm::IRBuilder<>::CreateURem,
                                                                   OP::NAMES[ins.opcode]);
   case OP_i32_and:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i32_or:
     return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateOr, OP::NAMES[ins.opcode]);
   case OP_i32_xor:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i32_shl:
     return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateShl,
-                                                                                        OP::NAMES[ins.opcode], false, false);
+                                                                                        OP::NAMES[ins.opcode], false,
+                                                                                        false);
   case OP_i32_shr_s:
     return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(&llvm::IRBuilder<>::CreateAShr,
                                                                                   OP::NAMES[ins.opcode], false);
@@ -1019,14 +1019,17 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return CompileDiv<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(false, &llvm::IRBuilder<>::CreateURem,
                                                                   OP::NAMES[ins.opcode]);
   case OP_i64_and:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i64_or:
     return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateOr, OP::NAMES[ins.opcode]);
   case OP_i64_xor:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i64_shl:
     return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateShl,
-                                                                                        OP::NAMES[ins.opcode], false, false);
+                                                                                        OP::NAMES[ins.opcode], false,
+                                                                                        false);
   case OP_i64_shr_s:
     return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(&llvm::IRBuilder<>::CreateAShr,
                                                                                   OP::NAMES[ins.opcode], false);
@@ -1181,6 +1184,7 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
   case OP_f64_reinterpret_i64:
     return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateBitCast,
                                                                        builder.getDoubleTy(), OP::NAMES[ins.opcode]);
+  case OP_atomic_prefix: return CompileAtomicInstruction(ins);
   default: return ERR_FATAL_UNKNOWN_INSTRUCTION;
   }
 
@@ -1319,4 +1323,51 @@ IN_ERROR Compiler::CompileInitConstant(Instruction& instruction, Module& m, llvm
   if(instruction.opcode[0] == OP_global_get)
     return CompileInitGlobal(m, instruction.immediates[0]._varuint32, out);
   return CompileConstant(instruction, out);
+}
+
+IN_ERROR innative::Compiler::CompileAtomicNotify(varuint7 memory, varuint32 offset, varuint32 memflags, const char* name)
+{
+  IN_ERROR err;
+
+  llvmVal *base, *count;
+  // Pop in reverse order
+  if(err = PopType(TE_i32, count))
+    return err;
+  if(err = PopType(TE_i32, base))
+    return err;
+
+  auto ptr = GetMemPointer(base, builder.getInt32Ty()->getPointerTo(), memory, offset);
+
+  // Trap on alignment failure
+  if(memflags) // Only if alignment > 1
+  {
+    auto zero = CInt::get(ptr->getType(), 0);
+    auto mask = CInt::get(ptr->getType(), (1Ui64 << memflags) - 1);
+    auto cond = builder.CreateICmpNE(builder.CreateAnd(ptr, mask), zero);
+    InsertConditionalTrap(cond);
+  }
+
+  // Call the environment support function
+  return PushReturn(builder.CreateCall(atomic_notify, { ptr, count }, name));
+}
+
+template<WASM_TYPE_ENCODING Ty>
+IN_ERROR innative::Compiler::CompileAtomicWait(varuint7 memory, varuint32 offset, varuint32 memflags, const char* name)
+{
+  // TODO
+  return IN_ERROR();
+}
+
+IN_ERROR innative::Compiler::CompileAtomicInstruction(Instruction& ins)
+{
+  switch(ins.opcode[1])
+  {
+  case OP_atomic_notify:
+    return CompileAtomicNotify(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode]);
+    // TODO: Rest of the instructions
+  default: return ERR_FATAL_UNKNOWN_INSTRUCTION;
+  }
+
+  assert(false);
+  return ERR_SUCCESS;
 }
