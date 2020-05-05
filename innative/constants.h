@@ -146,7 +146,7 @@ namespace innative {
       inline const char* operator[](const uint8_t (&x)[MAX_OPCODE_BYTES]) const { return Get(ToInt(x)); }
 
       kh_mapenum_s* MAP;
-      static constexpr std::array<std::pair<std::array<uint8_t, 2>, const char*>, 172> LIST = {
+      static constexpr std::array<std::pair<std::array<uint8_t, 2>, const char*>, 239> LIST = {
         // Control flow operators
         std::pair<std::array<uint8_t, 2>, const char*>{ { 0x00, 0x00 }, "unreachable" },
         { { 0x01, 0x00 }, "nop" },
@@ -347,6 +347,84 @@ namespace innative {
         { { 0xbd, 0x00 }, "i64.reinterpret_f64" },
         { { 0xbe, 0x00 }, "f32.reinterpret_i32" },
         { { 0xbf, 0x00 }, "f64.reinterpret_i64" },
+
+        // Atomics
+        { { 0xfe, 0x00 }, "memory.atomic.notify" },
+        { { 0xfe, 0x01 }, "memory.atomic.wait32" },
+        { { 0xfe, 0x02 }, "memory.atomic.wait64" },
+
+        { { 0xfe, 0x03 }, "atomic.fence" },
+
+        { { 0xfe, 0x10 }, "i32.atomic.load" },
+        { { 0xfe, 0x11 }, "i64.atomic.load" },
+        { { 0xfe, 0x12 }, "i32.atomic.load8_u" },
+        { { 0xfe, 0x13 }, "i32.atomic.load16_u" },
+        { { 0xfe, 0x14 }, "i64.atomic.load8_u" },
+        { { 0xfe, 0x15 }, "i64.atomic.load16_u" },
+        { { 0xfe, 0x16 }, "i64.atomic.load32_u" },
+        { { 0xfe, 0x17 }, "i32.atomic.store" },
+        { { 0xfe, 0x18 }, "i64.atomic.store" },
+        { { 0xfe, 0x19 }, "i32.atomic.store8" },
+        { { 0xfe, 0x1A }, "i32.atomic.store16" },
+        { { 0xfe, 0x1B }, "i64.atomic.store8" },
+        { { 0xfe, 0x1C }, "i64.atomic.store16" },
+        { { 0xfe, 0x1D }, "i64.atomic.store32" },
+
+        { { 0xfe, 0x1E }, "i32.atomic.rmw.add" },
+        { { 0xfe, 0x1F }, "i64.atomic.rmw.add" },
+        { { 0xfe, 0x20 }, "i32.atomic.rmw8.add_u" },
+        { { 0xfe, 0x21 }, "i32.atomic.rmw16.add_u" },
+        { { 0xfe, 0x22 }, "i64.atomic.rmw8.add_u" },
+        { { 0xfe, 0x23 }, "i64.atomic.rmw16.add_u" },
+        { { 0xfe, 0x24 }, "i64.atomic.rmw32.add_u" },
+
+        { { 0xfe, 0x25 }, "i32.atomic.rmw.sub" },
+        { { 0xfe, 0x26 }, "i64.atomic.rmw.sub" },
+        { { 0xfe, 0x27 }, "i32.atomic.rmw8.sub_u" },
+        { { 0xfe, 0x28 }, "i32.atomic.rmw16.sub_u" },
+        { { 0xfe, 0x29 }, "i64.atomic.rmw8.sub_u" },
+        { { 0xfe, 0x2A }, "i64.atomic.rmw16.sub_u" },
+        { { 0xfe, 0x2B }, "i64.atomic.rmw32.sub_u" },
+
+        { { 0xfe, 0x2C }, "i32.atomic.rmw.and" },
+        { { 0xfe, 0x2D }, "i64.atomic.rmw.and" },
+        { { 0xfe, 0x2E }, "i32.atomic.rmw8.and_u" },
+        { { 0xfe, 0x2F }, "i32.atomic.rmw16.and_u" },
+        { { 0xfe, 0x30 }, "i64.atomic.rmw8.and_u" },
+        { { 0xfe, 0x31 }, "i64.atomic.rmw16.and_u" },
+        { { 0xfe, 0x32 }, "i64.atomic.rmw32.and_u" },
+
+        { { 0xfe, 0x33 }, "i32.atomic.rmw.or" },
+        { { 0xfe, 0x34 }, "i64.atomic.rmw.or" },
+        { { 0xfe, 0x35 }, "i32.atomic.rmw8.or_u" },
+        { { 0xfe, 0x36 }, "i32.atomic.rmw16.or_u" },
+        { { 0xfe, 0x37 }, "i64.atomic.rmw8.or_u" },
+        { { 0xfe, 0x38 }, "i64.atomic.rmw16.or_u" },
+        { { 0xfe, 0x39 }, "i64.atomic.rmw32.or_u" },
+
+        { { 0xfe, 0x3A }, "i32.atomic.rmw.xor" },
+        { { 0xfe, 0x3B }, "i64.atomic.rmw.xor" },
+        { { 0xfe, 0x3C }, "i32.atomic.rmw8.xor_u" },
+        { { 0xfe, 0x3D }, "i32.atomic.rmw16.xor_u" },
+        { { 0xfe, 0x3E }, "i64.atomic.rmw8.xor_u" },
+        { { 0xfe, 0x3F }, "i64.atomic.rmw16.xor_u" },
+        { { 0xfe, 0x40 }, "i64.atomic.rmw32.xor_u" },
+
+        { { 0xfe, 0x41 }, "i32.atomic.rmw.xchg" },
+        { { 0xfe, 0x42 }, "i64.atomic.rmw.xchg" },
+        { { 0xfe, 0x43 }, "i32.atomic.rmw8.xchg_u" },
+        { { 0xfe, 0x44 }, "i32.atomic.rmw16.xchg_u" },
+        { { 0xfe, 0x45 }, "i64.atomic.rmw8.xchg_u" },
+        { { 0xfe, 0x46 }, "i64.atomic.rmw16.xchg_u" },
+        { { 0xfe, 0x47 }, "i64.atomic.rmw32.xchg_u" },
+
+        { { 0xfe, 0x48 }, "i32.atomic.rmw.cmpxchg" },
+        { { 0xfe, 0x49 }, "i64.atomic.rmw.cmpxchg" },
+        { { 0xfe, 0x4A }, "i32.atomic.rmw8.cmpxchg_u" },
+        { { 0xfe, 0x4B }, "i32.atomic.rmw16.cmpxchg_u" },
+        { { 0xfe, 0x4C }, "i64.atomic.rmw8.cmpxchg_u" },
+        { { 0xfe, 0x4D }, "i64.atomic.rmw16.cmpxchg_u" },
+        { { 0xfe, 0x4E }, "i64.atomic.rmw32.cmpxchg_u" },
       };
       static const OP NAMES;
     };

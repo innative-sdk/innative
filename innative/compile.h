@@ -78,6 +78,9 @@ namespace innative {
     llvm::Function* exit;
     llvm::Function* start;
     llvm::Function* memgrow;
+    llvm::Function* atomic_notify;
+    llvm::Function* atomic_wait32;
+    llvm::Function* atomic_wait64;
     std::string natvis;
 
     using Func    = llvm::Function;
@@ -318,6 +321,11 @@ namespace innative {
     IN_ERROR CompileDiv(bool overflow, llvmVal* (llvm::IRBuilder<>::*op)(llvmVal*, llvmVal*, Args...), Args... args);
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR>
     IN_ERROR CompileFloatCmp(llvm::Intrinsic::ID id, const llvm::Twine& name);
+
+    IN_ERROR CompileAtomicInstruction(Instruction& ins);
+    IN_ERROR CompileAtomicNotify(varuint7 memory, varuint32 offset, varuint32 memflags, const char* name);
+    template<WASM_TYPE_ENCODING Ty>
+    IN_ERROR CompileAtomicWait(varuint7 memory, varuint32 offset, varuint32 memflags, const char* name);
   };
 
   template<typename... Args> IN_FORCEINLINE std::string FormatString(bool xml, const char* format, Args&&... args)
