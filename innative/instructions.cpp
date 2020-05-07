@@ -479,7 +479,7 @@ IN_ERROR Compiler::CompileIndirectCall(varuint32 index)
   // CreateCall will then do the final dereference of the function pointer to make the indirect call
   CallInst* call = builder.CreateCall(funcptr, llvm::makeArrayRef(ArgsV, ftype.n_params));
   if(memories.size() > 0)
-    builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[0], 0)), memlocal);
+    builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[0], 0)), memlocal, false);
 
   builder.GetInsertBlock()->getParent()->setMetadata(IN_MEMORY_GROW_METADATA, llvm::MDNode::get(ctx, {}));
 
@@ -523,7 +523,7 @@ IN_ERROR Compiler::CompileLoad(varuint7 memory, varuint32 offset, varuint32 memf
 
   // TODO: In strict mode, we may have to disregard the alignment hint
   llvmVal* result =
-    builder.CreateAlignedLoad(GetMemPointer(base, ty->getPointerTo(0), memory, offset), (1 << memflags), name);
+    builder.CreateAlignedLoad(GetMemPointer(base, ty->getPointerTo(0), memory, offset), (1 << memflags), false, name);
 
   if(ext != nullptr)
     result = SIGNED ? builder.CreateSExt(result, ext) : builder.CreateZExt(result, ext);
@@ -549,7 +549,7 @@ IN_ERROR Compiler::CompileStore(varuint7 memory, varuint32 offset, varuint32 mem
 
   // TODO: In strict mode, we may have to disregard the alignment hint
   llvmVal* ptr = GetMemPointer(base, PtrType->getPointerTo(0), memory, offset);
-  builder.CreateAlignedStore(!ext ? value : builder.CreateIntCast(value, ext, false), ptr, (1 << memflags), name);
+  builder.CreateAlignedStore(!ext ? value : builder.CreateIntCast(value, ext, false), ptr, (1 << memflags), false);
 
   return ERR_SUCCESS;
 }
@@ -588,8 +588,8 @@ IN_ERROR Compiler::CompileMemGrow(const char* name)
 
   builder.CreateCondBr(success, successblock, contblock);
   builder.SetInsertPoint(successblock); // Only set new memory if call succeeded
-  builder.CreateAlignedStore(call, GetPairPtr(memories[0], 0), builder.getInt64Ty()->getPrimitiveSizeInBits() / 8);
-  builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[0], 0)), memlocal);
+  builder.CreateAlignedStore(call, GetPairPtr(memories[0], 0), builder.getInt64Ty()->getPrimitiveSizeInBits() / 8, false);
+  builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[0], 0)), memlocal, false);
   builder.CreateBr(contblock);
 
   builder.SetInsertPoint(contblock);
@@ -742,7 +742,7 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     builder.CreateStore(!values.Peek() ? llvm::Constant::getAllOnesValue(
                                            llvm::cast<llvm::PointerType>(local->getType())->getElementType()) :
                                          values.Peek(),
-                        local);
+                        local, false);
     if(values.Peek() != nullptr &&
        ins.opcode[0] == OP_local_set) // tee_local is the same as set_local except the operand isn't popped
       values.Pop();
@@ -756,7 +756,7 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     builder.CreateStore(!values.Peek() ? llvm::Constant::getAllOnesValue(
                                            globals[ins.immediates[0]._varuint32]->getType()->getElementType()) :
                                          values.Pop(),
-                        globals[ins.immediates[0]._varuint32]);
+                        globals[ins.immediates[0]._varuint32], false);
     debugger->DebugSetGlobal(ins.immediates[0]._varuint32);
     return ERR_SUCCESS;
   case OP_global_get:
@@ -1234,7 +1234,7 @@ IN_ERROR Compiler::CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst
 
     debugger->FuncParam(fn, index, desc);
     ++index;
-    builder.CreateStore(&arg, locals.back()); // Store parameter (we can't use the parameter directly
+    builder.CreateStore(&arg, locals.back(), false); // Store parameter (we can't use the parameter directly
                                               // because wasm lets you store to parameters)
   }
 
@@ -1251,7 +1251,7 @@ IN_ERROR Compiler::CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst
                                llvm::MDNode::get(ctx, { llvm::ConstantAsMetadata::get(builder.getInt32(offset)) }));
 
     debugger->FuncLocal(fn, index, desc);
-    builder.CreateStore(llvm::Constant::getNullValue(ty), locals.back());
+    builder.CreateStore(llvm::Constant::getNullValue(ty), locals.back(), false);
     offset += body.locals[i].count;
   }
 
@@ -1263,7 +1263,7 @@ IN_ERROR Compiler::CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst
   {
     memref = memlocal =
       builder.CreateAlloca(memories[0]->getType()->getElementType()->getContainedType(0), nullptr, "IN_!memlocal");
-    builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[0], 0)), memlocal);
+    builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[0], 0)), memlocal, false);
     stacksize += (memlocal->getType()->getElementType()->getPrimitiveSizeInBits() / 8);
   }
 
