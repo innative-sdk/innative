@@ -840,7 +840,7 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
     call->setCallingConv(memgrow->getCallingConv());
 
     InsertConditionalTrap(builder.CreateICmpEQ(builder.CreatePtrToInt(call, intptrty), CInt::get(intptrty, 0)));
-    builder.CreateStore(builder.CreatePointerCast(call, type), GetPairPtr(tables.back(), 0));
+    builder.CreateStore(builder.CreatePointerCast(call, type), GetPairPtr(tables.back(), 0), false);
   }
 
   // Declare linear memory spaces and allocate in init function
@@ -859,7 +859,7 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
       builder.CreateCall(memgrow, { llvm::ConstantPointerNull::get(type), sz, max, GetPairPtr(memories.back(), 1) });
     call->setCallingConv(memgrow->getCallingConv());
     InsertConditionalTrap(builder.CreateICmpEQ(builder.CreatePtrToInt(call, intptrty), CInt::get(intptrty, 0)));
-    builder.CreateStore(call, GetPairPtr(memories.back(), 0));
+    builder.CreateStore(call, GetPairPtr(memories.back(), 0), false);
   }
 
   IN_ERROR err;
@@ -925,7 +925,7 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
           builder.CreateGEP(builder.CreateLoad(GetPairPtr(tables[e.index], 0)),
                             { builder.CreateAdd(offset, CInt::get(offset->getType(), j, true)), builder.getInt32(0) });
         builder.CreateAlignedStore(builder.CreatePointerCast(functions[e.elements[j]].internal, target), ptr,
-                                   mod->getDataLayout().getPointerSize());
+                                   mod->getDataLayout().getPointerSize(), false);
 
         varuint32 index = GetFirstType(ModuleFunctionType(m, e.elements[j]));
         if(index == (varuint32)~0)
@@ -933,7 +933,7 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
 
         ptr = builder.CreateGEP(builder.CreateLoad(GetPairPtr(tables[e.index], 0)),
                                 { builder.CreateAdd(offset, CInt::get(offset->getType(), j, true)), builder.getInt32(1) });
-        builder.CreateAlignedStore(builder.getInt32(index), ptr, 4);
+        builder.CreateAlignedStore(builder.getInt32(index), ptr, 4, false);
       }
     }
   }
@@ -1100,7 +1100,7 @@ void Compiler::AddMemLocalCaching()
                 &i); // Setting the insert point doesn't actually gaurantee the instructions come after the call
               auto load = builder.CreateLoad(GetPairPtr(memories[0], 0));
               load->moveAfter(&i); // So we manually move them after the call instruction just to be sure.
-              builder.CreateStore(load, fn.memlocal)->moveAfter(load);
+              builder.CreateStore(load, fn.memlocal, false)->moveAfter(load);
             }
           }
         }
