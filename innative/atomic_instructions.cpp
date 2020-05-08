@@ -1,0 +1,292 @@
+// Copyright (c)2020 Black Sphere Studios
+// For conditions of distribution and use, see copyright notice in innative.h
+
+#include "llvm.h"
+#include "compile.h"
+#include "utility.h"
+#include "validate.h"
+
+using namespace innative;
+using namespace utility;
+using Func    = llvm::Function;
+using FuncTy  = llvm::FunctionType;
+using llvmTy  = llvm::Type;
+using llvmVal = llvm::Value;
+
+IN_ERROR innative::Compiler::InsertAlignmentTrap(llvmVal* ptr, varuint32 memflags)
+{
+  if(!memflags) // Only bother if alignment > 1
+    return ERR_SUCCESS;
+
+  auto alignment = 1Ui64 << memflags;
+  auto zero      = CInt::get(ptr->getType(), 0);
+  auto mask      = CInt::get(ptr->getType(), alignment - 1);
+  auto cond      = builder.CreateICmpNE(builder.CreateAnd(ptr, mask), zero);
+  InsertConditionalTrap(cond);
+
+  return ERR_SUCCESS;
+}
+
+IN_ERROR innative::Compiler::InsertAtomicMemGet(Instruction& ins, llvmVal*& ptr, unsigned& align)
+{
+  IN_ERROR err;
+
+  llvmVal* base;
+  if(err = PopType(TE_i32, base))
+    return err;
+
+  varuint7 memory    = 0;
+  varuint32 memflags = ins.immediates[0]._varuint32;
+  varuint32 offset   = ins.immediates[1]._varuint32;
+  align              = 1u << memflags;
+
+  // GetMemPointer already checks for us that the address is in-bounds
+  ptr = GetMemPointer(base, builder.getIntNTy(align * 8)->getPointerTo(), memory, offset);
+
+  // Trap on alignment failure
+  InsertAlignmentTrap(ptr, memflags);
+
+  return ERR_SUCCESS;
+}
+
+template<typename F> IN_ERROR innative::Compiler::CompileAtomicMemInstruction(Instruction& ins, F&& inner)
+{
+  IN_ERROR err;
+  unsigned align;
+  llvmVal* ptr;
+
+  if(err = InsertAtomicMemGet(ins, ptr, align))
+    return err;
+
+  return inner(align, ptr);
+}
+
+template<typename F>
+IN_ERROR innative::Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCODING arg2Ty, F&& inner)
+{
+  IN_ERROR err;
+  unsigned align;
+  llvmVal *ptr, *arg2;
+
+  if(err = PopType(arg2Ty, arg2))
+    return err;
+  if(err = InsertAtomicMemGet(ins, ptr, align))
+    return err;
+
+  return inner(align, ptr, arg2);
+}
+
+template<typename F>
+IN_ERROR innative::Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCODING arg2Ty,
+                                                         WASM_TYPE_ENCODING arg3Ty, F&& inner)
+{
+  IN_ERROR err;
+  unsigned align;
+  llvmVal *ptr, *arg2, *arg3;
+
+  if(err = PopType(arg3Ty, arg3))
+    return err;
+  if(err = PopType(arg2Ty, arg2))
+    return err;
+  if(err = InsertAtomicMemGet(ins, ptr, align))
+    return err;
+
+  return inner(align, ptr, arg2, arg3);
+}
+
+IN_ERROR innative::Compiler::CompileAtomicNotify(Instruction& ins, const char* name)
+{
+  return CompileAtomicMemInstruction(ins, TE_i32, [&](unsigned, llvmVal* ptr, llvmVal* count) {
+    return PushReturn(builder.CreateCall(atomic_notify, { ptr, count }, name));
+  });
+}
+
+IN_ERROR innative::Compiler::CompileAtomicWait(Instruction& ins, WASM_TYPE_ENCODING varTy, llvm::Function* wait_func,
+                                               const char* name)
+{
+  return CompileAtomicMemInstruction(ins, varTy, TE_i64, [&](unsigned, llvmVal* ptr, llvmVal* expected, llvmVal* count) {
+    return PushReturn(builder.CreateCall(wait_func, { ptr, expected, count }, name));
+  });
+}
+
+constexpr auto SeqCst = llvm::AtomicOrdering::SequentiallyConsistent;
+
+IN_ERROR innative::Compiler::CompileAtomicFence(const char* name)
+{
+  auto fence = builder.CreateFence(SeqCst);
+  fence->setName(name);
+
+  return ERR_SUCCESS;
+}
+
+IN_ERROR innative::Compiler::CompileAtomicLoad(Instruction& ins, WASM_TYPE_ENCODING varTy, const char* name)
+{
+  return CompileAtomicMemInstruction(ins, [&](unsigned align, llvmVal* ptr) {
+    auto varsize = unsigned(4 * -varTy); // TE_i32(-1) => 4; TE_i64(-2) => 8;
+    auto varty   = builder.getIntNTy(varsize * 8);
+
+    auto load = builder.CreateAlignedLoad(ptr, align, name);
+    load->setAtomic(SeqCst);
+
+    llvmVal* result = load;
+    // All atomic loads zero-ext when the atomic variable is smaller than the WASM value
+    if(varsize > align)
+      result = builder.CreateZExt(result, varty);
+
+    return PushReturn(result);
+  });
+}
+
+IN_ERROR innative::Compiler::CompileAtomicStore(Instruction& ins, WASM_TYPE_ENCODING varTy, const char* name)
+{
+  return CompileAtomicMemInstruction(ins, varTy, [&](unsigned align, llvmVal* ptr, llvmVal* value) {
+    auto varsize = unsigned(4 * -varTy); // TE_i32(-1) => 4; TE_i64(-2) => 8;
+    auto memty   = builder.getIntNTy(align * 8);
+
+    // We need to truncate first when the atomic field is smaller than the WASM value
+    if(varsize > align)
+      value = builder.CreateTrunc(value, memty);
+
+    auto store = builder.CreateAlignedStore(value, ptr, align);
+    store->setAtomic(SeqCst);
+    store->setName(name);
+
+    return ERR_SUCCESS;
+  });
+}
+
+IN_ERROR innative::Compiler::CompileAtomicRMW(Instruction& ins, WASM_TYPE_ENCODING varTy, llvm::AtomicRMWInst::BinOp Op,
+                                              const char* name)
+{
+  return CompileAtomicMemInstruction(ins, varTy, [&](unsigned align, llvmVal* ptr, llvmVal* newValue) {
+    auto varsize = unsigned(4 * -varTy); // TE_i32(-1) => 4; TE_i64(-2) => 8;
+    auto varty   = builder.getIntNTy(varsize * 8);
+    auto memty   = builder.getIntNTy(align * 8);
+
+    if(varsize > align)
+      newValue = builder.CreateTrunc(newValue, memty);
+
+    auto rmw = builder.CreateAtomicRMW(Op, ptr, newValue, SeqCst);
+    rmw->setName(name);
+
+    llvmVal* oldValue = rmw;
+    if(varsize > align)
+      oldValue = builder.CreateZExt(oldValue, varty);
+
+    return PushReturn(oldValue);
+  });
+}
+
+IN_ERROR innative::Compiler::CompileAtomicCmpXchg(Instruction& ins, WASM_TYPE_ENCODING varTy, const char* name)
+{
+  return CompileAtomicMemInstruction(ins, varTy, varTy, [&](unsigned align, llvmVal* ptr, llvmVal* cmp, llvmVal* newVal) {
+    auto varsize = unsigned(4 * -varTy); // TE_i32(-1) => 4; TE_i64(-2) => 8;
+    auto varty   = builder.getIntNTy(varsize * 8);
+    auto memty   = builder.getIntNTy(align * 8);
+
+    if(varsize > align)
+    {
+      cmp    = builder.CreateTrunc(cmp, memty);
+      newVal = builder.CreateTrunc(newVal, memty);
+    }
+
+    auto cmpxchg = builder.CreateAtomicCmpXchg(ptr, cmp, newVal, SeqCst, SeqCst);
+    cmpxchg->setName(name);
+
+    llvmVal* loaded = cmpxchg;
+    if(varsize > align)
+      loaded = builder.CreateZExt(loaded, varty);
+
+    return PushReturn(loaded);
+  });
+}
+
+constexpr auto OP_START      = OP_i32_atomic_load;
+constexpr auto OP_END        = OP_atomic_end;
+constexpr auto OP_GROUP_SIZE = 7;
+enum OpGroup
+{
+  Load,
+  Store,
+  Add,
+  Sub,
+  And,
+  Or,
+  Xor,
+  Xchg,
+  CmpXchg,
+
+  INVALID_CAT,
+};
+
+constexpr OpGroup GetOpGroup(uint8_t op) { return OpGroup((op - OP_START) / OP_GROUP_SIZE); }
+constexpr int GetOpType(uint8_t op) { return (op - OP_START) % OP_GROUP_SIZE; }
+constexpr int IsI64(int opType) { return (opType >> 2 | ~opType >> 1 & opType) & 1; }
+constexpr WASM_TYPE_ENCODING GetOpTy(uint8_t op) { return WASM_TYPE_ENCODING(TE_i32 - IsI64(op)); }
+
+IN_ERROR innative::Compiler::CompileAtomicInstruction(Instruction& ins)
+{
+  using RmwOp = llvm::AtomicRMWInst::BinOp;
+
+  auto op = ins.opcode[1];
+
+  switch(op)
+  {
+  case OP_atomic_notify: return CompileAtomicNotify(ins, OP::NAMES[ins.opcode]);
+  case OP_atomic_wait32: return CompileAtomicWait(ins, TE_i32, atomic_wait32, OP::NAMES[ins.opcode]);
+  case OP_atomic_wait64: return CompileAtomicWait(ins, TE_i64, atomic_wait64, OP::NAMES[ins.opcode]);
+
+  case OP_atomic_fence: return CompileAtomicFence(OP::NAMES[ins.opcode]);
+
+  default: break; // clever decoding because my god that switch block was unweildy
+  }
+
+  if(op < OP_START || op >= OP_END)
+    return ERR_FATAL_UNKNOWN_INSTRUCTION;
+
+  auto opGroup = GetOpGroup(op);
+  auto varTy   = GetOpTy(op);
+
+  switch(opGroup)
+  {
+  case Load: return CompileAtomicLoad(ins, varTy, OP::NAMES[ins.opcode]);
+  case Store: return CompileAtomicStore(ins, varTy, OP::NAMES[ins.opcode]);
+  case Add: return CompileAtomicRMW(ins, varTy, RmwOp::Add, OP::NAMES[ins.opcode]);
+  case Sub: return CompileAtomicRMW(ins, varTy, RmwOp::Sub, OP::NAMES[ins.opcode]);
+  case And: return CompileAtomicRMW(ins, varTy, RmwOp::And, OP::NAMES[ins.opcode]);
+  case Or: return CompileAtomicRMW(ins, varTy, RmwOp::Or, OP::NAMES[ins.opcode]);
+  case Xor: return CompileAtomicRMW(ins, varTy, RmwOp::Xor, OP::NAMES[ins.opcode]);
+  case Xchg: return CompileAtomicRMW(ins, varTy, RmwOp::Xchg, OP::NAMES[ins.opcode]);
+  case CmpXchg: return CompileAtomicCmpXchg(ins, varTy, OP::NAMES[ins.opcode]);
+
+  default:
+    // This should be unreachable, the static_asserts enforce the invariants
+    assert(false);
+    return ERR_SUCCESS; // shut up compiler lol
+  }
+}
+
+// Make sure my cursed shit has the right assumptions :)
+static_assert(GetOpGroup(OP_i32_atomic_load) == Load);
+static_assert(GetOpGroup(OP_i64_atomic_load32_u) == Load);
+static_assert(GetOpGroup(OP_i32_atomic_store) == Store);
+static_assert(GetOpGroup(OP_i32_atomic_rmw_add) == Add);
+static_assert(GetOpGroup(OP_i32_atomic_rmw_sub) == Sub);
+static_assert(GetOpGroup(OP_i32_atomic_rmw_and) == And);
+static_assert(GetOpGroup(OP_i32_atomic_rmw_or) == Or);
+static_assert(GetOpGroup(OP_i32_atomic_rmw_xor) == Xor);
+static_assert(GetOpGroup(OP_i32_atomic_rmw_xchg) == Xchg);
+static_assert(GetOpGroup(OP_i32_atomic_rmw_cmpxchg) == CmpXchg);
+static_assert(GetOpGroup(OP_END) == INVALID_CAT);
+
+static_assert(GetOpType(OP_END) == 0);
+static_assert(TE_i32 - 1 == TE_i64);
+
+static_assert(GetOpTy(OP_i32_atomic_load) == TE_i32);
+static_assert(GetOpTy(OP_i64_atomic_load) == TE_i64);
+static_assert(GetOpTy(OP_i32_atomic_load8_u) == TE_i32);
+static_assert(GetOpTy(OP_i32_atomic_load16_u) == TE_i32);
+static_assert(GetOpTy(OP_i64_atomic_load8_u) == TE_i64);
+static_assert(GetOpTy(OP_i64_atomic_load16_u) == TE_i64);
+static_assert(GetOpTy(OP_i64_atomic_load32_u) == TE_i64);
+

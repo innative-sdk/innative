@@ -323,9 +323,28 @@ namespace innative {
     IN_ERROR CompileFloatCmp(llvm::Intrinsic::ID id, const llvm::Twine& name);
 
     IN_ERROR CompileAtomicInstruction(Instruction& ins);
-    IN_ERROR CompileAtomicNotify(varuint7 memory, varuint32 offset, varuint32 memflags, const char* name);
-    template<WASM_TYPE_ENCODING Ty>
-    IN_ERROR CompileAtomicWait(varuint7 memory, varuint32 offset, varuint32 memflags, const char* name);
+
+    IN_ERROR InsertAlignmentTrap(llvmVal* ptr, varuint32 memflags);
+    IN_ERROR InsertAtomicMemGet(Instruction& ins, llvmVal*& ptr, unsigned& align);
+
+    // F = (unsigned align, llvmVal* ptr) -> IN_ERROR
+    template<typename F> IN_ERROR CompileAtomicMemInstruction(Instruction& ins, F&& inner);
+    // F = (unsigned align, llvmVal* ptr, llvmVal* arg2) -> IN_ERROR
+    template<typename F> IN_ERROR CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCODING arg2Ty, F&& inner);
+    // F = (unsigned align, llvmVal* ptr, llvmVal* arg2, llvmVal* arg3) -> IN_ERROR
+    template<typename F>
+    IN_ERROR CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCODING arg2Ty, WASM_TYPE_ENCODING arg3Ty, F&& inner);
+
+    IN_ERROR CompileAtomicNotify(Instruction& ins, const char* name);
+    IN_ERROR CompileAtomicWait(Instruction& ins, WASM_TYPE_ENCODING varTy, llvm::Function* wait_func, const char* name);
+
+    IN_ERROR CompileAtomicFence(const char* name);
+
+    IN_ERROR CompileAtomicLoad(Instruction& ins, WASM_TYPE_ENCODING varTy, const char* name);
+    IN_ERROR CompileAtomicStore(Instruction& ins, WASM_TYPE_ENCODING varTy, const char* name);
+
+    IN_ERROR CompileAtomicRMW(Instruction& ins, WASM_TYPE_ENCODING varTy, llvm::AtomicRMWInst::BinOp Op, const char* name);
+    IN_ERROR CompileAtomicCmpXchg(Instruction& ins, WASM_TYPE_ENCODING varTy, const char* name);
   };
 
   template<typename... Args> IN_FORCEINLINE std::string FormatString(bool xml, const char* format, Args&&... args)

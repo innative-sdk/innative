@@ -211,7 +211,8 @@ enum WASM_INSTRUCTION_OPCODES
   OP_atomic_wait32 = 0x01,
   OP_atomic_wait64 = 0x02,
 
-  OP_atomic_fence        = 0x03,
+  OP_atomic_fence = 0x03,
+
   OP_i32_atomic_load     = 0x10,
   OP_i64_atomic_load     = 0x11,
   OP_i32_atomic_load8_u  = 0x12,
@@ -219,13 +220,14 @@ enum WASM_INSTRUCTION_OPCODES
   OP_i64_atomic_load8_u  = 0x14,
   OP_i64_atomic_load16_u = 0x15,
   OP_i64_atomic_load32_u = 0x16,
-  OP_i32_atomic_store    = 0x17,
-  OP_i64_atomic_store    = 0x18,
-  OP_i32_atomic_store8   = 0x19,
-  OP_i32_atomic_store16  = 0x1A,
-  OP_i64_atomic_store8   = 0x1B,
-  OP_i64_atomic_store16  = 0x1C,
-  OP_i64_atomic_store32  = 0x1D,
+
+  OP_i32_atomic_store   = 0x17,
+  OP_i64_atomic_store   = 0x18,
+  OP_i32_atomic_store8  = 0x19,
+  OP_i32_atomic_store16 = 0x1A,
+  OP_i64_atomic_store8  = 0x1B,
+  OP_i64_atomic_store16 = 0x1C,
+  OP_i64_atomic_store32 = 0x1D,
 
   OP_i32_atomic_rmw_add     = 0x1E,
   OP_i64_atomic_rmw_add     = 0x1F,
@@ -282,6 +284,8 @@ enum WASM_INSTRUCTION_OPCODES
   OP_i64_atomic_rmw8_cmpxchg_u  = 0x4C,
   OP_i64_atomic_rmw16_cmpxchg_u = 0x4D,
   OP_i64_atomic_rmw32_cmpxchg_u = 0x4E,
+
+  OP_atomic_end,
 };
 
 #ifdef __cplusplus
