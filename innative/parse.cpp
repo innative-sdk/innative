@@ -7,6 +7,7 @@
 #include "utility.h"
 #include "dwarf_parser.h"
 #include "serialize.h"
+#include "atomic_instruction_details.h"
 #include <assert.h>
 #include <algorithm>
 #include <fstream>
@@ -255,10 +256,10 @@ IN_ERROR innative::ParseExport(Stream& s, Export& e, const Environment& env)
 
 IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environment& env)
 {
-  ins.line     = 1;
-  ins.column   = static_cast<decltype(ins.column)>(s.pos);
+  ins.line   = 1;
+  ins.column = static_cast<decltype(ins.column)>(s.pos);
   // Parse only the first instruction byte - multibyte instructions parse additional bytes
-  IN_ERROR err = ParseByte(s, ins.opcode[0]); 
+  IN_ERROR err = ParseByte(s, ins.opcode[0]);
   for(int i = 1; i < MAX_OPCODE_BYTES; ++i)
     ins.opcode[i] = 0;
   if(err < 0)
@@ -467,6 +468,9 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_i64_reinterpret_f64:
   case OP_f32_reinterpret_i32:
   case OP_f64_reinterpret_i64: break;
+
+  case OP_atomic_prefix: err = ParseAtomicInstruction(s, ins, env); break;
+
   default: err = ERR_FATAL_UNKNOWN_INSTRUCTION;
   }
 
@@ -950,4 +954,39 @@ IN_ERROR innative::ParseExportFixup(Module& m, ValidationError*& errors, const E
   }
 
   return ERR_SUCCESS;
+}
+
+IN_ERROR innative::ParseAtomicInstruction(utility::Stream& s, Instruction& ins, const Environment& env)
+{
+  namespace at = innative::atomic_details;
+
+  IN_ERROR err;
+
+  err = ParseByte(s, ins.opcode[1]);
+  if(err < 0)
+    return err;
+
+  uint8_t alignByte;
+  err = ParseByte(s, alignByte);
+  if(err < 0)
+    return err;
+
+  ins.immediates[0]._varuint32 = alignByte;
+
+  switch(ins.opcode[1])
+  {
+  case OP_atomic_notify:
+  case OP_atomic_wait32:
+  case OP_atomic_wait64: break;
+
+  case OP_atomic_fence: return ERR_SUCCESS;
+
+  default:
+    if(!at::IsLSRMWOp(ins.opcode[1]))
+      return ERR_FATAL_UNKNOWN_INSTRUCTION;
+    break;
+  }
+
+  ins.immediates[1]._varuint32 = s.ReadVarUInt32(err);
+  return err;
 }
