@@ -36,6 +36,7 @@ namespace innative {
     int ParseConstantOperator(Queue<WatToken>& tokens, Instruction& op);
     int ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionBody& f, FunctionDesc& desc, FunctionType& sig,
                       DeferWatAction& defer);
+    int ParseMemarg(Queue<WatToken>& tokens, Instruction& op);
     void ParseLabel(Queue<WatToken>& tokens);
     bool CheckLabel(Queue<WatToken>& tokens);
     int ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, FunctionDesc& desc, FunctionType& sig, varuint32 index);
