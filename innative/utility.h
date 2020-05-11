@@ -198,7 +198,7 @@ namespace innative {
       return (m.knownsections & (1 << opcode)) != 0;
     }
 
-    uint8_t GetInstruction(StringSpan s);
+    uint16_t GetInstruction(StringSpan s);
     varuint32 ModuleFunctionType(const Module& m, varuint32 index);
     FunctionType* ModuleFunction(const Module& m, varuint32 index);
     TableDesc* ModuleTable(const Module& m, varuint32 index);

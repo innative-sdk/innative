@@ -534,7 +534,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
           tokens.Push(WatToken{ kh_val(tokenhash, iter), begin, line, column });
         else
         {
-          uint8_t op = GetInstruction(ref);
+          uint16_t op = GetInstruction(ref);
           if(op != 0xFF)
             tokens.Push(WatToken{ WatTokens::OPERATOR, begin, line, column, (int64_t)op });
           else
