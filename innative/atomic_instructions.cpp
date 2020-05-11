@@ -5,6 +5,7 @@
 #include "compile.h"
 #include "utility.h"
 #include "validate.h"
+#include "atomic_instruction_details.h"
 
 using namespace innative;
 using namespace utility;
@@ -201,28 +202,7 @@ IN_ERROR innative::Compiler::CompileAtomicCmpXchg(Instruction& ins, WASM_TYPE_EN
   });
 }
 
-constexpr auto OP_START      = OP_i32_atomic_load;
-constexpr auto OP_END        = OP_atomic_end;
-constexpr auto OP_GROUP_SIZE = 7;
-enum OpGroup
-{
-  Load,
-  Store,
-  Add,
-  Sub,
-  And,
-  Or,
-  Xor,
-  Xchg,
-  CmpXchg,
-
-  INVALID_CAT,
-};
-
-constexpr OpGroup GetOpGroup(uint8_t op) { return OpGroup((op - OP_START) / OP_GROUP_SIZE); }
-constexpr int GetOpType(uint8_t op) { return (op - OP_START) % OP_GROUP_SIZE; }
-constexpr int IsI64(int opType) { return (opType >> 2 | ~opType >> 1 & opType) & 1; }
-constexpr WASM_TYPE_ENCODING GetOpTy(uint8_t op) { return WASM_TYPE_ENCODING(TE_i32 - IsI64(op)); }
+using namespace innative::atomic_details;
 
 IN_ERROR innative::Compiler::CompileAtomicInstruction(Instruction& ins)
 {
@@ -249,15 +229,15 @@ IN_ERROR innative::Compiler::CompileAtomicInstruction(Instruction& ins)
 
   switch(opGroup)
   {
-  case Load: return CompileAtomicLoad(ins, varTy, OP::NAMES[ins.opcode]);
-  case Store: return CompileAtomicStore(ins, varTy, OP::NAMES[ins.opcode]);
-  case Add: return CompileAtomicRMW(ins, varTy, RmwOp::Add, OP::NAMES[ins.opcode]);
-  case Sub: return CompileAtomicRMW(ins, varTy, RmwOp::Sub, OP::NAMES[ins.opcode]);
-  case And: return CompileAtomicRMW(ins, varTy, RmwOp::And, OP::NAMES[ins.opcode]);
-  case Or: return CompileAtomicRMW(ins, varTy, RmwOp::Or, OP::NAMES[ins.opcode]);
-  case Xor: return CompileAtomicRMW(ins, varTy, RmwOp::Xor, OP::NAMES[ins.opcode]);
-  case Xchg: return CompileAtomicRMW(ins, varTy, RmwOp::Xchg, OP::NAMES[ins.opcode]);
-  case CmpXchg: return CompileAtomicCmpXchg(ins, varTy, OP::NAMES[ins.opcode]);
+  case OpGroup::Load: return CompileAtomicLoad(ins, varTy, OP::NAMES[ins.opcode]);
+  case OpGroup::Store: return CompileAtomicStore(ins, varTy, OP::NAMES[ins.opcode]);
+  case OpGroup::Add: return CompileAtomicRMW(ins, varTy, RmwOp::Add, OP::NAMES[ins.opcode]);
+  case OpGroup::Sub: return CompileAtomicRMW(ins, varTy, RmwOp::Sub, OP::NAMES[ins.opcode]);
+  case OpGroup::And: return CompileAtomicRMW(ins, varTy, RmwOp::And, OP::NAMES[ins.opcode]);
+  case OpGroup::Or: return CompileAtomicRMW(ins, varTy, RmwOp::Or, OP::NAMES[ins.opcode]);
+  case OpGroup::Xor: return CompileAtomicRMW(ins, varTy, RmwOp::Xor, OP::NAMES[ins.opcode]);
+  case OpGroup::Xchg: return CompileAtomicRMW(ins, varTy, RmwOp::Xchg, OP::NAMES[ins.opcode]);
+  case OpGroup::CmpXchg: return CompileAtomicCmpXchg(ins, varTy, OP::NAMES[ins.opcode]);
 
   default:
     // This should be unreachable, the static_asserts enforce the invariants
@@ -265,28 +245,3 @@ IN_ERROR innative::Compiler::CompileAtomicInstruction(Instruction& ins)
     return ERR_SUCCESS; // shut up compiler lol
   }
 }
-
-// Make sure my cursed shit has the right assumptions :)
-static_assert(GetOpGroup(OP_i32_atomic_load) == Load);
-static_assert(GetOpGroup(OP_i64_atomic_load32_u) == Load);
-static_assert(GetOpGroup(OP_i32_atomic_store) == Store);
-static_assert(GetOpGroup(OP_i32_atomic_rmw_add) == Add);
-static_assert(GetOpGroup(OP_i32_atomic_rmw_sub) == Sub);
-static_assert(GetOpGroup(OP_i32_atomic_rmw_and) == And);
-static_assert(GetOpGroup(OP_i32_atomic_rmw_or) == Or);
-static_assert(GetOpGroup(OP_i32_atomic_rmw_xor) == Xor);
-static_assert(GetOpGroup(OP_i32_atomic_rmw_xchg) == Xchg);
-static_assert(GetOpGroup(OP_i32_atomic_rmw_cmpxchg) == CmpXchg);
-static_assert(GetOpGroup(OP_END) == INVALID_CAT);
-
-static_assert(GetOpType(OP_END) == 0);
-static_assert(TE_i32 - 1 == TE_i64);
-
-static_assert(GetOpTy(OP_i32_atomic_load) == TE_i32);
-static_assert(GetOpTy(OP_i64_atomic_load) == TE_i64);
-static_assert(GetOpTy(OP_i32_atomic_load8_u) == TE_i32);
-static_assert(GetOpTy(OP_i32_atomic_load16_u) == TE_i32);
-static_assert(GetOpTy(OP_i64_atomic_load8_u) == TE_i64);
-static_assert(GetOpTy(OP_i64_atomic_load16_u) == TE_i64);
-static_assert(GetOpTy(OP_i64_atomic_load32_u) == TE_i64);
-
