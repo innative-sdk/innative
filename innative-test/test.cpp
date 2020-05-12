@@ -40,6 +40,7 @@ int main(int argc, char* argv[])
   innative_set_work_dir_to_bin(!argc ? 0 : argv[0]);
   int log              = LOG_WARNING;
   int stages           = 0;
+  size_t failures       = 0;
   std::string temppath = temp_directory_path().u8string();
 
   std::cout << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION
@@ -77,7 +78,7 @@ int main(int argc, char* argv[])
   if(stages & TEST_INTERNAL)
   {
     TestHarness harness(exports, !argc ? 0 : argv[0], log, stderr, temppath.c_str());
-    harness.Run(stdout);
+    failures += harness.Run(stdout);
   }
 
   if(stages & TEST_BENCHMARK)
@@ -180,6 +181,7 @@ int main(int argc, char* argv[])
           fputs(env->errors->error, env->log);
           fputc('\n', env->log);
           env->errors = env->errors->next;
+          ++failures;
         }
 
         fputc('\n', env->log);
@@ -192,5 +194,5 @@ int main(int argc, char* argv[])
 
   std::cout << std::endl << "Finished running tests, press enter to exit." << std::endl;
   getchar();
-  return 0;
+  return failures;
 }
