@@ -1,0 +1,21 @@
+version: 1.0.{build}
+configuration:
+- Release
+- Debug Static
+platform:
+- x64
+- x86
+install:
+- cmd: "appveyor DownloadFile\nhttps://github.com/innative-sdk/llvm-project/releases/download/v%LLVM_VERSION%-innative/llvm-%LLVM_VERSION%-x86-64-windows.zip  \n7z x llvm-%LLVM_VERSION%-x86-64-windows.zip\ncopy .\\llvm-10.0.0-x86-64-windows\\bin .\\bin\\llvm\\bin\ncopy .\\llvm-10.0.0-x86-64-windows\\include .\\bin\\llvm\\include\ncopy .\\llvm-10.0.0-x86-64-windows\\lib .\\bin\\llvm\\lib"
+build:
+  project: innative.sln
+  verbosity: minimal
+test_script:
+- cmd: >-
+    cd bin
+
+    innative-test.exe
+
+    innative-test-s-d.exe
+
+    cd ..
