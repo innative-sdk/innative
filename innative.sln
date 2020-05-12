@@ -24,19 +24,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "innative-cmd", "innative-cm
 		{8B15928A-757D-4280-B90F-4D4E90D37F60} = {8B15928A-757D-4280-B90F-4D4E90D37F60}
 	EndProjectSection
 EndProject
-Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "out", "innative-cmd\out.exe", "{1A81C317-9409-4516-A5B4-425A970C6917}"
-	ProjectSection(DebuggerProjectSystem) = preProject
-		PortSupplier = 00000000-0000-0000-0000-000000000000
-		Executable = D:\Erik Documents\Visual Studio 2017\Projects\innative\innative-cmd\out.exe
-		RemoteMachine = ERIKWIN10
-		StartingDirectory = D:\Erik Documents\Visual Studio 2017\Projects\innative\innative-cmd
-		Environment = Default
-		LaunchingEngine = 00000000-0000-0000-0000-000000000000
-		UseLegacyDebugEngines = No
-		LaunchSQLEngine = No
-		AttachLaunchAction = No
-	EndProjectSection
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "innative-test", "innative-test\innative-test.vcxproj", "{EAC0DE14-E009-4D17-B58B-F8554F6C27FA}"
 	ProjectSection(ProjectDependencies) = postProject
 		{54E92032-38A6-4069-8189-2B27995700E0} = {54E92032-38A6-4069-8189-2B27995700E0}
