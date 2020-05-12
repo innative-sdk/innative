@@ -6,7 +6,7 @@ platform:
 - x64
 - x86
 install:
-- cmd: "appveyor DownloadFile -Url https://github.com/innative-sdk/llvm-project/releases/download/v10.0.0-innative/llvm-10.0.0-x86-64-windows.zip  \n7z x llvm-10.0.0-x86-64-windows.zip\nmkdir -p .\\bin\\llvm\\bin\nmkdir -p .\\bin\\llvm\\include\nmkdir -p .\\bin\\llvm\\lib\ncopy .\\llvm-10.0.0-x86-64-windows\\bin .\\bin\\llvm\\bin\ncopy .\\llvm-10.0.0-x86-64-windows\\include .\\bin\\llvm\\include\ncopy .\\llvm-10.0.0-x86-64-windows\\lib .\\bin\\llvm\\lib"
+- cmd: "appveyor DownloadFile -Url https://github.com/innative-sdk/llvm-project/releases/download/v10.0.0-innative/llvm-10.0.0-x86-64-windows.zip  \n7z x llvm-10.0.0-x86-64-windows.zip\nmkdir .\\bin\\llvm\\bin\nmkdir .\\bin\\llvm\\include\nmkdir .\\bin\\llvm\\lib\ncopy .\\llvm-10.0.0-x86-64-windows\\bin .\\bin\\llvm\\bin\ncopy .\\llvm-10.0.0-x86-64-windows\\include .\\bin\\llvm\\include\ncopy .\\llvm-10.0.0-x86-64-windows\\lib .\\bin\\llvm\\lib"
 build:
   project: innative.sln
   verbosity: minimal
