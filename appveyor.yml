@@ -1,10 +1,8 @@
 version: 1.0.{build}
-configuration:
-- Release
-- Debug Static
-platform:
-- x64
-- x86
+configuration: Release
+platform: x64
+init:
+- cmd: git submodule update --init spec
 install:
 - cmd: "appveyor DownloadFile -Url https://github.com/innative-sdk/llvm-project/releases/download/v10.0.0-innative/llvm-10.0.0-x86-64-windows.zip  \n7z x llvm-10.0.0-x86-64-windows.zip\nmkdir .\\bin\\llvm\\bin\nmkdir .\\bin\\llvm\\include\nmkdir .\\bin\\llvm\\lib\nxcopy .\\llvm-10.0.0-x86-64-windows\\bin\\* .\\bin\\llvm\\bin\\ /E\nxcopy .\\llvm-10.0.0-x86-64-windows\\include\\* .\\bin\\llvm\\include\\ /E\nxcopy .\\llvm-10.0.0-x86-64-windows\\lib\\* .\\bin\\llvm\\lib\\ /E"
 build:
@@ -14,8 +12,6 @@ test_script:
 - cmd: >-
     cd bin
 
-    innative-test.exe
-
-    innative-test-s-d.exe
+    innative-test.exe -auto -ignore=13
 
     cd ..
