@@ -40,8 +40,10 @@ int main(int argc, char* argv[])
   innative_set_work_dir_to_bin(!argc ? 0 : argv[0]);
   int log              = LOG_WARNING;
   int stages           = 0;
-  size_t failures       = 0;
+  ptrdiff_t ignore     = 0;
+  ptrdiff_t failures      = 0;
   std::string temppath = temp_directory_path().u8string();
+  bool wait            = true;
 
   std::cout << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION
             << " Test Utility" << std::endl;
@@ -60,6 +62,13 @@ int main(int argc, char* argv[])
       stages |= TEST_WASM_CORE;
     else if(!STRICMP(argv[i], "-v"))
       log = LOG_DEBUG;
+    else if(!STRICMP(argv[i], "-auto"))
+      wait = false;
+    else if(!STRNICMP(argv[i], "-ignore=", 8))
+    {
+      char* end;
+      ignore = strtoull(argv[i] + 8, &end, 10);
+    }
     else
       kh_put_match(matchfiles.get(), argv[i], &r);
   }
@@ -192,7 +201,11 @@ int main(int argc, char* argv[])
     }
   }
 
-  std::cout << std::endl << "Finished running tests, press enter to exit." << std::endl;
-  getchar();
-  return failures;
+  if(wait)
+  {
+    std::cout << std::endl << "Finished running tests, press enter to exit." << std::endl;
+    getchar();
+  }
+
+  return failures - ignore;
 }
