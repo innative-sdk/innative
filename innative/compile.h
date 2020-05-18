@@ -113,7 +113,7 @@ namespace innative {
     void PolymorphicStack();
     llvmVal* GetMemSize(llvm::GlobalVariable* target);
     varuint32 GetFirstType(varuint32 type);
-    llvmVal* GetMemPointer(llvmVal* base, llvm::PointerType* pointer_type, varuint7 memory, varuint32 offset);
+    llvmVal* GetMemPointer(llvmVal* base, llvm::PointerType* pointer_type, varuint32 memory, varuint32 offset);
     IN_ERROR InsertTruncTrap(double max, double min, llvm::Type* ty);
     llvm::Value* GetLocal(varuint32 index);
     llvm::GlobalVariable* CreateGlobal(llvmTy* ty, bool isconst, bool external, llvm::StringRef name,
@@ -140,7 +140,7 @@ namespace innative {
     IN_ERROR CompileConstant(Instruction& instruction, llvm::Constant*& constant);
     IN_ERROR CompileIndirectCall(varuint32 index);
     llvmVal* CompileMemSize(llvm::GlobalVariable* target);
-    IN_ERROR CompileMemGrow(const char* name);
+    IN_ERROR CompileMemGrow(varuint32 memory, const char* name);
     void DumpCompilerState();
     IN_ERROR CompileInstruction(Instruction& ins);
     IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memlocal, FunctionDesc& desc,
@@ -312,9 +312,9 @@ namespace innative {
     IN_ERROR CompileUnaryIntrinsic(llvm::Intrinsic::ID id, const llvm::Twine& name, Args... args);
     template<WASM_TYPE_ENCODING TYPE, bool LEFT> IN_ERROR CompileRotationOp(const char* name);
     template<bool SIGNED>
-    IN_ERROR CompileLoad(varuint7 memory, varuint32 offset, varuint32 memflags, const char* name, llvmTy* ext, llvmTy* ty);
+    IN_ERROR CompileLoad(varuint32 memory, varuint32 offset, varuint32 memflags, const char* name, llvmTy* ext, llvmTy* ty);
     template<WASM_TYPE_ENCODING TY>
-    IN_ERROR CompileStore(varuint7 memory, varuint32 offset, varuint32 memflags, const char* name, llvm::IntegerType* ext);
+    IN_ERROR CompileStore(varuint32 memory, varuint32 offset, varuint32 memflags, const char* name, llvm::IntegerType* ext);
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR>
     IN_ERROR CompileSRem(const llvm::Twine& name);
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR, typename... Args>
@@ -324,7 +324,7 @@ namespace innative {
 
     IN_ERROR CompileAtomicInstruction(Instruction& ins);
 
-    IN_ERROR InsertAlignmentTrap(llvmVal* ptr, varuint32 memflags);
+    IN_ERROR InsertAlignmentTrap(llvmVal* ptr, varuint32 memory, varuint32 memflags);
     IN_ERROR InsertAtomicMemGet(Instruction& ins, llvmVal*& ptr, unsigned& align);
 
     // F = (unsigned align, llvmVal* ptr) -> IN_ERROR

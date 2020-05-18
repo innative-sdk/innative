@@ -14,15 +14,17 @@ using FuncTy  = llvm::FunctionType;
 using llvmTy  = llvm::Type;
 using llvmVal = llvm::Value;
 
-IN_ERROR innative::Compiler::InsertAlignmentTrap(llvmVal* ptr, varuint32 memflags)
+IN_ERROR innative::Compiler::InsertAlignmentTrap(llvmVal* ptr, varuint32 memory, varuint32 memflags)
 {
   if(!memflags) // Only bother if alignment > 1
     return ERR_SUCCESS;
 
   auto alignment = 1Ui64 << memflags;
-  auto zero      = CInt::get(ptr->getType(), 0);
-  auto mask      = CInt::get(ptr->getType(), alignment - 1);
-  auto cond      = builder.CreateICmpNE(builder.CreateAnd(ptr, mask), zero);
+  auto sizet     = builder.getIntNTy(machine->getPointerSizeInBits(memory));
+  auto ptrtoint  = builder.CreatePtrToInt(ptr, sizet);
+  auto zero      = CInt::get(sizet, 0);
+  auto mask      = CInt::get(sizet, alignment - 1);
+  auto cond      = builder.CreateICmpNE(builder.CreateAnd(ptrtoint, mask), zero);
   InsertConditionalTrap(cond);
 
   return ERR_SUCCESS;
@@ -36,16 +38,16 @@ IN_ERROR innative::Compiler::InsertAtomicMemGet(Instruction& ins, llvmVal*& ptr,
   if(err = PopType(TE_i32, base))
     return err;
 
-  varuint7 memory    = 0;
   varuint32 memflags = ins.immediates[0]._varuint32;
   varuint32 offset   = ins.immediates[1]._varuint32;
+  varuint32 memory   = ins.immediates[2]._varuint32;
   align              = 1u << memflags;
 
   // GetMemPointer already checks for us that the address is in-bounds
   ptr = GetMemPointer(base, builder.getIntNTy(align * 8)->getPointerTo(), memory, offset);
 
   // Trap on alignment failure
-  InsertAlignmentTrap(ptr, memflags);
+  InsertAlignmentTrap(ptr, memory, memflags);
 
   return ERR_SUCCESS;
 }
@@ -98,15 +100,23 @@ IN_ERROR innative::Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_
 IN_ERROR innative::Compiler::CompileAtomicNotify(Instruction& ins, const char* name)
 {
   return CompileAtomicMemInstruction(ins, TE_i32, [&](unsigned, llvmVal* ptr, llvmVal* count) {
-    return PushReturn(builder.CreateCall(atomic_notify, { ptr, count }, name));
+    ptr = builder.CreatePointerCast(ptr, builder.getInt8PtrTy());
+    auto call = builder.CreateCall(atomic_notify, { ptr, count });
+    return PushReturn(call);
   });
 }
 
 IN_ERROR innative::Compiler::CompileAtomicWait(Instruction& ins, WASM_TYPE_ENCODING varTy, llvm::Function* wait_func,
                                                const char* name)
 {
+  // TODO: Trap if the memory isn't shared? Double-check this because
+  // that sounds like the spec is confused. We should know whether the
+  // memory will be shared or not at compile time... I can just insert an
+  // unconditional trap if it isn't shared I guess but :shrug:
+
   return CompileAtomicMemInstruction(ins, varTy, TE_i64, [&](unsigned, llvmVal* ptr, llvmVal* expected, llvmVal* count) {
-    return PushReturn(builder.CreateCall(wait_func, { ptr, expected, count }, name));
+    ptr = builder.CreatePointerCast(ptr, builder.getInt8PtrTy());
+    return PushReturn(builder.CreateCall(wait_func, { ptr, expected, count }));
   });
 }
 
@@ -150,7 +160,6 @@ IN_ERROR innative::Compiler::CompileAtomicStore(Instruction& ins, WASM_TYPE_ENCO
 
     auto store = builder.CreateAlignedStore(value, ptr, align);
     store->setAtomic(SeqCst);
-    store->setName(name);
 
     return ERR_SUCCESS;
   });
@@ -194,7 +203,7 @@ IN_ERROR innative::Compiler::CompileAtomicCmpXchg(Instruction& ins, WASM_TYPE_EN
     auto cmpxchg = builder.CreateAtomicCmpXchg(ptr, cmp, newVal, SeqCst, SeqCst);
     cmpxchg->setName(name);
 
-    llvmVal* loaded = cmpxchg;
+    llvmVal* loaded = builder.CreateExtractValue(cmpxchg, 0);
     if(varsize > align)
       loaded = builder.CreateZExt(loaded, varty);
 

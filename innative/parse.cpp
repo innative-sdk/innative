@@ -151,12 +151,13 @@ IN_ERROR innative::ParseFunctionType(Stream& s, FunctionType& sig, const Environ
 
 IN_ERROR innative::ParseResizableLimits(Stream& s, ResizableLimits& limits)
 {
+  // This will only actually read a single byte
   IN_ERROR err = ParseVarUInt32(s, limits.flags);
 
   if(err >= 0)
     err = ParseVarUInt32(s, limits.minimum);
 
-  if(err >= 0 && (limits.flags & 0x1) != 0)
+  if(err >= 0 && (limits.flags & WASM_LIMIT_HAS_MAXIMUM) != 0)
     err = ParseVarUInt32(s, limits.maximum);
 
   return err;
@@ -288,6 +289,8 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
     if(err < 0 || ins.immediates[0]._varuint1 !=
                     0) // We override any error here with ERR_INVALID_RESERVED_VALUE because that's what webassembly expects
       err = ERR_INVALID_RESERVED_VALUE;
+    // memidx
+    // ins.immediates[0]._varuint32 = s.ReadVarUInt32(err);
     break;
   case OP_br_table:
     err = Parse<varuint32>::template Array<&ParseVarUInt32>(s, ins.immediates[0].table, ins.immediates[0].n_table, env);
@@ -332,10 +335,19 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_i64_store8:
   case OP_i64_store16:
   case OP_i64_store32:
+    // Alignment and memidx bit flag
     ins.immediates[0]._varuint32 = s.ReadVarUInt32(err);
 
+    // Offset
     if(err >= 0)
       ins.immediates[1]._varuptr = s.ReadVarUInt32(err); // Currently 32-bit because all memories are 32-bit
+
+    // If bit 6 is set, read a memidx value
+    if(err >= 0 && (ins.immediates[0]._varuint32 & 0b1000000))
+    {
+      ins.immediates[0]._varuint32 &= 0b111; // All valid alignments fit in 3 bits (log2 form)
+      ins.immediates[2]._varuint32 = s.ReadVarUInt32(err);
+    }
 
     break;
   case OP_unreachable:
@@ -844,7 +856,9 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
         return ERR_PARSE_INVALID_FILE_LENGTH;
       else
       {
-        assert(curcustom < m.n_custom);
+        // assert(curcustom < m.n_custom);
+        if(curcustom >= m.n_custom)
+          return ERR_FATAL_SECTION_SIZE_MISMATCH;
         m.custom[curcustom].payload = payload;
         m.custom[curcustom].data    = s.data + s.pos;
         size_t custom               = s.pos + payload;
@@ -971,7 +985,7 @@ IN_ERROR innative::ParseAtomicInstruction(utility::Stream& s, Instruction& ins, 
   if(err < 0)
     return err;
 
-  ins.immediates[0]._varuint32 = alignByte;
+  ins.immediates[0]._varuint32 = alignByte & 0b111;
 
   switch(ins.opcode[1])
   {
@@ -988,5 +1002,13 @@ IN_ERROR innative::ParseAtomicInstruction(utility::Stream& s, Instruction& ins, 
   }
 
   ins.immediates[1]._varuint32 = s.ReadVarUInt32(err);
+  if(err < 0)
+    return err;
+
+  if(alignByte & 0b1000000)
+  {
+    ins.immediates[2]._varuint32 = s.ReadVarUInt32(err);
+  }
+
   return err;
 }

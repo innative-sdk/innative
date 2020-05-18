@@ -234,6 +234,12 @@ void Serializer::TokenizeInstruction(Instruction& ins, const FunctionBody* body,
   case OP_i64_store8:
   case OP_i64_store16:
   case OP_i64_store32:
+    if (ins.immediates[2]._varuint32 != 0)
+    {
+      tokens.Push(WatToken{ WatTokens::MEMIDX });
+      tokens.Push(WatToken{ WatTokens::INTEGER, 0, 0, 0, (int64_t)ins.immediates[2]._varuint32 });
+    }
+
     if(ins.immediates[1]._varuptr != 0)
     {
       tokens.Push(WatToken{ WatTokens::OFFSET });
@@ -351,6 +357,9 @@ void Serializer::TokenizeModule(bool emitdebug)
     t.Push(WatToken{ WatTokens::INTEGER, 0, 0, 0, limits.minimum });
     if(limits.flags & WASM_LIMIT_HAS_MAXIMUM)
       t.Push(WatToken{ WatTokens::INTEGER, 0, 0, 0, limits.maximum });
+    if(limits.flags & WASM_LIMIT_SHARED)
+      t.Push(WatToken{ WatTokens::SHARED });
+    // TODO: Should we serialize an UNSHARED token in the other case?
   };
 
   auto tokenize_global = [](Queue<WatToken>& t, const GlobalDesc& global) {

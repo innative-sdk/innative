@@ -17,8 +17,6 @@
 
 IN_COMPILER_DLLEXPORT int32_t _innative_internal_env_atomic_wait32(void* address, int32_t expected, int64_t timeoutns)
 {
-  // TODO: trap if address is misaligned. Should that be in the codegen before calling this function?
-
   struct in_wait_list* wait_list = _innative_internal_env_wait_map_get(&_innative_internal_env_global_wait_map, address, 1);
   _innative_internal_env_wait_list_enter(wait_list);
 
@@ -41,8 +39,6 @@ IN_COMPILER_DLLEXPORT int32_t _innative_internal_env_atomic_wait32(void* address
 
 IN_COMPILER_DLLEXPORT int32_t _innative_internal_env_atomic_wait64(void* address, int64_t expected, int64_t timeoutns)
 {
-  // TODO: trap if address is misaligned. Should that be in the codegen before calling this function?
-
   struct in_wait_list* wait_list = _innative_internal_env_wait_map_get(&_innative_internal_env_global_wait_map, address, 1);
   _innative_internal_env_wait_list_enter(wait_list);
 
@@ -65,8 +61,6 @@ IN_COMPILER_DLLEXPORT int32_t _innative_internal_env_atomic_wait64(void* address
 
 IN_COMPILER_DLLEXPORT uint32_t _innative_internal_env_atomic_notify(void* address, uint32_t count)
 {
-  // TODO: trap if address is misaligned. Should that be in the codegen before calling this function?
-
   struct in_wait_list* wait_list = _innative_internal_env_wait_map_get(&_innative_internal_env_global_wait_map, address, 0);
   if(wait_list == 0)
     return 0; // Nobody to notify

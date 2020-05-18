@@ -26,7 +26,17 @@ namespace innative::atomic_details {
   constexpr int GetOpType(uint8_t op) { return (op - OP_START) % OP_GROUP_SIZE; }
   constexpr uint8_t IsI64(int opType) { return uint8_t(0x01'01'01'00'00'01'00 >> (opType * 8)); }
   constexpr WASM_TYPE_ENCODING GetOpTy(uint8_t op) { return WASM_TYPE_ENCODING(TE_i32 - IsI64(GetOpType(op))); }
-  constexpr uint8_t GetValidAlignment(uint8_t op) { return uint8_t(0x02'01'00'01'00'03'02 >> (GetOpType(op) * 8)); }
+  constexpr uint8_t GetValidAlignment(uint8_t op)
+  {
+    switch(op)
+    {
+    case OP_atomic_notify: return 2;
+    case OP_atomic_wait32: return 2;
+    case OP_atomic_wait64: return 3;
+    case OP_atomic_fence: return 0;
+    default: return uint8_t(0x02'01'00'01'00'03'02 >> (GetOpType(op) * 8));
+    }
+  }
   constexpr bool IsLSRMWOp(uint8_t op) { return op >= OP_START && op < OP_END; }
 
   constexpr int GetArgCount(uint8_t op)
