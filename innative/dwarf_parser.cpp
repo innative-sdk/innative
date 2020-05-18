@@ -494,6 +494,8 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
       break;
     default: return (size_t)~0;
     }
+
+    iter = kh_get_maptype(maptype, &key); // Update iter in case the hash was resized
   }
 
   return kh_value(maptype, iter);

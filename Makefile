@@ -20,6 +20,7 @@ LDFLAGS  := -L$(LIBDIR) -Lbin/llvm/lib -Lbin/lld/lib
 # Destination settings
 PREFIX  ?= /usr/local
 DESTDIR ?=
+ARCHIVE_PREFIX ?= bin/llvm/lib/
 
 ifeq ($(MAKECMDGOALS), debug)
 CPPFLAGS += -DDEBUG -g
