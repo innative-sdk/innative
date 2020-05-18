@@ -396,7 +396,7 @@ IN_ERROR Compiler::InsertConditionalTrap(llvmVal* cond)
   return ERR_SUCCESS;
 }
 
-llvmVal* Compiler::GetMemPointer(llvmVal* base, llvm::PointerType* pointer_type, varuint7 memory, varuint32 offset)
+llvmVal* Compiler::GetMemPointer(llvmVal* base, llvm::PointerType* pointer_type, varuint32 memory, varuint32 offset)
 {
   assert(memories.size() > 0);
   llvmVal* src          = !memory ? memlocal : static_cast<llvmVal*>(GetPairPtr(memories[memory], 0));
@@ -637,12 +637,17 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
 
   atomic_notify = Func::Create(FuncTy::get(builder.getInt32Ty(), { builder.getInt8PtrTy(0), builder.getInt32Ty() }, false),
                                Func::ExternalLinkage, "_innative_internal_env_atomic_notify", mod);
+  atomic_notify->setCallingConv(llvm::CallingConv::C);
+
   atomic_wait32 = Func::Create(FuncTy::get(builder.getInt32Ty(),
                                            { builder.getInt8PtrTy(0), builder.getInt32Ty(), builder.getInt64Ty() }, false),
                                Func::ExternalLinkage, "_innative_internal_env_atomic_wait32", mod);
+  atomic_wait32->setCallingConv(llvm::CallingConv::C);
+
   atomic_wait64 = Func::Create(FuncTy::get(builder.getInt32Ty(),
                                            { builder.getInt8PtrTy(0), builder.getInt64Ty(), builder.getInt64Ty() }, false),
-                               Func::ExternalLinkage, "_innative_internal_env_atomic_wait32", mod);
+                               Func::ExternalLinkage, "_innative_internal_env_atomic_wait64", mod);
+  atomic_wait64->setCallingConv(llvm::CallingConv::C);
 
   Func* fn_memcpy = Func::Create(
     FuncTy::get(builder.getVoidTy(), { builder.getInt8PtrTy(0), builder.getInt8PtrTy(0), builder.getInt64Ty() }, false),

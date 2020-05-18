@@ -666,6 +666,38 @@ inline const char* wat::MapAssertionString(const char* s)
   return s;
 }
 
+inline bool CheckSpecialNaN(Queue<WatToken>& tokens, Instruction& value, bool& canonical)
+{
+  if(tokens.Size() < 2)
+    return false;
+
+  auto tokenEq = [&](int i, const char* s) {
+    auto checklen = strlen(s);
+    if(tokens[i].len != checklen)
+      return false;
+    return !strncmp(tokens[i].pos, s, checklen);
+  };
+
+  if(tokens[0].id != WatTokens::OPERATOR)
+    return false;
+  if(tokens[0].i != OP_f32_const && tokens[0].i != OP_f64_const)
+    return false;
+
+  value.opcode[0] = (uint8_t)tokens[0].i;
+
+  // this is a dirty hack i know but ugh this whole thing is just an annoying special case
+  if(tokenEq(1, "nan:canonical"))
+    canonical = true;
+  else if(tokenEq(1, "nan:arithmetic"))
+    canonical = false;
+  else
+    return false;
+
+  tokens.Pop();
+  tokens.Pop();
+  return true;
+}
+
 // This parses an entire extended WAT testing script into an environment
 int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const path& file, bool always_compile,
                         const path& output)
@@ -819,6 +851,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
       Instruction value = {};
       WatParser state(env, *last);
+      bool specialNan = false, nanCanonical;
 
       switch(t.id)
       {
@@ -828,7 +861,9 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
         else
         {
           EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
-          if(err = state.ParseInitializer(tokens, value))
+          if(CheckSpecialNaN(tokens, value, nanCanonical))
+            specialNan = true;
+          else if(err = state.ParseInitializer(tokens, value))
             return err;
           EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
         }
@@ -861,6 +896,12 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
           if(result.type != TE_f32)
             AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f32 type but got %s",
                         WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
+          else if(specialNan)
+          {
+            if(!WastIsNaN(result.f32, nanCanonical))
+              AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g",
+                          WatLineNumber(start, t.pos), nanCanonical ? "canonical" : "arithmetic", result.f32);
+          }
           else if(isnan(value.immediates[0]._float32)) // If this is an NAN we must match the exact bit pattern
           {
             if(value.immediates[0]._varsint32 != result.i32)
@@ -875,6 +916,12 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
           if(result.type != TE_f64)
             AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f64 type but got %s",
                         WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
+          else if(specialNan)
+          {
+            if(!WastIsNaN(result.f64, nanCanonical))
+              AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g",
+                          WatLineNumber(start, t.pos), nanCanonical ? "canonical" : "arithmetic", result.f64);
+          }
           else if(isnan(value.immediates[0]._float64)) // If this is an NAN we must match the exact bit pattern
           {
             if(value.immediates[0]._varsint64 != result.i64)

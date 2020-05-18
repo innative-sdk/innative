@@ -313,6 +313,10 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
                       "Imported memory maximum (%u) less than exported memory maximum (%u).", imp.mem_desc.limits.maximum,
                       mem->limits.maximum);
       }
+      else if(imp.mem_desc.limits.flags & WASM_LIMIT_SHARED) // SHARED && !HAS_MAXIMUM
+      {
+        AppendError(env, env.errors, m, ERR_SHARED_MEMORY_MAXIMUM_MISSING, "Shared memory must have maximum");
+      }
     }
     break;
   }
@@ -369,6 +373,8 @@ void innative::ValidateMemory(const MemoryDesc& mem, Environment& env, Module* m
     AppendError(env, env.errors, m, ERR_MEMORY_MINIMUM_TOO_LARGE, "Memory minimum cannot exceed 65536");
   if((mem.limits.flags & WASM_LIMIT_HAS_MAXIMUM) && mem.limits.maximum > 65536)
     AppendError(env, env.errors, m, ERR_MEMORY_MAXIMUM_TOO_LARGE, "Memory maximum cannot exceed 65536");
+  if((mem.limits.flags & WASM_LIMIT_SHARED) && !(mem.limits.flags & WASM_LIMIT_HAS_MAXIMUM))
+    AppendError(env, env.errors, m, ERR_SHARED_MEMORY_MAXIMUM_MISSING, "Shared memory must have maximum");
 }
 
 void innative::ValidateBlockSignature(const Instruction& ins, varsint7 sig, Environment& env, Module* m)
@@ -499,7 +505,7 @@ namespace innative {
   template<typename T, WASM_TYPE_ENCODING PUSH>
   void ValidateLoad(const Instruction& ins, varuint32 align, Stack<varsint7>& values, Environment& env, Module* m)
   {
-    if(!ModuleMemory(*m, 0))
+    if(!ModuleMemory(*m, ins.immediates[2]._varuint32))
       AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
     if((1ULL << align) > sizeof(T))
       AppendError(env, env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT,
@@ -511,7 +517,7 @@ namespace innative {
   template<typename T, WASM_TYPE_ENCODING POP>
   void ValidateStore(const Instruction& ins, varuint32 align, Stack<varsint7>& values, Environment& env, Module* m)
   {
-    if(!ModuleMemory(*m, 0))
+    if(!ModuleMemory(*m, ins.immediates[2]._varuint32))
       AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
     if((1ULL << align) > sizeof(T))
       AppendError(env, env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT,
@@ -628,7 +634,14 @@ namespace innative {
         expectedTys[2] = TE_i64;
         returnTy       = TE_i64;
       }
+
+      // Stores don't return anything
+      if(at::GetOpGroup(atomicOp) == at::OpGroup::Store)
+        returnTy = TE_void;
     }
+
+    if(!ModuleMemory(*m, ins.immediates[2]._varuint32))
+      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
 
     if(specifiedAlign != correctAlign)
       AppendError(env, env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT,
@@ -783,15 +796,17 @@ namespace innative {
     case OP_i64_store16: ValidateStore<int16_t, TE_i64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
     case OP_i64_store32: ValidateStore<int32_t, TE_i64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
     case OP_memory_size:
-      if(!ModuleMemory(*m, 0))
+      if(!ModuleMemory(*m, ins.immediates[0]._varuint32))
         AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
+      // TODO: Remove this when we do multi-memory
       if(ins.immediates[0]._varuint1 != 0)
         AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
       values.Push(TE_i32);
       break;
     case OP_memory_grow:
-      if(!ModuleMemory(*m, 0))
+      if(!ModuleMemory(*m, ins.immediates[0]._varuint32))
         AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
+      // TODO: Remove this when we do multi-memory
       if(ins.immediates[0]._varuint1 != 0)
         AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
       ValidatePopType(ins, values, TE_i32, env, m);
