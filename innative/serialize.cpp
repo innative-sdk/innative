@@ -234,6 +234,10 @@ void Serializer::TokenizeInstruction(Instruction& ins, const FunctionBody* body,
   case OP_i64_store8:
   case OP_i64_store16:
   case OP_i64_store32:
+  case OP_atomic_prefix:
+    if(ins.opcode[0] == OP_atomic_prefix && ins.opcode[1] == OP_atomic_fence)
+      break;
+
     if (ins.immediates[2]._varuint32 != 0)
     {
       tokens.Push(WatToken{ WatTokens::MEMIDX });
