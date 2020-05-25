@@ -4,6 +4,8 @@
 #include "wait_list.h"
 #include "internal.h"
 
+#define IN_MAX(a, b) ((a) > (b) ? (a) : (b))
+
 static void in_wait_map_entries_cleanup(in_wait_map* map);
 
 static uint64_t in_addr_hash(void* address);
@@ -111,7 +113,7 @@ static void in_wait_map_grow(in_wait_map* map)
 {
   struct in_wait_map_entry* old = map->entries;
   size_t old_cap                = map->cap;
-  map->cap                      = max(map->cap * 2, 32);
+  map->cap                      = IN_MAX(map->cap * 2, 32);
   map->entries                  = grow_array(NULL, sizeof(*old), map->cap); // Unfortunately it can't be reused
 
   for(size_t i = 0; i < old_cap; ++i)
@@ -241,7 +243,7 @@ static void in_wait_map_entries_cleanup(in_wait_map* map)
       struct in_wait_map_entry* old = map->entries;
       size_t old_cap                = map->cap;
 
-      map->cap     = max(map->len * 2, 32);
+      map->cap     = IN_MAX(map->len * 2, 32);
       map->entries = grow_array(NULL, sizeof(*old), map->cap);
 
       for(size_t i = 0; i < old_cap; ++i)
@@ -282,7 +284,7 @@ in_wait_entry* _innative_internal_env_wait_list_push(in_wait_list* list)
 {
   if(list->len == list->cap)
   {
-    list->cap     = max(list->cap * 2, 1);
+    list->cap     = IN_MAX(list->cap * 2, 1);
     list->entries = grow_array(list->entries, sizeof(void*), list->cap);
   }
 
@@ -395,7 +397,7 @@ static uint64_t in_addr_hash(void* address)
     hash = hash * 1099511628211ULL;
     value >>= 8;
   }
-  return max(hash, 1) & ~TOMB_MASK; // 0 is reserved. I feel very sorry for the value that has a hash of 0 anyways lmao
+  return IN_MAX(hash, 1) & ~TOMB_MASK; // 0 is reserved. I feel very sorry for the value that has a hash of 0 anyways lmao
 }
 
 #ifdef IN_PLATFORM_WIN32

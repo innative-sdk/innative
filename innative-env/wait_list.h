@@ -10,6 +10,7 @@
   #include "../innative/win32.h"
 #elif defined(IN_PLATFORM_POSIX)
   #include <pthread.h>
+  #include <errno.h>
 #else
   #error unknown platform!
 #endif
