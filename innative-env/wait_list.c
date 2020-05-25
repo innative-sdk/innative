@@ -11,9 +11,14 @@ static uint64_t in_addr_hash(void* address);
 static void in_platform_mutex_init(in_platform_mutex* mutex);
 static void in_platform_mutex_lock(in_platform_mutex* mutex);
 static void in_platform_mutex_unlock(in_platform_mutex* mutex);
-static void in_platform_mutex_shared_lock(in_platform_mutex* mutex);
-static void in_platform_mutex_shared_unlock(in_platform_mutex* mutex);
 static void in_platform_mutex_free(in_platform_mutex* mutex);
+
+static void in_platform_rwlock_init(in_platform_rwlock*mutex);
+static void in_platform_rwlock_lock(in_platform_rwlock* mutex);
+static void in_platform_rwlock_unlock(in_platform_rwlock* mutex);
+static void in_platform_rwlock_shared_lock(in_platform_rwlock* mutex);
+static void in_platform_rwlock_shared_unlock(in_platform_rwlock* mutex);
+static void in_platform_rwlock_free(in_platform_rwlock* mutex);
 
 static void in_platform_condvar_init(in_platform_condvar* condvar);
 static int in_platform_condvar_wait(in_platform_condvar* condvar, in_platform_mutex* mutex, int64_t timeoutns);
@@ -165,16 +170,16 @@ static in_wait_list* in_wait_map_get_inner(in_wait_map* map, void* address, int 
 in_wait_list* _innative_internal_env_wait_map_get(in_wait_map* map, void* address, int create)
 {
   // First try to extract the list with just a read lock
-  in_platform_mutex_shared_lock(&map->lock);
+  in_platform_rwlock_shared_lock(&map->lock);
   in_wait_list* result = in_wait_map_get_inner(map, address, 0);
-  in_platform_mutex_shared_unlock(&map->lock);
+  in_platform_rwlock_shared_unlock(&map->lock);
 
   // If we don't get one and we need to create a new one, now get an exclusive lock
   if(!result && create)
   {
-    in_platform_mutex_lock(&map->lock);
+    in_platform_rwlock_lock(&map->lock);
     result = in_wait_map_get_inner(map, address, 1);
-    in_platform_mutex_unlock(&map->lock);
+    in_platform_rwlock_unlock(&map->lock);
   }
 
   return result;
@@ -185,7 +190,7 @@ void _innative_internal_env_wait_map_return(in_wait_map* map, void* address, in_
   // Put this entry on the free list if it's no longer being used
   if(list->len == 0 && list->outstanding_signals == 0)
   {
-    in_platform_mutex_lock(&map->lock);
+    in_platform_rwlock_lock(&map->lock);
 
     if(in_atomic_decr(&list->refs) == 0)
     {
@@ -208,7 +213,7 @@ void _innative_internal_env_wait_map_return(in_wait_map* map, void* address, in_
       in_wait_map_entries_cleanup(map);
     }
 
-    in_platform_mutex_unlock(&map->lock);
+    in_platform_rwlock_unlock(&map->lock);
   }
   else
   {
@@ -260,12 +265,12 @@ static void in_wait_map_entries_cleanup(in_wait_map* map)
 
 void _innative_internal_env_wait_map_cleanup(in_wait_map* map)
 {
-  in_platform_mutex_lock(&map->lock);
+  in_platform_rwlock_lock(&map->lock);
 
   in_wait_map_free_list_cleanup(map);
   in_wait_map_entries_cleanup(map);
 
-  in_platform_mutex_unlock(&map->lock);
+  in_platform_rwlock_unlock(&map->lock);
 }
 
 // Wait list
@@ -400,9 +405,14 @@ in_wait_map _innative_internal_env_global_wait_map = { SRWLOCK_INIT };
 static void in_platform_mutex_init(in_platform_mutex* mutex) { InitializeSRWLock(mutex); }
 static void in_platform_mutex_lock(in_platform_mutex* mutex) { AcquireSRWLockExclusive(mutex); }
 static void in_platform_mutex_unlock(in_platform_mutex* mutex) { ReleaseSRWLockExclusive(mutex); }
-static void in_platform_mutex_shared_lock(in_platform_mutex* mutex) { AcquireSRWLockShared(mutex); }
-static void in_platform_mutex_shared_unlock(in_platform_mutex* mutex) { ReleaseSRWLockShared(mutex); }
 static void in_platform_mutex_free(in_platform_mutex* mutex) {}
+
+static void in_platform_rwlock_init(in_platform_rwlock* rwlock) { InitializeSRWLock(rwlock); }
+static void in_platform_rwlock_lock(in_platform_rwlock* rwlock) { AcquireSRWLockExclusive(rwlock); }
+static void in_platform_rwlock_unlock(in_platform_rwlock* rwlock) { ReleaseSRWLockExclusive(rwlock); }
+static void in_platform_rwlock_shared_lock(in_platform_rwlock* rwlock) { AcquireSRWLockShared(rwlock); }
+static void in_platform_rwlock_shared_unlock(in_platform_rwlock* rwlock) { ReleaseSRWLockShared(rwlock); }
+static void in_platform_rwlock_free(in_platform_rwlock* rwlock) {}
 
 static void in_platform_condvar_init(in_platform_condvar* condvar) { InitializeConditionVariable(condvar); }
 
@@ -450,17 +460,35 @@ static size_t in_atomic_decr(size_t* value) { return InterlockedExchangeAdd64(va
 
 #elif defined(IN_PLATFORM_POSIX)
 
-in_wait_map global_wait_map = { PTHREAD_MUTEX_INITIALIZER };
+in_wait_map global_wait_map = { PTHREAD_RWLOCK_INITIALIZER };
 
-// TODO
-static void in_platform_mutex_init(in_platform_mutex* mutex) {}
-static void in_platform_mutex_lock(in_platform_mutex* mutex) {}
-static void in_platform_mutex_unlock(in_platform_mutex* mutex) {}
-static void in_platform_mutex_free(in_platform_mutex* mutex) {}
+static void in_platform_mutex_init(in_platform_mutex* mutex) { pthread_mutex_init(mutex, NULL); }
+static void in_platform_mutex_lock(in_platform_mutex* mutex) { pthread_mutex_lock(mutex); }
+static void in_platform_mutex_unlock(in_platform_mutex* mutex) { pthread_mutex_unlock(mutex); }
+static void in_platform_mutex_free(in_platform_mutex* mutex) { pthread_mutex_destroy(mutex); }
 
-static void in_platform_condvar_init(in_platform_condvar* condvar) {}
-static void in_platform_condvar_wait(in_platform_condvar* condvar, in_platform_mutex* mutex) {}
-static void in_platform_condvar_notify(in_platform_condvar* condvar, in_platform_mutex* mutex) {}
-static void in_platform_condvar_free(in_platform_condvar* condvar) {}
+static void in_platform_rwlock_init(in_platform_rwlock* rwlock) { pthread_rwlock_init(rwlock, NULL); }
+static void in_platform_rwlock_lock(in_platform_rwlock* rwlock) { pthread_rwlock_wdlock(rwlock); }
+static void in_platform_rwlock_unlock(in_platform_rwlock* rwlock) { pthread_rwlock_unlock(rwlock); }
+static void in_platform_rwlock_shared_lock(in_platform_rwlock* rwlock) { pthread_rwlock_rdlock(rwlock); }
+static void in_platform_rwlock_shared_unlock(in_platform_rwlock* rwlock) { pthread_rwlock_unlock(rwlock); }
+static void in_platform_rwlock_free(in_platform_rwlock* rwlock) { pthread_rwlock_destroy(rwlock); }
+
+static void in_platform_condvar_init(in_platform_condvar* condvar) { pthread_cond_init(condvar, NULL); }
+static int in_platform_condvar_wait(in_platform_condvar* condvar, in_platform_mutex* mutex, int64_t timeoutns)
+{
+  if(timeoutns < 0)
+  {
+    pthread_cond_wait(condvar, mutex);
+    return 0;
+  }
+  else
+  {
+    struct timespec abstime = { timeoutns / 1000000000, timeoutns % 1000000000 };
+    return pthread_cond_timedwait(condvar, mutex, &abstime) == ETIMEDOUT;
+  }
+}
+static void in_platform_condvar_notify(in_platform_condvar* condvar) { pthread_cond_signal(condvar); }
+static void in_platform_condvar_free(in_platform_condvar* condvar) { pthread_cond_destroy(condvar); }
 
 #endif

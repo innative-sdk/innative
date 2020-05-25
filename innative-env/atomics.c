@@ -115,16 +115,7 @@ int64_t _innative_internal_env_atomic_load64(int64_t* address)
 
 #elif defined(POSIX)
 
-int32_t _innative_internal_env_atomic_load32(int32_t* address)
-{
-  // TODO
-  return *address;
-}
-
-int64_t _innative_internal_env_atomic_load64(int64_t* address)
-{
-  // TODO
-  return *address;
-}
+int32_t _innative_internal_env_atomic_load32(int32_t* address) { return __atomic_load_n(address, __ATOMIC_SEQ_CST); }
+int64_t _innative_internal_env_atomic_load64(int64_t* address) { return __atomic_load_n(address, __ATOMIC_SEQ_CST); }
 
 #endif

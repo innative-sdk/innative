@@ -9,7 +9,7 @@
 #ifdef IN_PLATFORM_WIN32
   #include "../innative/win32.h"
 #elif defined(IN_PLATFORM_POSIX)
-// TODO: POSIX
+  #include <pthread.h>
 #else
   #error unknown platform!
 #endif
@@ -53,10 +53,12 @@ extern in_wait_map _innative_internal_env_global_wait_map;
 
 #ifdef IN_PLATFORM_WIN32
 typedef SRWLOCK in_platform_mutex;
+typedef SRWLOCK in_platform_rwlock;
 typedef CONDITION_VARIABLE in_platform_condvar;
 #elif defined(IN_PLATFORM_POSIX)
-typedef pthread_rwlock_t in_platform_mutex;
-// TODO
+typedef pthread_mutex_t in_platform_mutex;
+typedef pthread_rwlock_t in_platform_rwlock;
+typedef pthread_cond_t in_platform_condvar;
 #endif
 
 struct in_wait_entry
@@ -75,22 +77,19 @@ struct in_wait_list
 
   in_wait_entry** entries;
   size_t cap;
-  // union
-  //{
   size_t len;
-  in_wait_list* next_free_list;
-  //};
 
   size_t outstanding_signals;
   size_t refs;
 
   // Reuse the nodes
   in_wait_entry* free_list;
+  in_wait_list* next_free_list;
 };
 
 struct in_wait_map
 {
-  in_platform_mutex lock;
+  in_platform_rwlock lock;
   size_t len, cap;
   struct in_wait_map_entry* entries;
 
