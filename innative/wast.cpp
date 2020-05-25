@@ -851,7 +851,8 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
       Instruction value = {};
       WatParser state(env, *last);
-      bool specialNan = false, nanCanonical;
+      bool specialNan = false;
+      bool nanCanonical;
 
       switch(t.id)
       {

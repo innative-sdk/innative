@@ -1,7 +1,8 @@
 // Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#pragma once
+#ifndef IN__ENV_WAIT_LIST_H
+#define IN__ENV_WAIT_LIST_H
 
 #include "innative/export.h"
 
@@ -106,4 +107,6 @@ struct in_wait_map_entry
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

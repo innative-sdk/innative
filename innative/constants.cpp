@@ -276,7 +276,6 @@ namespace innative {
       { ERR_EMPTY_IMPORT, "unknown import" },
       { ERR_WAT_PARAM_AFTER_RESULT, "unexpected token" },
 
-
     });
 
     const char* EnumToString(const kh_mapenum_s* h, int i, char* buf, size_t n)

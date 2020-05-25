@@ -7,7 +7,7 @@
 #include "utility.h"
 #include "dwarf_parser.h"
 #include "serialize.h"
-#include "atomic_instruction_details.h"
+#include "atomic_instructions.h"
 #include <assert.h>
 #include <algorithm>
 #include <fstream>

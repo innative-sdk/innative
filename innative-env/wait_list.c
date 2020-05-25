@@ -164,11 +164,9 @@ static in_wait_list* in_wait_map_get_inner(in_wait_map* map, void* address, int 
 
 in_wait_list* _innative_internal_env_wait_map_get(in_wait_map* map, void* address, int create)
 {
-  in_wait_list* result;
-
   // First try to extract the list with just a read lock
   in_platform_mutex_shared_lock(&map->lock);
-  result = in_wait_map_get_inner(map, address, 0);
+  in_wait_list* result = in_wait_map_get_inner(map, address, 0);
   in_platform_mutex_shared_unlock(&map->lock);
 
   // If we don't get one and we need to create a new one, now get an exclusive lock

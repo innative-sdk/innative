@@ -147,6 +147,7 @@ namespace innative {
       if(s >= end)
         return end;
 
+      // AFAICT this should only be lowercase? but it's a special case value for the spec tests so it's unclear
       if(!strncmp(":canonical", s, std::min((size_t)(end - s), (size_t)10)))
       {
         //if(target)

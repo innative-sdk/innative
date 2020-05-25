@@ -363,7 +363,6 @@ void Serializer::TokenizeModule(bool emitdebug)
       t.Push(WatToken{ WatTokens::INTEGER, 0, 0, 0, limits.maximum });
     if(limits.flags & WASM_LIMIT_SHARED)
       t.Push(WatToken{ WatTokens::SHARED });
-    // TODO: Should we serialize an UNSHARED token in the other case?
   };
 
   auto tokenize_global = [](Queue<WatToken>& t, const GlobalDesc& global) {

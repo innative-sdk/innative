@@ -284,8 +284,6 @@ enum WASM_INSTRUCTION_OPCODES
   OP_i64_atomic_rmw8_cmpxchg_u  = 0x4C,
   OP_i64_atomic_rmw16_cmpxchg_u = 0x4D,
   OP_i64_atomic_rmw32_cmpxchg_u = 0x4E,
-
-  OP_atomic_end,
 };
 
 #ifdef __cplusplus
