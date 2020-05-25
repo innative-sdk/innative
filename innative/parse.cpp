@@ -979,11 +979,12 @@ IN_ERROR innative::ParseAtomicInstruction(utility::Stream& s, Instruction& ins, 
   if(err < 0)
     return err;
 
-  varuint7 alignByte = s.ReadVarUInt7(err);
+  varuint32 alignValue = s.ReadVarUInt32(err);
   if(err < 0)
     return err;
 
-  ins.immediates[0]._varuint32 = alignByte & 0b111;
+  // Only the bottom 3 bits are actually allowed to hold alignment value via the multi-memory proposal
+  ins.immediates[0]._varuint32 = alignValue & 0b111;
 
   switch(ins.opcode[1])
   {
@@ -1003,7 +1004,8 @@ IN_ERROR innative::ParseAtomicInstruction(utility::Stream& s, Instruction& ins, 
   if(err < 0)
     return err;
 
-  if(alignByte & 0b1000000)
+  // (multi-memory proposal) if bit 6 is set, there's a memidx value to read
+  if(alignValue & 0b1000000)
   {
     ins.immediates[2]._varuint32 = s.ReadVarUInt32(err);
   }
