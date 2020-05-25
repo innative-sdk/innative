@@ -5,6 +5,7 @@
 #include "internal.h"
 
 #define IN_MAX(a, b) ((a) > (b) ? (a) : (b))
+#define IN_MIN(a, b) ((a) < (b) ? (a) : (b))
 
 static void in_wait_map_entries_cleanup(in_wait_map* map);
 
@@ -226,7 +227,7 @@ void _innative_internal_env_wait_map_return(in_wait_map* map, void* address, in_
 static void in_wait_map_free_list_cleanup(in_wait_map* map)
 {
   in_wait_list* temp;
-  while(temp = map->free_lists)
+  while((temp = map->free_lists) != NULL)
   {
     _innative_internal_env_wait_list_shrink(temp);
     map->free_lists = temp->next_free_list;
@@ -343,7 +344,7 @@ void _innative_internal_env_wait_list_remove(in_wait_list* list, in_wait_entry* 
 
 uint32_t _innative_internal_env_wait_list_notify(in_wait_list* list, uint32_t num)
 {
-  size_t count = min(num, list->len);
+  size_t count = IN_MIN(num, list->len);
   for(size_t i = 0; i < count; ++i)
   {
     // Doesn't need to be atomic because of the mutex
@@ -366,7 +367,7 @@ void _innative_internal_env_wait_list_shrink(in_wait_list* list)
 
   list->cap     = list->len;
   list->entries = grow_array(list->entries, sizeof(void*), list->cap);
-  while(temp = list->free_list)
+  while((temp = list->free_list) != NULL)
   {
     list->free_list = temp->next_free_node;
     free_array(temp);
@@ -426,7 +427,7 @@ static int in_platform_condvar_wait(in_platform_condvar* condvar, in_platform_mu
   else if(timeoutns < 1'000'000)
     timeout = 1; // timeout 0 would be worse than timeout 1ms if any timeout was requested
   else
-    timeout = min((DWORD)(timeoutns / 1'000'000), INFINITE - 1);
+    timeout = IN_MIN((DWORD)(timeoutns / 1'000'000), INFINITE - 1);
 
   BOOL result = SleepConditionVariableSRW(condvar, mutex, timeout, 0);
   return !result;
@@ -470,7 +471,7 @@ static void in_platform_mutex_unlock(in_platform_mutex* mutex) { pthread_mutex_u
 static void in_platform_mutex_free(in_platform_mutex* mutex) { pthread_mutex_destroy(mutex); }
 
 static void in_platform_rwlock_init(in_platform_rwlock* rwlock) { pthread_rwlock_init(rwlock, NULL); }
-static void in_platform_rwlock_lock(in_platform_rwlock* rwlock) { pthread_rwlock_wdlock(rwlock); }
+static void in_platform_rwlock_lock(in_platform_rwlock* rwlock) { pthread_rwlock_wrlock(rwlock); }
 static void in_platform_rwlock_unlock(in_platform_rwlock* rwlock) { pthread_rwlock_unlock(rwlock); }
 static void in_platform_rwlock_shared_lock(in_platform_rwlock* rwlock) { pthread_rwlock_rdlock(rwlock); }
 static void in_platform_rwlock_shared_unlock(in_platform_rwlock* rwlock) { pthread_rwlock_unlock(rwlock); }
