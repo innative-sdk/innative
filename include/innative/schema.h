@@ -188,7 +188,7 @@ typedef struct IN_WASM_FUNCTION_TYPE
 // The underlying resizable limits structure used by linear memories and tables.
 typedef struct IN_WASM_RESIZABLE_LIMITS
 {
-  varuint32 flags; // WASM_LIMIT_FLAGS
+  varuint7 flags; // WASM_LIMIT_FLAGS
   varuint32 minimum;
   varuint32 maximum;
 } ResizableLimits;

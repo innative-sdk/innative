@@ -151,8 +151,7 @@ IN_ERROR innative::ParseFunctionType(Stream& s, FunctionType& sig, const Environ
 
 IN_ERROR innative::ParseResizableLimits(Stream& s, ResizableLimits& limits)
 {
-  // This will only actually read a single byte
-  IN_ERROR err = ParseVarUInt32(s, limits.flags);
+  IN_ERROR err = ParseVarUInt7(s, limits.flags);
 
   if(err >= 0)
     err = ParseVarUInt32(s, limits.minimum);
@@ -980,8 +979,7 @@ IN_ERROR innative::ParseAtomicInstruction(utility::Stream& s, Instruction& ins, 
   if(err < 0)
     return err;
 
-  uint8_t alignByte;
-  err = ParseByte(s, alignByte);
+  varuint7 alignByte = s.ReadVarUInt7(err);
   if(err < 0)
     return err;
 
