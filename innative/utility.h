@@ -198,7 +198,10 @@ namespace innative {
       return (m.knownsections & (1 << opcode)) != 0;
     }
 
-    uint16_t GetInstruction(StringSpan s);
+    using OpcodeInt = uint16_t;
+    static_assert(sizeof(OpcodeInt) >= MAX_OPCODE_BYTES, "MAX_OPCODE_BYTES must fit inside an OpcodeInt");
+
+    OpcodeInt GetInstruction(StringSpan s);
     varuint32 ModuleFunctionType(const Module& m, varuint32 index);
     FunctionType* ModuleFunction(const Module& m, varuint32 index);
     TableDesc* ModuleTable(const Module& m, varuint32 index);
