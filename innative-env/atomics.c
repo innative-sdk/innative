@@ -82,6 +82,7 @@ IN_COMPILER_DLLEXPORT uint32_t _innative_internal_env_atomic_notify(void* addres
 // Atomic helpers
 #ifdef IN_PLATFORM_WIN32
 
+// This code is based on the implementation of std::atomic in MSVC's headers
 int32_t _innative_internal_env_atomic_load32(int32_t* address)
 {
   volatile int32_t* vmem = (volatile int32_t*)address;
@@ -114,6 +115,16 @@ int64_t _innative_internal_env_atomic_load64(int64_t* address)
 
 #elif defined(POSIX)
 
-static int64_t in_atomic_load64(int64_t* address) {}
+int32_t _innative_internal_env_atomic_load32(int32_t* address)
+{
+  // TODO
+  return *address;
+}
+
+int64_t _innative_internal_env_atomic_load64(int64_t* address)
+{
+  // TODO
+  return *address;
+}
 
 #endif

@@ -5,7 +5,7 @@
 #include "utility.h"
 #include "parse.h"
 #include "validate.h"
-#include "atomic_instruction_details.h"
+#include "atomic_instructions.h"
 #include <limits>
 
 using std::numeric_limits;

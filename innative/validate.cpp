@@ -5,7 +5,7 @@
 #include "utility.h"
 #include "stack.h"
 #include "link.h"
-#include "atomic_instruction_details.h"
+#include "atomic_instructions.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <atomic>

@@ -5,16 +5,18 @@
 #include "compile.h"
 #include "utility.h"
 #include "validate.h"
-#include "atomic_instruction_details.h"
+#include "atomic_instructions.h"
 
 using namespace innative;
 using namespace utility;
+using namespace innative::atomic_details;
+
 using Func    = llvm::Function;
 using FuncTy  = llvm::FunctionType;
 using llvmTy  = llvm::Type;
 using llvmVal = llvm::Value;
 
-IN_ERROR innative::Compiler::InsertAlignmentTrap(llvmVal* ptr, varuint32 memory, varuint32 memflags)
+IN_ERROR Compiler::InsertAlignmentTrap(llvmVal* ptr, varuint32 memory, varuint32 memflags)
 {
   if(!memflags) // Only bother if alignment > 1
     return ERR_SUCCESS;
@@ -30,7 +32,7 @@ IN_ERROR innative::Compiler::InsertAlignmentTrap(llvmVal* ptr, varuint32 memory,
   return ERR_SUCCESS;
 }
 
-IN_ERROR innative::Compiler::InsertAtomicMemGet(Instruction& ins, llvmVal*& ptr, unsigned& align)
+IN_ERROR Compiler::InsertAtomicMemGet(Instruction& ins, llvmVal*& ptr, unsigned& align)
 {
   IN_ERROR err;
 
@@ -52,7 +54,7 @@ IN_ERROR innative::Compiler::InsertAtomicMemGet(Instruction& ins, llvmVal*& ptr,
   return ERR_SUCCESS;
 }
 
-template<typename F> IN_ERROR innative::Compiler::CompileAtomicMemInstruction(Instruction& ins, F&& inner)
+template<typename F> IN_ERROR Compiler::CompileAtomicMemInstruction(Instruction& ins, F&& inner)
 {
   IN_ERROR err;
   unsigned align;
@@ -65,7 +67,7 @@ template<typename F> IN_ERROR innative::Compiler::CompileAtomicMemInstruction(In
 }
 
 template<typename F>
-IN_ERROR innative::Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCODING arg2Ty, F&& inner)
+IN_ERROR Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCODING arg2Ty, F&& inner)
 {
   IN_ERROR err;
   unsigned align;
@@ -80,7 +82,7 @@ IN_ERROR innative::Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_
 }
 
 template<typename F>
-IN_ERROR innative::Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCODING arg2Ty,
+IN_ERROR Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCODING arg2Ty,
                                                          WASM_TYPE_ENCODING arg3Ty, F&& inner)
 {
   IN_ERROR err;
@@ -97,7 +99,7 @@ IN_ERROR innative::Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_
   return inner(align, ptr, arg2, arg3);
 }
 
-IN_ERROR innative::Compiler::CompileAtomicNotify(Instruction& ins, const char* name)
+IN_ERROR Compiler::CompileAtomicNotify(Instruction& ins, const char* name)
 {
   return CompileAtomicMemInstruction(ins, TE_i32, [&](unsigned, llvmVal* ptr, llvmVal* count) {
     ptr = builder.CreatePointerCast(ptr, builder.getInt8PtrTy());
@@ -106,7 +108,7 @@ IN_ERROR innative::Compiler::CompileAtomicNotify(Instruction& ins, const char* n
   });
 }
 
-IN_ERROR innative::Compiler::CompileAtomicWait(Instruction& ins, WASM_TYPE_ENCODING varTy, llvm::Function* wait_func,
+IN_ERROR Compiler::CompileAtomicWait(Instruction& ins, WASM_TYPE_ENCODING varTy, llvm::Function* wait_func,
                                                const char* name)
 {
   // TODO: Trap if the memory isn't shared? Double-check this because
@@ -122,7 +124,7 @@ IN_ERROR innative::Compiler::CompileAtomicWait(Instruction& ins, WASM_TYPE_ENCOD
 
 constexpr auto SeqCst = llvm::AtomicOrdering::SequentiallyConsistent;
 
-IN_ERROR innative::Compiler::CompileAtomicFence(const char* name)
+IN_ERROR Compiler::CompileAtomicFence(const char* name)
 {
   auto fence = builder.CreateFence(SeqCst);
   fence->setName(name);
@@ -130,7 +132,7 @@ IN_ERROR innative::Compiler::CompileAtomicFence(const char* name)
   return ERR_SUCCESS;
 }
 
-IN_ERROR innative::Compiler::CompileAtomicLoad(Instruction& ins, WASM_TYPE_ENCODING varTy, const char* name)
+IN_ERROR Compiler::CompileAtomicLoad(Instruction& ins, WASM_TYPE_ENCODING varTy, const char* name)
 {
   return CompileAtomicMemInstruction(ins, [&](unsigned align, llvmVal* ptr) {
     auto varsize = unsigned(4 * -varTy); // TE_i32(-1) => 4; TE_i64(-2) => 8;
@@ -148,7 +150,7 @@ IN_ERROR innative::Compiler::CompileAtomicLoad(Instruction& ins, WASM_TYPE_ENCOD
   });
 }
 
-IN_ERROR innative::Compiler::CompileAtomicStore(Instruction& ins, WASM_TYPE_ENCODING varTy, const char* name)
+IN_ERROR Compiler::CompileAtomicStore(Instruction& ins, WASM_TYPE_ENCODING varTy, const char* name)
 {
   return CompileAtomicMemInstruction(ins, varTy, [&](unsigned align, llvmVal* ptr, llvmVal* value) {
     auto varsize = unsigned(4 * -varTy); // TE_i32(-1) => 4; TE_i64(-2) => 8;
@@ -165,7 +167,7 @@ IN_ERROR innative::Compiler::CompileAtomicStore(Instruction& ins, WASM_TYPE_ENCO
   });
 }
 
-IN_ERROR innative::Compiler::CompileAtomicRMW(Instruction& ins, WASM_TYPE_ENCODING varTy, llvm::AtomicRMWInst::BinOp Op,
+IN_ERROR Compiler::CompileAtomicRMW(Instruction& ins, WASM_TYPE_ENCODING varTy, llvm::AtomicRMWInst::BinOp Op,
                                               const char* name)
 {
   return CompileAtomicMemInstruction(ins, varTy, [&](unsigned align, llvmVal* ptr, llvmVal* newValue) {
@@ -187,7 +189,7 @@ IN_ERROR innative::Compiler::CompileAtomicRMW(Instruction& ins, WASM_TYPE_ENCODI
   });
 }
 
-IN_ERROR innative::Compiler::CompileAtomicCmpXchg(Instruction& ins, WASM_TYPE_ENCODING varTy, const char* name)
+IN_ERROR Compiler::CompileAtomicCmpXchg(Instruction& ins, WASM_TYPE_ENCODING varTy, const char* name)
 {
   return CompileAtomicMemInstruction(ins, varTy, varTy, [&](unsigned align, llvmVal* ptr, llvmVal* cmp, llvmVal* newVal) {
     auto varsize = unsigned(4 * -varTy); // TE_i32(-1) => 4; TE_i64(-2) => 8;
@@ -211,9 +213,7 @@ IN_ERROR innative::Compiler::CompileAtomicCmpXchg(Instruction& ins, WASM_TYPE_EN
   });
 }
 
-using namespace innative::atomic_details;
-
-IN_ERROR innative::Compiler::CompileAtomicInstruction(Instruction& ins)
+IN_ERROR Compiler::CompileAtomicInstruction(Instruction& ins)
 {
   using RmwOp = llvm::AtomicRMWInst::BinOp;
 

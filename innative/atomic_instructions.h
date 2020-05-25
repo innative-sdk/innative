@@ -1,11 +1,14 @@
 // Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#pragma once
+#ifndef IN__ATOMIC_INSTRUCTIONS_H
+#define IN__ATOMIC_INSTRUCTIONS_H
+
+#include "innative/schema.h"
 
 namespace innative::atomic_details {
   constexpr auto OP_START      = OP_i32_atomic_load;
-  constexpr auto OP_END        = OP_atomic_end;
+  constexpr auto OP_END        = OP_i64_atomic_rmw32_cmpxchg_u + 1;
   constexpr auto OP_GROUP_SIZE = 7;
   enum class OpGroup
   {
@@ -22,10 +25,19 @@ namespace innative::atomic_details {
     INVALID_CAT,
   };
 
+  // Abusing the fact that all of the atomic instructions are grouped in regular intervals of 7 values,
+  // we can extract some metadata about which instruction we're looking at with some modulo and division
   constexpr OpGroup GetOpGroup(uint8_t op) { return OpGroup((op - OP_START) / OP_GROUP_SIZE); }
   constexpr int GetOpType(uint8_t op) { return (op - OP_START) % OP_GROUP_SIZE; }
+
+  // This integer constant is actually an 8 byte lookup table, with the values read by index from right to left
+  // expressing whether the instruction in the given place in the period is an i64 instruction.
   constexpr uint8_t IsI64(int opType) { return uint8_t(0x01'01'01'00'00'01'00 >> (opType * 8)); }
+
+  // Gets the WASM_TYPE_ENCODING for the given atomic opcode[1] using our sneaky math from above
   constexpr WASM_TYPE_ENCODING GetOpTy(uint8_t op) { return WASM_TYPE_ENCODING(TE_i32 - IsI64(GetOpType(op))); }
+
+  // Returns the one and only valid `align` field value for the instruction's memarg
   constexpr uint8_t GetValidAlignment(uint8_t op)
   {
     switch(op)
@@ -37,8 +49,11 @@ namespace innative::atomic_details {
     default: return uint8_t(0x02'01'00'01'00'03'02 >> (GetOpType(op) * 8));
     }
   }
+  
+  // Whether the atomic instruction is part of the range of periodic instruction values
   constexpr bool IsLSRMWOp(uint8_t op) { return op >= OP_START && op < OP_END; }
 
+  // Gets the number of stack arguments the LSRMW instruction is supposed to take
   constexpr int GetArgCount(uint8_t op)
   {
     switch(GetOpGroup(op))
@@ -81,3 +96,5 @@ namespace innative::atomic_details {
   static_assert(GetValidAlignment(OP_i64_atomic_load16_u) == 1);
   static_assert(GetValidAlignment(OP_i64_atomic_load32_u) == 2);
 }
+
+#endif

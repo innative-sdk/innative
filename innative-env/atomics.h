@@ -1,7 +1,8 @@
 // Copyright (c)2020 Black Sphere Studios
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#pragma once
+#ifndef IN__ENV_ATOMICS_H
+#define IN__ENV_ATOMICS_H
 
 #include "innative/export.h"
 
@@ -21,4 +22,6 @@ int64_t _innative_internal_env_atomic_load64(int64_t* address);
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

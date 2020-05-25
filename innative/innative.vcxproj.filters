@@ -203,7 +203,7 @@
     <ClInclude Include="utility.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="atomic_instruction_details.h">
+    <ClInclude Include="atomic_instructions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
