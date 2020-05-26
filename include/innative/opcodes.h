@@ -214,6 +214,87 @@ enum WASM_INSTRUCTION_OPCODES
   OP_table_init = 0x0c,
   OP_elem_drop = 0x0d,
   OP_table_copy = 0x0e,
+
+  // Atomics
+  OP_atomic_prefix = 0xfe,
+
+  OP_atomic_notify = 0x00,
+  OP_atomic_wait32 = 0x01,
+  OP_atomic_wait64 = 0x02,
+
+  OP_atomic_fence = 0x03,
+
+  OP_i32_atomic_load     = 0x10,
+  OP_i64_atomic_load     = 0x11,
+  OP_i32_atomic_load8_u  = 0x12,
+  OP_i32_atomic_load16_u = 0x13,
+  OP_i64_atomic_load8_u  = 0x14,
+  OP_i64_atomic_load16_u = 0x15,
+  OP_i64_atomic_load32_u = 0x16,
+
+  OP_i32_atomic_store   = 0x17,
+  OP_i64_atomic_store   = 0x18,
+  OP_i32_atomic_store8  = 0x19,
+  OP_i32_atomic_store16 = 0x1A,
+  OP_i64_atomic_store8  = 0x1B,
+  OP_i64_atomic_store16 = 0x1C,
+  OP_i64_atomic_store32 = 0x1D,
+
+  OP_i32_atomic_rmw_add     = 0x1E,
+  OP_i64_atomic_rmw_add     = 0x1F,
+  OP_i32_atomic_rmw8_add_u  = 0x20,
+  OP_i32_atomic_rmw16_add_u = 0x21,
+  OP_i64_atomic_rmw8_add_u  = 0x22,
+  OP_i64_atomic_rmw16_add_u = 0x23,
+  OP_i64_atomic_rmw32_add_u = 0x24,
+
+  OP_i32_atomic_rmw_sub     = 0x25,
+  OP_i64_atomic_rmw_sub     = 0x26,
+  OP_i32_atomic_rmw8_sub_u  = 0x27,
+  OP_i32_atomic_rmw16_sub_u = 0x28,
+  OP_i64_atomic_rmw8_sub_u  = 0x29,
+  OP_i64_atomic_rmw16_sub_u = 0x2A,
+  OP_i64_atomic_rmw32_sub_u = 0x2B,
+
+  OP_i32_atomic_rmw_and     = 0x2C,
+  OP_i64_atomic_rmw_and     = 0x2D,
+  OP_i32_atomic_rmw8_and_u  = 0x2E,
+  OP_i32_atomic_rmw16_and_u = 0x2F,
+  OP_i64_atomic_rmw8_and_u  = 0x30,
+  OP_i64_atomic_rmw16_and_u = 0x31,
+  OP_i64_atomic_rmw32_and_u = 0x32,
+
+  OP_i32_atomic_rmw_or     = 0x33,
+  OP_i64_atomic_rmw_or     = 0x34,
+  OP_i32_atomic_rmw8_or_u  = 0x35,
+  OP_i32_atomic_rmw16_or_u = 0x36,
+  OP_i64_atomic_rmw8_or_u  = 0x37,
+  OP_i64_atomic_rmw16_or_u = 0x38,
+  OP_i64_atomic_rmw32_or_u = 0x39,
+
+  OP_i32_atomic_rmw_xor     = 0x3A,
+  OP_i64_atomic_rmw_xor     = 0x3B,
+  OP_i32_atomic_rmw8_xor_u  = 0x3C,
+  OP_i32_atomic_rmw16_xor_u = 0x3D,
+  OP_i64_atomic_rmw8_xor_u  = 0x3E,
+  OP_i64_atomic_rmw16_xor_u = 0x3F,
+  OP_i64_atomic_rmw32_xor_u = 0x40,
+
+  OP_i32_atomic_rmw_xchg     = 0x41,
+  OP_i64_atomic_rmw_xchg     = 0x42,
+  OP_i32_atomic_rmw8_xchg_u  = 0x43,
+  OP_i32_atomic_rmw16_xchg_u = 0x44,
+  OP_i64_atomic_rmw8_xchg_u  = 0x45,
+  OP_i64_atomic_rmw16_xchg_u = 0x46,
+  OP_i64_atomic_rmw32_xchg_u = 0x47,
+
+  OP_i32_atomic_rmw_cmpxchg     = 0x48,
+  OP_i64_atomic_rmw_cmpxchg     = 0x49,
+  OP_i32_atomic_rmw8_cmpxchg_u  = 0x4A,
+  OP_i32_atomic_rmw16_cmpxchg_u = 0x4B,
+  OP_i64_atomic_rmw8_cmpxchg_u  = 0x4C,
+  OP_i64_atomic_rmw16_cmpxchg_u = 0x4D,
+  OP_i64_atomic_rmw32_cmpxchg_u = 0x4E,
 };
 
 #ifdef __cplusplus
