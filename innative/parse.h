@@ -30,6 +30,7 @@ namespace innative {
   IN_ERROR ParseModule(utility::Stream& s, const char* file, const Environment& env, Module& module, ByteArray name,
                        ValidationError*& errors);
   IN_ERROR ParseExportFixup(Module& module, ValidationError*& errors, const Environment& env);
+  IN_ERROR ParseBulkMemoryInstruction(utility::Stream& s, Instruction& ins, const Environment& env);
 }
 
 #endif

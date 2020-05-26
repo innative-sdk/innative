@@ -156,7 +156,6 @@ IN_ERROR Compiler::CompileBinaryShiftOp(llvmVal* (llvm::IRBuilder<>::*op)(llvmVa
   return PushReturn((builder.*op)(val1, MaskShiftBits(val2), args...));
 }
 
-
 IN_ERROR Compiler::CompileIfBlock(varsint7 sig)
 {
   IN_ERROR err;
@@ -274,7 +273,6 @@ void Compiler::CompileTrap()
   call->setDoesNotReturn();
   builder.CreateUnreachable();
 }
-
 
 IN_ERROR Compiler::CompileBranch(varuint32 depth)
 {
@@ -602,6 +600,60 @@ IN_ERROR Compiler::CompileMemGrow(const char* name)
   return PushReturn(phi);
 }
 
+IN_ERROR Compiler::CompileMemCopy(varuint32 dst_mem, varuint32 src_mem)
+{
+  if(dst_mem >= memories.size() || src_mem >= memories.size())
+    return ERR_INVALID_MEMORY_INDEX;
+
+  IN_ERROR err;
+
+  llvmVal* mem_size;
+  if(err = PopType(TE_i32, mem_size))
+    return err;
+
+  llvmVal* src_base;
+  if(err = PopType(TE_i32, src_base))
+    return err;
+
+  llvmVal* dst_base;
+  if(err = PopType(TE_i32, dst_base))
+    return err;
+
+  llvmVal* dst = GetMemPointerRegion(dst_base, builder.getInt8PtrTy(), mem_size, dst_mem, 0);
+  llvmVal* src = GetMemPointerRegion(src_base, builder.getInt8PtrTy(), mem_size, src_mem, 0);
+
+  builder.CreateMemMove(dst, llvm::None, src, llvm::None, mem_size);
+
+  return ERR_SUCCESS;
+}
+
+IN_ERROR innative::Compiler::CompileMemFill(varuint32 mem)
+{
+  if(mem >= memories.size())
+    return ERR_INVALID_MEMORY_INDEX;
+
+  IN_ERROR err;
+
+  llvmVal* mem_size;
+  if(err = PopType(TE_i32, mem_size))
+    return err;
+
+  llvmVal* value;
+  if(err = PopType(TE_i32, value))
+    return err;
+
+  llvmVal* dst_base;
+  if(err = PopType(TE_i32, dst_base))
+    return err;
+
+  value        = builder.CreateTrunc(value, builder.getInt8Ty()); // Value must be truncated to i8
+  llvmVal* dst = GetMemPointerRegion(dst_base, builder.getInt8PtrTy(), mem_size, mem, 0);
+
+  builder.CreateMemSet(dst, value, mem_size, llvm::None);
+
+  return ERR_SUCCESS;
+}
+
 template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR>
 IN_ERROR Compiler::CompileSRem(const llvm::Twine& name)
 {
@@ -670,7 +722,6 @@ IN_ERROR Compiler::CompileFloatCmp(llvm::Intrinsic::ID id, const llvm::Twine& na
   auto compare  = builder.CreateBinaryIntrinsic(id, val1, val2, nullptr, name);
   return PushReturn(builder.CreateSelect(nancheck, llvm::ConstantFP::getNaN(val1->getType()), compare));
 }
-
 
 IN_ERROR Compiler::CompileInstruction(Instruction& ins)
 {
@@ -978,14 +1029,17 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return CompileDiv<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(false, &llvm::IRBuilder<>::CreateURem,
                                                                   OP::NAMES[ins.opcode]);
   case OP_i32_and:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i32_or:
     return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateOr, OP::NAMES[ins.opcode]);
   case OP_i32_xor:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i32_shl:
     return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateShl,
-                                                                                        OP::NAMES[ins.opcode], false, false);
+                                                                                        OP::NAMES[ins.opcode], false,
+                                                                                        false);
   case OP_i32_shr_s:
     return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(&llvm::IRBuilder<>::CreateAShr,
                                                                                   OP::NAMES[ins.opcode], false);
@@ -1019,14 +1073,17 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return CompileDiv<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(false, &llvm::IRBuilder<>::CreateURem,
                                                                   OP::NAMES[ins.opcode]);
   case OP_i64_and:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i64_or:
     return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateOr, OP::NAMES[ins.opcode]);
   case OP_i64_xor:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i64_shl:
     return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateShl,
-                                                                                        OP::NAMES[ins.opcode], false, false);
+                                                                                        OP::NAMES[ins.opcode], false,
+                                                                                        false);
   case OP_i64_shr_s:
     return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(&llvm::IRBuilder<>::CreateAShr,
                                                                                   OP::NAMES[ins.opcode], false);
@@ -1181,6 +1238,14 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
   case OP_f64_reinterpret_i64:
     return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateBitCast,
                                                                        builder.getDoubleTy(), OP::NAMES[ins.opcode]);
+  case OP_bulk_memory_prefix:
+    switch (ins.opcode[1])
+    {
+    case OP_memory_copy: return CompileMemCopy(ins.immediates[0]._varuint32, ins.immediates[1]._varuint32);
+    case OP_memory_fill: return CompileMemFill(ins.immediates[0]._varuint32);
+    default: return ERR_FATAL_UNKNOWN_INSTRUCTION;
+    }
+
   default: return ERR_FATAL_UNKNOWN_INSTRUCTION;
   }
 
@@ -1235,7 +1300,7 @@ IN_ERROR Compiler::CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst
     debugger->FuncParam(fn, index, desc);
     ++index;
     builder.CreateStore(&arg, locals.back(), false); // Store parameter (we can't use the parameter directly
-                                              // because wasm lets you store to parameters)
+                                                     // because wasm lets you store to parameters)
   }
 
   for(varuint32 i = 0; i < body.n_locals; ++i)

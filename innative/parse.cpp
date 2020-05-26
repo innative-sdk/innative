@@ -467,6 +467,10 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_i64_reinterpret_f64:
   case OP_f32_reinterpret_i32:
   case OP_f64_reinterpret_i64: break;
+  case OP_bulk_memory_prefix:
+  {
+  
+  }
   default: err = ERR_FATAL_UNKNOWN_INSTRUCTION;
   }
 
