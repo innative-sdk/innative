@@ -40,7 +40,7 @@ typedef float float32;
 typedef double float64;
 
 // Maximum number of immediates used by any instruction
-#define MAX_IMMEDIATES 2
+#define MAX_IMMEDIATES 3
 
 // WASM binary type encodings, stored as a varsint7
 enum WASM_TYPE_ENCODING
@@ -63,6 +63,7 @@ enum WASM_TYPE_ENCODING
 enum WASM_LIMIT_FLAGS
 {
   WASM_LIMIT_HAS_MAXIMUM = 0x01,
+  WASM_LIMIT_SHARED      = 0x02,
 };
 
 // Known webassembly section opcodes
@@ -187,7 +188,7 @@ typedef struct IN_WASM_FUNCTION_TYPE
 // The underlying resizable limits structure used by linear memories and tables.
 typedef struct IN_WASM_RESIZABLE_LIMITS
 {
-  varuint32 flags; // WASM_LIMIT_FLAGS
+  varuint7 flags; // WASM_LIMIT_FLAGS
   varuint32 minimum;
   varuint32 maximum;
 } ResizableLimits;

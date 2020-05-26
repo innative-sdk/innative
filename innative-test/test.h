@@ -20,6 +20,7 @@ public:
   ~TestHarness();
   size_t Run(FILE* out);
   void test_allocator();
+  void test_atomic_waitnotify();
   void test_environment();
   void test_debug();
   void test_queue();
