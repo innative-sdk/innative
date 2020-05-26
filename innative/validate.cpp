@@ -988,6 +988,8 @@ namespace innative {
         ValidatePopType(ins, values, TE_i32, env, m);
       }
 
+      // TODO: The rest of the bulk memory ops
+
       default:
         AppendError(env, env.errors, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "[%u] Unknown instruction code %hhu", ins.line,
                     ins.opcode);
