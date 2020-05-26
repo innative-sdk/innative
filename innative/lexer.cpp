@@ -7,6 +7,7 @@
 #include "validate.h"
 #include <limits>
 #include <cmath>
+#include <algorithm>
 
 using std::numeric_limits;
 using std::string;
@@ -74,6 +75,9 @@ namespace innative {
                                        "then",
                                        "else",
                                        "end",
+                                       "shared",
+                                       "unshared",
+                                       "memidx",
                                        "binary", // script expressions
                                        "quote",
                                        "register",
@@ -142,6 +146,20 @@ namespace innative {
       s += 3;
       if(s >= end)
         return end;
+
+      // AFAICT this should only be lowercase? but it's a special case value for the spec tests so it's unclear
+      if(!strncmp(":canonical", s, std::min((size_t)(end - s), (size_t)10)))
+      {
+        //if(target)
+        //  target->assign("canonical");
+        return s + 10;
+      }
+      if(!strncmp(":arithmetic", s, std::min((size_t)(end - s), (size_t)11)))
+      {
+        //if(target)
+        //  target->assign("arithmetic");
+        return s + 11;
+      }
 
       for(i = 0; i < 3 && s < end; ++i)
       {
@@ -534,7 +552,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
           tokens.Push(WatToken{ kh_val(tokenhash, iter), begin, line, column });
         else
         {
-          uint8_t op = GetInstruction(ref);
+          uint16_t op = GetInstruction(ref);
           if(op != 0xFF)
             tokens.Push(WatToken{ WatTokens::OPERATOR, begin, line, column, (int64_t)op });
           else

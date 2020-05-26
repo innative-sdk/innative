@@ -5,6 +5,7 @@
 #include "utility.h"
 #include "stack.h"
 #include "link.h"
+#include "atomic_instructions.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <atomic>
@@ -312,6 +313,10 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
                       "Imported memory maximum (%u) less than exported memory maximum (%u).", imp.mem_desc.limits.maximum,
                       mem->limits.maximum);
       }
+      else if(imp.mem_desc.limits.flags & WASM_LIMIT_SHARED) // SHARED && !HAS_MAXIMUM
+      {
+        AppendError(env, env.errors, m, ERR_SHARED_MEMORY_MAXIMUM_MISSING, "Shared memory must have maximum");
+      }
     }
     break;
   }
@@ -368,6 +373,8 @@ void innative::ValidateMemory(const MemoryDesc& mem, Environment& env, Module* m
     AppendError(env, env.errors, m, ERR_MEMORY_MINIMUM_TOO_LARGE, "Memory minimum cannot exceed 65536");
   if((mem.limits.flags & WASM_LIMIT_HAS_MAXIMUM) && mem.limits.maximum > 65536)
     AppendError(env, env.errors, m, ERR_MEMORY_MAXIMUM_TOO_LARGE, "Memory maximum cannot exceed 65536");
+  if((mem.limits.flags & WASM_LIMIT_SHARED) && !(mem.limits.flags & WASM_LIMIT_HAS_MAXIMUM))
+    AppendError(env, env.errors, m, ERR_SHARED_MEMORY_MAXIMUM_MISSING, "Shared memory must have maximum");
 }
 
 void innative::ValidateBlockSignature(const Instruction& ins, varsint7 sig, Environment& env, Module* m)
@@ -498,7 +505,7 @@ namespace innative {
   template<typename T, WASM_TYPE_ENCODING PUSH>
   void ValidateLoad(const Instruction& ins, varuint32 align, Stack<varsint7>& values, Environment& env, Module* m)
   {
-    if(!ModuleMemory(*m, 0))
+    if(!ModuleMemory(*m, ins.immediates[2]._varuint32))
       AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
     if((1ULL << align) > sizeof(T))
       AppendError(env, env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT,
@@ -510,7 +517,7 @@ namespace innative {
   template<typename T, WASM_TYPE_ENCODING POP>
   void ValidateStore(const Instruction& ins, varuint32 align, Stack<varsint7>& values, Environment& env, Module* m)
   {
-    if(!ModuleMemory(*m, 0))
+    if(!ModuleMemory(*m, ins.immediates[2]._varuint32))
       AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
     if((1ULL << align) > sizeof(T))
       AppendError(env, env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT,
@@ -569,6 +576,83 @@ namespace innative {
     else
       AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "[%u] callee was %u, which is an invalid function index.",
                   ins.line, callee);
+  }
+
+  void ValidateAtomicOp(const Instruction& ins, Stack<varsint7>& values, Environment& env, Module* m)
+  {
+    namespace at = innative::atomic_details;
+
+    unsigned correctAlign;
+    auto opName                       = OP::NAMES[ins.opcode];
+    auto atomicOp                     = ins.opcode[1];
+    auto specifiedAlign               = ins.immediates[0]._varuint32;
+    auto expectedArgs                 = 3;
+    WASM_TYPE_ENCODING returnTy       = TE_i32;
+    WASM_TYPE_ENCODING expectedTys[3] = { TE_i32, TE_i32, TE_i32 };
+
+    switch(atomicOp)
+    {
+    case OP_atomic_notify:
+      correctAlign = 2;
+      expectedArgs = 2;
+      break;
+    case OP_atomic_wait32:
+      correctAlign   = 2;
+      expectedTys[2] = TE_i64;
+      break;
+    case OP_atomic_wait64:
+      correctAlign   = 3;
+      expectedTys[1] = TE_i64;
+      expectedTys[2] = TE_i64;
+      break;
+
+    case OP_atomic_fence:
+      correctAlign = 0;       // The fence instruction should have a 0 where the rest of them read `align`
+      expectedArgs = 0;       // It takes no arguments
+      returnTy     = TE_void; // This instruction pushes nothing onto the stack
+      break;
+
+    default:
+      // The rest of the valid opcodes are all L/S/RMW ops
+      if(!at::IsLSRMWOp(atomicOp))
+      {
+        AppendError(env, env.errors, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "[%u] Unknown atomic instruction opcode %hhu%hhu",
+                    ins.line, ins.opcode[0], ins.opcode[1]);
+        return; // The rest of our checks don't make sense for an unknown instruction
+      }
+
+      expectedArgs = at::GetArgCount(atomicOp);
+
+      // L/S/RMW ops can have the correct alignment value derived from their opcode
+      correctAlign = at::GetValidAlignment(atomicOp);
+
+      // L/S/RMW ops are all the same from here;
+      // except the 2 last args and ret are different if it's an i64 op
+      if(at::IsI64(at::GetOpType(atomicOp)))
+      {
+        expectedTys[1] = TE_i64;
+        expectedTys[2] = TE_i64;
+        returnTy       = TE_i64;
+      }
+
+      // Stores don't return anything
+      if(at::GetOpGroup(atomicOp) == at::OpGroup::Store)
+        returnTy = TE_void;
+    }
+
+    if(!ModuleMemory(*m, ins.immediates[2]._varuint32))
+      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
+
+    if(specifiedAlign != correctAlign)
+      AppendError(env, env.errors, m, ERR_INVALID_MEMORY_ALIGNMENT,
+                  "[%u] Invalid memory alignment for %s: expected %u, found %u", ins.line, opName, correctAlign,
+                  specifiedAlign);
+
+    for(int i = expectedArgs - 1; i >= 0; --i)
+      ValidatePopType(ins, values, expectedTys[i], env, m);
+
+    if(returnTy != TE_void)
+      values.Push(returnTy);
   }
 
   void ValidateInstruction(const Instruction& ins, Stack<varsint7>& values, Stack<internal::ControlBlock>& control,
@@ -712,15 +796,17 @@ namespace innative {
     case OP_i64_store16: ValidateStore<int16_t, TE_i64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
     case OP_i64_store32: ValidateStore<int32_t, TE_i64>(ins, ins.immediates[0]._varuint32, values, env, m); break;
     case OP_memory_size:
-      if(!ModuleMemory(*m, 0))
+      if(!ModuleMemory(*m, ins.immediates[0]._varuint32))
         AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
+      // TODO: Remove this when we do multi-memory
       if(ins.immediates[0]._varuint1 != 0)
         AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
       values.Push(TE_i32);
       break;
     case OP_memory_grow:
-      if(!ModuleMemory(*m, 0))
+      if(!ModuleMemory(*m, ins.immediates[0]._varuint32))
         AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
+      // TODO: Remove this when we do multi-memory
       if(ins.immediates[0]._varuint1 != 0)
         AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
       ValidatePopType(ins, values, TE_i32, env, m);
@@ -870,7 +956,13 @@ namespace innative {
     case OP_i32_reinterpret_f32: ValidateUnaryOp<TE_f32, TE_i32>(ins, values, env, m); break;
     case OP_i64_reinterpret_f64: ValidateUnaryOp<TE_f64, TE_i64>(ins, values, env, m); break;
     case OP_f32_reinterpret_i32: ValidateUnaryOp<TE_i32, TE_f32>(ins, values, env, m); break;
-    case OP_f64_reinterpret_i64: ValidateUnaryOp<TE_i64, TE_f64>(ins, values, env, m); break;
+    case OP_f64_reinterpret_i64:
+      ValidateUnaryOp<TE_i64, TE_f64>(ins, values, env, m);
+      break;
+
+      // Atomics
+    case OP_atomic_prefix: ValidateAtomicOp(ins, values, env, m); break;
+
     default:
       AppendError(env, env.errors, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "[%u] Unknown instruction code %hhu", ins.line,
                   ins.opcode);

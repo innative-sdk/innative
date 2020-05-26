@@ -381,6 +381,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="atomic_instructions.cpp" />
     <ClCompile Include="compile.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug Static|Win32'">NotUsing</PrecompiledHeader>
@@ -557,6 +558,7 @@
     <ClInclude Include="..\include\innative\opcodes.h" />
     <ClInclude Include="..\include\innative\schema.h" />
     <ClInclude Include="..\include\innative\sourcemap.h" />
+    <ClInclude Include="atomic_instructions.h" />
     <ClInclude Include="compile.h" />
     <ClInclude Include="constants.h" />
     <ClInclude Include="debug.h" />

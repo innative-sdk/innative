@@ -7,6 +7,7 @@
 #include "utility.h"
 #include "dwarf_parser.h"
 #include "serialize.h"
+#include "atomic_instructions.h"
 #include <assert.h>
 #include <algorithm>
 #include <fstream>
@@ -150,12 +151,12 @@ IN_ERROR innative::ParseFunctionType(Stream& s, FunctionType& sig, const Environ
 
 IN_ERROR innative::ParseResizableLimits(Stream& s, ResizableLimits& limits)
 {
-  IN_ERROR err = ParseVarUInt32(s, limits.flags);
+  IN_ERROR err = ParseVarUInt7(s, limits.flags);
 
   if(err >= 0)
     err = ParseVarUInt32(s, limits.minimum);
 
-  if(err >= 0 && (limits.flags & 0x1) != 0)
+  if(err >= 0 && (limits.flags & WASM_LIMIT_HAS_MAXIMUM) != 0)
     err = ParseVarUInt32(s, limits.maximum);
 
   return err;
@@ -255,10 +256,10 @@ IN_ERROR innative::ParseExport(Stream& s, Export& e, const Environment& env)
 
 IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environment& env)
 {
-  ins.line     = 1;
-  ins.column   = static_cast<decltype(ins.column)>(s.pos);
+  ins.line   = 1;
+  ins.column = static_cast<decltype(ins.column)>(s.pos);
   // Parse only the first instruction byte - multibyte instructions parse additional bytes
-  IN_ERROR err = ParseByte(s, ins.opcode[0]); 
+  IN_ERROR err = ParseByte(s, ins.opcode[0]);
   for(int i = 1; i < MAX_OPCODE_BYTES; ++i)
     ins.opcode[i] = 0;
   if(err < 0)
@@ -287,6 +288,8 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
     if(err < 0 || ins.immediates[0]._varuint1 !=
                     0) // We override any error here with ERR_INVALID_RESERVED_VALUE because that's what webassembly expects
       err = ERR_INVALID_RESERVED_VALUE;
+    // memidx
+    // ins.immediates[0]._varuint32 = s.ReadVarUInt32(err);
     break;
   case OP_br_table:
     err = Parse<varuint32>::template Array<&ParseVarUInt32>(s, ins.immediates[0].table, ins.immediates[0].n_table, env);
@@ -331,10 +334,19 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_i64_store8:
   case OP_i64_store16:
   case OP_i64_store32:
+    // Alignment and memidx bit flag
     ins.immediates[0]._varuint32 = s.ReadVarUInt32(err);
 
+    // Offset
     if(err >= 0)
       ins.immediates[1]._varuptr = s.ReadVarUInt32(err); // Currently 32-bit because all memories are 32-bit
+
+    // If bit 6 is set, read a memidx value
+    if(err >= 0 && (ins.immediates[0]._varuint32 & 0b1000000))
+    {
+      ins.immediates[0]._varuint32 &= 0b111; // All valid alignments fit in 3 bits (log2 form)
+      ins.immediates[2]._varuint32 = s.ReadVarUInt32(err);
+    }
 
     break;
   case OP_unreachable:
@@ -467,6 +479,9 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_i64_reinterpret_f64:
   case OP_f32_reinterpret_i32:
   case OP_f64_reinterpret_i64: break;
+
+  case OP_atomic_prefix: err = ParseAtomicInstruction(s, ins, env); break;
+
   default: err = ERR_FATAL_UNKNOWN_INSTRUCTION;
   }
 
@@ -840,7 +855,9 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
         return ERR_PARSE_INVALID_FILE_LENGTH;
       else
       {
-        assert(curcustom < m.n_custom);
+        // assert(curcustom < m.n_custom);
+        if(curcustom >= m.n_custom)
+          return ERR_FATAL_SECTION_SIZE_MISMATCH;
         m.custom[curcustom].payload = payload;
         m.custom[curcustom].data    = s.data + s.pos;
         size_t custom               = s.pos + payload;
@@ -950,4 +967,48 @@ IN_ERROR innative::ParseExportFixup(Module& m, ValidationError*& errors, const E
   }
 
   return ERR_SUCCESS;
+}
+
+IN_ERROR innative::ParseAtomicInstruction(utility::Stream& s, Instruction& ins, const Environment& env)
+{
+  namespace at = innative::atomic_details;
+
+  IN_ERROR err;
+
+  err = ParseByte(s, ins.opcode[1]);
+  if(err < 0)
+    return err;
+
+  varuint32 alignValue = s.ReadVarUInt32(err);
+  if(err < 0)
+    return err;
+
+  // Only the bottom 3 bits are actually allowed to hold alignment value via the multi-memory proposal
+  ins.immediates[0]._varuint32 = alignValue & 0b111;
+
+  switch(ins.opcode[1])
+  {
+  case OP_atomic_notify:
+  case OP_atomic_wait32:
+  case OP_atomic_wait64: break;
+
+  case OP_atomic_fence: return ERR_SUCCESS;
+
+  default:
+    if(!at::IsLSRMWOp(ins.opcode[1]))
+      return ERR_FATAL_UNKNOWN_INSTRUCTION;
+    break;
+  }
+
+  ins.immediates[1]._varuint32 = s.ReadVarUInt32(err);
+  if(err < 0)
+    return err;
+
+  // (multi-memory proposal) if bit 6 is set, there's a memidx value to read
+  if(alignValue & 0b1000000)
+  {
+    ins.immediates[2]._varuint32 = s.ReadVarUInt32(err);
+  }
+
+  return err;
 }

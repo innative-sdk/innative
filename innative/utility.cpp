@@ -136,7 +136,7 @@ namespace innative {
       return h;
     }
 
-    uint8_t GetInstruction(StringSpan ref)
+    OpcodeInt GetInstruction(StringSpan ref)
     {
       static const kh_opnames_t* h = GenOpNames();
 

@@ -5,6 +5,7 @@
 #include "utility.h"
 #include "parse.h"
 #include "validate.h"
+#include "atomic_instructions.h"
 #include <limits>
 
 using std::numeric_limits;
@@ -468,11 +469,13 @@ int WatParser::ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionB
     return ERR_WAT_EXPECTED_OPERATOR;
 
   int err;
-  if(tokens.Peek().i > 0xFF)
+  if(tokens.Peek().i == 0xFF)
     return ERR_WAT_OUT_OF_RANGE;
-  op        = { (uint8_t)tokens.Peek().i };
-  op.line   = tokens.Peek().line;
-  op.column = tokens.Pop().column;
+  op           = { 0 };
+  op.opcode[0] = (uint8_t)tokens.Peek().i;
+  op.opcode[1] = (uint8_t)(tokens.Peek().i >> 8);
+  op.line      = tokens.Peek().line;
+  op.column    = tokens.Pop().column;
 
   switch(op.opcode[0])
   {
@@ -547,28 +550,57 @@ int WatParser::ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionB
   case OP_i64_store8:
   case OP_i64_store16:
   case OP_i64_store32:
-    if(tokens.Peek().id == WatTokens::OFFSET)
-    {
-      tokens.Pop();
-      if(err = ResolveTokenu32(tokens.Pop(), numbuf, op.immediates[1]._varuint32))
-        // if(err = ResolveTokenu64(tokens.Pop(), op.immediates[1]._varuptr)) // We can't do this until webassembly actually
-        // supports 64-bit
-        return err;
-    }
-    if(tokens.Peek().id == WatTokens::ALIGN)
-    {
-      tokens.Pop();
-      if(err = ResolveTokenu32(tokens.Pop(), numbuf, op.immediates[0]._varuint32))
-        return err;
-      if(op.immediates[0]._varuint32 == 0 ||
-         !IsPowerOfTwo(op.immediates[0]._varuint32)) // Ensure this alignment is exactly a power of two
-        return ERR_WAT_INVALID_ALIGNMENT;
-      op.immediates[0]._varuint32 = Power2Log2(op.immediates[0]._varuint32); // Calculate proper power of two
-    }
+    if(err = ParseMemarg(tokens, op))
+      return err;
+    break;
 
+  case OP_atomic_prefix:
+    if(op.opcode[1] == OP_atomic_fence) // The only atomic op that doesn't take a memarg
+      break;
+    // Set the default memargs for when they aren't specified
+    op.immediates[0]._varuint32 = innative::atomic_details::GetValidAlignment(op.opcode[1]);
+    op.immediates[1]._varuint32 = 0;
+    if(err = ParseMemarg(tokens, op))
+      return err;
     break;
   }
 
+  return ERR_SUCCESS;
+}
+
+int innative::WatParser::ParseMemarg(Queue<WatToken>& tokens, Instruction& op)
+{
+  int err;
+  if (tokens.Peek().id == WatTokens::MEMIDX)
+  {
+    tokens.Pop();
+    if(err = ResolveTokenu32(tokens.Pop(), numbuf, op.immediates[2]._varuint32))
+      return err;
+  }
+  else
+  {
+    // Default memidx 0
+    op.immediates[2]._varuint32 = 0;
+  }
+
+  if(tokens.Peek().id == WatTokens::OFFSET)
+  {
+    tokens.Pop();
+    if(err = ResolveTokenu32(tokens.Pop(), numbuf, op.immediates[1]._varuint32))
+      // if(err = ResolveTokenu64(tokens.Pop(), op.immediates[1]._varuptr)) // We can't do this until webassembly actually
+      // supports 64-bit
+      return err;
+  }
+  if(tokens.Peek().id == WatTokens::ALIGN)
+  {
+    tokens.Pop();
+    if(err = ResolveTokenu32(tokens.Pop(), numbuf, op.immediates[0]._varuint32))
+      return err;
+    if(op.immediates[0]._varuint32 == 0 ||
+       !IsPowerOfTwo(op.immediates[0]._varuint32)) // Ensure this alignment is exactly a power of two
+      return ERR_WAT_INVALID_ALIGNMENT;
+    op.immediates[0]._varuint32 = Power2Log2(op.immediates[0]._varuint32); // Calculate proper power of two
+  }
   return ERR_SUCCESS;
 }
 
@@ -1020,7 +1052,15 @@ int WatParser::ParseResizableLimits(ResizableLimits& limits, Queue<WatToken>& to
   {
     if(err = ResolveTokenu32(tokens.Pop(), numbuf, limits.maximum))
       return err;
-    limits.flags = 1;
+    limits.flags |= WASM_LIMIT_HAS_MAXIMUM;
+  }
+
+  auto shareToken = tokens.Peek().id;
+  if(shareToken == WatTokens::SHARED || shareToken == WatTokens::UNSHARED)
+  {
+    tokens.Pop();
+    if(shareToken == WatTokens::SHARED)
+      limits.flags |= WASM_LIMIT_SHARED;
   }
 
   return ERR_SUCCESS;
