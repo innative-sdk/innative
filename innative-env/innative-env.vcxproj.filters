@@ -21,10 +21,27 @@
     <ClCompile Include="win32_x86.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="atomics.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="wait_list.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="internal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="atomics.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="wait_list.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="wait_list.natvis">
+      <Filter>Resource Files</Filter>
+    </Natvis>
   </ItemGroup>
 </Project>

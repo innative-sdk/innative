@@ -156,7 +156,6 @@ IN_ERROR Compiler::CompileBinaryShiftOp(llvmVal* (llvm::IRBuilder<>::*op)(llvmVa
   return PushReturn((builder.*op)(val1, MaskShiftBits(val2), args...));
 }
 
-
 IN_ERROR Compiler::CompileIfBlock(varsint7 sig)
 {
   IN_ERROR err;
@@ -274,7 +273,6 @@ void Compiler::CompileTrap()
   call->setDoesNotReturn();
   builder.CreateUnreachable();
 }
-
 
 IN_ERROR Compiler::CompileBranch(varuint32 depth)
 {
@@ -510,10 +508,10 @@ IN_ERROR Compiler::CompileConstant(Instruction& instruction, llvm::Constant*& co
 }
 
 template<bool SIGNED>
-IN_ERROR Compiler::CompileLoad(varuint7 memory, varuint32 offset, varuint32 memflags, const char* name, llvmTy* ext,
+IN_ERROR Compiler::CompileLoad(varuint32 memory, varuint32 offset, varuint32 memflags, const char* name, llvmTy* ext,
                                llvmTy* ty)
 {
-  if(memories.size() < 1)
+  if(memory >= memories.size())
     return ERR_INVALID_MEMORY_INDEX;
 
   llvmVal* base;
@@ -532,10 +530,10 @@ IN_ERROR Compiler::CompileLoad(varuint7 memory, varuint32 offset, varuint32 memf
 }
 
 template<WASM_TYPE_ENCODING TY>
-IN_ERROR Compiler::CompileStore(varuint7 memory, varuint32 offset, varuint32 memflags, const char* name,
+IN_ERROR Compiler::CompileStore(varuint32 memory, varuint32 offset, varuint32 memflags, const char* name,
                                 llvm::IntegerType* ext)
 {
-  if(memories.size() < 1)
+  if(memory >= memories.size())
     return ERR_INVALID_MEMORY_INDEX;
 
   IN_ERROR err;
@@ -560,7 +558,7 @@ llvmVal* Compiler::CompileMemSize(llvm::GlobalVariable* target)
   return builder.CreateIntCast(builder.CreateLShr(GetMemSize(target), 16), builder.getInt32Ty(), true);
 }
 
-IN_ERROR Compiler::CompileMemGrow(const char* name)
+IN_ERROR Compiler::CompileMemGrow(varuint32 memory, const char* name)
 {
   if(memories.size() < 1)
     return ERR_INVALID_MEMORY_INDEX;
@@ -570,14 +568,14 @@ IN_ERROR Compiler::CompileMemGrow(const char* name)
   if(err = PopType(TE_i32, delta))
     return err;
 
-  llvmVal* old = CompileMemSize(memories[0]);
+  llvmVal* old = CompileMemSize(memories[memory]);
 
   auto max =
-    llvm::cast<llvm::ConstantAsMetadata>(memories[0]->getMetadata(IN_MEMORY_MAX_METADATA)->getOperand(0))->getValue();
+    llvm::cast<llvm::ConstantAsMetadata>(memories[memory]->getMetadata(IN_MEMORY_MAX_METADATA)->getOperand(0))->getValue();
   CallInst* call = builder.CreateCall(memgrow,
-                                      { builder.CreateLoad(GetPairPtr(memories[0], 0)),
+                                      { builder.CreateLoad(GetPairPtr(memories[memory], 0)),
                                         builder.CreateShl(builder.CreateZExt(delta, builder.getInt64Ty()), 16), max,
-                                        GetPairPtr(memories[0], 1) },
+                                        GetPairPtr(memories[memory], 1) },
                                       name);
 
   llvmVal* success = builder.CreateICmpNE(builder.CreatePtrToInt(call, intptrty), CInt::get(intptrty, 0));
@@ -588,8 +586,8 @@ IN_ERROR Compiler::CompileMemGrow(const char* name)
 
   builder.CreateCondBr(success, successblock, contblock);
   builder.SetInsertPoint(successblock); // Only set new memory if call succeeded
-  builder.CreateAlignedStore(call, GetPairPtr(memories[0], 0), builder.getInt64Ty()->getPrimitiveSizeInBits() / 8, false);
-  builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[0], 0)), memlocal, false);
+  builder.CreateAlignedStore(call, GetPairPtr(memories[memory], 0), builder.getInt64Ty()->getPrimitiveSizeInBits() / 8, false);
+  builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[memory], 0)), memlocal, false);
   builder.CreateBr(contblock);
 
   builder.SetInsertPoint(contblock);
@@ -670,7 +668,6 @@ IN_ERROR Compiler::CompileFloatCmp(llvm::Intrinsic::ID id, const llvm::Twine& na
   auto compare  = builder.CreateBinaryIntrinsic(id, val1, val2, nullptr, name);
   return PushReturn(builder.CreateSelect(nancheck, llvm::ConstantFP::getNaN(val1->getType()), compare));
 }
-
 
 IN_ERROR Compiler::CompileInstruction(Instruction& ins)
 {
@@ -767,77 +764,77 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
 
     // Memory-related operators
   case OP_i32_load:
-    return CompileLoad<false>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode], nullptr,
-                              builder.getInt32Ty());
+    return CompileLoad<false>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                              OP::NAMES[ins.opcode], nullptr, builder.getInt32Ty());
   case OP_i64_load:
-    return CompileLoad<false>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode], nullptr,
-                              builder.getInt64Ty());
+    return CompileLoad<false>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                              OP::NAMES[ins.opcode], nullptr, builder.getInt64Ty());
   case OP_f32_load:
-    return CompileLoad<false>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode], nullptr,
-                              builder.getFloatTy());
+    return CompileLoad<false>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                              OP::NAMES[ins.opcode], nullptr, builder.getFloatTy());
   case OP_f64_load:
-    return CompileLoad<false>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode], nullptr,
-                              builder.getDoubleTy());
+    return CompileLoad<false>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                              OP::NAMES[ins.opcode], nullptr, builder.getDoubleTy());
   case OP_i32_load8_s:
-    return CompileLoad<true>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                             builder.getInt32Ty(), builder.getInt8Ty());
+    return CompileLoad<true>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                             OP::NAMES[ins.opcode], builder.getInt32Ty(), builder.getInt8Ty());
   case OP_i32_load8_u:
-    return CompileLoad<false>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                              builder.getInt32Ty(), builder.getInt8Ty());
+    return CompileLoad<false>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                              OP::NAMES[ins.opcode], builder.getInt32Ty(), builder.getInt8Ty());
   case OP_i32_load16_s:
-    return CompileLoad<true>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                             builder.getInt32Ty(), builder.getInt16Ty());
+    return CompileLoad<true>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                             OP::NAMES[ins.opcode], builder.getInt32Ty(), builder.getInt16Ty());
   case OP_i32_load16_u:
-    return CompileLoad<false>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                              builder.getInt32Ty(), builder.getInt16Ty());
+    return CompileLoad<false>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                              OP::NAMES[ins.opcode], builder.getInt32Ty(), builder.getInt16Ty());
   case OP_i64_load8_s:
-    return CompileLoad<true>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                             builder.getInt64Ty(), builder.getInt8Ty());
+    return CompileLoad<true>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                             OP::NAMES[ins.opcode], builder.getInt64Ty(), builder.getInt8Ty());
   case OP_i64_load8_u:
-    return CompileLoad<false>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                              builder.getInt64Ty(), builder.getInt8Ty());
+    return CompileLoad<false>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                              OP::NAMES[ins.opcode], builder.getInt64Ty(), builder.getInt8Ty());
   case OP_i64_load16_s:
-    return CompileLoad<true>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                             builder.getInt64Ty(), builder.getInt16Ty());
+    return CompileLoad<true>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                             OP::NAMES[ins.opcode], builder.getInt64Ty(), builder.getInt16Ty());
   case OP_i64_load16_u:
-    return CompileLoad<false>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                              builder.getInt64Ty(), builder.getInt16Ty());
+    return CompileLoad<false>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                              OP::NAMES[ins.opcode], builder.getInt64Ty(), builder.getInt16Ty());
   case OP_i64_load32_s:
-    return CompileLoad<true>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                             builder.getInt64Ty(), builder.getInt32Ty());
+    return CompileLoad<true>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                             OP::NAMES[ins.opcode], builder.getInt64Ty(), builder.getInt32Ty());
   case OP_i64_load32_u:
-    return CompileLoad<false>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                              builder.getInt64Ty(), builder.getInt32Ty());
+    return CompileLoad<false>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                              OP::NAMES[ins.opcode], builder.getInt64Ty(), builder.getInt32Ty());
   case OP_i32_store:
-    return CompileStore<TE_i32>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                                nullptr);
+    return CompileStore<TE_i32>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                                OP::NAMES[ins.opcode], nullptr);
   case OP_i64_store:
-    return CompileStore<TE_i64>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                                nullptr);
+    return CompileStore<TE_i64>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                                OP::NAMES[ins.opcode], nullptr);
   case OP_f32_store:
-    return CompileStore<TE_f32>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                                nullptr);
+    return CompileStore<TE_f32>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                                OP::NAMES[ins.opcode], nullptr);
   case OP_f64_store:
-    return CompileStore<TE_f64>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                                nullptr);
+    return CompileStore<TE_f64>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                                OP::NAMES[ins.opcode], nullptr);
   case OP_i32_store8:
-    return CompileStore<TE_i32>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                                builder.getInt8Ty());
+    return CompileStore<TE_i32>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                                OP::NAMES[ins.opcode], builder.getInt8Ty());
   case OP_i32_store16:
-    return CompileStore<TE_i32>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                                builder.getInt16Ty());
+    return CompileStore<TE_i32>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                                OP::NAMES[ins.opcode], builder.getInt16Ty());
   case OP_i64_store8:
-    return CompileStore<TE_i64>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                                builder.getInt8Ty());
+    return CompileStore<TE_i64>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                                OP::NAMES[ins.opcode], builder.getInt8Ty());
   case OP_i64_store16:
-    return CompileStore<TE_i64>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                                builder.getInt16Ty());
+    return CompileStore<TE_i64>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                                OP::NAMES[ins.opcode], builder.getInt16Ty());
   case OP_i64_store32:
-    return CompileStore<TE_i64>(0, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32, OP::NAMES[ins.opcode],
-                                builder.getInt32Ty());
-  case OP_memory_size: return PushReturn(CompileMemSize(memories[0]));
+    return CompileStore<TE_i64>(ins.immediates[2]._varuint32, ins.immediates[1]._varuint32, ins.immediates[0]._varuint32,
+                                OP::NAMES[ins.opcode], builder.getInt32Ty());
+  case OP_memory_size: return PushReturn(CompileMemSize(memories[ins.immediates[0]._varuint32]));
   case OP_memory_grow:
-    return CompileMemGrow(OP::NAMES[ins.opcode]);
+    return CompileMemGrow(ins.immediates[0]._varuint32, OP::NAMES[ins.opcode]);
 
     // Constants
   case OP_i32_const: // While we interpret this as unsigned, it is cast to a signed int.
@@ -978,14 +975,17 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return CompileDiv<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(false, &llvm::IRBuilder<>::CreateURem,
                                                                   OP::NAMES[ins.opcode]);
   case OP_i32_and:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i32_or:
     return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateOr, OP::NAMES[ins.opcode]);
   case OP_i32_xor:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i32_shl:
     return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateShl,
-                                                                                        OP::NAMES[ins.opcode], false, false);
+                                                                                        OP::NAMES[ins.opcode], false,
+                                                                                        false);
   case OP_i32_shr_s:
     return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(&llvm::IRBuilder<>::CreateAShr,
                                                                                   OP::NAMES[ins.opcode], false);
@@ -1019,14 +1019,17 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return CompileDiv<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(false, &llvm::IRBuilder<>::CreateURem,
                                                                   OP::NAMES[ins.opcode]);
   case OP_i64_and:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i64_or:
     return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateOr, OP::NAMES[ins.opcode]);
   case OP_i64_xor:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i64_shl:
     return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateShl,
-                                                                                        OP::NAMES[ins.opcode], false, false);
+                                                                                        OP::NAMES[ins.opcode], false,
+                                                                                        false);
   case OP_i64_shr_s:
     return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(&llvm::IRBuilder<>::CreateAShr,
                                                                                   OP::NAMES[ins.opcode], false);
@@ -1181,6 +1184,10 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
   case OP_f64_reinterpret_i64:
     return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateBitCast,
                                                                        builder.getDoubleTy(), OP::NAMES[ins.opcode]);
+
+    // Atomic
+  case OP_atomic_prefix: return CompileAtomicInstruction(ins);
+
   default: return ERR_FATAL_UNKNOWN_INSTRUCTION;
   }
 

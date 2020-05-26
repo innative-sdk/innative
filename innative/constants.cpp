@@ -65,6 +65,7 @@ namespace innative {
       { ERR_FATAL_UNKNOWN_KIND, "ERR_FATAL_UNKNOWN_KIND" },
       { ERR_FATAL_UNKNOWN_INSTRUCTION, "ERR_FATAL_UNKNOWN_INSTRUCTION" },
       { ERR_FATAL_UNKNOWN_SECTION, "ERR_FATAL_UNKNOWN_SECTION" },
+      { ERR_FATAL_SECTION_SIZE_MISMATCH, "ERR_FATAL_SECTION_SIZE_MISMATCH" },
       { ERR_FATAL_UNKNOWN_FUNCTION_SIGNATURE, "ERR_FATAL_UNKNOWN_FUNCTION_SIGNATURE" },
       { ERR_FATAL_UNKNOWN_TARGET, "ERR_FATAL_UNKNOWN_TARGET" },
       { ERR_FATAL_EXPECTED_END_INSTRUCTION, "ERR_FATAL_EXPECTED_END_INSTRUCTION" },
@@ -134,6 +135,7 @@ namespace innative {
       { ERR_FUNCTION_BODY_MISMATCH, "ERR_FUNCTION_BODY_MISMATCH" },
       { ERR_MEMORY_MINIMUM_TOO_LARGE, "ERR_MEMORY_MINIMUM_TOO_LARGE" },
       { ERR_MEMORY_MAXIMUM_TOO_LARGE, "ERR_MEMORY_MAXIMUM_TOO_LARGE" },
+      { ERR_SHARED_MEMORY_MAXIMUM_MISSING, "ERR_SHARED_MEMORY_MAXIMUM_MISSING" },
       { ERR_IF_ELSE_MISMATCH, "ERR_IF_ELSE_MISMATCH" },
       { ERR_END_MISMATCH, "ERR_END_MISMATCH" },
       { ERR_SIGNATURE_MISMATCH, "ERR_SIGNATURE_MISMATCH" },
@@ -227,10 +229,12 @@ namespace innative {
       { ERR_INVALID_TABLE_INDEX, "unknown table" },
       { ERR_WAT_OUT_OF_RANGE, "constant out of range" },
       { ERR_PARSE_UNEXPECTED_EOF, "unexpected end" },
+      { ERR_WAT_EXPECTED_OPEN, "unexpected token" },
       { ERR_WAT_EXPECTED_OPERATOR, "unexpected token" },
       { ERR_WAT_UNEXPECTED_NAME, "unexpected token" },
       { ERR_PARSE_INVALID_FILE_LENGTH, "unexpected end" },
       { ERR_FATAL_UNKNOWN_SECTION, "invalid section id" },
+      { ERR_FATAL_SECTION_SIZE_MISMATCH, "section size mismatch" },
       { ERR_FUNCTION_BODY_MISMATCH, "function and code section have inconsistent lengths" },
       { ERR_FATAL_DUPLICATE_EXPORT, "duplicate export name" },
       { ERR_INVALID_MEMORY_INDEX, "unknown memory" },
@@ -267,9 +271,11 @@ namespace innative {
       { ERR_INVALID_LIMITS, "size minimum must not be greater than maximum" },
       { ERR_MEMORY_MAXIMUM_TOO_LARGE, "memory size must be at most 65536 pages (4GiB)" },
       { ERR_MEMORY_MINIMUM_TOO_LARGE, "memory size must be at most 65536 pages (4GiB)" },
+      { ERR_SHARED_MEMORY_MAXIMUM_MISSING, "shared memory must have maximum" },
       { ERR_INVALID_INITIALIZER, "constant expression required" },
       { ERR_EMPTY_IMPORT, "unknown import" },
       { ERR_WAT_PARAM_AFTER_RESULT, "unexpected token" },
+
     });
 
     const char* EnumToString(const kh_mapenum_s* h, int i, char* buf, size_t n)

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?> 
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="in_wait_map">
+    <DisplayString>in_wait_map{{ {len} active wait lists }}</DisplayString>
+    <Expand>
+      <Item Name="[len]">len</Item>
+      <CustomListItems>
+        <Variable Name="i" InitialValue="0" />
+        <Size>len</Size>
+
+        <Exec>i = 0</Exec>
+        <Loop>
+          <Break Condition="i == cap" />
+          <Item Condition="entries[i].hash &amp;&amp; !(entries[i].hash >> 63)" Name="{entries[i].key}">entries[i].value</Item>
+          <Exec>i += 1</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+  <Type Name="in_wait_list">
+    <DisplayString>in_wait_list{{ {len} waiters }}</DisplayString>
+    <Expand>
+      <Item Name="[len]">len</Item>
+      <ArrayItems>
+        <Size>len</Size>
+        <ValuePointer>entries</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="in_wait_entry">
+    <DisplayString>in_wait_entry{{ signaled: {signaled} }}</DisplayString>
+  </Type>
+</AutoVisualizer>
