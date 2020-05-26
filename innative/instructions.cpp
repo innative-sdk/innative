@@ -603,8 +603,7 @@ IN_ERROR Compiler::CompileMemGrow(varuint32 memory, const char* name)
 
 IN_ERROR Compiler::CompileMemCopy(varuint32 dst_mem, varuint32 src_mem)
 {
-  if(dst_mem >= memories.size() || src_mem >= memories.size())
-    return ERR_INVALID_MEMORY_INDEX;
+  assert(dst_mem < memories.size() || src_mem < memories.size());
 
   IN_ERROR err;
 
@@ -630,8 +629,7 @@ IN_ERROR Compiler::CompileMemCopy(varuint32 dst_mem, varuint32 src_mem)
 
 IN_ERROR innative::Compiler::CompileMemFill(varuint32 mem)
 {
-  if(mem >= memories.size())
-    return ERR_INVALID_MEMORY_INDEX;
+  assert(mem < memories.size());
 
   IN_ERROR err;
 
