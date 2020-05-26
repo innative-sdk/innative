@@ -203,6 +203,17 @@ enum WASM_INSTRUCTION_OPCODES
   OP_i64_reinterpret_f64 = 0xbd,
   OP_f32_reinterpret_i32 = 0xbe,
   OP_f64_reinterpret_i64 = 0xbf,
+
+  // Bulk Memory Operations
+  OP_bulk_memory_prefix = 0xfc,
+
+  OP_memory_init = 0x08,
+  OP_data_drop = 0x09,
+  OP_memory_copy = 0x0a,
+  OP_memory_fill = 0x0b,
+  OP_table_init = 0x0c,
+  OP_elem_drop = 0x0d,
+  OP_table_copy = 0x0e,
 };
 
 #ifdef __cplusplus

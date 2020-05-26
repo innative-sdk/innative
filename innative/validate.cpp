@@ -870,7 +870,44 @@ namespace innative {
     case OP_i32_reinterpret_f32: ValidateUnaryOp<TE_f32, TE_i32>(ins, values, env, m); break;
     case OP_i64_reinterpret_f64: ValidateUnaryOp<TE_f64, TE_i64>(ins, values, env, m); break;
     case OP_f32_reinterpret_i32: ValidateUnaryOp<TE_i32, TE_f32>(ins, values, env, m); break;
-    case OP_f64_reinterpret_i64: ValidateUnaryOp<TE_i64, TE_f64>(ins, values, env, m); break;
+    case OP_f64_reinterpret_i64:
+      ValidateUnaryOp<TE_i64, TE_f64>(ins, values, env, m);
+      break;
+
+      // Bulk memory operations
+    case OP_bulk_memory_prefix:
+      switch(ins.opcode[1])
+      {
+      case OP_memory_copy:
+      {
+        varuint32 dst_mem = ins.immediates[0]._varuint32;
+        varuint32 src_mem = ins.immediates[1]._varuint32;
+        if(!ModuleMemory(*m, dst_mem) || !ModuleMemory(*m, src_mem))
+          AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
+        if(dst_mem != 0 || src_mem != 0)
+          AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
+        ValidatePopType(ins, values, TE_i32, env, m);
+        ValidatePopType(ins, values, TE_i32, env, m);
+        ValidatePopType(ins, values, TE_i32, env, m);
+      }
+      case OP_memory_fill:
+      {
+        varuint32 mem = ins.immediates[0]._varuint32;
+        if(!ModuleMemory(*m, mem))
+          AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
+        if(mem != 0)
+          AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
+        ValidatePopType(ins, values, TE_i32, env, m);
+        ValidatePopType(ins, values, TE_i32, env, m);
+        ValidatePopType(ins, values, TE_i32, env, m);
+      }
+
+      default:
+        AppendError(env, env.errors, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "[%u] Unknown instruction code %hhu", ins.line,
+                    ins.opcode);
+      }
+      break;
+
     default:
       AppendError(env, env.errors, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "[%u] Unknown instruction code %hhu", ins.line,
                   ins.opcode);

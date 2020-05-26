@@ -111,6 +111,8 @@ namespace innative {
     llvmVal* GetMemSize(llvm::GlobalVariable* target);
     varuint32 GetFirstType(varuint32 type);
     llvmVal* GetMemPointer(llvmVal* base, llvm::PointerType* pointer_type, varuint7 memory, varuint32 offset);
+    llvmVal* GetMemPointerRegion(llvmVal* base, llvm::PointerType* pointer_type, llvmVal* byteLength, varuint32 memory,
+                                 varuint32 offset);
     IN_ERROR InsertTruncTrap(double max, double min, llvm::Type* ty);
     llvm::Value* GetLocal(varuint32 index);
     llvm::GlobalVariable* CreateGlobal(llvmTy* ty, bool isconst, bool external, llvm::StringRef name,
@@ -138,6 +140,8 @@ namespace innative {
     IN_ERROR CompileIndirectCall(varuint32 index);
     llvmVal* CompileMemSize(llvm::GlobalVariable* target);
     IN_ERROR CompileMemGrow(const char* name);
+    IN_ERROR CompileMemCopy(varuint32 dst_mem, varuint32 src_mem);
+    IN_ERROR CompileMemFill(varuint32 mem);
     void DumpCompilerState();
     IN_ERROR CompileInstruction(Instruction& ins);
     IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memlocal, FunctionDesc& desc,

@@ -382,7 +382,6 @@ void Compiler::PolymorphicStack()
   builder.SetInsertPoint(graveyard);
 }
 
-
 IN_ERROR Compiler::InsertConditionalTrap(llvmVal* cond)
 {
   // Define a failure block that all errors jump to via a conditional branch which simply traps
@@ -398,6 +397,15 @@ IN_ERROR Compiler::InsertConditionalTrap(llvmVal* cond)
 }
 
 llvmVal* Compiler::GetMemPointer(llvmVal* base, llvm::PointerType* pointer_type, varuint7 memory, varuint32 offset)
+{
+  llvm::IntegerType* ty = machine->getPointerSizeInBits(memory) == 32 ? builder.getInt32Ty() : builder.getInt64Ty();
+  llvmVal* elemSize     = CInt::get(ty, pointer_type->getPointerElementType()->getPrimitiveSizeInBits() / 8, false);
+
+  return GetMemPointerRegion(base, pointer_type, elemSize, memory, offset);
+}
+
+llvmVal* Compiler::GetMemPointerRegion(llvmVal* base, llvm::PointerType* pointer_type, llvmVal* byteLength,
+                                       varuint32 memory, varuint32 offset)
 {
   assert(memories.size() > 0);
   llvmVal* src          = !memory ? memlocal : static_cast<llvmVal*>(GetPairPtr(memories[memory], 0));
@@ -417,10 +425,9 @@ llvmVal* Compiler::GetMemPointer(llvmVal* base, llvm::PointerType* pointer_type,
 
     if(bypass) // If we can bypass the overflow check because we have enough bits, only check the upper bound
     {
-      loc = builder.CreateAdd(base, CInt::get(ty, offset, false), "", true, true);
-      auto upper =
-        builder.CreateAdd(loc, CInt::get(ty, pointer_type->getPointerElementType()->getPrimitiveSizeInBits() / 8, false));
-      cond = builder.CreateICmpUGT(upper, end, "invalid_mem_access_cond");
+      loc        = builder.CreateAdd(base, CInt::get(ty, offset, false), "", true, true);
+      auto upper = builder.CreateAdd(loc, byteLength);
+      cond       = builder.CreateICmpUGT(upper, end, "invalid_mem_access_cond");
     }
     else
     {
@@ -428,9 +435,7 @@ llvmVal* Compiler::GetMemPointer(llvmVal* base, llvm::PointerType* pointer_type,
       llvmVal* overflow = builder.CreateExtractValue(v, 1);
       loc               = builder.CreateExtractValue(v, 0);
 
-      v          = builder.CreateCall(uadd_with_overflow,
-                             { loc,
-                               CInt::get(ty, pointer_type->getPointerElementType()->getPrimitiveSizeInBits() / 8, false) });
+      v          = builder.CreateCall(uadd_with_overflow, { loc, byteLength });
       overflow   = builder.CreateOr(overflow, builder.CreateExtractValue(v, 1), "invalid_mem_access_cond_overflow");
       auto upper = builder.CreateExtractValue(v, 0);
       cond       = builder.CreateOr(overflow, builder.CreateICmpUGT(upper, end, "invalid_mem_access_cond_upper"),
@@ -527,7 +532,6 @@ llvm::Value* Compiler::GetLocal(varuint32 index)
     return nullptr;
   return builder.CreateInBoundsGEP(*i, { builder.getInt32(index) });
 }
-
 
 llvm::GlobalVariable* Compiler::CreateGlobal(llvmTy* ty, bool isconst, bool external, llvm::StringRef name,
                                              const llvm::Twine& canonical, size_t line, llvm::Constant* init = 0)

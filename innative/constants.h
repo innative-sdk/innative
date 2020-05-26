@@ -146,7 +146,7 @@ namespace innative {
       inline const char* operator[](const uint8_t (&x)[MAX_OPCODE_BYTES]) const { return Get(ToInt(x)); }
 
       kh_mapenum_s* MAP;
-      static constexpr std::array<std::pair<std::array<uint8_t, 2>, const char*>, 172> LIST = {
+      static constexpr std::array<std::pair<std::array<uint8_t, 2>, const char*>, 179> LIST = {
         // Control flow operators
         std::pair<std::array<uint8_t, 2>, const char*>{ { 0x00, 0x00 }, "unreachable" },
         { { 0x01, 0x00 }, "nop" },
@@ -347,6 +347,15 @@ namespace innative {
         { { 0xbd, 0x00 }, "i64.reinterpret_f64" },
         { { 0xbe, 0x00 }, "f32.reinterpret_i32" },
         { { 0xbf, 0x00 }, "f64.reinterpret_i64" },
+
+        // Bulk memory operations
+        { { 0xfc, 0x08 }, "memory.init" },
+        { { 0xfc, 0x09 }, "data.drop" },
+        { { 0xfc, 0x0a }, "memory.copy" },
+        { { 0xfc, 0x0b }, "memory.fill" },
+        { { 0xfc, 0x0c }, "table.init" },
+        { { 0xfc, 0x0d }, "elem.drop" },
+        { { 0xfc, 0x0e }, "table.copy" },
       };
       static const OP NAMES;
     };
