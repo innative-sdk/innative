@@ -586,7 +586,8 @@ IN_ERROR Compiler::CompileMemGrow(varuint32 memory, const char* name)
 
   builder.CreateCondBr(success, successblock, contblock);
   builder.SetInsertPoint(successblock); // Only set new memory if call succeeded
-  builder.CreateAlignedStore(call, GetPairPtr(memories[memory], 0), builder.getInt64Ty()->getPrimitiveSizeInBits() / 8, false);
+  builder.CreateAlignedStore(call, GetPairPtr(memories[memory], 0), builder.getInt64Ty()->getPrimitiveSizeInBits() / 8,
+                             false);
   builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[memory], 0)), memlocal, false);
   builder.CreateBr(contblock);
 
@@ -1238,14 +1239,15 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
   case OP_f64_reinterpret_i64:
     return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateBitCast,
                                                                        builder.getDoubleTy(), OP::NAMES[ins.opcode]);
+
+    // Bulk memory operations
   case OP_bulk_memory_prefix:
-    switch (ins.opcode[1])
+    switch(ins.opcode[1])
     {
     case OP_memory_copy: return CompileMemCopy(ins.immediates[0]._varuint32, ins.immediates[1]._varuint32);
     case OP_memory_fill: return CompileMemFill(ins.immediates[0]._varuint32);
     default: return ERR_FATAL_UNKNOWN_INSTRUCTION;
     }
-
 
     // Atomic
   case OP_atomic_prefix: return CompileAtomicInstruction(ins);

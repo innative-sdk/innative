@@ -479,12 +479,8 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_i64_reinterpret_f64:
   case OP_f32_reinterpret_i32:
   case OP_f64_reinterpret_i64: break;
-  
-  case OP_bulk_memory_prefix:
-  {
-  
-  }
 
+  case OP_bulk_memory_prefix: err = ParseBulkMemoryInstruction(s, ins, env); break;
   case OP_atomic_prefix: err = ParseAtomicInstruction(s, ins, env); break;
 
   default: err = ERR_FATAL_UNKNOWN_INSTRUCTION;
@@ -972,6 +968,34 @@ IN_ERROR innative::ParseExportFixup(Module& m, ValidationError*& errors, const E
   }
 
   return ERR_SUCCESS;
+}
+
+IN_ERROR innative::ParseBulkMemoryInstruction(utility::Stream& s, Instruction& ins, const Environment& env)
+{
+  IN_ERROR err;
+
+  err = ParseByte(s, ins.opcode[1]);
+  if(err < 0)
+    return err;
+
+  switch(ins.opcode[1])
+  {
+  case OP_memory_copy:
+    ins.immediates[0]._varuint32 = s.ReadVarUInt32(err);
+    if(err >= 0)
+      ins.immediates[1]._varuint32 = s.ReadVarUInt32(err);
+    break;
+
+  case OP_memory_fill:
+    ins.immediates[0]._varuint32 = s.ReadVarUInt32(err);
+    break;
+
+    // TODO: The rest of the bulk memory ops
+
+  default: err = ERR_FATAL_UNKNOWN_INSTRUCTION;
+  }
+
+  return err;
 }
 
 IN_ERROR innative::ParseAtomicInstruction(utility::Stream& s, Instruction& ins, const Environment& env)

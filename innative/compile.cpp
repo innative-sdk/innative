@@ -398,7 +398,7 @@ IN_ERROR Compiler::InsertConditionalTrap(llvmVal* cond)
 
 llvmVal* Compiler::GetMemPointer(llvmVal* base, llvm::PointerType* pointer_type, varuint32 memory, varuint32 offset)
 {
-  llvm::IntegerType* ty = machine->getPointerSizeInBits(memory) == 32 ? builder.getInt32Ty() : builder.getInt64Ty();
+  llvm::IntegerType* ty = machine->getPointerSizeInBits(0) == 32 ? builder.getInt32Ty() : builder.getInt64Ty();
   llvmVal* elemSize     = CInt::get(ty, pointer_type->getPointerElementType()->getPrimitiveSizeInBits() / 8, false);
 
   return GetMemPointerRegion(base, pointer_type, elemSize, memory, offset);
@@ -409,7 +409,7 @@ llvmVal* Compiler::GetMemPointerRegion(llvmVal* base, llvm::PointerType* pointer
 {
   assert(memories.size() > 0);
   llvmVal* src          = !memory ? memlocal : static_cast<llvmVal*>(GetPairPtr(memories[memory], 0));
-  llvm::IntegerType* ty = machine->getPointerSizeInBits(memory) == 32 ? builder.getInt32Ty() : builder.getInt64Ty();
+  llvm::IntegerType* ty = machine->getPointerSizeInBits(0) == 32 ? builder.getInt32Ty() : builder.getInt64Ty();
 
   // If our native integer size is larger than the webassembly memory pointer size, then overflow is not possible and we
   // can bypass the check.
