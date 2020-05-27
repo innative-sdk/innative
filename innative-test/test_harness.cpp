@@ -76,9 +76,11 @@ size_t TestHarness::Run(FILE* out)
 }
 
 int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), const char* system,
-                             std::function<int(Environment*)> preprocess)
+                             std::function<int(Environment*)> preprocess, const char* name)
 {
   Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);
+  if(!env)
+    return ERR_UNKNOWN_ENVIRONMENT_ERROR;
   env->flags       = ENV_ENABLE_WAT | ENV_LIBRARY;
   env->optimize    = ENV_OPTIMIZE_O3;
   env->features    = ENV_FEATURE_ALL;
@@ -96,37 +98,32 @@ int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), co
     if(int err = preprocess(env); err < 0)
       return err;
 
+  auto stem = file.stem().u8string();
   int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
-  if(err < 0)
-  {
-    (*_exports.DestroyEnvironment)(env);
-    return err;
-  }
+  if(err >= 0)
+    (*_exports.AddModule)(env, file.u8string().c_str(), 0, (!name ? stem.c_str() : name), &err);
 
-  (*_exports.AddModule)(env, file.u8string().c_str(), 0, file.stem().u8string().c_str(), &err);
-  if(err < 0)
-  {
-    (*_exports.DestroyEnvironment)(env);
-    return err;
-  }
+  if(err >= 0)
+    (*_exports.FinalizeEnvironment)(env);
 
-  (*_exports.FinalizeEnvironment)(env);
   path base = _folder / file.stem();
-  path out  = base;
-  out.replace_extension(IN_LIBRARY_EXTENSION);
+  _out      = base;
+  _out.replace_extension(IN_LIBRARY_EXTENSION);
 
-  err = (*_exports.Compile)(env, out.u8string().c_str());
+  if(err >= 0)
+    err = (*_exports.Compile)(env, _out.u8string().c_str());
+
   (*_exports.DestroyEnvironment)(env);
 
   if(err < 0)
     return err;
 
-  _garbage.push_back(out);
+  _garbage.push_back(_out);
 #ifdef IN_PLATFORM_WIN32
   base.replace_extension(".lib");
   _garbage.push_back(base);
 #endif
-  void* m = (*_exports.LoadAssembly)(out.u8string().c_str());
+  void* m = (*_exports.LoadAssembly)(_out.u8string().c_str());
   if(!m)
     return ERR_FATAL_INVALID_MODULE;
   if(fn)

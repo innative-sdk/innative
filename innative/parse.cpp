@@ -284,12 +284,10 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_f64_const: ins.immediates[0]._float64 = s.ReadFloat64(err); break;
   case OP_memory_grow:
   case OP_memory_size:
-    ins.immediates[0]._varuint1 = s.ReadVarUInt1(err);
-    if(err < 0 || ins.immediates[0]._varuint1 !=
-                    0) // We override any error here with ERR_INVALID_RESERVED_VALUE because that's what webassembly expects
+    ins.immediates[0]._varuint32 = s.ReadVarUInt32(err);
+    // We override any error here with ERR_INVALID_RESERVED_VALUE because that's what webassembly expects
+    if(err < 0 || (ins.immediates[0]._varuint1 != 0 && !(env.features & ENV_FEATURE_MULTI_MEMORY)))
       err = ERR_INVALID_RESERVED_VALUE;
-    // memidx
-    // ins.immediates[0]._varuint32 = s.ReadVarUInt32(err);
     break;
   case OP_br_table:
     err = Parse<varuint32>::template Array<&ParseVarUInt32>(s, ins.immediates[0].table, ins.immediates[0].n_table, env);
@@ -304,9 +302,8 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
     {
       ins.immediates[1]._varuint1 = s.ReadVarUInt1(err);
 
-      if(err < 0 ||
-         ins.immediates[1]._varuint1 !=
-           0) // We override any error here with ERR_INVALID_RESERVED_VALUE because that's what webassembly expects
+      // We override any error here with ERR_INVALID_RESERVED_VALUE because that's what webassembly expects
+      if(err < 0 || ins.immediates[1]._varuint1 != 0)
         err = ERR_INVALID_RESERVED_VALUE;
     }
 
@@ -347,6 +344,8 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
       ins.immediates[0]._varuint32 &= 0b111; // All valid alignments fit in 3 bits (log2 form)
       ins.immediates[2]._varuint32 = s.ReadVarUInt32(err);
     }
+    else
+      ins.immediates[2]._varuint32 = 0;
 
     break;
   case OP_unreachable:

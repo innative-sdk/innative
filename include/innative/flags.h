@@ -120,8 +120,13 @@ enum WASM_OPTIMIZE_FLAGS
 
 enum WASM_FEATURE_FLAGS
 {
-  ENV_FEATURE_MUTABLE_GLOBALS = (1 << 0), // https://github.com/WebAssembly/mutable-global
-  ENV_FEATURE_ALL             = ~0,
+  ENV_FEATURE_MUTABLE_GLOBALS          = (1 << 0), // https://github.com/WebAssembly/mutable-global
+  //ENV_FEATURE_MULTI_VALUE              = (1 << 1), // https://github.com/WebAssembly/multi-value
+  //ENV_FEATURE_SIGN_EXTENSION           = (1 << 2), // https://github.com/WebAssembly/nontrapping-float-to-int-conversions
+  //ENV_FEATURE_NON_TRAPPING_CONVERSIONS = (1 << 3), // https://github.com/WebAssembly/sign-extension-ops
+  ENV_FEATURE_MULTI_MEMORY             = (1 << 4), // https://github.com/WebAssembly/multi-memory
+  ENV_FEATURE_THREADS                  = (1 << 5) | ENV_FEATURE_MULTI_MEMORY, // https://github.com/WebAssembly/threads
+  ENV_FEATURE_ALL                      = ~0,
 };
 
 #ifdef __cplusplus

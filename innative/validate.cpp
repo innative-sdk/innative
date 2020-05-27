@@ -798,17 +798,17 @@ namespace innative {
     case OP_memory_size:
       if(!ModuleMemory(*m, ins.immediates[0]._varuint32))
         AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
-      // TODO: Remove this when we do multi-memory
-      if(ins.immediates[0]._varuint1 != 0)
-        AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
+      if(!(env.features & ENV_FEATURE_MULTI_MEMORY))
+        if(ins.immediates[0]._varuint32 != 0)
+          AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
       values.Push(TE_i32);
       break;
     case OP_memory_grow:
       if(!ModuleMemory(*m, ins.immediates[0]._varuint32))
         AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
-      // TODO: Remove this when we do multi-memory
-      if(ins.immediates[0]._varuint1 != 0)
-        AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
+      if(!(env.features & ENV_FEATURE_MULTI_MEMORY))
+        if(ins.immediates[0]._varuint32 != 0)
+          AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
       ValidatePopType(ins, values, TE_i32, env, m);
       values.Push(TE_i32);
       break;
