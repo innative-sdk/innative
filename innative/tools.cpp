@@ -92,6 +92,13 @@ void innative::LoadModule(Environment* env, size_t index, const void* data, size
 {
   Stream s = { reinterpret_cast<const uint8_t*>(data), size, 0 };
   std::string fallback;
+  bool force_c = false;
+  if(name != nullptr && !name[0])
+  {
+    force_c = true;
+    name    = nullptr;
+  }
+
   if(!name)
   {
     fallback = "m" + std::to_string(index);
@@ -106,6 +113,8 @@ void innative::LoadModule(Environment* env, size_t index, const void* data, size
   else
     *err = ParseModule(s, file, *env, env->modules[index], ByteArray::Identifier(name, strlen(name)), env->errors);
 
+  if(force_c)
+    env->modules[index].knownsections |= WASM_SECTION_C_LINKAGE;
   ((std::atomic<size_t>&)env->n_modules).fetch_add(1, std::memory_order_release);
 }
 
