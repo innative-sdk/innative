@@ -777,6 +777,9 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
     varuint32 payload = s.ReadVarUInt32(err);
     if(err < 0)
       break;
+    if(opcode == WASM_SECTION_START && (m.knownsections & (1 << opcode)))
+      return ERR_FATAL_MULTIPLE_START_SECTIONS;
+
     if(opcode != WASM_SECTION_CUSTOM) // Section order only applies to known sections
     {
       if(!ValidateSectionOrder(m.knownsections, opcode))
