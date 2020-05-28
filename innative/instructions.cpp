@@ -1271,7 +1271,7 @@ IN_ERROR Compiler::CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst
     memref = memlocal =
       builder.CreateAlloca(memories[0]->getType()->getElementType()->getContainedType(0), nullptr, "IN_!memlocal");
     builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[0], 0)), memlocal, false);
-    stacksize += (memlocal->getType()->getElementType()->getPrimitiveSizeInBits() / 8);
+    stacksize += (memref->getAllocationSizeInBits(mod->getDataLayout()).getValueOr(0) / 8);
   }
 
   debugger->PostFuncBody(fn, body);

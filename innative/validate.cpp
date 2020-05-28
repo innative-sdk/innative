@@ -1317,8 +1317,9 @@ void innative::ValidateModule(Environment& env, Module& m)
 
   if(ModuleTable(m, 1) != nullptr)
     AppendError(env, env.errors, &m, ERR_MULTIPLE_TABLES, "Cannot have more than 1 table defined.");
-  if(ModuleMemory(m, 1) != nullptr)
-    AppendError(env, env.errors, &m, ERR_MULTIPLE_MEMORIES, "Cannot have more than 1 memory defined.");
+  if(!(env.features & ENV_FEATURE_MULTI_MEMORY))
+    if(ModuleMemory(m, 1) != nullptr)
+      AppendError(env, env.errors, &m, ERR_MULTIPLE_MEMORIES, "Cannot have more than 1 memory defined.");
 
   if(m.knownsections & (1 << WASM_SECTION_TYPE))
     ValidateSection<FunctionType, &ValidateFunctionSig>(m.type.functypes, m.type.n_functypes, env, &m);
