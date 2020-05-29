@@ -66,6 +66,7 @@ namespace innative {
       { ERR_FATAL_UNKNOWN_INSTRUCTION, "ERR_FATAL_UNKNOWN_INSTRUCTION" },
       { ERR_FATAL_UNKNOWN_SECTION, "ERR_FATAL_UNKNOWN_SECTION" },
       { ERR_FATAL_SECTION_SIZE_MISMATCH, "ERR_FATAL_SECTION_SIZE_MISMATCH" },
+      { ERR_FATAL_FUNCTION_SIZE_MISMATCH, "ERR_FATAL_FUNCTION_SIZE_MISMATCH" },
       { ERR_FATAL_UNKNOWN_FUNCTION_SIGNATURE, "ERR_FATAL_UNKNOWN_FUNCTION_SIGNATURE" },
       { ERR_FATAL_UNKNOWN_TARGET, "ERR_FATAL_UNKNOWN_TARGET" },
       { ERR_FATAL_EXPECTED_END_INSTRUCTION, "ERR_FATAL_EXPECTED_END_INSTRUCTION" },
@@ -137,6 +138,7 @@ namespace innative {
       { ERR_MEMORY_MINIMUM_TOO_LARGE, "ERR_MEMORY_MINIMUM_TOO_LARGE" },
       { ERR_MEMORY_MAXIMUM_TOO_LARGE, "ERR_MEMORY_MAXIMUM_TOO_LARGE" },
       { ERR_SHARED_MEMORY_MAXIMUM_MISSING, "ERR_SHARED_MEMORY_MAXIMUM_MISSING" },
+      { ERR_SHARED_MEMORY_MISMATCH, "ERR_SHARED_MEMORY_MISMATCH" },
       { ERR_IF_ELSE_MISMATCH, "ERR_IF_ELSE_MISMATCH" },
       { ERR_END_MISMATCH, "ERR_END_MISMATCH" },
       { ERR_SIGNATURE_MISMATCH, "ERR_SIGNATURE_MISMATCH" },
@@ -235,7 +237,7 @@ namespace innative {
       { ERR_WAT_EXPECTED_OPERATOR, "unexpected token" },
       { ERR_WAT_UNEXPECTED_NAME, "unexpected token" },
       { ERR_PARSE_INVALID_FILE_LENGTH, "unexpected end" },
-      { ERR_FATAL_UNKNOWN_SECTION, "invalid section id" },
+      { ERR_FATAL_UNKNOWN_SECTION, "section size mismatch" },
       { ERR_FATAL_SECTION_SIZE_MISMATCH, "section size mismatch" },
       { ERR_FUNCTION_BODY_MISMATCH, "function and code section have inconsistent lengths" },
       { ERR_FATAL_DUPLICATE_EXPORT, "duplicate export name" },
@@ -280,6 +282,7 @@ namespace innative {
       { ERR_FATAL_MULTIPLE_START_SECTIONS, "multiple start sections" },
       { ERR_FATAL_INVALID_WASM_SECTION_ORDER, "section size mismatch" },
       { ERR_FATAL_EXPECTED_END_INSTRUCTION, "invalid value type" },
+      { ERR_SHARED_MEMORY_MISMATCH, "incompatible import type" },
     });
 
     const char* EnumToString(const kh_mapenum_s* h, int i, char* buf, size_t n)
