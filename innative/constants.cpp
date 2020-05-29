@@ -13,7 +13,7 @@ innative::utility::OP::OP() : MAP(kh_init_mapenum())
   int r;
   for(auto& e : LIST)
   {
-    auto iter                = kh_put_mapenum(MAP, ToInt(e.first), &r);
+    auto iter         = kh_put_mapenum(MAP, ToInt(e.first), &r);
     kh_val(MAP, iter) = e.second;
   }
 }
@@ -82,6 +82,7 @@ namespace innative {
       { ERR_FATAL_NO_OUTPUT_FILE, "ERR_FATAL_NO_OUTPUT_FILE" },
       { ERR_FATAL_NO_MODULES, "ERR_FATAL_NO_MODULES" },
       { ERR_FATAL_NO_START_FUNCTION, "ERR_FATAL_NO_START_FUNCTION" },
+      { ERR_FATAL_MULTIPLE_START_SECTIONS, "ERR_FATAL_MULTIPLE_START_SECTIONS" },
       { ERR_VALIDATION_ERROR, "ERR_VALIDATION_ERROR" },
       { ERR_INVALID_FUNCTION_SIG, "ERR_INVALID_FUNCTION_SIG" },
       { ERR_INVALID_FUNCTION_INDEX, "ERR_INVALID_FUNCTION_INDEX" },
@@ -178,6 +179,7 @@ namespace innative {
       { ERR_WAT_INVALID_VAR, "ERR_WAT_INVALID_VAR" },
       { ERR_WAT_INVALID_TYPE, "ERR_WAT_INVALID_TYPE" },
       { ERR_WAT_INVALID_LOCAL, "ERR_WAT_INVALID_LOCAL" },
+      { ERR_WAT_INVALID_MEMORY, "ERR_WAT_INVALID_MEMORY" },
       { ERR_WAT_UNKNOWN_TYPE, "ERR_WAT_UNKNOWN_TYPE" },
       { ERR_WAT_UNEXPECTED_NAME, "ERR_WAT_UNEXPECTED_NAME" },
       { ERR_WAT_TYPE_MISMATCH, "ERR_WAT_TYPE_MISMATCH" },
@@ -275,7 +277,9 @@ namespace innative {
       { ERR_INVALID_INITIALIZER, "constant expression required" },
       { ERR_EMPTY_IMPORT, "unknown import" },
       { ERR_WAT_PARAM_AFTER_RESULT, "unexpected token" },
-
+      { ERR_FATAL_MULTIPLE_START_SECTIONS, "multiple start sections" },
+      { ERR_FATAL_INVALID_WASM_SECTION_ORDER, "section size mismatch" },
+      { ERR_FATAL_EXPECTED_END_INSTRUCTION, "invalid value type" },
     });
 
     const char* EnumToString(const kh_mapenum_s* h, int i, char* buf, size_t n)

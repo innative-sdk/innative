@@ -77,7 +77,6 @@ namespace innative {
                                        "end",
                                        "shared",
                                        "unshared",
-                                       "memidx",
                                        "binary", // script expressions
                                        "quote",
                                        "register",
@@ -147,7 +146,7 @@ namespace innative {
       if(s >= end)
         return end;
 
-      // AFAICT this should only be lowercase? but it's a special case value for the spec tests so it's unclear
+      // At the moment this should only be lowercase
       if(!strncmp(":canonical", s, std::min((size_t)(end - s), (size_t)10)))
       {
         //if(target)
@@ -435,7 +434,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
         IncToken(s, end, line, column);
       }
 
-      WatToken t = { WatTokens::STRING, begin, line };
+      WatToken t = { WatTokens::STRING, begin, line, column };
       t.len      = s - begin;
       tokens.Push(t);
 
@@ -445,7 +444,7 @@ void innative::TokenizeWAT(Queue<WatToken>& tokens, const char* s, const char* e
     }
     case '$': // A name
     {
-      WatToken t = { WatTokens::NAME, s + 1, line };
+      WatToken t = { WatTokens::NAME, s + 1, line, column };
 
       // We avoid using a regex here because extremely long names are still technically valid but can overwhelm the standard
       // C++ regex evaluator

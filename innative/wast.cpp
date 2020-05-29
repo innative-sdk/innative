@@ -2,7 +2,6 @@
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "wast.h"
-#include "validate.h"
 #include "link.h"
 #include "tools.h"
 #include "queue.h"
@@ -56,6 +55,7 @@ namespace innative {
       { "import after table", "invalid import order" },
       { "import after memory", "invalid import order" },
       { "result before parameter", "unexpected token" },
+      { "unexpected end of section or function", "unexpected end" },
     });
 
     size_t GetWastMapping(kh_indexname_t* mapping, const WatToken& t);
@@ -269,7 +269,7 @@ int wat::SetTempName(Environment& env, Module& m)
 
 int wat::ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module& m, const path& file)
 {
-  EXPECTED(tokens, WatTokens::MODULE, ERR_WAT_EXPECTED_MODULE);
+  EXPECTED(env, tokens, WatTokens::MODULE, ERR_WAT_EXPECTED_MODULE);
   int err;
   WatToken name = { WatTokens::NONE };
   m             = { 0 }; // We have to ensure this is zeroed, because an error could occur before ParseModule is called
@@ -285,7 +285,7 @@ int wat::ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname
       name.len = tempname.size();
     }
 
-    EXPECTED(tokens, WatTokens::BINARY, ERR_WAT_EXPECTED_BINARY);
+    EXPECTED(env, tokens, WatTokens::BINARY, ERR_WAT_EXPECTED_BINARY);
     ByteArray binary;
     while(tokens.Peek().id == WatTokens::STRING)
       if(err = WatParser::WatString(env, binary, tokens.Pop()))
@@ -306,7 +306,7 @@ int wat::ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname
       name.len = tempname.size();
     }
 
-    EXPECTED(tokens, WatTokens::QUOTE, ERR_WAT_EXPECTED_QUOTE);
+    EXPECTED(env, tokens, WatTokens::QUOTE, ERR_WAT_EXPECTED_QUOTE);
     ByteArray quote;
     while(tokens.Peek().id == WatTokens::STRING)
       if(err = WatParser::WatString(env, quote, tokens.Pop()))
@@ -485,10 +485,10 @@ int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname
     {
       WatParser st(env, *m);
       params.emplace_back();
-      EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+      EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
       if(err = st.ParseInitializer(tokens, params.back()))
         return err;
-      EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
     }
 
     if(params.size() != ftype->n_params)
@@ -730,7 +730,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
 
   while(tokens.Size() > 0 && tokens[0].id != WatTokens::CLOSE)
   {
-    EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+    EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
     switch(tokens[0].id)
     {
     case WatTokens::MODULE:
@@ -803,7 +803,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       if(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN &&
          tokens[1].id == WatTokens::MODULE) // Check if we're actually trapping on a module load
       {
-        EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+        EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
         env.modules = trealloc<Module>(
           env.modules,
           ++env.n_modules); // We temporarily add this module to the environment, but don't set the "last" module to it
@@ -811,25 +811,25 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
           return ERR_FATAL_OUT_OF_MEMORY;
         if(err = ParseWastModule(env, tokens, mapping, env.modules[env.n_modules - 1], file))
           return err;
-        EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
+        EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
         err = CompileWast(env, GenUniquePath(targetpath, counter), cache, cachepath);
         --env.n_modules; // Remove the module from the environment to avoid poisoning other compilations
         if(err != ERR_RUNTIME_TRAP)
           AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded",
                       WatLineNumber(start, t.pos));
-        EXPECTED(tokens, WatTokens::STRING, ERR_WAT_EXPECTED_STRING);
+        EXPECTED(env, tokens, WatTokens::STRING, ERR_WAT_EXPECTED_STRING);
       }
       else
       {
-        EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+        EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
         WastResult result;
         err = ParseWastAction(env, tokens, mapping, last, cache, cachepath, counter, targetpath, result);
         if(err != ERR_RUNTIME_TRAP)
           AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded",
                       WatLineNumber(start, t.pos));
-        EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
-        EXPECTED(tokens, WatTokens::STRING, ERR_WAT_EXPECTED_STRING);
+        EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
+        EXPECTED(env, tokens, WatTokens::STRING, ERR_WAT_EXPECTED_STRING);
       }
       break;
     }
@@ -838,7 +838,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     case WatTokens::ASSERT_RETURN_ARITHMETIC_NAN:
     {
       WatToken t = tokens.Pop();
-      EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+      EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
       WastResult result = { TE_NONE };
       if(err = ParseWastAction(env, tokens, mapping, last, cache, cachepath, counter, targetpath, result))
       {
@@ -848,7 +848,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
         AppendError(env, errors, last, err, "[%zu] Runtime error %s while attempting to verify result.",
                     WatLineNumber(start, t.pos), EnumToString(ERR_ENUM_MAP, err, buf, 10));
       }
-      EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
       Instruction value = {};
       WatParser state(env, *last);
       bool specialNan = false;
@@ -861,12 +861,12 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
           value.opcode[0] = OP_nop;
         else
         {
-          EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+          EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
           if(CheckSpecialNaN(tokens, value, nanCanonical))
             specialNan = true;
           else if(err = state.ParseInitializer(tokens, value))
             return err;
-          EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
+          EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
         }
 
         char typebuf[10];
@@ -956,10 +956,10 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     case WatTokens::ASSERT_MALFORMED:
     {
       WatToken t = tokens.Pop();
-      EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+      EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
       Module m;
       int code = ParseWastModule(env, tokens, mapping, m, file);
-      EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
       ByteArray error;
       if(err = WatParser::WatString(env, error, tokens.Pop()))
@@ -977,10 +977,10 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     case WatTokens::ASSERT_UNLINKABLE:
     {
       WatToken t = tokens.Pop();
-      EXPECTED(tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
+      EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
       Module m;
       int code = ParseWastModule(env, tokens, mapping, m, file);
-      EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
       string assertcode = GetAssertionString(code);
 
@@ -1023,7 +1023,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     {
       assert(false);
       WatSkipSection(tokens);
-      EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
+      EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
       break;
     }
     default:
@@ -1047,7 +1047,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     }
     }
 
-    EXPECTED(tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
 
   // If cache is null we must ensure we've at least tried to compile the test even if there's nothing to run.

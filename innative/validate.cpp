@@ -798,17 +798,17 @@ namespace innative {
     case OP_memory_size:
       if(!ModuleMemory(*m, ins.immediates[0]._varuint32))
         AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
-      // TODO: Remove this when we do multi-memory
-      if(ins.immediates[0]._varuint1 != 0)
-        AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
+      if(!(env.features & ENV_FEATURE_MULTI_MEMORY))
+        if(ins.immediates[0]._varuint32 != 0)
+          AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
       values.Push(TE_i32);
       break;
     case OP_memory_grow:
       if(!ModuleMemory(*m, ins.immediates[0]._varuint32))
         AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
-      // TODO: Remove this when we do multi-memory
-      if(ins.immediates[0]._varuint1 != 0)
-        AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
+      if(!(env.features & ENV_FEATURE_MULTI_MEMORY))
+        if(ins.immediates[0]._varuint32 != 0)
+          AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "[%u] reserved must be 0.", ins.line);
       ValidatePopType(ins, values, TE_i32, env, m);
       values.Push(TE_i32);
       break;
@@ -1355,8 +1355,9 @@ void innative::ValidateModule(Environment& env, Module& m)
 
   if(ModuleTable(m, 1) != nullptr)
     AppendError(env, env.errors, &m, ERR_MULTIPLE_TABLES, "Cannot have more than 1 table defined.");
-  if(ModuleMemory(m, 1) != nullptr)
-    AppendError(env, env.errors, &m, ERR_MULTIPLE_MEMORIES, "Cannot have more than 1 memory defined.");
+  if(!(env.features & ENV_FEATURE_MULTI_MEMORY))
+    if(ModuleMemory(m, 1) != nullptr)
+      AppendError(env, env.errors, &m, ERR_MULTIPLE_MEMORIES, "Cannot have more than 1 memory defined.");
 
   if(m.knownsections & (1 << WASM_SECTION_TYPE))
     ValidateSection<FunctionType, &ValidateFunctionSig>(m.type.functypes, m.type.n_functypes, env, &m);
