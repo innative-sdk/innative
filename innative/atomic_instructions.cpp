@@ -22,7 +22,7 @@ IN_ERROR Compiler::InsertAlignmentTrap(llvmVal* ptr, varuint32 memory, varuint32
     return ERR_SUCCESS;
 
   auto alignment = 1Ui64 << memflags;
-  auto sizet     = builder.getIntNTy(machine->getPointerSizeInBits(memory));
+  auto sizet     = builder.getIntNTy(machine->getPointerSizeInBits(0));
   auto ptrtoint  = builder.CreatePtrToInt(ptr, sizet);
   auto zero      = CInt::get(sizet, 0);
   auto mask      = CInt::get(sizet, alignment - 1);

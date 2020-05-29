@@ -78,6 +78,10 @@ namespace innative {
     llvm::Function* exit;
     llvm::Function* start;
     llvm::Function* memgrow;
+    llvm::Function* memcpy;
+    llvm::Function* memmove;
+    llvm::Function* memset;
+    llvm::Function* memcmp;
     llvm::Function* atomic_notify;
     llvm::Function* atomic_wait32;
     llvm::Function* atomic_wait64;

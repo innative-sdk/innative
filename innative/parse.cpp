@@ -980,17 +980,18 @@ IN_ERROR innative::ParseBulkMemoryInstruction(utility::Stream& s, Instruction& i
 
   switch(ins.opcode[1])
   {
+  case OP_memory_init:
   case OP_memory_copy:
+  case OP_table_init:
+  case OP_table_copy:
     ins.immediates[0]._varuint32 = s.ReadVarUInt32(err);
     if(err >= 0)
       ins.immediates[1]._varuint32 = s.ReadVarUInt32(err);
     break;
 
+  case OP_data_drop:
   case OP_memory_fill:
-    ins.immediates[0]._varuint32 = s.ReadVarUInt32(err);
-    break;
-
-    // TODO: The rest of the bulk memory ops
+  case OP_elem_drop: ins.immediates[0]._varuint32 = s.ReadVarUInt32(err); break;
 
   default: err = ERR_FATAL_UNKNOWN_INSTRUCTION;
   }
