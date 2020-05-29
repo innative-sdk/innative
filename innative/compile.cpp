@@ -655,9 +655,27 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
                                Func::ExternalLinkage, "_innative_internal_env_atomic_wait64", mod);
   atomic_wait64->setCallingConv(llvm::CallingConv::C);
 
-  Func* fn_memcpy = Func::Create(
-    FuncTy::get(builder.getVoidTy(), { builder.getInt8PtrTy(0), builder.getInt8PtrTy(0), builder.getInt64Ty() }, false),
-    Func::ExternalLinkage, "_innative_internal_env_memcpy", mod);
+  memcpy = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
+                                    { builder.getInt8PtrTy(0), builder.getInt8PtrTy(0), builder.getInt64Ty() }, false),
+                        Func::ExternalLinkage, "_innative_internal_env_memcpy", mod);
+
+  memmove = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
+                                     { builder.getInt8PtrTy(), builder.getInt8PtrTy(),
+                                       builder.getIntNTy(machine->getPointerSizeInBits(0)) },
+                                     false),
+                         Func::ExternalLinkage, "_innative_internal_env_memmove", mod);
+
+  memset = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
+                                    { builder.getInt8PtrTy(), builder.getInt32Ty(),
+                                      builder.getIntNTy(machine->getPointerSizeInBits(0)) },
+                                    false),
+                        Func::ExternalLinkage, "_innative_internal_env_memset", mod);
+
+  memcmp = Func::Create(FuncTy::get(builder.getInt32Ty(),
+                                    { builder.getInt8PtrTy(), builder.getInt32Ty(),
+                                      builder.getIntNTy(machine->getPointerSizeInBits(0)) },
+                                    false),
+                        Func::ExternalLinkage, "_innative_internal_env_memcmp", mod);
 
   Func* fn_memfree =
     Func::Create(FuncTy::get(builder.getVoidTy(), { builder.getInt8PtrTy(0), builder.getInt64Ty() }, false),
@@ -909,12 +927,10 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
       return err;
 
     // Then we create a memcpy call that copies this data to the appropriate location in the init function
-    builder
-      .CreateCall(fn_memcpy,
-                  { builder.CreateInBoundsGEP(builder.CreateLoad(GetPairPtr(memories[d.index], 0)), offset),
-                    builder.CreateInBoundsGEP(data->getType(), val, { builder.getInt32(0), builder.getInt32(0) }),
-                    builder.getInt64(GetTotalSize(data->getType())) })
-      ->setCallingConv(fn_memcpy->getCallingConv());
+    auto dst = builder.CreateInBoundsGEP(builder.CreateLoad(GetPairPtr(memories[d.index], 0)), offset);
+    auto src = builder.CreateInBoundsGEP(data->getType(), val, { builder.getInt32(0), builder.getInt32(0) });
+    auto sz  = builder.getInt64(GetTotalSize(data->getType()));
+    builder.CreateMemCpy(dst, llvm::None, src, llvm::None, sz);
   }
 
   // Process element section by appending to the init function
@@ -1325,6 +1341,39 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   }
 
   builder.CreateRetVoid();
+
+  // Create memcpy function to satisfy the rtlibcalls
+  Func* memcpy = Func::Create(mainctx.memcpy->getFunctionType(), Func::WeakAnyLinkage, "memcpy", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", memcpy));
+  mainctx.debugger->FunctionDebugInfo(memcpy, "memcpy", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(builder, memcpy->getSubprogram());
+  CallInst* inner_memcpy = builder.CreateCall(mainctx.memcpy, { memcpy->getArg(0), memcpy->getArg(1), memcpy->getArg(2) });
+  builder.CreateRet(inner_memcpy);
+
+  // Create memmove function to satisfy the rtlibcalls
+  Func* memmove = Func::Create(mainctx.memmove->getFunctionType(), Func::WeakAnyLinkage, "memmove", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", memmove));
+  mainctx.debugger->FunctionDebugInfo(memmove, "memmove", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(builder, memmove->getSubprogram());
+  CallInst* inner_memmove =
+    builder.CreateCall(mainctx.memmove, { memmove->getArg(0), memmove->getArg(1), memmove->getArg(2) });
+  builder.CreateRet(inner_memmove);
+
+  // Create memset function to satisfy the rtlibcalls
+  Func* memset = Func::Create(mainctx.memset->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memset", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", memset));
+  mainctx.debugger->FunctionDebugInfo(memset, "memset", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(builder, memset->getSubprogram());
+  CallInst* inner_memset = builder.CreateCall(mainctx.memset, { memset->getArg(0), memset->getArg(1), memset->getArg(2) });
+  builder.CreateRet(inner_memset);
+
+  // Create memcmp function to satisfy the rtlibcalls
+  Func* memcmp = Func::Create(mainctx.memcmp->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memcmp", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", memcmp));
+  mainctx.debugger->FunctionDebugInfo(memcmp, "memcmp", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(builder, memcmp->getSubprogram());
+  CallInst* inner_memcmp = builder.CreateCall(mainctx.memcmp, { memcmp->getArg(0), memcmp->getArg(1), memcmp->getArg(2) });
+  builder.CreateRet(inner_memcmp);
 
   // Create main function that calls all init functions for all modules and all start functions
   Func* main = Compiler::TopLevelFunction(*env->context, builder, IN_INIT_FUNCTION, nullptr);

@@ -622,6 +622,10 @@ IN_ERROR Compiler::CompileMemCopy(varuint32 dst_mem, varuint32 src_mem)
   llvmVal* dst = GetMemPointerRegion(dst_base, builder.getInt8PtrTy(), mem_size, dst_mem, 0);
   llvmVal* src = GetMemPointerRegion(src_base, builder.getInt8PtrTy(), mem_size, src_mem, 0);
 
+  auto sizet = builder.getIntNTy(machine->getPointerSizeInBits(0));
+  if(machine->getPointerSizeInBits(0) != mem_size->getType()->getPrimitiveSizeInBits())
+    mem_size = builder.CreateZExtOrTrunc(mem_size, sizet);
+
   builder.CreateMemMove(dst, llvm::None, src, llvm::None, mem_size);
 
   return ERR_SUCCESS;
@@ -644,6 +648,10 @@ IN_ERROR innative::Compiler::CompileMemFill(varuint32 mem)
   llvmVal* dst_base;
   if(err = PopType(TE_i32, dst_base))
     return err;
+
+  auto sizet = builder.getIntNTy(machine->getPointerSizeInBits(0));
+  if(machine->getPointerSizeInBits(0) != mem_size->getType()->getPrimitiveSizeInBits())
+    mem_size = builder.CreateZExtOrTrunc(mem_size, sizet);
 
   value        = builder.CreateTrunc(value, builder.getInt8Ty()); // Value must be truncated to i8
   llvmVal* dst = GetMemPointerRegion(dst_base, builder.getInt8PtrTy(), mem_size, mem, 0);

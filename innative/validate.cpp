@@ -975,6 +975,7 @@ namespace innative {
         ValidatePopType(ins, values, TE_i32, env, m);
         ValidatePopType(ins, values, TE_i32, env, m);
         ValidatePopType(ins, values, TE_i32, env, m);
+        break;
       }
       case OP_memory_fill:
       {
@@ -986,6 +987,7 @@ namespace innative {
         ValidatePopType(ins, values, TE_i32, env, m);
         ValidatePopType(ins, values, TE_i32, env, m);
         ValidatePopType(ins, values, TE_i32, env, m);
+        break;
       }
 
       // TODO: The rest of the bulk memory ops

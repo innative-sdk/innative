@@ -66,6 +66,25 @@ enum WASM_LIMIT_FLAGS
   WASM_LIMIT_SHARED      = 0x02,
 };
 
+// Flags for data segments
+enum WASM_DATA_FLAGS
+{
+  WASM_DATA_PASSIVE = 0x01,
+  WASM_DATA_HAS_INDEX = 0x02,
+
+  WASM_DATA_INVALID_FLAGS = ~0x03,
+};
+
+enum WASM_ELEM_FLAGS
+{
+  WASM_ELEM_PASSIVE = 0x01,
+  WASM_ELEM_ACTIVE_HAS_INDEX = 0x02,
+  WASM_ELEM_PASSIVE_DECLARED = 0x02,
+  WASM_ELEM_CARRIES_ELEMEXPRS = 0x03,
+
+  WASM_ELEM_INVALID_FLAGS = ~0x07,
+};
+
 // Known webassembly section opcodes
 enum WASM_SECTION_OPCODE
 {
@@ -260,10 +279,15 @@ typedef struct IN_WASM_EXPORT
 // Encodes initialization data for a table
 typedef struct IN_WASM_TABLE_INIT
 {
+  varuint32 flags;
   varuint32 index;
   Instruction offset;
   varuint32 n_elements;
-  varuint32* elements;
+  union
+  {
+    varuint32* elements;
+    Instruction* elemexprs;
+  };
 } TableInit;
 
 // Stores a local declaration, which includes the count and debug information.
@@ -290,6 +314,7 @@ typedef struct IN_WASM_FUNCTION_BODY
 // Encodes initialization data for a data section
 typedef struct IN_WASM_DATA_INIT
 {
+  varuint32 flags;
   varuint32 index;
   Instruction offset;
   ByteArray data;
