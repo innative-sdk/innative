@@ -6,6 +6,7 @@
 
 #include "lexer.h"
 #include "stack.h"
+#include "validate.h"
 
 namespace innative {
   namespace wat {
@@ -26,13 +27,14 @@ namespace innative {
     ~WatParser();
     varuint32 GetJump(WatToken var);
     int ParseInitializer(Queue<WatToken>& tokens, Instruction& op);
-    int ParseFunctionType(Queue<WatToken>& tokens, varuint32* index);
-    static int ParseFunctionTypeInner(const Environment& env, Queue<WatToken>& tokens, FunctionType& sig, DebugInfo** info,
+    int ParseFunctionType(Queue<WatToken>& tokens, WatToken token);
+    static int ParseFunctionTypeInner(Environment& env, Queue<WatToken>& tokens, FunctionType& sig, DebugInfo** info,
                                       varuint32* n_info, bool anonymous);
     varuint32 GetFromHash(wat::kh_indexname_t* hash, const WatToken& t);
     int MergeFunctionType(const FunctionType& ftype, varuint32& out);
     int ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo** info, varuint32* n_info, bool anonymous);
     varuint32 GetLocal(FunctionBody& f, FunctionDesc& desc, varuint32 n_param, const WatToken& t);
+    varuint32 GetMemory(const WatToken& t);
     int ParseConstantOperator(Queue<WatToken>& tokens, Instruction& op);
     int ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionBody& f, FunctionDesc& desc, FunctionType& sig,
                       DeferWatAction& defer);
@@ -44,31 +46,30 @@ namespace innative {
     int ParseFunction(Queue<WatToken>& tokens, varuint32* index, utility::StringSpan name);
     int ParseResizableLimits(ResizableLimits& limits, Queue<WatToken>& tokens);
     int ParseTableDesc(TableDesc& t, Queue<WatToken>& tokens);
-    int ParseTable(Queue<WatToken>& tokens, varuint32* index);
+    int ParseTable(Queue<WatToken>& tokens, WatToken token);
     int ParseInitializerInstruction(Queue<WatToken>& tokens, Instruction& op, bool expr);
-    static int ParseGlobalDesc(GlobalDesc& g, Queue<WatToken>& tokens);
-    int ParseGlobal(Queue<WatToken>& tokens, varuint32* index);
+    int ParseGlobalDesc(GlobalDesc& g, Queue<WatToken>& tokens);
+    int ParseGlobal(Queue<WatToken>& tokens, WatToken token);
     int ParseMemoryDesc(MemoryDesc& m, Queue<WatToken>& tokens);
-    int ParseMemory(Queue<WatToken>& tokens, varuint32* index);
+    int ParseMemory(Queue<WatToken>& tokens, WatToken token);
     int ParseImport(Queue<WatToken>& tokens);
     int ParseExport(Queue<WatToken>& tokens);
     int ParseElemData(Queue<WatToken>& tokens, varuint32& index, Instruction& op, wat::kh_indexname_t* hash);
     int ParseElem(TableInit& e, Queue<WatToken>& tokens);
     int ParseData(Queue<WatToken>& tokens);
     int AppendImport(Module& m, const Import& i, varuint32* index);
-    int InlineImportExport(const Environment& env, Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind,
-                           Import** out);
+    int InlineImportExport(Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out);
+    int ParseBlockType(Queue<WatToken>& tokens, varsint7& out);
 
-    static int ParseBlockType(Queue<WatToken>& tokens, varsint7& out);
     static int ParseModule(Environment& env, Module& m, const char* file, Queue<WatToken>& tokens, utility::StringSpan name,
                            WatToken& internalname);
-    static int ParseName(const Environment& env, ByteArray& name, const WatToken& t);
-    static int AddWatValType(const Environment& env, WatTokens id, varsint7*& a, varuint32& n);
+    static int ParseName(Environment& env, ByteArray& name, const WatToken& t);
+    static int AddWatValType(Environment& env, WatTokens id, varsint7*& a, varuint32& n);
     static int WatString(const Environment& env, ByteArray& str, utility::StringSpan t);
     static void WriteUTF32(uint32_t ch, ByteArray& str, varuint32& index);
     static varsint7 WatValType(WatTokens id);
     static int ParseLocalAppend(const Environment& env, FunctionLocal& local, FunctionBody& body, Queue<WatToken>& tokens);
-    static int AddName(wat::kh_indexname_t* h, WatToken t, varuint32 index);
+    static int AddName(wat::kh_indexname_t* h, WatToken t, varuint32 index, DebugInfo* info);
 
     IN_FORCEINLINE static int WatString(const Environment& env, ByteArray& str, const WatToken& t)
     {
@@ -91,18 +92,10 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    template<int (WatParser::*F)(Queue<WatToken>&, varuint32*)>
-    inline int ParseIndexProcess(Queue<WatToken>& tokens, wat::kh_indexname_t* hash)
+    template<int (WatParser::*F)(Queue<WatToken>&, WatToken)>
+    inline int ParseIndexProcess(Queue<WatToken>& tokens)
     {
-      WatToken t = GetWatNameToken(tokens);
-
-      int err;
-      varuint32 index = (varuint32)~0;
-      if(err = (this->*F)(tokens, &index))
-        return err;
-      assert(index != (varuint32)~0);
-
-      return AddName(hash, t, index);
+      return (this->*F)(tokens, GetWatNameToken(tokens));
     }
 
     template<typename T, int (*FN)(const WatToken&, std::string&, T&)> inline T ResolveInlineToken(const WatToken& token)
@@ -124,9 +117,21 @@ namespace innative {
     std::string numbuf;
   };
 
-#define EXPECTED(t, e, err)                  \
-  if((t).Size() == 0 || (t).Pop().id != (e)) \
-  return (err)
+  inline int WatAppendError(Environment& env, const WatToken& t, int err)
+  {
+    AppendError(env, env.errors, 0, err, "Unexpected %hu at [%u:%u]", t.id, t.line, t.column);
+    return err;
+  }
+
+#define EXPECTED(env, t, e, err)               \
+  if((t).Size() == 0)                          \
+    return (err);                              \
+  else                                         \
+  {                                            \
+    auto ztoken = (t).Pop();                   \
+    if(ztoken.id != (e))                       \
+      return WatAppendError(env, ztoken, err); \
+  }
 
   int ParseWatModule(Environment& env, const char* file, Module& m, const uint8_t* data, size_t sz,
                      utility::StringSpan name);

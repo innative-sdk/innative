@@ -1155,7 +1155,8 @@ void Compiler::ResolveModuleExports(const Environment* env, Module* root, llvm::
     Export* e = &m->exportsection.exports[j];
 
     // Calculate the canonical name we wish to export as using the initial export object
-    auto canonical = CanonicalName(StringSpan::From(m->name), StringSpan::From(e->name));
+    auto mname     = (m->knownsections & WASM_SECTION_C_LINKAGE) ? StringSpan{ 0, 0 } : StringSpan::From(m->name);
+    auto canonical = CanonicalName(mname, StringSpan::From(e->name));
 
     // Resolve the export/module pair to the concrete source
     for(;;)

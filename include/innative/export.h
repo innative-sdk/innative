@@ -88,7 +88,7 @@ typedef struct IN__MODULE_METADATA
 // Contains pointers to the actual runtime functions
 typedef struct IN__EXPORTS
 {
-  /// Creates an environment with default settings, which must be destroyed using DestroyEnvironment
+  /// Creates an environment with default settings, which must be destroyed using DestroyEnvironment.
   /// \param modules The number of modules that are expected to be added to the environment - can just be an estimate.
   /// \param maxthreads The maximum number of threads to use for multithreading. 0 defaults to logical cores.
   /// \param arg0 the first argument sent to the program. Used to determine binary location on POSIX systems.
@@ -101,7 +101,8 @@ typedef struct IN__EXPORTS
   /// pointing to a file that contains the module.
   /// \param size The length of the memory that the data pointer points to, or zero if the data pointer is actually a UTF8
   /// encoded null terminated string.
-  /// \param name A name to use for the module. If the module data does not contain a name, this will be used.
+  /// \param name A name to use for the module. If the module data does not contain a name, this will be used. If this is
+  /// set to an empty string, a unique name is generated for the module and the functions are exported using C linkage.
   /// \param err A pointer to an integer that receives an error code should the function fail. Not valid until
   /// FinalizeEnvironment() is called.
   void (*AddModule)(Environment* env, const void* data, size_t size, const char* name, int* err);
@@ -266,7 +267,7 @@ typedef struct IN__EXPORTS
 
   /// Serializes the given source map to JSON and saves it at path.
   /// \param map A pointer to the source map that should be serialized.
-  /// \param path A null-terminated UTF8 string pointing to the file location where the source map should be saved
+  /// \param path A null-terminated UTF8 string pointing to the file location where the source map should be saved.
   enum IN_ERROR (*SerializeSourceMap)(const SourceMap* map, const char* path);
 
   /// Inserts a new, zero'd element into the given module section at the specified index. It is up to the caller to

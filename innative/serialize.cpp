@@ -240,7 +240,6 @@ void Serializer::TokenizeInstruction(Instruction& ins, const FunctionBody* body,
 
     if (ins.immediates[2]._varuint32 != 0)
     {
-      tokens.Push(WatToken{ WatTokens::MEMIDX });
       tokens.Push(WatToken{ WatTokens::INTEGER, 0, 0, 0, (int64_t)ins.immediates[2]._varuint32 });
     }
 

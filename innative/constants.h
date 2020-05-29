@@ -126,6 +126,7 @@ namespace innative {
 
     static const unsigned int WASM_MAGIC_COOKIE  = INNATIVE_WASM_MAGIC_COOKIE;
     static const unsigned int WASM_MAGIC_VERSION = INNATIVE_WASM_MAGIC_VERSION;
+    static const unsigned int WASM_SECTION_C_LINKAGE = (1 << 31); // magical internal section flag telling us to force c linkage
     static const size_t VLQ_CONTINUATION_BIT     = 0b100000;
 
     struct OP

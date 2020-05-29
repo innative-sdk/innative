@@ -45,7 +45,6 @@ namespace innative {
     END,
     SHARED,
     UNSHARED,
-    MEMIDX,
     BINARY, // Script extension tokens
     QUOTE,
     REGISTER,
