@@ -490,20 +490,53 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
 
 IN_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const Environment& env)
 {
-  IN_ERROR err = ParseVarUInt32(s, init.index);
+  IN_ERROR err = ParseVarUInt32(s, init.flags);
 
-  if(err >= 0)
+  // Only parse index if active (not passive) and has index
+  if(err >= 0 && !(init.flags & WASM_ELEM_PASSIVE) && (init.flags & WASM_ELEM_ACTIVE_HAS_INDEX))
+    err = ParseVarUInt32(s, init.index);
+  else
+    init.index = 0;
+
+  // Only parse if active (not passive)
+  if(err >= 0 && !(init.flags & WASM_ELEM_PASSIVE))
     err = ParseInitializer(s, init.offset, env);
 
-  if(err >= 0)
+  // To simplify the rest of this mess, return any errors so far now
+  if(err < 0)
+    return err;
+
+  // Parse the elem_type / extern_kind
+  bool legacyActive = (init.flags & 0b11) == 0;
+  if(!legacyActive)
+  {
+    if((err = ParseVarSInt7(s, init.elem_type)) < 0)
+      return err;
+  }
+  else
+  {
+    init.elem_type = (init.flags & WASM_ELEM_CARRIES_ELEMEXPRS) ? TE_funcref : 0;
+  }
+
+  // Check the module table if the segment is active (not passive)
+  if(!(init.flags & WASM_ELEM_PASSIVE))
   {
     TableDesc* desc = ModuleTable(m, init.index);
     if(!desc)
-      err = ERR_INVALID_TABLE_INDEX;
-    else if(desc->element_type == TE_funcref)
-      err = Parse<varuint32>::template Array<&ParseVarUInt32>(s, init.elements, init.n_elements, env);
-    else
-      err = ERR_FATAL_BAD_ELEMENT_TYPE;
+      return ERR_INVALID_TABLE_INDEX;
+    if(desc->element_type != TE_funcref)
+      return ERR_FATAL_BAD_ELEMENT_TYPE;
+  }
+
+  // Parse func indices or funcrefs elemexprs depending on the flag
+  if(init.flags & WASM_ELEM_CARRIES_ELEMEXPRS)
+  {
+    err = Parse<Instruction, const Environment&>::template Array<&ParseInitializer>(s, init.elemexprs, init.n_elements, env,
+                                                                                    env);
+  }
+  else
+  {
+    err = Parse<varuint32>::template Array<&ParseVarUInt32>(s, init.elements, init.n_elements, env);
   }
 
   return err;
@@ -552,9 +585,14 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, cons
 
 IN_ERROR innative::ParseDataInit(Stream& s, DataInit& data, const Environment& env)
 {
-  IN_ERROR err = ParseVarUInt32(s, data.index);
+  IN_ERROR err = ParseVarUInt32(s, data.flags);
 
-  if(err >= 0)
+  if(err >= 0 && data.flags & WASM_DATA_HAS_INDEX)
+    err = ParseVarUInt32(s, data.index);
+  else
+    data.index = 0;
+
+  if(err >= 0 && !(data.flags & WASM_DATA_PASSIVE))
     err = ParseInitializer(s, data.offset, env);
 
   if(err >= 0)
@@ -743,7 +781,7 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
     if(err < 0)
       return err;
 
-    if(op > WASM_SECTION_DATA) // require valid opcode to continue
+    if(op > WASM_SECTION_DATA_COUNT) // require valid opcode to continue
       return ERR_FATAL_UNKNOWN_SECTION;
     if(op == WASM_SECTION_CUSTOM)
       ++m.n_custom;
@@ -844,6 +882,7 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
                                                                                            m.element.n_elements, env, m,
                                                                                            env);
       break;
+    case WASM_SECTION_DATA_COUNT: m.data_count.count = s.ReadVarUInt32(err); break;
     case WASM_SECTION_CODE:
       err = Parse<FunctionBody, Module&, const Environment&>::template Array<&ParseFunctionBody>(s, m.code.funcbody,
                                                                                                  m.code.n_funcbody, env, m,
