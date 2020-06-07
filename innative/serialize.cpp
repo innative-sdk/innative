@@ -645,6 +645,10 @@ void Serializer::TokenizeModule(bool emitdebug)
     }
 
   tokens.Push(WatToken{ WatTokens::CLOSE });
+  {
+    unsigned int i = 0, j = 0;
+    DumpTokens(i, j);
+  }
 }
 
 void Serializer::WriteTokens(std::ostream& out)

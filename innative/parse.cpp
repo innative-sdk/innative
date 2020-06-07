@@ -580,6 +580,8 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, cons
       err = ParseInstruction(s, f.body[f.n_body], env);
   }
 
+  //if(s.pos != end) // We can't fail on this error because the spec parser doesn't
+  //  return ERR_FATAL_FUNCTION_SIZE_MISMATCH;
   return err;
 }
 

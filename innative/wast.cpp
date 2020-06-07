@@ -56,6 +56,7 @@ namespace innative {
       { "import after memory", "invalid import order" },
       { "result before parameter", "unexpected token" },
       { "unexpected end of section or function", "unexpected end" },
+      { "junk after last section", "multiple start sections" },
     });
 
     size_t GetWastMapping(kh_indexname_t* mapping, const WatToken& t);
