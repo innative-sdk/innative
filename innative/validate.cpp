@@ -317,6 +317,12 @@ void innative::ValidateImport(const Import& imp, Environment& env, Module* m)
       {
         AppendError(env, env.errors, m, ERR_SHARED_MEMORY_MAXIMUM_MISSING, "Shared memory must have maximum");
       }
+
+      if((imp.mem_desc.limits.flags & WASM_LIMIT_SHARED) ^ (mem->limits.flags & WASM_LIMIT_SHARED))
+      {
+        AppendError(env, env.errors, m, ERR_SHARED_MEMORY_MISMATCH,
+                    "Imported memory shared flag must match exported memory shared flag");
+      }
     }
     break;
   }
