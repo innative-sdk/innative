@@ -156,7 +156,7 @@ IN_ERROR Compiler::CompileBinaryShiftOp(llvmVal* (llvm::IRBuilder<>::*op)(llvmVa
   return PushReturn((builder.*op)(val1, MaskShiftBits(val2), args...));
 }
 
-IN_ERROR Compiler::CompileIfBlock(varsint7 sig)
+IN_ERROR Compiler::CompileIfBlock(varsint64 sig)
 {
   IN_ERROR err;
   llvmVal* cond;
@@ -193,7 +193,7 @@ IN_ERROR Compiler::CompileElseBlock()
   {
     IN_ERROR err;
     llvmVal* value;
-    if(err = PopType(control.Peek().sig, value))
+    if(err = PopStruct(control.Peek().sig, value, false))
       return err;
     if(err = PushResult(&control.Peek().results, value, builder.GetInsertBlock(), env)) // Push result
       return err;
@@ -214,14 +214,14 @@ IN_ERROR Compiler::CompileElseBlock()
   return ERR_SUCCESS;
 }
 
-IN_ERROR Compiler::CompileReturn(varsint7 sig)
+IN_ERROR Compiler::CompileReturn(varsint64 sig)
 {
   if(sig == TE_void)
     builder.CreateRetVoid();
   else
   {
     llvmVal* val;
-    IN_ERROR err = PopType(sig, val);
+    IN_ERROR err = PopStruct(sig, val, false);
     if(err)
       return err;
 
@@ -251,7 +251,7 @@ IN_ERROR Compiler::CompileEndBlock()
   switch(cache.op) // Verify source operation
   {
   case OP_if:
-    if(control.Peek().sig != TE_void) // An if statement with no else statement cannot return a value
+    if(GetBlockSigResults(control.Peek().sig, m) > 0) // An if statement with no else statement cannot return a value
       return ERR_EXPECTED_ELSE_INSTRUCTION;
   case OP_else:
   case OP_block:

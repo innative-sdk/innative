@@ -367,9 +367,8 @@ int WatParser::MergeFunctionType(const FunctionType& ftype, varuint32& out)
   return AppendArray<FunctionType>(env, ftype, m.type.functypes, m.type.n_functypes);
 }
 
-int WatParser::ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo** info, varuint32* n_info, bool anonymous)
+int WatParser::ParseType(Queue<WatToken>& tokens, varuint32& sig)
 {
-  sig = (varuint32)~0;
   if(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::TYPE)
   {
     EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
@@ -385,6 +384,15 @@ int WatParser::ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo**
 
     EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
   }
+
+  return ERR_SUCCESS;
+}
+
+int WatParser::ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo** info, varuint32* n_info, bool anonymous)
+{
+  sig = (varuint32)~0;
+  if(int err = ParseType(tokens, sig))
+    return err;
 
   if(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN &&
      (tokens[1].id == WatTokens::PARAM || tokens[1].id == WatTokens::RESULT))
@@ -487,7 +495,7 @@ int WatParser::ParseOperator(Queue<WatToken>& tokens, Instruction& op, FunctionB
                              FunctionType& sig, WatParser::DeferWatAction& defer)
 {
   if(tokens.Peek().id != WatTokens::OPERATOR)
-    return ERR_WAT_EXPECTED_OPERATOR;
+    EXPECTED(env, tokens, WatTokens::OPERATOR, ERR_WAT_EXPECTED_OPERATOR);
 
   int err;
   if(tokens.Peek().i == 0xFF)
@@ -651,28 +659,37 @@ bool WatParser::CheckLabel(Queue<WatToken>& tokens)
   return true;
 }
 
-int WatParser::ParseBlockType(Queue<WatToken>& tokens, varsint7& out)
+int WatParser::ParseBlockType(Queue<WatToken>& tokens, varsint64& out)
 {
-  out = TE_void;
-  if(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::RESULT)
+  varuint32 idx = ~0;
+  int err       = ParseType(tokens, idx);
+  if(err < 0)
+    return err;
+  FunctionType sig = { 0 };
+  err              = ParseFunctionTypeInner(env, tokens, sig, 0, 0, true);
+  if(err < 0)
+    return err;
+
+  if(idx != ~0)
   {
-    EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
-    EXPECTED(env, tokens, WatTokens::RESULT, ERR_WAT_EXPECTED_RESULT);
-
-    if(tokens.Peek().id != WatTokens::CLOSE)
+    // If we have both a type index and a signature, ensure they are identical.
+    if(sig.n_returns || sig.n_params)
     {
-      if(!(out = WatValType(tokens.Pop().id)))
-        return ERR_WAT_EXPECTED_VALTYPE;
-
-      if(tokens.Peek().id != WatTokens::CLOSE)
-        return ERR_MULTIPLE_RETURN_VALUES;
+      if(idx < m.type.n_functypes && !MatchFunctionType(m.type.functypes[idx], sig))
+        return ERR_WAT_TYPE_MISMATCH;
     }
-
-    EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
+    out = idx;
   }
-
-  if(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::RESULT)
-    return ERR_MULTIPLE_RETURN_VALUES;
+  else if(!sig.n_returns && !sig.n_params)
+    out = TE_void;
+  else if(sig.n_returns == 1 && !sig.n_params)
+    out = sig.returns[0];
+  else
+  {
+    out = m.type.n_functypes;
+    if(err = AppendArray<FunctionType>(env, sig, m.type.functypes, m.type.n_functypes))
+      return err;
+  }
   return ERR_SUCCESS;
 }
 
@@ -682,7 +699,7 @@ int WatParser::ParseExpression(Queue<WatToken>& tokens, FunctionBody& f, Functio
   EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
 
   int err;
-  varsint7 blocktype;
+  varsint64 blocktype;
   switch(tokens[0].id)
   {
   case WatTokens::BLOCK:
@@ -696,9 +713,9 @@ int WatParser::ParseExpression(Queue<WatToken>& tokens, FunctionBody& f, Functio
     {
       Instruction op = { t.id == WatTokens::BLOCK ? (uint8_t)OP_block : (uint8_t)OP_loop };
 
-      op.immediates[0]._varsint7 = blocktype;
-      op.line                    = t.line;
-      op.column                  = t.column;
+      op.immediates[0]._varsint64 = blocktype;
+      op.line                     = t.line;
+      op.column                   = t.column;
       if(err = AppendArray<Instruction>(env, op, f.body, f.n_body))
         return err;
     }
@@ -730,9 +747,9 @@ int WatParser::ParseExpression(Queue<WatToken>& tokens, FunctionBody& f, Functio
     {
       Instruction op = { OP_if };
 
-      op.immediates[0]._varsint7 = blocktype;
-      op.line                    = t.line;
-      op.column                  = t.column;
+      op.immediates[0]._varsint64 = blocktype;
+      op.line                     = t.line;
+      op.column                   = t.column;
       if(err = AppendArray<Instruction>(env, op, f.body,
                                         f.n_body)) // We append the if instruction _after_ the optional condition expression
         return err;
@@ -807,7 +824,7 @@ int WatParser::ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, Functi
                                 varuint32 index)
 {
   int err;
-  varsint7 blocktype;
+  varsint64 blocktype;
   switch(tokens[0].id)
   {
   case WatTokens::OPEN: // This must be an expression
@@ -823,9 +840,9 @@ int WatParser::ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, Functi
     {
       Instruction op = { t.id == WatTokens::BLOCK ? (uint8_t)OP_block : (uint8_t)OP_loop };
 
-      op.immediates[0]._varsint7 = blocktype;
-      op.line                    = t.line;
-      op.column                  = t.column;
+      op.immediates[0]._varsint64 = blocktype;
+      op.line                     = t.line;
+      op.column                   = t.column;
       if(err = AppendArray<Instruction>(env, op, f.body, f.n_body))
         return err;
     }
@@ -861,9 +878,9 @@ int WatParser::ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, Functi
     {
       Instruction op = { OP_if };
 
-      op.immediates[0]._varsint7 = blocktype;
-      op.line                    = t.line;
-      op.column                  = t.column;
+      op.immediates[0]._varsint64 = blocktype;
+      op.line                     = t.line;
+      op.column                   = t.column;
       if(err = AppendArray<Instruction>(env, op, f.body,
                                         f.n_body)) // We append the if instruction _after_ the optional condition expression
         return err;
@@ -1347,21 +1364,21 @@ int WatParser::ParseImport(Queue<WatToken>& tokens)
     i.kind = WASM_KIND_GLOBAL;
     if(err = ParseGlobalDesc(i.global_desc, tokens))
       return err;
-    hash = globalhash;
+    hash                     = globalhash;
     i.global_desc.debug.name = Identifier((uint8_t*)name.pos, name.len);
     break;
   case WatTokens::TABLE:
     i.kind = WASM_KIND_TABLE;
     if(err = ParseTableDesc(i.table_desc, tokens))
       return err;
-    hash = tablehash;
+    hash                    = tablehash;
     i.table_desc.debug.name = Identifier((uint8_t*)name.pos, name.len);
     break;
   case WatTokens::MEMORY:
     i.kind = WASM_KIND_MEMORY;
     if(err = ParseMemoryDesc(i.mem_desc, tokens))
       return err;
-    hash = memoryhash;
+    hash                  = memoryhash;
     i.mem_desc.debug.name = Identifier((uint8_t*)name.pos, name.len);
     break;
   default: return ERR_WAT_EXPECTED_KIND;

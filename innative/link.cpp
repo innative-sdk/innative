@@ -400,7 +400,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
 
 #elif defined(IN_PLATFORM_POSIX)
     LLD_FORMAT format                 = LLD_FORMAT::ELF;
-    std::vector<const char*> linkargs = {};
+    std::vector<const char*> linkargs = {"--stack-first"};
 
     if(env->flags & ENV_LIBRARY)
       linkargs.push_back("-shared");

@@ -44,6 +44,28 @@ llvmTy* Compiler::GetLLVMType(varsint7 type)
   return nullptr;
 }
 
+llvmTy* Compiler::GetLLVMTypes(varsint7* types, varuint32 count)
+{
+  if(count == 0)
+    return llvmTy::getVoidTy(ctx);
+  if(count == 1)
+    return GetLLVMType(types[0]);
+
+  llvm::SmallVector<llvmTy*, 4> llvmtypes;
+  for(varuint32 i = 0; i < count; ++i)
+    llvmtypes.push_back(GetLLVMType(types[i]));
+  return llvm::StructType::get(ctx, llvmtypes);
+}
+
+llvmTy* Compiler::GetLLVMTypeSig(varsint64 sig)
+{
+  if(sig < 0)
+    return GetLLVMType(static_cast<varsint7>(sig));
+  if(sig >= m.type.n_functypes)
+    return nullptr;
+  return GetLLVMTypes(m.type.functypes[sig].returns, m.type.functypes[sig].n_returns);
+}
+
 WASM_TYPE_ENCODING Compiler::GetTypeEncoding(llvmTy* t)
 {
   if(t->isFloatTy())
@@ -64,9 +86,7 @@ WASM_TYPE_ENCODING Compiler::GetTypeEncoding(llvmTy* t)
 
 FuncTy* Compiler::GetFunctionType(FunctionType& signature)
 {
-  if(signature.n_returns > 1)
-    return nullptr;
-  llvmTy* ret = (signature.n_returns > 0) ? GetLLVMType(signature.returns[0]) : llvmTy::getVoidTy(ctx);
+  llvmTy* ret = GetLLVMTypes(signature.returns, signature.n_returns);
 
   if(signature.n_params > 0)
   {
@@ -188,9 +208,8 @@ Func* Compiler::WrapFunction(Func* fn, llvm::StringRef name, const llvm::Twine& 
   return wrap;
 }
 
-bool Compiler::CheckType(varsint7 ty, llvmVal* v)
+bool Compiler::CheckType(varsint7 ty, llvmTy* t)
 {
-  llvmTy* t = v->getType();
   switch(ty)
   {
   case TE_i32: return t->isIntegerTy() && static_cast<llvm::IntegerType*>(t)->getBitWidth() == 32;
@@ -204,15 +223,18 @@ bool Compiler::CheckType(varsint7 ty, llvmVal* v)
   return true;
 }
 
-bool Compiler::CheckSig(varsint7 sig, const Stack<llvmVal*>& values)
+bool Compiler::CheckSig(varsint64 sig, llvmTy* t, Module& m)
 {
-  if(sig == TE_void)
-    return !values.Size() || !values.Peek() || values.Peek()->getType()->isVoidTy();
-  if(!values.Size())
+  if(sig < 0)
+    return CheckType(static_cast<varsint7>(sig), t);
+  if(sig >= m.type.n_functypes)
     return false;
-  if(!values.Peek())
-    return true;
-  return CheckType(sig, values.Peek());
+
+  auto n_sig = m.type.functypes[sig].n_returns;
+  for(varuint32 i = 0; i < n_sig; ++i)
+    if(!CheckType(m.type.functypes[sig].returns[i], t->getStructElementType(i)))
+      return false;
+  return true;
 }
 
 IN_ERROR Compiler::PopType(varsint7 ty, llvmVal*& v, bool peek)
@@ -239,13 +261,44 @@ IN_ERROR Compiler::PopType(varsint7 ty, llvmVal*& v, bool peek)
     v = builder.CreateIntToPtr(v, GetLLVMType(TE_cref));
     return ERR_SUCCESS;
   }
-  else if(!CheckType(ty, values.Peek()))
+  else if(!CheckType(ty, values.Peek()->getType()))
     return ERR_INVALID_TYPE;
   else if(peek)
     v = values.Peek();
   else
     v = values.Pop();
 
+  return ERR_SUCCESS;
+}
+
+IN_ERROR Compiler::PopStruct(varsint64 sig, llvmVal*& v, bool peek)
+{
+  size_t n_sig = GetBlockSigResults(sig, m);
+
+  if(n_sig == 0)
+  {
+    v = 0;
+    return ERR_SUCCESS;
+  }
+
+  if(!values.Size())
+    return ERR_INVALID_VALUE_STACK;
+
+  if(!values.Peek()) // polymorphic value
+  {
+    auto ty = GetLLVMTypeSig(sig);
+    if(ty->isAggregateType())
+      v = llvm::ConstantAggregateZero::get(ty);
+    else
+      v = llvm::Constant::getNullValue(ty);
+
+    return !v ? ERR_INVALID_VALUE_STACK : ERR_SUCCESS;
+  }
+
+  if(!CheckSig(sig, values.Peek()->getType(), m))
+    return ERR_INVALID_TYPE;
+
+  v = peek ? values.Peek() : values.Pop();
   return ERR_SUCCESS;
 }
 
@@ -274,7 +327,7 @@ llvmVal* Compiler::MaskShiftBits(llvmVal* value)
   return builder.CreateAnd(value, CInt::get(value->getType(), value->getType()->getIntegerBitWidth() - 1));
 }
 
-BB* Compiler::PushLabel(const char* name, varsint7 sig, uint8_t opcode, Func* fnptr, llvm::DILocalScope* scope)
+BB* Compiler::PushLabel(const char* name, varsint64 sig, uint8_t opcode, Func* fnptr, llvm::DILocalScope* scope)
 {
   BB* bb = BB::Create(ctx, name, fnptr);
   debugger->PushBlock(scope, builder.getCurrentDebugLocation());
@@ -313,14 +366,46 @@ IN_ERROR Compiler::PushResult(BlockResult** root, llvmVal* result, BB* block, co
   return ERR_SUCCESS;
 }
 
+IN_ERROR Compiler::PushMultiReturn(llvmVal* arg, varsint64 sig)
+{
+  varuint32 n_sig = GetBlockSigResults(sig, m);
+  if(!n_sig)
+    return ERR_INVALID_VALUE_STACK;
+  if(n_sig == 1)
+    return PushReturn(arg);
+
+  auto ty = arg->getType();
+  if(!ty->isStructTy() || sig >= m.type.n_functypes)
+    return ERR_MULTIPLE_RETURN_VALUES;
+  if(ty->getStructNumElements() != n_sig)
+    return ERR_INVALID_BLOCK_SIGNATURE;
+
+  // Push struct members in reverse order
+  for(varuint32 i = n_sig; i-- > 0;)
+  {
+    llvmVal* val = builder.CreateLoad(builder.CreateInBoundsGEP(arg, { builder.getInt32(0), builder.getInt32(i) }));
+    if(m.type.functypes[sig].returns[i] == TE_cref && val->getType()->isIntegerTy())
+    { // If this is true, we need to do an int -> cref conversion
+      auto v = builder.CreatePtrToInt(builder.CreateLoad(GetPairPtr(memories[0], 0)), builder.getInt64Ty());
+      v      = builder.CreateAdd(builder.CreateZExt(val, builder.getInt64Ty()), v, "", true, true);
+      val    = builder.CreateIntToPtr(v, GetLLVMType(TE_cref));
+    }
+    if(IN_ERROR err = PushReturn(val))
+      return err;
+  }
+
+  return ERR_SUCCESS;
+}
+
 // Adds current value stack to target branch according to that branch's signature.
 IN_ERROR Compiler::AddBranch(Block& target)
 {
-  IN_ERROR err = ERR_SUCCESS;
-  if(target.sig != TE_void)
+  IN_ERROR err    = ERR_SUCCESS;
+  varuint32 n_sig = GetBlockSigResults(target.sig, m);
+  if(n_sig > 0)
   {
     llvmVal* value;
-    err = PopType(target.sig, value, true);
+    err = PopStruct(target.sig, value, true);
     if(!err)
       err = PushResult(&target.results, value, builder.GetInsertBlock(), env); // Push result
   }
@@ -331,15 +416,16 @@ IN_ERROR Compiler::AddBranch(Block& target)
 // necessary
 IN_ERROR Compiler::PopLabel(BB* block)
 {
-  varsint7 sig  = control.Peek().sig;
-  llvmVal* push = nullptr;
-  if(sig != TE_void)
+  varuint32 n_sig = GetBlockSigResults(control.Peek().sig, m);
+  llvmVal* push   = nullptr;
+  if(n_sig > 0)
   {
     IN_ERROR err;
-    if(err = PopType(sig, push))
+    if(err = PopStruct(control.Peek().sig, push, false))
       return err;
-    if(control.Peek().results !=
-       nullptr) // If there are results from other branches, perform a PHI merge. Otherwise, leave the value stack alone
+
+    // If there are results from other branches, perform a PHI merge. Otherwise, leave the value stack alone
+    if(control.Peek().results != nullptr)
     {
       unsigned int count = 1; // Start with 1 for our current branch's values
       for(auto i = control.Peek().results; i != nullptr; i = i->next)
@@ -364,7 +450,7 @@ IN_ERROR Compiler::PopLabel(BB* block)
     return ERR_INVALID_VALUE_STACK;
 
   if(push)
-    PushReturn(push);
+    PushMultiReturn(push, control.Peek().sig);
 
   values.SetLimit(control.Peek().limit);
   control.Pop();

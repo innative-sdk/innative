@@ -32,6 +32,7 @@ namespace innative {
                                       varuint32* n_info, bool anonymous);
     varuint32 GetFromHash(wat::kh_indexname_t* hash, const WatToken& t);
     int MergeFunctionType(const FunctionType& ftype, varuint32& out);
+    int ParseType(Queue<WatToken>& tokens, varuint32& sig);
     int ParseTypeUse(Queue<WatToken>& tokens, varuint32& sig, DebugInfo** info, varuint32* n_info, bool anonymous);
     varuint32 GetLocal(FunctionBody& f, FunctionDesc& desc, varuint32 n_param, const WatToken& t);
     varuint32 GetMemory(const WatToken& t);
@@ -59,7 +60,7 @@ namespace innative {
     int ParseData(Queue<WatToken>& tokens);
     int AppendImport(Module& m, const Import& i, varuint32* index);
     int InlineImportExport(Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out);
-    int ParseBlockType(Queue<WatToken>& tokens, varsint7& out);
+    int ParseBlockType(Queue<WatToken>& tokens, varsint64& out);
 
     static int ParseModule(Environment& env, Module& m, const char* file, Queue<WatToken>& tokens, utility::StringSpan name,
                            WatToken& internalname);
@@ -92,8 +93,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    template<int (WatParser::*F)(Queue<WatToken>&, WatToken)>
-    inline int ParseIndexProcess(Queue<WatToken>& tokens)
+    template<int (WatParser::*F)(Queue<WatToken>&, WatToken)> inline int ParseIndexProcess(Queue<WatToken>& tokens)
     {
       return (this->*F)(tokens, GetWatNameToken(tokens));
     }

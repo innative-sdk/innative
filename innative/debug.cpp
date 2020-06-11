@@ -105,7 +105,8 @@ llvm::DIType* Debugger::CreateDebugType(llvm::Type* t)
       align = std::max(align, elem->getAlignInBits());
     }
 
-    return _dbuilder->createStructType(dcu, t->getStructName(), dunit, 0, offset, align, llvm::DINode::FlagZero, nullptr,
+    return _dbuilder->createStructType(dcu, !llvm::cast<llvm::StructType>(t)->isLiteral() ? t->getStructName() : "LiteralTuple", dunit, 0, offset, align,
+                                       llvm::DINode::FlagZero, nullptr,
                                        _dbuilder->getOrCreateArray(members));
   }
   if(t->isArrayTy())

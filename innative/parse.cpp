@@ -269,7 +269,7 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   {
   case OP_block:
   case OP_loop:
-  case OP_if: ins.immediates[0]._varsint7 = s.ReadVarInt7(err); break;
+  case OP_if: ins.immediates[0]._varsint64 = s.ReadVarInt64(err); break;
   case OP_br:
   case OP_br_if:
   case OP_local_get:
@@ -546,7 +546,7 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, cons
       err = ParseInstruction(s, f.body[f.n_body], env);
   }
 
-  //if(s.pos != end) // We can't fail on this error because the spec parser doesn't
+  // if(s.pos != end) // We can't fail on this error because the spec parser doesn't
   //  return ERR_FATAL_FUNCTION_SIZE_MISMATCH;
   return err;
 }

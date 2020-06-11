@@ -370,6 +370,48 @@ namespace innative {
 
       return ERR_SUCCESS;
     }
+
+    IN_FORCEINLINE varuint32 GetBlockSigResults(varsint64 sig, Module& m)
+    {
+      switch(sig)
+      {
+      case TE_i32:
+      case TE_i64:
+      case TE_f32:
+      case TE_f64: return 1;
+      case TE_void: return 0;
+      }
+
+      if(sig >= 0 && sig < m.type.n_functypes)
+        return m.type.functypes[sig].n_returns;
+
+      return 0;
+    }
+
+    IN_FORCEINLINE varuint32 GetBlockSigParams(varsint64 sig, Module& m)
+    {
+      if(sig >= 0 && sig < m.type.n_functypes)
+        return m.type.functypes[sig].n_params;
+
+      return 0;
+    }
+
+    IN_FORCEINLINE varsint7 GetBlockSigResult(varsint64 sig, varuint32 i, Module& m)
+    {
+      switch(sig)
+      {
+      case TE_i32: return TE_i32;
+      case TE_i64: return TE_i64;
+      case TE_f32: return TE_f32;
+      case TE_f64: return TE_f64;
+      case TE_void: return TE_void;
+      }
+
+      if(sig >= 0 && sig < m.type.n_functypes && i < m.type.functypes[sig].n_returns)
+        return m.type.functypes[sig].returns[i];
+
+      return TE_NONE;
+    }
   }
 }
 
