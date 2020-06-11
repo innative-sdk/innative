@@ -30,7 +30,7 @@ namespace innative {
       llvm::BasicBlock* block;  // Label
       llvm::BasicBlock* ifelse; // Label for else statement
       size_t limit;             // Limit of value stack
-      varsint7 sig;             // Block signature
+      varsint64 sig;             // Block signature
       uint8_t op;               // instruction that pushed this label
       BlockResult* results;     // Holds alternative branch results targeting this block
     };
@@ -96,6 +96,8 @@ namespace innative {
     llvm::Constant* GetPairNull(llvm::StructType* ty);
     IN_ERROR InsertConditionalTrap(llvmVal* cond);
     llvmTy* GetLLVMType(varsint7 type);
+    llvmTy* GetLLVMTypes(varsint7* types, varuint32 count);
+    llvmTy* GetLLVMTypeSig(varsint64 sig);
     FuncTy* GetFunctionType(FunctionType& signature);
     Func* HomogenizeFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
                              llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv);
@@ -104,8 +106,9 @@ namespace innative {
     Func* WrapFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
                        llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv);
     IN_ERROR PopType(varsint7 ty, llvmVal*& v, bool peek = false);
+    IN_ERROR PopStruct(varsint64 sig, llvmVal*& v, bool peek);
     llvmVal* MaskShiftBits(llvmVal* value);
-    BB* PushLabel(const char* name, varsint7 sig, uint8_t opcode, Func* fnptr, llvm::DILocalScope* scope);
+    BB* PushLabel(const char* name, varsint64 sig, uint8_t opcode, Func* fnptr, llvm::DILocalScope* scope);
     BB* BindLabel(BB* block);
     IN_ERROR PushResult(BlockResult** root, llvmVal* result, BB* block, const Environment& env);
     IN_ERROR AddBranch(Block& target);
@@ -128,9 +131,9 @@ namespace innative {
 
     Func* CompileFunction(FunctionType& signature, const llvm::Twine& name);
     IN_ERROR CompileSelectOp(const llvm::Twine& name, llvm::Instruction* from);
-    IN_ERROR CompileIfBlock(varsint7 sig);
+    IN_ERROR CompileIfBlock(varsint64 sig);
     IN_ERROR CompileElseBlock();
-    IN_ERROR CompileReturn(varsint7 sig);
+    IN_ERROR CompileReturn(varsint64 sig);
     IN_ERROR CompileEndBlock();
     void CompileTrap();
     IN_ERROR CompileBranch(varuint32 depth);
@@ -155,8 +158,8 @@ namespace innative {
     IN_ERROR IN_Intrinsic_FuncPtr(llvm::Value** params, llvm::Value*& out);
 
     static WASM_TYPE_ENCODING GetTypeEncoding(llvm::Type* t);
-    static bool CheckSig(varsint7 sig, const Stack<llvmVal*>& values);
-    static bool CheckType(varsint7 ty, llvmVal* v);
+    static bool CheckType(varsint7 ty, llvmTy* t);
+    static bool CheckSig(varsint64 sig, llvmTy* t, Module& m);
     static uint64_t GetLocalOffset(llvm::AllocaInst* p);
     static Func* TopLevelFunction(llvm::LLVMContext& context, llvm::IRBuilder<>& builder, const char* name,
                                   llvm::Module* m);
@@ -298,6 +301,9 @@ namespace innative {
                     arg);
       return e;
     }
+
+    // Pushes a single argument, splitting up the argument if it's a struct and the sig indicates multiple arguments
+    IN_ERROR PushMultiReturn(llvmVal* arg, varsint64 sig);
 
   private:
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR, typename... Args>

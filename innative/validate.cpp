@@ -18,9 +18,9 @@ namespace innative {
   namespace internal {
     struct ControlBlock
     {
-      size_t limit; // Previous limit of value stack
-      varsint7 sig; // Block signature
-      uint8_t type; // instruction that pushed this label
+      size_t limit;  // Previous limit of value stack
+      varsint64 sig; // Block signature (void, value type, or funcidx)
+      uint8_t type;  // instruction that pushed this label
     };
   }
 }
@@ -133,7 +133,7 @@ void innative::ValidateFunctionSig(const FunctionType& sig, Environment& env, Mo
 {
   if(sig.form == TE_func)
   {
-    if(sig.n_returns > 1)
+    if(!(env.features & ENV_FEATURE_MULTI_VALUE) && sig.n_returns > 1)
       AppendError(env, env.errors, m, ERR_MULTIPLE_RETURN_VALUES, "Return count of %u encountered: only 0 or 1 allowed.",
                   sig.n_returns);
   }
@@ -383,9 +383,11 @@ void innative::ValidateMemory(const MemoryDesc& mem, Environment& env, Module* m
     AppendError(env, env.errors, m, ERR_SHARED_MEMORY_MAXIMUM_MISSING, "Shared memory must have maximum");
 }
 
-void innative::ValidateBlockSignature(const Instruction& ins, varsint7 sig, Environment& env, Module* m)
+void innative::ValidateBlockSignature(const Instruction& ins, Stack<varsint7>& values, varsint64 sig, Environment& env,
+                                      Module* m)
 {
   char buf[10];
+  char buf2[10];
   switch(sig)
   {
   case TE_i32:
@@ -394,8 +396,29 @@ void innative::ValidateBlockSignature(const Instruction& ins, varsint7 sig, Envi
   case TE_f64:
   case TE_void: break;
   default:
-    AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "[%u] %s is not a valid block signature type.", ins.line,
-                EnumToString(TYPE_ENCODING_MAP, sig, buf, 10));
+    if(!(env.features & ENV_FEATURE_MULTI_VALUE) || sig < 0 || sig > m->type.n_functypes)
+      AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE, "[%u] %lli is not a valid block signature type.",
+                  ins.line, sig);
+    else
+    {
+      auto& ty = m->type.functypes[sig];
+      for(varuint32 i = 0; i < ty.n_params; ++i)
+      {
+        if(values.Size() > 0 && !values.Peek())
+          break; // A polymorphic value automatically validates
+        if(i >= values.Size())
+          AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE,
+                      "[%u] Block expected %u values but value stack only has %zu.", ins.line, ty.n_params, values.Size());
+        else if(values[i] != ty.params[i])
+          AppendError(env, env.errors, m, ERR_INVALID_TYPE,
+                      "[%u] block signature expected %s, but value stack had %s instead!", ins.line,
+                      EnumToString(TYPE_ENCODING_MAP, ty.params[i], buf, 10),
+                      EnumToString(TYPE_ENCODING_MAP, values[i], buf, 10));
+        else
+          continue;
+        break;
+      }
+    }
   }
 }
 
@@ -424,34 +447,34 @@ namespace innative {
     return 0;
   }
 
-  void ValidateBranchSignature(const Instruction& ins, varsint7 sig, Stack<varsint7>& values, Environment& env, Module* m)
+  void ValidateBranchSignature(const Instruction& ins, varsint64 sig, Stack<varsint7>& values, Environment& env, Module* m)
   {
     char buf[10];
-    if(sig != TE_void)
+    varuint32 n_sigresults = GetBlockSigResults(sig, *m);
+    for(varuint32 i = 0; i < n_sigresults; ++i)
     {
+      varsint7 sigval = GetBlockSigResult(sig, n_sigresults - i - 1, *m);
       if(values.Size() > 0)
       {
         char buf2[10];
-        // if(values.Size() > 2 || (values.Size() == 2 && values.Peek() != TE_POLY)) // TE_POLY can count as 0
-        //  AppendError(env, env.errors, m, ERR_INVALID_TYPE, "block signature expected one value, but value stack had
-        //  %zu!", values.Size());
-        if(values.Peek() != TE_POLY && values.Peek() != sig)
+        // TE_POLY can count as 0
+        if(values[i] != TE_POLY && values[i] != sigval)
           AppendError(env, env.errors, m, ERR_INVALID_TYPE,
                       "[%u] block signature expected %s, but value stack had %s instead!", ins.line,
-                      EnumToString(TYPE_ENCODING_MAP, sig, buf, 10),
-                      EnumToString(TYPE_ENCODING_MAP, values.Peek(), buf2, 10));
-        if(values.Peek() == TE_POLY) // If this is a polymorphic type, it now HAS to evaluate to this branch's type
-                                     // regardless of which branch is chosen.
-          values.Push(sig);
+                      EnumToString(TYPE_ENCODING_MAP, sigval, buf, 10),
+                      EnumToString(TYPE_ENCODING_MAP, values[i], buf2, 10));
+        if(values[i] == TE_POLY) // If this is a polymorphic type, it now HAS to evaluate to this branch's type
+                                 // regardless of which branch is chosen.
+          values.Push(sigval);
       }
       else
         AppendError(env, env.errors, m, ERR_EMPTY_VALUE_STACK,
                     "[%u] block signature expected %s, but value stack was empty!", ins.line,
-                    EnumToString(TYPE_ENCODING_MAP, sig, buf, 10));
+                    EnumToString(TYPE_ENCODING_MAP, sigval, buf, 10));
     }
   }
 
-  void ValidateSignature(const Instruction& ins, varsint7 sig, Stack<varsint7>& values, Environment& env, Module* m)
+  void ValidateSignature(const Instruction& ins, varsint64 sig, Stack<varsint7>& values, Environment& env, Module* m)
   {
     if(sig != TE_void)
       ValidateBranchSignature(ins, sig, values, env, m);
@@ -479,10 +502,10 @@ namespace innative {
     values.Push(TE_POLY);
   }
 
-  IN_FORCEINLINE varsint7 GetBlockSig(const internal::ControlBlock& block)
-  {
-    return block.type == OP_loop ? TE_void : block.sig;
-  }
+  // IN_FORCEINLINE varsint7 GetBlockSig(const internal::ControlBlock& block)
+  //{
+  //  return block.type == OP_loop ? TE_void : block.sig;
+  //}
 
   void ValidateBranchTable(const Instruction& ins, varuint32 n_table, varuint32* table, varuint32 def,
                            Stack<varsint7>& values, Stack<internal::ControlBlock>& control, Environment& env, Module* m)
@@ -496,14 +519,10 @@ namespace innative {
     {
       for(varuint32 i = 0; i < n_table; ++i)
       {
-        varsint7 type = GetBlockSig(control[def]);
-        char buf[10];
-        char buf2[10];
-        if(table[i] < control.Size() && GetBlockSig(control[table[i]]) != type)
+        if(table[i] < control.Size() && control[table[i]].sig != control[def].sig)
           AppendError(env, env.errors, m, ERR_INVALID_TYPE,
-                      "[%u] Branch table target has type signature %s, but default branch has %s", ins.line,
-                      EnumToString(TYPE_ENCODING_MAP, control[table[i]].sig, buf, 10),
-                      EnumToString(TYPE_ENCODING_MAP, control[def].sig, buf2, 10));
+                      "[%u] Branch table target has type signature %lli, but default branch has %lli", ins.line,
+                      control[table[i]].sig, control[def].sig);
       }
     }
   }
@@ -552,7 +571,7 @@ namespace innative {
     for(varuint32 i = sig.n_params; i-- > 0;) // Pop in reverse order
       ValidatePopType(ins, values, sig.params[i], env, m);
 
-    if(sig.n_returns > 1)
+    if(!(env.features & ENV_FEATURE_MULTI_VALUE) && sig.n_returns > 1)
       AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_SIG,
                   "[%u] Cannot return more than one value yet, tried to return %i.", ins.line, sig.n_returns);
 
@@ -670,7 +689,7 @@ namespace innative {
     case OP_nop: break;
     case OP_if: ValidatePopType(ins, values, TE_i32, env, m);
     case OP_block:
-    case OP_loop: ValidateBlockSignature(ins, ins.immediates[0]._varsint7, env, m); break;
+    case OP_loop: ValidateBlockSignature(ins, values, ins.immediates[0]._varsint64, env, m); break;
     case OP_else:
     case OP_end: break;
     case OP_br:
@@ -980,20 +999,28 @@ namespace innative {
   {
     ValidateSignature(ins, block.sig, values, env, m);
 
-    if(block.sig != TE_void && values.Size() > 0)
+    varuint32 nsig = GetBlockSigResults(block.sig, *m);
+    if(nsig > 0 && values.Size() > 0)
     {
-      values.Pop();
+      for(varuint32 i = 0; i < nsig; ++i)
+        if(values.Pop() == TE_POLY)
+          break; // If we popped a polymorphic value, assume we are finished
+
       if(values.Size() > 0 && values.Peek() != TE_POLY)
         AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK,
-                    "[%u] block signature wanted one value, but found %i values!", ins.line, values.Size());
+                    "[%u] block signature wanted %i values, but found %i leftover values!", ins.line, nsig, values.Size());
     }
 
     // Replace the value stack with the expected signature
     while(values.Size())
       values.Pop();
-    if(restore &&
-       block.sig != TE_void) // Only restore the block signature if this is an end statement, not an else statement
-      values.Push(block.sig);
+
+    // Only restore the block signature if this is an end statement, not an else statement
+    if(restore)
+    {
+      for(varuint32 i = 0; i < nsig; ++i)
+        values.Push(GetBlockSigResult(block.sig, i, *m));
+    }
 
     values.SetLimit(block.limit); // Reset old limit value
   }
@@ -1167,17 +1194,15 @@ void innative::ValidateTableOffset(const TableInit& init, Environment& env, Modu
   }
 }
 
-void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody& body, Environment& env, Module* m)
+void innative::ValidateFunctionBody(varuint32 idx, const FunctionBody& body, Environment& env, Module* m)
 {
+  assert(m);
   Instruction* cur = body.body;
   Stack<internal::ControlBlock> control; // control-flow stack that must be closed by end instructions
   Stack<varsint7> values;                // Current stack of value types
-  varsint7 ret = TE_void;
-  if(sig.n_returns > 1) // This is already an invalid function so don't pollute the output with more errors.
+  const auto& sig = m->type.functypes[idx];
+  if(!(env.features & ENV_FEATURE_MULTI_VALUE) && sig.n_returns > 1) // Don't pollute the output with more errors.
     return;
-
-  if(sig.n_returns > 0)
-    ret = sig.returns[0];
 
   // Calculate function locals
   if(sig.n_params > (std::numeric_limits<uint32_t>::max() - body.local_size))
@@ -1198,7 +1223,7 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
     for(varuint32 j = 0; j < body.locals[i].count; ++j)
       locals[n_local++] = body.locals[i].type;
 
-  control.Push({ values.Limit(), ret, OP_block }); // Push the function body block with the function signature
+  control.Push({ values.Limit(), idx, OP_block }); // Push the function body block with the function signature
 
   if(!body.n_body)
     return AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Cannot have an empty function body!");
@@ -1212,19 +1237,26 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
     case OP_block:
     case OP_loop:
     case OP_if:
-      control.Push({ values.Limit(), cur[i].immediates[0]._varsint7, cur[i].opcode[0] });
-      values.SetLimit(values.Size() + values.Limit());
+    {
+      control.Push({ values.Limit(), cur[i].immediates[0]._varsint64, cur[i].opcode[0] });
+      varuint32 n_params = GetBlockSigParams(control.Peek().sig, *m);
+      if(n_params > values.Size())
+      {
+        AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK,
+                    "[%u] Block has %u parameters, but value stack has %u values!", cur[i].line, n_params, values.Size());
+        n_params = values.Size();
+      }
+      values.SetLimit(values.Size() - n_params + values.Limit());
       break;
+    }
     case OP_end:
       if(!control.Size())
         AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Mismatched end instruction at index %u!", i);
       else
       {
-        char buf[10];
-        if(control.Peek().type == OP_if && control.Peek().sig != TE_void)
+        if(control.Peek().type == OP_if && GetBlockSigResults(control.Peek().sig, *m) > 0)
           AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE,
-                      "If statement without else cannot have a non-void block signature, had %s.",
-                      EnumToString(TYPE_ENCODING_MAP, control.Peek().sig, buf, 10));
+                      "If statement without else cannot have a non-void block signature, had %lli.", control.Peek().sig);
         ValidateEndBlock(cur[i], control.Pop(), values, env, m, true);
       }
       break;
@@ -1247,7 +1279,8 @@ void innative::ValidateFunctionBody(const FunctionType& sig, const FunctionBody&
     }
   }
 
-  for(varuint32 i = 0; i < sig.n_returns; ++i)
+  // Validate return values in reverse order
+  for(varuint32 i = sig.n_returns; i-- > 0;)
     ValidatePopType(Instruction{ 0, 0, body.line, body.column }, values, sig.returns[i], env, m);
 
   if(control.Size() > 0)
@@ -1379,7 +1412,7 @@ void innative::ValidateModule(Environment& env, Module& m)
     for(varuint32 j = 0; j < m.code.n_funcbody; ++j)
     {
       if(m.function.funcdecl[j].type_index < m.type.n_functypes)
-        ValidateFunctionBody(m.type.functypes[m.function.funcdecl[j].type_index], m.code.funcbody[j], env, &m);
+        ValidateFunctionBody(m.function.funcdecl[j].type_index, m.code.funcbody[j], env, &m);
     }
   }
 
