@@ -56,6 +56,7 @@ namespace innative {
     int ParseExport(Queue<WatToken>& tokens);
     int ParseElemData(Queue<WatToken>& tokens, varuint32& index, Instruction& op, wat::kh_indexname_t* hash);
     int ParseElem(TableInit& e, Queue<WatToken>& tokens);
+    int ParseElemList(TableInit& e, Queue<WatToken>& tokens);
     int ParseData(Queue<WatToken>& tokens);
     int AppendImport(Module& m, const Import& i, varuint32* index);
     int InlineImportExport(Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out);
@@ -92,8 +93,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    template<int (WatParser::*F)(Queue<WatToken>&, WatToken)>
-    inline int ParseIndexProcess(Queue<WatToken>& tokens)
+    template<int (WatParser::*F)(Queue<WatToken>&, WatToken)> inline int ParseIndexProcess(Queue<WatToken>& tokens)
     {
       return (this->*F)(tokens, GetWatNameToken(tokens));
     }
@@ -105,6 +105,33 @@ namespace innative {
       return !err ? t : (T)~0;
     }
 
+    template<WatTokens T1> inline bool MatchTokens(Queue<WatToken>& tokens, WatToken* t1 = nullptr)
+    {
+      if(tokens.Size() >= 1 && tokens[0].id == T1)
+      {
+        auto v1 = tokens.Pop();
+        if(t1)
+          *t1 = v1;
+        return true;
+      }
+      return false;
+    }
+    template<WatTokens T1, WatTokens T2>
+    inline bool MatchTokens(Queue<WatToken>& tokens, WatToken* t1 = nullptr,  WatToken* t2 = nullptr)
+    {
+      if(tokens.Size() >= 2 && tokens[0].id == T1 && tokens[1].id == T2)
+      {
+        auto v1 = tokens.Pop();
+        if(t1)
+          *t1 = v1;
+        auto v2 = tokens.Pop();
+        if(t2)
+          *t2 = v2;
+        return true;
+      }
+      return false;
+    }
+
     Environment& env;
     Module& m;
     Queue<DeferWatAction> deferred;
@@ -114,6 +141,8 @@ namespace innative {
     wat::kh_indexname_t* tablehash;
     wat::kh_indexname_t* memoryhash;
     wat::kh_indexname_t* globalhash;
+    wat::kh_indexname_t* datahash;
+    wat::kh_indexname_t* elemhash;
     std::string numbuf;
   };
 
