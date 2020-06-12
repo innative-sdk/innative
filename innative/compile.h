@@ -54,6 +54,32 @@ namespace innative {
       llvm::AllocaInst* memlocal;
     };
 
+    struct DataSegment
+    {
+      llvm::Constant* data;
+      llvm::GlobalVariable* global;
+      llvm::GlobalVariable* runtime_len; // because of dumb data.drop :unamused:
+    };
+
+    struct ElemSegment
+    {
+      llvm::Constant* elem;
+      llvm::GlobalVariable* global;
+      llvm::GlobalVariable* runtime_len; // because of dumb table.drop :unamused:
+    };
+
+    enum class FPToIntOp : int
+    {
+      F32ToI32 = 0,
+      F32ToU32 = 1,
+      F64ToI32 = 2,
+      F64ToU32 = 3,
+      F32ToI64 = 4,
+      F32ToU64 = 5,
+      F64ToI64 = 6,
+      F64ToU64 = 7,
+    };
+
     Environment& env;
     Module& m;
     llvm::LLVMContext& ctx;
@@ -72,6 +98,8 @@ namespace innative {
     std::vector<llvm::GlobalVariable*> memories;
     std::vector<llvm::GlobalVariable*> tables;
     std::vector<llvm::GlobalVariable*> globals;
+    std::vector<DataSegment> data_globals;
+    std::vector<ElemSegment> elem_globals;
     llvm::GlobalVariable* exported_functions;
     std::vector<FunctionSet> functions;
     llvm::Function* init;
@@ -92,6 +120,7 @@ namespace innative {
     using llvmTy  = llvm::Type;
     using llvmVal = llvm::Value;
     using CInt    = llvm::ConstantInt;
+    using CFloat  = llvm::ConstantFP;
     using BB      = llvm::BasicBlock;
 
     llvm::StructType* GetTableType(varsint7 element_type);
@@ -99,6 +128,8 @@ namespace innative {
     llvm::Value* GetPairPtr(llvm::GlobalVariable* v, int index);
     llvm::Constant* GetPairNull(llvm::StructType* ty);
     IN_ERROR InsertConditionalTrap(llvmVal* cond);
+    IN_ERROR InsertBoundsCheck(llvm::Type* inputTy, llvmVal* end, std::initializer_list<llvmVal*> offsets,
+                               llvmVal* accessSize, llvmVal*& loc);
     llvmTy* GetLLVMType(varsint7 type);
     FuncTy* GetFunctionType(FunctionType& signature);
     Func* HomogenizeFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
@@ -147,8 +178,13 @@ namespace innative {
     IN_ERROR CompileIndirectCall(varuint32 index);
     llvmVal* CompileMemSize(llvm::GlobalVariable* target);
     IN_ERROR CompileMemGrow(varuint32 memory, const char* name);
+    IN_ERROR CompileMemInit(varuint32 dst_mem, varuint32 src_seg);
     IN_ERROR CompileMemCopy(varuint32 dst_mem, varuint32 src_mem);
     IN_ERROR CompileMemFill(varuint32 mem);
+    IN_ERROR CompileTableInit(varuint32 dst_tbl, varuint32 src_elem);
+    IN_ERROR CompileTableCopy(varuint32 dst_tbl, varuint32 src_tbl);
+    IN_ERROR CompileDataDrop(varuint32 segment);
+    IN_ERROR CompileElemDrop(varuint32 segment);
     void DumpCompilerState();
     IN_ERROR CompileInstruction(Instruction& ins);
     IN_ERROR CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst*& memlocal, FunctionDesc& desc,
@@ -329,6 +365,9 @@ namespace innative {
     IN_ERROR CompileDiv(bool overflow, llvmVal* (llvm::IRBuilder<>::*op)(llvmVal*, llvmVal*, Args...), Args... args);
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR>
     IN_ERROR CompileFloatCmp(llvm::Intrinsic::ID id, const llvm::Twine& name);
+
+    IN_ERROR CompileSignExtendOp(WASM_TYPE_ENCODING argTy, unsigned valueBits, const char* name);
+    IN_ERROR CompileFPToInt(FPToIntOp op, bool saturating, const char* name);
 
     IN_ERROR CompileAtomicInstruction(Instruction& ins);
 

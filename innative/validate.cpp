@@ -584,10 +584,31 @@ namespace innative {
                   ins.line, callee);
   }
 
-  void ValidateBulkMemOp(const Instruction& ins, Stack<varsint7>& values, Environment& env, Module* m)
+  void ValidateMiscOp(const Instruction& ins, Stack<varsint7>& values, Environment& env, Module* m)
   {
     switch(ins.opcode[1])
     {
+    case OP_i32_trunc_sat_f32_s:
+    case OP_i32_trunc_sat_f32_u:
+      ValidatePopType(ins, values, TE_f32, env, m);
+      values.Push(TE_i32);
+      break;
+    case OP_i32_trunc_sat_f64_s:
+    case OP_i32_trunc_sat_f64_u:
+      ValidatePopType(ins, values, TE_f64, env, m);
+      values.Push(TE_i32);
+      break;
+    case OP_i64_trunc_sat_f32_s:
+    case OP_i64_trunc_sat_f32_u:
+      ValidatePopType(ins, values, TE_f32, env, m);
+      values.Push(TE_i64);
+      break;
+    case OP_i64_trunc_sat_f64_s:
+    case OP_i64_trunc_sat_f64_u:
+      ValidatePopType(ins, values, TE_f64, env, m);
+      values.Push(TE_i64);
+      break;
+
     case OP_memory_init:
     {
       varuint32 dst_mem = ins.immediates[0]._varuint32;
@@ -1065,13 +1086,19 @@ namespace innative {
     case OP_i32_reinterpret_f32: ValidateUnaryOp<TE_f32, TE_i32>(ins, values, env, m); break;
     case OP_i64_reinterpret_f64: ValidateUnaryOp<TE_f64, TE_i64>(ins, values, env, m); break;
     case OP_f32_reinterpret_i32: ValidateUnaryOp<TE_i32, TE_f32>(ins, values, env, m); break;
-    case OP_f64_reinterpret_i64:
-      ValidateUnaryOp<TE_i64, TE_f64>(ins, values, env, m);
+    case OP_f64_reinterpret_i64: ValidateUnaryOp<TE_i64, TE_f64>(ins, values, env, m); break;
+
+    case OP_i32_extend8_s:
+    case OP_i32_extend16_s: ValidateUnaryOp<TE_i32, TE_i32>(ins, values, env, m); break;
+    case OP_i64_extend8_s:
+    case OP_i64_extend16_s:
+    case OP_i64_extend32_s:
+      ValidateUnaryOp<TE_i64, TE_i64>(ins, values, env, m);
       break;
 
       // Bulk memory operations
-    case OP_bulk_memory_prefix:
-      ValidateBulkMemOp(ins, values, env, m);
+    case OP_misc_ops_prefix:
+      ValidateMiscOp(ins, values, env, m);
       break;
 
       // Atomics
@@ -1079,7 +1106,7 @@ namespace innative {
 
     default:
       AppendError(env, env.errors, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "[%u] Unknown instruction code %hhu", ins.line,
-                  ins.opcode);
+                  ins.opcode[0]);
     }
   }
 
@@ -1134,7 +1161,7 @@ varsint7 innative::ValidateInitializer(const Instruction& ins, Environment& env,
   }
 
   AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER,
-              "[%u] An initializer must be a get_global or const instruction, not %hhu", ins.line, ins.opcode);
+              "[%u] An initializer must be a get_global or const instruction, not %hhu", ins.line, ins.opcode[0]);
   return TE_NONE;
 }
 
@@ -1230,7 +1257,7 @@ varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env,
 
 void innative::ValidateTableOffset(const TableInit& init, Environment& env, Module* m)
 {
-  if(init.flags > 7)
+  if(init.flags & WASM_ELEM_INVALID_FLAGS)
   {
     AppendError(env, env.errors, m, ERR_INVALID_ELEMENT_SEGMENT, "Invalid element segment flags %x", init.flags);
     return; // The rest of this validation is junk if the flags are junk
@@ -1283,15 +1310,27 @@ void innative::ValidateTableOffset(const TableInit& init, Environment& env, Modu
     }
 
     varsint32 offset = EvalInitializerI32(init.offset, env, m);
-    if(offset < 0 || offset + init.n_elements > table->resizable.minimum)
+    // This is now a trap at start
+    /*if(offset < 0 || offset + init.n_elements > table->resizable.minimum)
       AppendError(env, env.errors, m, ERR_INVALID_TABLE_OFFSET,
                   "Offset (%i) plus element count (%u) exceeds minimum table length (%u)", offset, init.n_elements,
-                  table->resizable.minimum);
+                  table->resizable.minimum);*/
 
     for(varuint32 i = 0; i < init.n_elements; ++i)
-      if(!ModuleFunction(*m, init.elements[i]))
+    {
+      varuint32 idx;
+      if(init.flags & WASM_ELEM_CARRIES_ELEMEXPRS)
+      {
+        if(init.elemexprs[i].opcode[0] == OP_ref_null)
+          continue;
+        idx = init.elemexprs[i].immediates[0]._varuint32;
+      }
+      else
+        idx = init.elements[i];
+      if(!ModuleFunction(*m, idx))
         AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid element initializer %u function index: %u", i,
                     init.elements[i]);
+    }
   }
   else
   {
@@ -1434,11 +1473,12 @@ void innative::ValidateDataOffset(const DataInit& init, Environment& env, Module
         AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "Could not resolve memory import %u", init.index);
     }
 
-    varsint32 offset = EvalInitializerI32(init.offset, env, m);
+    // Offset out of bounds is now a trap at module start instead of a validation error
+    /*varsint32 offset = EvalInitializerI32(init.offset, env, m);
     if(offset < 0 || offset + (uint64_t)init.data.size() > (((uint64_t)memory->limits.minimum) << 16))
       AppendError(env, env.errors, m, ERR_INVALID_DATA_SEGMENT,
                   "Offset (%i) plus element count (%u) exceeds minimum memory length (%llu)", offset, init.data.size(),
-                  (((uint64_t)memory->limits.minimum) << 16));
+                  (((uint64_t)memory->limits.minimum) << 16));*/
   }
 }
 
@@ -1538,8 +1578,9 @@ void innative::ValidateModule(Environment& env, Module& m)
   }
   else if(m.knownsections & (1 << WASM_SECTION_DATA_COUNT))
   {
-    // DataCount but no Data...
-    AppendError(env, env.errors, &m, ERR_INVALID_DATA_SEGMENT, "DataCount section specified but no Data");
+    // DataCount but no Data is only a problem if the count is not 0
+    if(m.data_count.count != 0)
+      AppendError(env, env.errors, &m, ERR_INVALID_DATA_SEGMENT, "Data section count does not match DataCount section");
   }
 }
 
