@@ -20,9 +20,11 @@ namespace innative {
   IN_ERROR GenerateLinkerObjects(const Environment& env, std::vector<std::string>& cache);
   int CallLinker(const Environment* env, std::vector<const char*>& linkargs, LLD_FORMAT format);
   path GetLinkerObjectPath(const Environment& env, Module& m, const path& outfile);
-  IN_ERROR CompileEnvironment(Environment* env, const char* file);
+  IN_ERROR CompileEnvironment(Environment* env, const char* file, bool generics);
+  IN_ERROR CompileEnvironmentJIT(Environment* env, bool expose_process);
   int GetCallingConvention(const Import& imp);
   IN_ERROR OutputObjectFile(Compiler& context, const path& out);
+  void* LoadJITFunction(void* env, const char* s);
 }
 
 #endif

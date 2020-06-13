@@ -360,7 +360,7 @@ IN_ERROR innative::Validate(Environment* env)
     return ERR_FATAL_NULL_POINTER;
 
   // Before validating, add all modules to the modulemap. We must do this outside of LoadModule for multithreading reasons.
-  // kh_clear_modules(env->modulemap);
+  kh_clear_modules(env->modulemap);
   for(size_t i = 0; i < env->n_modules; ++i)
   {
     int r;
@@ -389,27 +389,148 @@ IN_ERROR innative::Compile(Environment* env, const char* file)
   if(err != ERR_SUCCESS)
     return err;
 
-  return CompileEnvironment(env, file);
-}
-IN_Entrypoint innative::LoadFunction(void* assembly, const char* module_name, const char* function)
-{
-  auto canonical = CanonicalName(StringSpan::From(module_name), StringSpan::From(function));
-  return (IN_Entrypoint)LoadDLLFunction(assembly, !function ? IN_INIT_FUNCTION : canonical.c_str());
+  return CompileEnvironment(env, file, false);
 }
 
-IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const char* table, varuint32 index)
+IN_Entrypoint innative::LoadFunctionLambda(void* p, void* (*load)(void*, const char*), const char* module_name,
+                                           const char* function)
 {
-  INGlobal* ref = reinterpret_cast<INGlobal*>(
-    LoadDLLFunction(assembly, CanonicalName(StringSpan::From(module_name), StringSpan::From(table)).c_str()));
+  auto canonical = CanonicalName(StringSpan::From(module_name), StringSpan::From(function));
+  return (IN_Entrypoint)(*load)(p, !function ? IN_INIT_FUNCTION : canonical.c_str());
+}
+
+IN_Entrypoint innative::LoadTableLambda(void* p, void* (*load)(void*, const char*), const char* module_name,
+                                        const char* table, varuint32 index)
+{
+  INGlobal* ref =
+    reinterpret_cast<INGlobal*>((*load)(p, CanonicalName(StringSpan::From(module_name), StringSpan::From(table)).c_str()));
   if(ref != nullptr && index < (ref->table.size / sizeof(INTableEntry)))
     return ref->table.entries[index].func;
   return nullptr;
 }
 
-INGlobal* innative::LoadGlobal(void* assembly, const char* module_name, const char* export_name)
+INGlobal* innative::LoadGlobalLambda(void* p, void* (*load)(void*, const char*), const char* module_name,
+                                     const char* export_name)
 {
   return reinterpret_cast<INGlobal*>(
-    LoadDLLFunction(assembly, CanonicalName(StringSpan::From(module_name), StringSpan::From(export_name)).c_str()));
+    (*load)(p, CanonicalName(StringSpan::From(module_name), StringSpan::From(export_name)).c_str()));
+}
+
+INModuleMetadata* innative::GetModuleMetadataLambda(void* p, void* (*load)(void*, const char*), uint32_t module_index)
+{
+  return reinterpret_cast<INModuleMetadata*>(
+    (*load)(p, CanonicalName(StringSpan(), StringSpan::From(IN_METADATA_PREFIX), module_index).c_str()));
+}
+IN_Entrypoint innative::LoadTableIndexLambda(void* p, void* (*load)(void*, const char*), uint32_t module_index,
+                                             uint32_t table_index, varuint32 function_index)
+{
+  auto metadata = GetModuleMetadataLambda(p, load, module_index);
+  if(!metadata || table_index >= metadata->n_tables)
+    return nullptr;
+  INGlobal* table = reinterpret_cast<INGlobal*>(metadata->tables[table_index]);
+  if(function_index < (table->table.size / sizeof(INTableEntry)))
+    return table->table.entries[function_index].func;
+  return nullptr;
+}
+INGlobal* innative::LoadGlobalIndexLambda(void* p, void* (*load)(void*, const char*), uint32_t module_index,
+                                          uint32_t global_index)
+{
+  auto metadata = GetModuleMetadataLambda(p, load, module_index);
+  if(!metadata || global_index >= metadata->n_globals)
+    return nullptr;
+  return metadata->globals[global_index];
+}
+INGlobal* innative::LoadMemoryIndexLambda(void* p, void* (*load)(void*, const char*), uint32_t module_index,
+                                          uint32_t memory_index)
+{
+  auto metadata = GetModuleMetadataLambda(p, load, module_index);
+  if(!metadata || memory_index >= metadata->n_memories)
+    return nullptr;
+  return reinterpret_cast<INGlobal*>(metadata->memories[memory_index]);
+}
+
+enum IN_ERROR innative::CompileJIT(Environment* env, bool expose_process)
+{
+  if(!env)
+    return ERR_FATAL_NULL_POINTER;
+
+  IN_ERROR err = Validate(env);
+  if(err != ERR_SUCCESS)
+    return err;
+
+  return CompileEnvironmentJIT(env, expose_process);
+}
+
+IN_Entrypoint innative::LoadFunction(void* assembly, const char* module_name, const char* function)
+{
+  return LoadFunctionLambda(assembly, &LoadDLLFunction, module_name, function);
+}
+
+IN_Entrypoint innative::LoadTable(void* assembly, const char* module_name, const char* table, varuint32 index)
+{
+  return LoadTableLambda(assembly, &LoadDLLFunction, module_name, table, index);
+}
+
+INGlobal* innative::LoadGlobal(void* assembly, const char* module_name, const char* export_name)
+{
+  return LoadGlobalLambda(assembly, &LoadDLLFunction, module_name, export_name);
+}
+
+INModuleMetadata* innative::GetModuleMetadata(void* assembly, uint32_t module_index)
+{
+  return GetModuleMetadataLambda(assembly, &LoadDLLFunction, module_index);
+}
+
+IN_Entrypoint innative::LoadTableIndex(void* assembly, uint32_t module_index, uint32_t table_index,
+                                       varuint32 function_index)
+{
+  return LoadTableIndexLambda(assembly, &LoadDLLFunction, module_index, table_index, function_index);
+}
+
+INGlobal* innative::LoadGlobalIndex(void* assembly, uint32_t module_index, uint32_t global_index)
+{
+  return LoadGlobalIndexLambda(assembly, &LoadDLLFunction, module_index, global_index);
+}
+
+INGlobal* innative::LoadMemoryIndex(void* assembly, uint32_t module_index, uint32_t memory_index)
+{
+  return LoadMemoryIndexLambda(assembly, &LoadDLLFunction, module_index, memory_index);
+}
+
+IN_Entrypoint innative::LoadFunctionJIT(Environment* env, const char* module_name, const char* function)
+{
+  return LoadFunctionLambda(env, &LoadJITFunction, module_name, function);
+}
+
+IN_Entrypoint innative::LoadTableJIT(Environment* env, const char* module_name, const char* table, varuint32 index)
+{
+  return LoadTableLambda(env, &LoadJITFunction, module_name, table, index);
+}
+
+INGlobal* innative::LoadGlobalJIT(Environment* env, const char* module_name, const char* export_name)
+{
+  return LoadGlobalLambda(env, &LoadJITFunction, module_name, export_name);
+}
+
+INModuleMetadata* innative::GetModuleMetadataJIT(Environment* env, uint32_t module_index)
+{
+  return GetModuleMetadataLambda(env, &LoadJITFunction, module_index);
+}
+
+IN_Entrypoint innative::LoadTableIndexJIT(Environment* env, uint32_t module_index, uint32_t table_index,
+                                          varuint32 function_index)
+{
+  return LoadTableIndexLambda(env, &LoadJITFunction, module_index, table_index, function_index);
+}
+
+INGlobal* innative::LoadGlobalIndexJIT(Environment* env, uint32_t module_index, uint32_t global_index)
+{
+  return LoadGlobalIndexLambda(env, &LoadJITFunction, module_index, global_index);
+}
+
+INGlobal* innative::LoadMemoryIndexJIT(Environment* env, uint32_t module_index, uint32_t memory_index)
+{
+  return LoadMemoryIndexLambda(env, &LoadJITFunction, module_index, memory_index);
 }
 
 void* innative::LoadAssembly(const char* file)
@@ -783,37 +904,6 @@ int innative::RemoveModuleReturn(Environment* env, FunctionType* func, varuint32
   if(!func)
     return ERR_FATAL_NULL_POINTER;
   return DeleteModuleType(env, func->returns, func->n_returns, index);
-}
-
-INModuleMetadata* innative::GetModuleMetadata(void* assembly, uint32_t module_index)
-{
-  return reinterpret_cast<INModuleMetadata*>(
-    LoadDLLFunction(assembly, CanonicalName(StringSpan(), StringSpan::From(IN_METADATA_PREFIX), module_index).c_str()));
-}
-IN_Entrypoint innative::LoadTableIndex(void* assembly, uint32_t module_index, uint32_t table_index,
-                                       varuint32 function_index)
-{
-  auto metadata = GetModuleMetadata(assembly, module_index);
-  if(!metadata || table_index >= metadata->n_tables)
-    return nullptr;
-  INGlobal* table = reinterpret_cast<INGlobal*>(metadata->tables[table_index]);
-  if(function_index < (table->table.size / sizeof(INTableEntry)))
-    return table->table.entries[function_index].func;
-  return nullptr;
-}
-INGlobal* innative::LoadGlobalIndex(void* assembly, uint32_t module_index, uint32_t global_index)
-{
-  auto metadata = GetModuleMetadata(assembly, module_index);
-  if(!metadata || global_index >= metadata->n_globals)
-    return nullptr;
-  return metadata->globals[global_index];
-}
-INGlobal* innative::LoadMemoryIndex(void* assembly, uint32_t module_index, uint32_t memory_index)
-{
-  auto metadata = GetModuleMetadata(assembly, module_index);
-  if(!metadata || memory_index >= metadata->n_memories)
-    return nullptr;
-  return reinterpret_cast<INGlobal*>(metadata->memories[memory_index]);
 }
 int innative::ReplaceTableFuncPtr(void* assembly, uint32_t module_index, uint32_t table_index, const char* function,
                                   IN_Entrypoint replace)

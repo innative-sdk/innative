@@ -115,6 +115,8 @@ namespace innative {
     constexpr char IN_TEMP_PREFIX[]          = "wast_m";
     constexpr char IN_METADATA_PREFIX[]      = "$_innative_module#";
     constexpr char IN_BASE64[]               = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    constexpr char IN_INIT_POSTFIX[]         = "innative_internal_init";
+    constexpr char IN_EXIT_POSTFIX[]         = "innative_internal_exit";
     constexpr uint8_t BASE64['z' + 1] = { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
                                           255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
                                           255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 62,  255, 255, 255, 63,

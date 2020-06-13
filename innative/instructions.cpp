@@ -169,7 +169,7 @@ IN_ERROR Compiler::CompileIfBlock(varsint64 sig)
   Func* parent          = builder.GetInsertBlock()->getParent();
   BB* tblock            = BB::Create(ctx, "if_true", parent);
   BB* fblock            = BB::Create(ctx, "if_else", parent); // Create else stub
-  BB* endblock          = PushLabel("if_end", sig, OP_if, nullptr, debugger->_curscope);
+  BB* endblock          = PushLabel("if_end", sig, OP_if, nullptr, debugger->_curscope, false);
   control.Peek().ifelse = fblock;
 
   builder.CreateCondBr(cmp, tblock, fblock); // Insert branch in current block
@@ -216,23 +216,28 @@ IN_ERROR Compiler::CompileElseBlock()
 
 IN_ERROR Compiler::CompileReturn(varsint64 sig)
 {
-  if(sig == TE_void)
-    builder.CreateRetVoid();
-  else
-  {
-    llvmVal* val;
-    IN_ERROR err = PopStruct(sig, val, false);
-    if(err)
-      return err;
+  llvmVal* val = nullptr;
+  IN_ERROR err = PopStruct(sig, val, false);
+  if(err)
+    return err;
 
+  if(!val)
+    builder.CreateRetVoid();
+  else if(val->getType()->isPointerTy() && val->getType()->getPointerElementType()->isStructTy())
+    builder.CreateRet(builder.CreateLoad(val));
+  else
     builder.CreateRet(val);
-  }
 
   return ERR_SUCCESS;
 }
 
 IN_ERROR Compiler::CompileEndBlock()
 {
+  llvmVal* push = nullptr;
+  IN_ERROR err = PopStruct(control.Peek().sig, push, false);
+  if(err < 0)
+    return err;
+
   BB* cur = builder.GetInsertBlock();
   if(control.Peek().block->getParent() != nullptr) // If the label wasn't bound, branch to the new one we create
   {
@@ -260,9 +265,9 @@ IN_ERROR Compiler::CompileEndBlock()
   default: return ERR_END_MISMATCH;
   }
 
-  IN_ERROR err = PopLabel(cur); // Pop the label to assemble the phi node before pushing it.
-  if(cache.op == OP_return)
-    CompileReturn(cache.sig);
+  err = PopLabel(cur, push); // Pop the label to assemble the phi node before pushing it.
+  if(err >= 0 && cache.op == OP_return)
+    err = CompileReturn(cache.sig);
 
   return err;
 }
@@ -280,11 +285,10 @@ IN_ERROR Compiler::CompileBranch(varuint32 depth)
     return ERR_INVALID_BRANCH_DEPTH;
 
   Block& target = control[depth];
-  builder.CreateBr(target.block);
-  IN_ERROR err =
-    (target.op != OP_loop) ?
-      AddBranch(target) :
-      ERR_SUCCESS; // Branches targeting loops just throw all their values away, so we don't need to build PHI nodes.
+
+  // Branches targeting loops just throw all their values away, so we don't need to build PHI nodes.
+  IN_ERROR err = (target.op != OP_loop) ? AddBranch(target) : ERR_SUCCESS;
+  builder.CreateBr(target.block); // Create branch AFTER AddBranch because AddBranch can emit code.
   PolymorphicStack();
   return err;
 }
@@ -305,14 +309,15 @@ IN_ERROR Compiler::CompileIfBranch(varuint32 depth)
   BB* block = BB::Create(ctx, "br_if_cont", builder.GetInsertBlock()->getParent());
 
   Block& target = control[depth];
-  builder.CreateCondBr(cmp, target.block, block);
   if(target.op != OP_loop)
   {
     if(err = AddBranch(target))
       return err;
   }
-  builder.SetInsertPoint(
-    block); // Start inserting code into continuation AFTER we add the branch, so the branch goes to the right place
+  builder.CreateCondBr(cmp, target.block, block);
+
+  // Start inserting code into continuation AFTER we add the branch, so the branch goes to the right place
+  builder.SetInsertPoint(block);
   return ERR_SUCCESS; // Branches targeting loops just throw all their values away, so we don't need to build PHI nodes.
 }
 IN_ERROR Compiler::CompileBranchTable(varuint32 n_table, varuint32* table, varuint32 def)
@@ -325,8 +330,8 @@ IN_ERROR Compiler::CompileBranchTable(varuint32 n_table, varuint32* table, varui
   if(def >= control.Size())
     return ERR_INVALID_BRANCH_DEPTH;
 
-  llvm::SwitchInst* s = builder.CreateSwitch(index, control[def].block, n_table);
   err                 = (control[def].op != OP_loop) ? AddBranch(control[def]) : ERR_SUCCESS;
+  llvm::SwitchInst* s = builder.CreateSwitch(index, control[def].block, n_table);
 
   for(varuint32 i = 0; i < n_table && err == ERR_SUCCESS; ++i)
   {
@@ -334,8 +339,8 @@ IN_ERROR Compiler::CompileBranchTable(varuint32 n_table, varuint32* table, varui
       return ERR_INVALID_BRANCH_DEPTH;
 
     Block& target = control[table[i]];
+    err           = (target.op != OP_loop) ? AddBranch(target) : ERR_SUCCESS;
     s->addCase(builder.getInt32(i), target.block);
-    err = (target.op != OP_loop) ? AddBranch(target) : ERR_SUCCESS;
   }
 
   PolymorphicStack();
@@ -366,7 +371,7 @@ IN_ERROR Compiler::CompileCall(varuint32 index)
     llvmVal* out = nullptr;
     err          = (this->*functions[index].intrinsic->fn)(ArgsV, out);
     if(err >= 0 && out != nullptr)
-      return PushReturn(out);
+      return PushReturn(out); // We assume all intrinsics only have one return
 
     return err;
   }
@@ -395,7 +400,7 @@ IN_ERROR Compiler::CompileCall(varuint32 index)
   call->setAttributes(fn->getAttributes());
 
   if(!fn->getReturnType()->isVoidTy()) // Only push a value if there is one to push
-    return PushReturn(call);
+    return PushMultiReturn(call, ModuleFunctionType(m, index));
 
   return ERR_SUCCESS;
 }
@@ -487,7 +492,7 @@ IN_ERROR Compiler::CompileIndirectCall(varuint32 index)
                                             // the internal wrapping function
 
   if(!ty->getReturnType()->isVoidTy()) // Only push a value if there is one to push
-    return PushReturn(call);
+    return PushMultiReturn(call, index);
   return ERR_SUCCESS;
 }
 
@@ -586,7 +591,8 @@ IN_ERROR Compiler::CompileMemGrow(varuint32 memory, const char* name)
 
   builder.CreateCondBr(success, successblock, contblock);
   builder.SetInsertPoint(successblock); // Only set new memory if call succeeded
-  builder.CreateAlignedStore(call, GetPairPtr(memories[memory], 0), builder.getInt64Ty()->getPrimitiveSizeInBits() / 8, false);
+  builder.CreateAlignedStore(call, GetPairPtr(memories[memory], 0), builder.getInt64Ty()->getPrimitiveSizeInBits() / 8,
+                             false);
   builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[memory], 0)), memlocal, false);
   builder.CreateBr(contblock);
 
@@ -683,14 +689,14 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return ERR_SUCCESS;
   case OP_nop: return ERR_SUCCESS;
   case OP_block:
-    PushLabel("block", ins.immediates[0]._varsint7, OP_block, nullptr, debugger->_curscope);
+    PushLabel("block", ins.immediates[0]._varsint64, OP_block, nullptr, debugger->_curscope, false);
     return ERR_SUCCESS;
   case OP_loop:
-    PushLabel("loop", ins.immediates[0]._varsint7, OP_loop, nullptr, debugger->_curscope);
+    PushLabel("loop", ins.immediates[0]._varsint64, OP_loop, nullptr, debugger->_curscope, false);
     builder.CreateBr(control.Peek().block); // Branch into next block
     BindLabel(control.Peek().block);
     return ERR_SUCCESS;
-  case OP_if: return CompileIfBlock(ins.immediates[0]._varsint7);
+  case OP_if: return CompileIfBlock(ins.immediates[0]._varsint64);
   case OP_else: return CompileElseBlock();
   case OP_end: return CompileEndBlock();
   case OP_br: return CompileBranch(ins.immediates[0]._varuint32);
@@ -1209,14 +1215,10 @@ IN_ERROR Compiler::CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst
   if(sig.n_params != fn->arg_size())
     return ERR_SIGNATURE_MISMATCH;
 
-  // Get return value
-  varsint7 ret = TE_void;
-  if(sig.n_returns > 0)
-    ret = sig.returns[0];
-
   debugger->FuncBody(fn, indice, desc, body);
-  PushLabel("exit", ret, OP_return, nullptr,
-            fn->getSubprogram()); // Setup the function exit block that wraps everything
+  // Setup the function exit block that wraps everything, but discard the function parameters because they aren't really
+  // there.
+  PushLabel("exit", desc.type_index, OP_return, nullptr, fn->getSubprogram(), true);
 
   builder.SetInsertPoint(BB::Create(ctx, "entry", fn)); // Setup initial basic block.
   locals.resize(0);
@@ -1242,7 +1244,7 @@ IN_ERROR Compiler::CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst
     debugger->FuncParam(fn, index, desc);
     ++index;
     builder.CreateStore(&arg, locals.back(), false); // Store parameter (we can't use the parameter directly
-                                              // because wasm lets you store to parameters)
+                                                     // because wasm lets you store to parameters)
   }
 
   for(varuint32 i = 0; i < body.n_locals; ++i)

@@ -217,8 +217,6 @@ std::string Debugger::GenFlagString(const Environment& env)
     f += " multithreaded";
   if(env.flags & ENV_EMIT_LLVM)
     f += " llvm";
-  if(env.flags & ENV_HOMOGENIZE_FUNCTIONS)
-    f += " homogenize";
   if(env.flags & ENV_NO_INIT)
     f += " noinit";
   if(env.flags & ENV_CHECK_STACK_OVERFLOW)
@@ -267,6 +265,12 @@ std::string Debugger::GenFlagString(const Environment& env)
   {
     if(env.features & ENV_FEATURE_MUTABLE_GLOBALS)
       f += " mutable_globals";
+    if(env.features & ENV_FEATURE_MULTI_VALUE)
+      f += " multi_value";
+    if(env.features & ENV_FEATURE_MULTI_MEMORY)
+      f += " multi_memory";
+    if(env.features & ENV_FEATURE_THREADS)
+      f += " threads";
   }
 
   return f;

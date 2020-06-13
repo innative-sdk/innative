@@ -71,6 +71,34 @@ namespace innative {
         float f32;
         double f64;
       };
+
+      template<typename T> static WastResult get(T v)
+      {
+        WastResult r;
+        if constexpr(std::is_same_v<T, int32_t>)
+        {
+          r.type = TE_i32;
+          r.i32  = v;
+        }
+        else if constexpr(std::is_same_v<T, int64_t>)
+        {
+          r.type = TE_i64;
+          r.i64  = v;
+        }
+        else if constexpr(std::is_same_v<T, float>)
+        {
+          r.type = TE_f32;
+          r.f32  = v;
+        }
+        else if constexpr(std::is_same_v<T, double>)
+        {
+          r.type = TE_f64;
+          r.f64  = v;
+        }
+        else
+          static_assert(false, "invalid type");
+        return r;
+      }
     };
 
     jmp_buf jump_location;
@@ -82,70 +110,17 @@ namespace innative {
     int SetTempName(Environment& env, Module& m);
     int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module& m, const path& file);
 
-    template<int I, typename... Args> struct GenWastFunction
-    {
-      inline static void Call(void* f, WastResult& result, const Instruction* param, Args... args)
-      {
-        switch(param[I - 1].opcode[0])
-        {
-        case OP_i32_const:
-          return GenWastFunction<I - 1, int32_t, Args...>::Call(f, result, param, param[I - 1].immediates[0]._varsint32,
-                                                                args...);
-        case OP_i64_const:
-          return GenWastFunction<I - 1, int64_t, Args...>::Call(f, result, param, param[I - 1].immediates[0]._varsint64,
-                                                                args...);
-        case OP_f32_const:
-          return GenWastFunction<I - 1, float, Args...>::Call(f, result, param, param[I - 1].immediates[0]._float32,
-                                                              args...);
-        case OP_f64_const:
-          return GenWastFunction<I - 1, double, Args...>::Call(f, result, param, param[I - 1].immediates[0]._float64,
-                                                               args...);
-        }
-        assert(false);
-      }
-    };
-
-    template<typename... Args> struct GenWastFunction<0, Args...>
-    {
-      inline static void Call(void* f, WastResult& result, const Instruction* param, Args... args)
-      {
-        switch(result.type)
-        {
-        case TE_i32: result.i32 = reinterpret_cast<int32_t (*)(Args...)>(f)(args...); break;
-        case TE_i64: result.i64 = reinterpret_cast<int64_t (*)(Args...)>(f)(args...); break;
-        case TE_f32: result.f32 = reinterpret_cast<float (*)(Args...)>(f)(args...); break;
-        case TE_f64: result.f64 = reinterpret_cast<double (*)(Args...)>(f)(args...); break;
-        default: assert(false); result.type = TE_NONE;
-        case TE_void: reinterpret_cast<void (*)(Args...)>(f)(args...); break;
-        }
-      }
-    };
-
-    int64_t Homogenize(const Instruction& i);
-
-    template<typename... Args> void GenWastFunctionCall(void* f, WastResult& result, Args... params)
-    {
-      int64_t r = reinterpret_cast<int64_t (*)(typename internal::HType<Args>::T...)>(f)(Homogenize(params)...);
-      switch(result.type)
-      {
-      case TE_i32:
-      case TE_f32:
-      case TE_f64:
-      case TE_i64: result.i64 = r; break;
-      default: assert(false); result.type = TE_NONE;
-      case TE_void: break;
-      }
-    }
-
     // SEH exceptions and destructors don't mix, so we isolate all this signal and exception handling in this function.
-    int IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, WastResult& result,
+    int IsolateFunctionCall(Environment& env, FunctionType* ftype, void* f, std::vector<WastResult>& result,
                             std::vector<Instruction>& params);
     int ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache,
-                        path& cachepath, int& counter, const path& file, WastResult& result);
+                        path& cachepath, int& counter, const path& file, std::vector<WastResult>& result);
     bool WastIsNaN(float f, bool canonical);
     bool WastIsNaN(double f, bool canonical);
     inline string GetAssertionString(int code);
     inline const char* MapAssertionString(const char* s);
+
+    typedef void (*IN_GENERAL)(char*, char*);
   } // namespace wat
 } // namespace innative
 
@@ -241,7 +216,7 @@ int wat::CompileWast(Environment& env, const path& out, void*& cache, path& cach
   ValidateEnvironment(env);
   if(env.errors)
     return ERR_VALIDATION_ERROR;
-  if(err = CompileEnvironment(&env, out.u8string().c_str()))
+  if(err = CompileEnvironment(&env, out.u8string().c_str(), true))
     return err;
 
   cachepath = out;
@@ -336,22 +311,8 @@ int wat::ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname
   return ERR_SUCCESS;
 }
 
-int64_t wat::Homogenize(const Instruction& i)
-{
-  switch(i.opcode[0])
-  {
-  case OP_i32_const: return i.immediates[0]._varsint32;
-  case OP_i64_const: return i.immediates[0]._varsint64;
-  case OP_f32_const: return i.immediates[0]._varsint32;
-  case OP_f64_const: return i.immediates[0]._varsint64;
-  }
-
-  assert(false);
-  return 0;
-}
-
 // SEH exceptions and destructors don't mix, so we isolate all this signal and exception handling in this function.
-int wat::IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, WastResult& result,
+int wat::IsolateFunctionCall(Environment& env, FunctionType* ftype, void* f, std::vector<WastResult>& result,
                              std::vector<Instruction>& params)
 {
   if(SETJMP(jump_location) != 0)
@@ -363,42 +324,55 @@ int wat::IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, Wast
   __try // this catches division by zero on windows
   {
 #endif
-    if(env.flags & ENV_HOMOGENIZE_FUNCTIONS)
+    if(params.size() != ftype->n_params)
+      return ERR_FATAL_UNKNOWN_KIND;
+
+    size_t n_parambytes = 0;
+    for(auto& p : params)
     {
-      switch(n_params)
+      switch(p.opcode[0])
       {
-      case 0: GenWastFunctionCall(f, result); break;
-      case 1: GenWastFunctionCall(f, result, params[0]); break;
-      case 2: GenWastFunctionCall(f, result, params[0], params[1]); break;
-      case 3: GenWastFunctionCall(f, result, params[0], params[1], params[2]); break;
-      case 4: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3]); break;
-      case 5: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4]); break;
-      case 6: GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5]); break;
-      case 7:
-        GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6]);
-        break;
-      case 8:
-        GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6],
-                            params[7]);
-        break;
-      case 9:
-        GenWastFunctionCall(f, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6],
-                            params[7], params[8]);
-        break;
-      default: assert(false); return ERR_FATAL_UNKNOWN_KIND;
+      case OP_i32_const:
+      case OP_f32_const: n_parambytes += sizeof(int32_t); break;
+      case OP_i64_const:
+      case OP_f64_const: n_parambytes += sizeof(int64_t); break;
       }
     }
-    else
+
+    auto parambytes = tmalloc<char>(env, n_parambytes);
+    size_t offset   = 0;
+    for(auto& p : params)
     {
-      switch(n_params)
+      switch(p.opcode[0])
       {
-      case 0: GenWastFunction<0>::Call(f, result, params.data()); break;
-      case 1: GenWastFunction<1>::Call(f, result, params.data()); break;
-      case 2: GenWastFunction<2>::Call(f, result, params.data()); break;
-      case 3: GenWastFunction<3>::Call(f, result, params.data()); break;
-      default: assert(false); return ERR_FATAL_UNKNOWN_KIND;
+      case OP_i32_const:
+      case OP_f32_const:
+        memcpy(parambytes + offset, &p.immediates[0]._varsint32, sizeof(int32_t));
+        offset += sizeof(int32_t);
+        break;
+      case OP_i64_const:
+      case OP_f64_const:
+        memcpy(parambytes + offset, &p.immediates[0]._varsint64, sizeof(int64_t));
+        offset += sizeof(int64_t);
+        break;
       }
     }
+
+    size_t n_returnbytes = 0;
+    for(varuint32 i = 0; i < ftype->n_returns; ++i)
+    {
+      switch(ftype->returns[i])
+      {
+      case TE_i32:
+      case TE_f32: n_returnbytes += sizeof(int32_t); break;
+      case TE_i64:
+      case TE_f64: n_returnbytes += sizeof(int64_t); break;
+      }
+    }
+
+    auto returnbytes = tmalloc<char>(env, n_returnbytes);
+
+    //reinterpret_cast<IN_GENERAL>(f)(parambytes, returnbytes);
 #ifdef IN_COMPILER_MSC
   }
   __except(1)
@@ -442,8 +416,10 @@ int wat::IsolateFunctionCall(Environment& env, varuint32 n_params, void* f, Wast
   return ERR_SUCCESS;
 }
 
+std::vector<FunctionType> functypes;
+
 int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache,
-                         path& cachepath, int& counter, const path& file, WastResult& result)
+                         path& cachepath, int& counter, const path& file, std::vector<WastResult>& result)
 {
   int err;
   int cache_err = 0;
@@ -517,11 +493,6 @@ int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname
     if(!f)
       return ERR_INVALID_FUNCTION_INDEX;
 
-    if(!ftype->n_returns)
-      result.type = TE_void;
-    else
-      result.type = (WASM_TYPE_ENCODING)ftype->returns[0];
-
     // Call the function and set the correct result.
     signal(SIGILL, WastCrashHandler);
     signal(SIGFPE, WastCrashHandler); // This catches division by zero on linux
@@ -544,8 +515,39 @@ int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname
     sigemptyset(&sa.sa_mask);
     sigaction(SIGSEGV, &sa, NULL);
 #endif
+    auto pred = [ftype](const FunctionType& a) {
+      auto& b = *ftype;
+      if(a.form != b.form || a.n_params != b.n_params || a.n_returns != b.n_returns)
+        return false;
+      for(varuint32 i = 0; i < a.n_returns; ++i)
+        if(a.returns[i] != b.returns[i])
+          return false;
+      for(varuint32 i = 0; i < a.n_params; ++i)
+        if(a.params[i] != b.params[i])
+          return false;
+      return true;
+    };
 
-    err = IsolateFunctionCall(env, ftype->n_params, f, result, params);
+    if(std::find_if(functypes.begin(), functypes.end(), pred) == functypes.end())
+    {
+      if(ftype->n_params)
+      {
+        varsint7* params = (varsint7*)malloc(ftype->n_params);
+        memcpy(params, ftype->params, ftype->n_params);
+        ftype->params = params;
+      }
+
+      if(ftype->n_returns)
+      {
+        varsint7* returns = (varsint7*)malloc(ftype->n_returns);
+        memcpy(returns, ftype->returns, ftype->n_returns);
+        ftype->returns = returns;
+      }
+
+      functypes.push_back(*ftype);
+    }
+
+    err = IsolateFunctionCall(env, ftype, f, result, params);
 
     signal(SIGILL, SIG_DFL);
     signal(SIGFPE, SIG_DFL);
@@ -590,22 +592,10 @@ int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname
 
     switch(g->type)
     {
-    case TE_i32:
-      result.i32  = *reinterpret_cast<int32_t*>(f);
-      result.type = TE_i32;
-      break;
-    case TE_i64:
-      result.i64  = *reinterpret_cast<int64_t*>(f);
-      result.type = TE_i64;
-      break;
-    case TE_f32:
-      result.f32  = *reinterpret_cast<float*>(f);
-      result.type = TE_f32;
-      break;
-    case TE_f64:
-      result.f64  = *reinterpret_cast<double*>(f);
-      result.type = TE_f64;
-      break;
+    case TE_i32: result.push_back(WastResult::get(*reinterpret_cast<int32_t*>(f))); break;
+    case TE_i64: result.push_back(WastResult::get(*reinterpret_cast<int64_t*>(f))); break;
+    case TE_f32: result.push_back(WastResult::get(*reinterpret_cast<float*>(f))); break;
+    case TE_f64: result.push_back(WastResult::get(*reinterpret_cast<double*>(f))); break;
     default: return ERR_INVALID_TYPE;
     }
 
@@ -780,7 +770,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     case WatTokens::GET:
     {
       WatToken t = tokens.Peek();
-      WastResult result;
+      std::vector<WastResult> result;
       if(err = ParseWastAction(env, tokens, mapping, last, cache, cachepath, counter, targetpath, result))
       {
         if(err != ERR_RUNTIME_TRAP && err != ERR_RUNTIME_INIT_ERROR)
@@ -824,7 +814,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       else
       {
         EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
-        WastResult result;
+        std::vector<WastResult> result;
         err = ParseWastAction(env, tokens, mapping, last, cache, cachepath, counter, targetpath, result);
         if(err != ERR_RUNTIME_TRAP)
           AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded",
@@ -840,7 +830,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     {
       WatToken t = tokens.Pop();
       EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
-      WastResult result = { TE_NONE };
+      std::vector<WastResult> result;
       if(err = ParseWastAction(env, tokens, mapping, last, cache, cachepath, counter, targetpath, result))
       {
         if(err != ERR_RUNTIME_TRAP && err != ERR_RUNTIME_INIT_ERROR)
@@ -858,97 +848,113 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       switch(t.id)
       {
       case WatTokens::ASSERT_RETURN:
-        if(tokens[0].id == WatTokens::CLOSE) // This is valid because it represents a return of nothing
-          value.opcode[0] = OP_nop;
-        else
+        char typebuf[10];
+
+        while(tokens[0].id == WatTokens::OPEN)
         {
           EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
           if(CheckSpecialNaN(tokens, value, nanCanonical))
             specialNan = true;
           else if(err = state.ParseInitializer(tokens, value))
             return err;
+
+          if(result.empty())
+          {
+            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Ran out of return values!",
+                        WatLineNumber(start, t.pos));
+          }
+          else
+          {
+            switch(value.opcode[0])
+            {
+            case OP_i32_const:
+              if(result.back().type != TE_i32)
+                AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i32 type but got %s",
+                            WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.back().type, typebuf, 10));
+              else if(result.back().i32 != value.immediates[0]._varsint32)
+                AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %i but got %i",
+                            WatLineNumber(start, t.pos), value.immediates[0]._varsint32, result.back().i32);
+              break;
+            case OP_i64_const:
+              if(result.back().type != TE_i64)
+                AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i64 type but got %s",
+                            WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.back().type, typebuf, 10));
+              else if(result.back().i64 != value.immediates[0]._varsint64)
+                AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %lli but got %lli",
+                            WatLineNumber(start, t.pos), value.immediates[0]._varsint64, result.back().i64);
+              break;
+            case OP_f32_const:
+              if(result.back().type != TE_f32)
+                AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f32 type but got %s",
+                            WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.back().type, typebuf, 10));
+              else if(specialNan)
+              {
+                if(!WastIsNaN(result.back().f32, nanCanonical))
+                  AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g",
+                              WatLineNumber(start, t.pos), nanCanonical ? "canonical" : "arithmetic", result.back().f32);
+              }
+              else if(isnan(value.immediates[0]._float32)) // If this is an NAN we must match the exact bit pattern
+              {
+                if(value.immediates[0]._varsint32 != result.back().i32)
+                  AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g",
+                              WatLineNumber(start, t.pos), value.immediates[0]._float32, result.back().f32);
+              }
+              else if(result.back().f32 != value.immediates[0]._float32)
+                AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g",
+                            WatLineNumber(start, t.pos), value.immediates[0]._float32, result.back().f32);
+              break;
+            case OP_f64_const:
+              if(result.back().type != TE_f64)
+                AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f64 type but got %s",
+                            WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.back().type, typebuf, 10));
+              else if(specialNan)
+              {
+                if(!WastIsNaN(result.back().f64, nanCanonical))
+                  AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g",
+                              WatLineNumber(start, t.pos), nanCanonical ? "canonical" : "arithmetic", result.back().f64);
+              }
+              else if(isnan(value.immediates[0]._float64)) // If this is an NAN we must match the exact bit pattern
+              {
+                if(value.immediates[0]._varsint64 != result.back().i64)
+                  AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g",
+                              WatLineNumber(start, t.pos), value.immediates[0]._float64, result.back().f64);
+              }
+              else if(result.back().f64 != value.immediates[0]._float64)
+                AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g",
+                            WatLineNumber(start, t.pos), value.immediates[0]._float64, result.back().f64);
+              break;
+            default: assert(false);
+            }
+            result.pop_back();
+          }
+
           EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
         }
 
-        char typebuf[10];
-        switch(value.opcode[0])
-        {
-        case OP_nop:
-          if(result.type != TE_void)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected no return value but got %s",
-                        WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
-          break;
-        case OP_i32_const:
-          if(result.type != TE_i32)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i32 type but got %s",
-                        WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
-          else if(result.i32 != value.immediates[0]._varsint32)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %i but got %i",
-                        WatLineNumber(start, t.pos), value.immediates[0]._varsint32, result.i32);
-          break;
-        case OP_i64_const:
-          if(result.type != TE_i64)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i64 type but got %s",
-                        WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
-          else if(result.i64 != value.immediates[0]._varsint64)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %lli but got %lli",
-                        WatLineNumber(start, t.pos), value.immediates[0]._varsint64, result.i64);
-          break;
-        case OP_f32_const:
-          if(result.type != TE_f32)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f32 type but got %s",
-                        WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
-          else if(specialNan)
-          {
-            if(!WastIsNaN(result.f32, nanCanonical))
-              AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g",
-                          WatLineNumber(start, t.pos), nanCanonical ? "canonical" : "arithmetic", result.f32);
-          }
-          else if(isnan(value.immediates[0]._float32)) // If this is an NAN we must match the exact bit pattern
-          {
-            if(value.immediates[0]._varsint32 != result.i32)
-              AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g",
-                          WatLineNumber(start, t.pos), value.immediates[0]._float32, result.f32);
-          }
-          else if(result.f32 != value.immediates[0]._float32)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g",
-                        WatLineNumber(start, t.pos), value.immediates[0]._float32, result.f32);
-          break;
-        case OP_f64_const:
-          if(result.type != TE_f64)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected f64 type but got %s",
-                        WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.type, typebuf, 10));
-          else if(specialNan)
-          {
-            if(!WastIsNaN(result.f64, nanCanonical))
-              AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g",
-                          WatLineNumber(start, t.pos), nanCanonical ? "canonical" : "arithmetic", result.f64);
-          }
-          else if(isnan(value.immediates[0]._float64)) // If this is an NAN we must match the exact bit pattern
-          {
-            if(value.immediates[0]._varsint64 != result.i64)
-              AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g",
-                          WatLineNumber(start, t.pos), value.immediates[0]._float64, result.f64);
-          }
-          else if(result.f64 != value.immediates[0]._float64)
-            AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %g but got %g",
-                        WatLineNumber(start, t.pos), value.immediates[0]._float64, result.f64);
-          break;
-        }
+        if(result.size())
+          AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected no return value but got %zu",
+                      WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.size(), typebuf, 10));
+
         break;
       case WatTokens::ASSERT_RETURN_ARITHMETIC_NAN:
       case WatTokens::ASSERT_RETURN_CANONICAL_NAN:
       {
         bool canonical = t.id == WatTokens::ASSERT_RETURN_CANONICAL_NAN;
-        if(result.type != TE_f32 && result.type != TE_f64)
+        if(result.empty())
+        {
+          AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Ran out of return values!",
+                      WatLineNumber(start, t.pos));
+          break;
+        }
+        if(result.back().type != TE_f32 && result.back().type != TE_f64)
           AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got unexpected integer %z",
-                      WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.i64);
-        if(result.type == TE_f32 && !WastIsNaN(result.f32, canonical))
+                      WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.back().i64);
+        if(result.back().type == TE_f32 && !WastIsNaN(result.back().f32, canonical))
           AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g",
-                      WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.f32);
-        if(result.type == TE_f64 && !WastIsNaN(result.f64, canonical))
+                      WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.back().f32);
+        if(result.back().type == TE_f64 && !WastIsNaN(result.back().f64, canonical))
           AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %s NaN but got %g",
-                      WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.f64);
+                      WatLineNumber(start, t.pos), canonical ? "canonical" : "arithmetic", result.back().f64);
       }
       break;
       }

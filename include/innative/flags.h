@@ -37,11 +37,9 @@ enum WASM_ENVIRONMENT_FLAGS
   // LLVM IR that is compiled to machine code. This can be used to investigate compiler bugs or unexpected behavior.
   ENV_EMIT_LLVM = (1 << 6),
 
-  // When testing, due to C++ not being able to dynamically generate calling conventions, it is useful to "homogenize" all
-  // functions to always return `i64` and transform every single parameter into an `i64` parameter. This makes it easier to
-  // generate function pointers for the test harness.This may be useful for game scripting APIs in certain contexts, but in
-  // most cases is unnecessary and simply adds overhead.
-  ENV_HOMOGENIZE_FUNCTIONS = (1 << 7),
+  // Forces all internal functions to use the standard C ABI instead of an fast internal representation. Not compatible with
+  // multiple return values.
+  ENV_FORCE_C_ABI = (1 << 7),
 
   // Normally, inNative will create a dynamic library that automatically calls it's initialization function when it is
   // loaded into memory, using the operating system's global initialization handles, and free it's global resources when it
@@ -120,13 +118,13 @@ enum WASM_OPTIMIZE_FLAGS
 
 enum WASM_FEATURE_FLAGS
 {
-  ENV_FEATURE_MUTABLE_GLOBALS          = (1 << 0), // https://github.com/WebAssembly/mutable-global
-  ENV_FEATURE_MULTI_VALUE              = (1 << 1), // https://github.com/WebAssembly/multi-value
-  //ENV_FEATURE_SIGN_EXTENSION           = (1 << 2), // https://github.com/WebAssembly/nontrapping-float-to-int-conversions
-  //ENV_FEATURE_NON_TRAPPING_CONVERSIONS = (1 << 3), // https://github.com/WebAssembly/sign-extension-ops
-  ENV_FEATURE_MULTI_MEMORY             = (1 << 4), // https://github.com/WebAssembly/multi-memory
-  ENV_FEATURE_THREADS                  = (1 << 5) | ENV_FEATURE_MULTI_MEMORY, // https://github.com/WebAssembly/threads
-  ENV_FEATURE_ALL                      = ~0,
+  ENV_FEATURE_MUTABLE_GLOBALS = (1 << 0), // https://github.com/WebAssembly/mutable-global
+  ENV_FEATURE_MULTI_VALUE     = (1 << 1), // https://github.com/WebAssembly/multi-value
+  // ENV_FEATURE_SIGN_EXTENSION           = (1 << 2), // https://github.com/WebAssembly/nontrapping-float-to-int-conversions
+  // ENV_FEATURE_NON_TRAPPING_CONVERSIONS = (1 << 3), // https://github.com/WebAssembly/sign-extension-ops
+  ENV_FEATURE_MULTI_MEMORY = (1 << 4),                            // https://github.com/WebAssembly/multi-memory
+  ENV_FEATURE_THREADS      = (1 << 5) | ENV_FEATURE_MULTI_MEMORY, // https://github.com/WebAssembly/threads
+  ENV_FEATURE_ALL          = ~0,
 };
 
 #ifdef __cplusplus

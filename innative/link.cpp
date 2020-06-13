@@ -6,8 +6,10 @@
 #include "link.h"
 #include "compile.h"
 #include "innative/export.h"
+#include "jit.h"
 
 using namespace innative;
+using namespace utility;
 
 IN_ERROR innative::OutputObjectFile(Compiler& context, const path& out)
 {
@@ -192,8 +194,18 @@ void innative::DeleteCache(const Environment& env, Module& m)
   if(m.cache != nullptr)
   {
     auto context = static_cast<Compiler*>(m.cache);
+    if(env.jit)
+    {
+      if(!(env.flags & ENV_NO_INIT) && context->exit)
+        reinterpret_cast<IN_Entrypoint>(
+          env.jit->Lookup(CanonicalName(StringSpan::From(m.name), StringSpan::From(IN_EXIT_POSTFIX)).c_str())
+            .get()
+            .getAddress())();
+    }
+    else
+      delete context->mod;
+
     kh_destroy_importhash(context->importhash);
-    delete context->mod;
     delete context;
     m.cache = nullptr;
   }
@@ -206,8 +218,12 @@ void innative::DeleteContext(Environment& env, bool shutdown)
     DeleteCache(env, env.modules[i]);
   }
 
-  delete env.context;
+  if(env.jit)
+    delete env.jit;
+  else if(env.context)
+    delete env.context;
   env.context = nullptr;
+  env.jit     = nullptr;
 
   if(shutdown)
     llvm::llvm_shutdown();
@@ -303,9 +319,9 @@ std::string innative::ABIMangle(const std::string& src, ABI abi, int convention,
 
 IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
 {
-  path workdir   = utility::GetWorkingDir();
-  path libpath   = utility::GetPath(env->libpath);
-  path objpath   = !env->objpath ? file.parent_path() : utility::GetPath(env->objpath);
+  path workdir   = GetWorkingDir();
+  path libpath   = GetPath(env->libpath);
+  path objpath   = !env->objpath ? file.parent_path() : GetPath(env->objpath);
   bool UseNatVis = false;
 
   // Finalize all modules
@@ -314,7 +330,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
     env->modules[i].cache->debugger->Finalize();
     UseNatVis = UseNatVis || !env->modules[i].cache->natvis.empty();
 
-    if(env->flags & ENV_EMIT_LLVM)
+    //if(env->flags & ENV_EMIT_LLVM)
     {
       std::error_code EC;
       llvm::raw_fd_ostream dest(((file.parent_path() / env->modules[i].cache->mod->getName().str()) += ".llvm").u8string(),
@@ -400,7 +416,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
 
 #elif defined(IN_PLATFORM_POSIX)
     LLD_FORMAT format                 = LLD_FORMAT::ELF;
-    std::vector<const char*> linkargs = {"--stack-first"};
+    std::vector<const char*> linkargs = { "--stack-first" };
 
     if(env->flags & ENV_LIBRARY)
       linkargs.push_back("-shared");
@@ -415,7 +431,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
     std::vector<path> garbage;
 
     // Defer lambda deleting temporary files
-    utility::DeferLambda<std::function<void()>> deferclean([&garbage]() {
+    DeferLambda<std::function<void()>> deferclean([&garbage]() {
       for(auto& v : garbage)
         remove(v);
     });
@@ -436,7 +452,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
           size_t z;
         } u        = { cur };
         auto embed = objpath / std::to_string(u.z);
-        embed += utility::IN_ENV_EXTENSION;
+        embed += IN_ENV_EXTENSION;
         embed += IN_STATIC_EXTENSION;
         cache.emplace_back(embed.u8string());
         FILE* f;

@@ -53,7 +53,6 @@ const static std::initializer_list<std::pair<const char*, unsigned int>> FLAG_MA
   { "debug_dwarf", ENV_DEBUG_DWARF },
   { "library", ENV_LIBRARY },
   { "llvm", ENV_EMIT_LLVM },
-  { "homogenize", ENV_HOMOGENIZE_FUNCTIONS },
   { "noinit", ENV_NO_INIT },
   { "check_stack_overflow", ENV_CHECK_STACK_OVERFLOW },
   { "check_float_trunc", ENV_CHECK_FLOAT_TRUNC },

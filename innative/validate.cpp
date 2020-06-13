@@ -1274,7 +1274,7 @@ void innative::ValidateFunctionBody(varuint32 idx, const FunctionBody& body, Env
         ValidateEndBlock(cur[i], block, values, env, m, false);
         control.Push(
           { values.Limit(), block.sig, OP_else }); // Push a new else block that must be terminated by an end instruction
-        values.SetLimit(values.Size() + values.Limit());
+        values.SetLimit(values.Size() - GetBlockSigParams(control.Peek().sig, *m) + values.Limit());
       }
     }
   }

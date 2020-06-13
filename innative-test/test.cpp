@@ -36,6 +36,8 @@ enum TEST_STAGES
   TEST_WASM_CORE = (1 << 2),
 };
 
+extern std::vector<FunctionType> functypes;
+
 int main(int argc, char* argv[])
 {
   innative_set_work_dir_to_bin(!argc ? 0 : argv[0]);
@@ -82,7 +84,7 @@ int main(int argc, char* argv[])
       stages = TEST_WASM_CORE;
   }
 
-  INExports exports;
+  INExports exports = {};
   innative_runtime(&exports);
 
   if(stages & TEST_INTERNAL)
@@ -132,7 +134,7 @@ int main(int argc, char* argv[])
         return -1;
       }
 
-      env->flags = ENV_LIBRARY | ENV_DEBUG | ENV_STRICT | ENV_HOMOGENIZE_FUNCTIONS;
+      env->flags = ENV_LIBRARY | ENV_DEBUG | ENV_STRICT;
 #ifdef IN_DEBUG
       env->optimize = ENV_OPTIMIZE_O0;
 #else
@@ -201,6 +203,33 @@ int main(int argc, char* argv[])
       (*exports.DestroyEnvironment)(env);
     }
   }
+
+  for(auto& f : functypes)
+  {
+    FPRINTF(stdout, "%hhi: {", f.form);
+    for(varuint32 i = 0; i < f.n_returns; ++i)
+      switch(f.returns[i])
+      {
+      case TE_i32: FPRINTF(stdout, "TE_i32"); break;
+      case TE_i64: FPRINTF(stdout, "TE_i64"); break;
+      case TE_f32: FPRINTF(stdout, "TE_f32"); break;
+      case TE_f64: FPRINTF(stdout, "TE_f64"); break;
+      default: assert(false); break;
+      }
+    FPRINTF(stdout, "} -> {", f.form);
+    for(varuint32 i = 0; i < f.n_params; ++i)
+      switch(f.params[i])
+      {
+      case TE_i32: FPRINTF(stdout, "TE_i32"); break;
+      case TE_i64: FPRINTF(stdout, "TE_i64"); break;
+      case TE_f32: FPRINTF(stdout, "TE_f32"); break;
+      case TE_f64: FPRINTF(stdout, "TE_f64"); break;
+      default: assert(false); break;
+      }
+
+    FPRINTF(stdout, "}\n", f.form);
+  }
+  std::cout << std::endl;
 
   if(wait)
   {

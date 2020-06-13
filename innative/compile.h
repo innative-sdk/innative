@@ -99,20 +99,20 @@ namespace innative {
     llvmTy* GetLLVMTypes(varsint7* types, varuint32 count);
     llvmTy* GetLLVMTypeSig(varsint64 sig);
     FuncTy* GetFunctionType(FunctionType& signature);
-    Func* HomogenizeFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
-                             llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv);
     Func* PassFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
                        llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv);
     Func* WrapFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
                        llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv);
+    Func* GenericFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
+                          llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv);
     IN_ERROR PopType(varsint7 ty, llvmVal*& v, bool peek = false);
     IN_ERROR PopStruct(varsint64 sig, llvmVal*& v, bool peek);
     llvmVal* MaskShiftBits(llvmVal* value);
-    BB* PushLabel(const char* name, varsint64 sig, uint8_t opcode, Func* fnptr, llvm::DILocalScope* scope);
+    BB* PushLabel(const char* name, varsint64 sig, uint8_t opcode, Func* fnptr, llvm::DILocalScope* scope, bool discard);
     BB* BindLabel(BB* block);
     IN_ERROR PushResult(BlockResult** root, llvmVal* result, BB* block, const Environment& env);
     IN_ERROR AddBranch(Block& target);
-    IN_ERROR PopLabel(BB* block);
+    IN_ERROR PopLabel(BB* block, llvmVal* push);
     void PolymorphicStack();
     llvmVal* GetMemSize(llvm::GlobalVariable* target);
     varuint32 GetFirstType(varuint32 type);
@@ -293,6 +293,8 @@ namespace innative {
     {
       IN_ERROR e = PushReturn(args...);
       auto ty    = static_cast<llvmVal*>(arg)->getType();
+      assert(!ty->isPointerTy() || !ty->getPointerElementType()->isStructTy());
+      assert(!ty->isStructTy());
       if(ty->isIntegerTy() && ty->getIntegerBitWidth() != 32 && ty->getIntegerBitWidth() != 64 &&
          ty->getIntegerBitWidth() != 1)
         assert(false);

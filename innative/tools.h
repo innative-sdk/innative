@@ -31,6 +31,14 @@ namespace innative {
   INGlobal* LoadMemoryIndex(void* assembly, uint32_t module_index, uint32_t memory_index);
   int ReplaceTableFuncPtr(void* assembly, uint32_t module_index, uint32_t table_index, const char* function,
                           IN_Entrypoint replace);
+  enum IN_ERROR CompileJIT(Environment* env, bool expose_process);
+  IN_Entrypoint LoadFunctionJIT(Environment* env, const char* module_name, const char* function);
+  IN_Entrypoint LoadTableJIT(Environment* env, const char* module_name, const char* table, varuint32 index);
+  INGlobal* LoadGlobalJIT(Environment* env, const char* module_name, const char* export_name);
+  INModuleMetadata* GetModuleMetadataJIT(Environment* env, uint32_t module_index);
+  IN_Entrypoint LoadTableIndexJIT(Environment* env, uint32_t module_index, uint32_t table_index, varuint32 function_index);
+  INGlobal* LoadGlobalIndexJIT(Environment* env, uint32_t module_index, uint32_t global_index);
+  INGlobal* LoadMemoryIndexJIT(Environment* env, uint32_t module_index, uint32_t memory_index);
   void* LoadAssembly(const char* file);
   void FreeAssembly(void* assembly);
   const char* GetTypeEncodingString(int type_encoding);
@@ -53,6 +61,17 @@ namespace innative {
   int InsertModuleReturn(Environment* env, FunctionType* func, varuint32 index, varsint7 result);
   int RemoveModuleReturn(Environment* env, FunctionType* func, varuint32 index);
   size_t ReserveModule(Environment* env, int* err);
+
+  IN_Entrypoint LoadFunctionLambda(void* p, void* (*load)(void*, const char*), const char* module_name,
+                                   const char* function);
+  IN_Entrypoint LoadTableLambda(void* p, void* (*load)(void*, const char*), const char* module_name, const char* table, varuint32 index);
+  INGlobal* LoadGlobalLambda(void* p, void* (*load)(void*, const char*), const char* module_name, const char* export_name);
+  INModuleMetadata* GetModuleMetadataLambda(void* p, void* (*load)(void*, const char*), uint32_t module_index);
+  IN_Entrypoint LoadTableIndexLambda(void* p, void* (*load)(void*, const char*), uint32_t module_index, uint32_t table_index, varuint32 function_index);
+  INGlobal* LoadGlobalIndexLambda(void* p, void* (*load)(void*, const char*), uint32_t module_index, uint32_t global_index);
+  INGlobal* LoadMemoryIndexLambda(void* p, void* (*load)(void*, const char*), uint32_t module_index, uint32_t memory_index);
+  void DumpJITState(Environment* env);
+
 }
 
 #endif
