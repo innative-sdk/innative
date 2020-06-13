@@ -586,7 +586,8 @@ IN_ERROR Compiler::CompileMemGrow(varuint32 memory, const char* name)
 
   builder.CreateCondBr(success, successblock, contblock);
   builder.SetInsertPoint(successblock); // Only set new memory if call succeeded
-  builder.CreateAlignedStore(call, GetPairPtr(memories[memory], 0), builder.getInt64Ty()->getPrimitiveSizeInBits() / 8, false);
+  builder.CreateAlignedStore(call, GetPairPtr(memories[memory], 0), builder.getInt64Ty()->getPrimitiveSizeInBits() / 8,
+                             false);
   builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[memory], 0)), memlocal, false);
   builder.CreateBr(contblock);
 
@@ -598,6 +599,207 @@ IN_ERROR Compiler::CompileMemGrow(varuint32 memory, const char* name)
 
   builder.GetInsertBlock()->getParent()->setMetadata(IN_MEMORY_GROW_METADATA, llvm::MDNode::get(ctx, {}));
   return PushReturn(phi);
+}
+
+IN_ERROR Compiler::CompileMemInit(varuint32 dst_mem, varuint32 src_seg)
+{
+  assert(dst_mem < memories.size() && src_seg < data_globals.size());
+
+  DataSegment& data = data_globals[src_seg];
+
+  IN_ERROR err;
+
+  llvmVal* mem_size;
+  if(err = PopType(TE_i32, mem_size))
+    return err;
+
+  llvmVal* src_offset;
+  if(err = PopType(TE_i32, src_offset))
+    return err;
+
+  llvmVal* dst_base;
+  if(err = PopType(TE_i32, dst_base))
+    return err;
+
+  auto sizet = builder.getIntNTy(machine->getPointerSizeInBits(0));
+  mem_size   = builder.CreateZExtOrTrunc(mem_size, sizet);
+
+  // Check data access
+  llvmVal* src_loc;
+  llvmVal* data_size = builder.CreateLoad(builder.CreateInBoundsGEP(data.runtime_len, { builder.getInt32(0) }));
+  InsertBoundsCheck(GetLLVMType(TE_i32), data_size, { src_offset }, mem_size, src_loc);
+
+  auto dst = GetMemPointerRegion(dst_base, builder.getInt8PtrTy(), mem_size, dst_mem, 0);
+  auto src = builder.CreateInBoundsGEP(data.data->getType(), data.global, { builder.getInt32(0), src_loc });
+
+  builder.CreateMemCpy(dst, llvm::None, src, llvm::None, mem_size);
+
+  return ERR_SUCCESS;
+}
+
+IN_ERROR Compiler::CompileMemCopy(varuint32 dst_mem, varuint32 src_mem)
+{
+  assert(dst_mem < memories.size() && src_mem < memories.size());
+
+  IN_ERROR err;
+
+  llvmVal* mem_size;
+  if(err = PopType(TE_i32, mem_size))
+    return err;
+
+  llvmVal* src_base;
+  if(err = PopType(TE_i32, src_base))
+    return err;
+
+  llvmVal* dst_base;
+  if(err = PopType(TE_i32, dst_base))
+    return err;
+
+  auto sizet = builder.getIntNTy(machine->getPointerSizeInBits(0));
+  mem_size   = builder.CreateZExtOrTrunc(mem_size, sizet);
+
+  llvmVal* dst = GetMemPointerRegion(dst_base, builder.getInt8PtrTy(), mem_size, dst_mem, 0);
+  llvmVal* src = GetMemPointerRegion(src_base, builder.getInt8PtrTy(), mem_size, src_mem, 0);
+
+  builder.CreateMemMove(dst, llvm::None, src, llvm::None, mem_size);
+
+  return ERR_SUCCESS;
+}
+
+IN_ERROR innative::Compiler::CompileMemFill(varuint32 mem)
+{
+  assert(mem < memories.size());
+
+  IN_ERROR err;
+
+  llvmVal* mem_size;
+  if(err = PopType(TE_i32, mem_size))
+    return err;
+
+  llvmVal* value;
+  if(err = PopType(TE_i32, value))
+    return err;
+
+  llvmVal* dst_base;
+  if(err = PopType(TE_i32, dst_base))
+    return err;
+
+  auto sizet = builder.getIntNTy(machine->getPointerSizeInBits(0));
+  if(machine->getPointerSizeInBits(0) != mem_size->getType()->getPrimitiveSizeInBits())
+    mem_size = builder.CreateZExtOrTrunc(mem_size, sizet);
+
+  value        = builder.CreateTrunc(value, builder.getInt8Ty()); // Value must be truncated to i8
+  llvmVal* dst = GetMemPointerRegion(dst_base, builder.getInt8PtrTy(), mem_size, mem, 0);
+
+  builder.CreateMemSet(dst, value, mem_size, llvm::None);
+
+  return ERR_SUCCESS;
+}
+
+IN_ERROR Compiler::CompileTableInit(varuint32 dst_tbl, varuint32 src_elem)
+{
+  assert(dst_tbl < tables.size() && src_elem < elem_globals.size());
+
+  auto& elem_desc    = m.element.elements[src_elem];
+  ElemSegment& elem = elem_globals[src_elem];
+  auto element_type  = (elem_desc.flags & WASM_ELEM_CARRIES_ELEMEXPRS) ? elem_desc.elem_type : TE_funcref;
+
+  auto sizet     = builder.getIntNTy(machine->getPointerSizeInBits(0));
+  auto elem_ty   = GetTableType(element_type);
+  auto elem_size = mod->getDataLayout().getTypeAllocSize(elem_ty).getFixedSize();
+
+  IN_ERROR err;
+
+  llvmVal* count;
+  if(err = PopType(TE_i32, count))
+    return err;
+
+  llvmVal* src_offset;
+  if(err = PopType(TE_i32, src_offset))
+    return err;
+
+  llvmVal* dst_base;
+  if(err = PopType(TE_i32, dst_base))
+    return err;
+
+  llvmVal* dst_size = builder.CreateUDiv(GetMemSize(tables[dst_tbl]), builder.getInt64(elem_size));
+  llvmVal* src_size = builder.CreateLoad(builder.CreateInBoundsGEP(elem.runtime_len, { builder.getInt32(0) }));
+
+  llvmVal *dst_loc, *src_loc;
+  InsertBoundsCheck(count->getType(), dst_size, { dst_base }, count, dst_loc);
+  InsertBoundsCheck(count->getType(), src_size, { src_offset }, count, src_loc);
+
+  llvmVal* dst_ptr = builder.CreateLoad(GetPairPtr(tables[dst_tbl], 0));
+  llvmVal* src_ptr = builder.CreateInBoundsGEP(elem.elem->getType(), elem.global, { builder.getInt32(0), src_loc });
+
+  dst_ptr = builder.CreateInBoundsGEP(dst_ptr, dst_loc);
+
+  llvmVal* byteCount = builder.CreateMul(builder.CreateZExtOrTrunc(count, sizet), CInt::get(sizet, elem_size));
+
+  builder.CreateMemMove(dst_ptr, llvm::None, src_ptr, llvm::None, byteCount);
+
+  return ERR_SUCCESS;
+}
+
+IN_ERROR Compiler::CompileTableCopy(varuint32 dst_tbl, varuint32 src_tbl)
+{
+  assert(dst_tbl < tables.size() && src_tbl < tables.size());
+
+  auto& dst_desc = m.table.tables[dst_tbl];
+  auto& src_desc = m.table.tables[src_tbl];
+
+  auto sizet     = builder.getIntNTy(machine->getPointerSizeInBits(0));
+  auto elem_ty   = GetTableType(dst_desc.element_type);
+  auto elem_size = mod->getDataLayout().getTypeAllocSize(elem_ty).getFixedSize();
+
+  IN_ERROR err;
+
+  llvmVal* count;
+  if(err = PopType(TE_i32, count))
+    return err;
+
+  llvmVal* src_base;
+  if(err = PopType(TE_i32, src_base))
+    return err;
+
+  llvmVal* dst_base;
+  if(err = PopType(TE_i32, dst_base))
+    return err;
+
+  llvmVal* dst_size = builder.CreateUDiv(GetMemSize(tables[dst_tbl]), builder.getInt64(elem_size));
+  llvmVal* src_size = builder.CreateUDiv(GetMemSize(tables[src_tbl]), builder.getInt64(elem_size));
+
+  llvmVal *dst_loc, *src_loc;
+  InsertBoundsCheck(count->getType(), dst_size, { dst_base }, count, dst_loc);
+  InsertBoundsCheck(count->getType(), src_size, { src_base }, count, src_loc);
+
+  llvmVal* dst_ptr = builder.CreateLoad(GetPairPtr(tables[dst_tbl], 0));
+  llvmVal* src_ptr = builder.CreateLoad(GetPairPtr(tables[src_tbl], 0));
+
+  dst_ptr = builder.CreateInBoundsGEP(dst_ptr, dst_loc);
+  src_ptr = builder.CreateInBoundsGEP(src_ptr, src_loc);
+
+  llvmVal* byteCount = builder.CreateMul(builder.CreateZExtOrTrunc(count, sizet), CInt::get(sizet, elem_size));
+
+  builder.CreateMemMove(dst_ptr, llvm::None, src_ptr, llvm::None, byteCount);
+
+  return ERR_SUCCESS;
+}
+
+IN_ERROR innative::Compiler::CompileDataDrop(varuint32 segment)
+{
+  auto var    = data_globals[segment].runtime_len;
+  auto valptr = builder.CreateInBoundsGEP(var, { builder.getInt32(0) });
+  builder.CreateStore(builder.getInt64(0), valptr);
+  return ERR_SUCCESS;
+}
+
+IN_ERROR innative::Compiler::CompileElemDrop(varuint32 segment)
+{
+  auto var    = elem_globals[segment].runtime_len;
+  auto valptr = builder.CreateInBoundsGEP(var, { builder.getInt32(0) });
+  builder.CreateStore(builder.getInt64(0), valptr);
+  return ERR_SUCCESS;
 }
 
 template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR>
@@ -1098,24 +1300,10 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return CompileUnaryOp<TE_i64, TE_i32, llvmTy*, bool, const llvm::Twine&>(&llvm::IRBuilder<>::CreateIntCast,
                                                                              builder.getInt32Ty(), true,
                                                                              OP::NAMES[ins.opcode]);
-  case OP_i32_trunc_f32_s: // These truncation values are specifically picked to be the largest representable 32-bit
-                           // floating point value that can be safely converted.
-    InsertTruncTrap(2147483520.0, -2147483650.0, builder.getFloatTy());
-    return CompileUnaryOp<TE_f32, TE_i32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateFPToSI,
-                                                                       builder.getInt32Ty(), OP::NAMES[ins.opcode]);
-  case OP_i32_trunc_f32_u: // This is truncation, so values of up to -0.999999... are actually valid unsigned integers
-                           // because they are truncated to 0
-    InsertTruncTrap(4294967040.0, -0.999999940, builder.getFloatTy());
-    return CompileUnaryOp<TE_f32, TE_i32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateFPToUI,
-                                                                       builder.getInt32Ty(), OP::NAMES[ins.opcode]);
-  case OP_i32_trunc_f64_s: // Doubles can exactly represent 32-bit integers, so the real values are used
-    InsertTruncTrap(2147483647.0, -2147483648.0, builder.getDoubleTy());
-    return CompileUnaryOp<TE_f64, TE_i32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateFPToSI,
-                                                                       builder.getInt32Ty(), OP::NAMES[ins.opcode]);
-  case OP_i32_trunc_f64_u:
-    InsertTruncTrap(4294967295.0, -0.99999999999999989, builder.getDoubleTy());
-    return CompileUnaryOp<TE_f64, TE_i32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateFPToUI,
-                                                                       builder.getInt32Ty(), OP::NAMES[ins.opcode]);
+  case OP_i32_trunc_f32_s: return CompileFPToInt(FPToIntOp::F32ToI32, false, OP::NAMES[ins.opcode]);
+  case OP_i32_trunc_f32_u: return CompileFPToInt(FPToIntOp::F32ToU32, false, OP::NAMES[ins.opcode]);
+  case OP_i32_trunc_f64_s: return CompileFPToInt(FPToIntOp::F64ToI32, false, OP::NAMES[ins.opcode]);
+  case OP_i32_trunc_f64_u: return CompileFPToInt(FPToIntOp::F64ToU32, false, OP::NAMES[ins.opcode]);
   case OP_i64_extend_i32_s:
     return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const llvm::Twine&>(&llvm::IRBuilder<>::CreateIntCast,
                                                                              builder.getInt64Ty(), true,
@@ -1124,22 +1312,10 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const llvm::Twine&>(&llvm::IRBuilder<>::CreateIntCast,
                                                                              builder.getInt64Ty(), false,
                                                                              OP::NAMES[ins.opcode]);
-  case OP_i64_trunc_f32_s:
-    InsertTruncTrap(9223371490000000000.0, -9223372040000000000.0, builder.getFloatTy());
-    return CompileUnaryOp<TE_f32, TE_i64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateFPToSI,
-                                                                       builder.getInt64Ty(), OP::NAMES[ins.opcode]);
-  case OP_i64_trunc_f32_u:
-    InsertTruncTrap(18446743000000000000.0, -0.999999940, builder.getFloatTy());
-    return CompileUnaryOp<TE_f32, TE_i64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateFPToUI,
-                                                                       builder.getInt64Ty(), OP::NAMES[ins.opcode]);
-  case OP_i64_trunc_f64_s: // Largest representable 64-bit floating point values that can be safely converted
-    InsertTruncTrap(9223372036854774800.0, -9223372036854775800.0, builder.getDoubleTy());
-    return CompileUnaryOp<TE_f64, TE_i64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateFPToSI,
-                                                                       builder.getInt64Ty(), OP::NAMES[ins.opcode]);
-  case OP_i64_trunc_f64_u:
-    InsertTruncTrap(18446744073709550000.0, -0.99999999999999989, builder.getDoubleTy());
-    return CompileUnaryOp<TE_f64, TE_i64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateFPToUI,
-                                                                       builder.getInt64Ty(), OP::NAMES[ins.opcode]);
+  case OP_i64_trunc_f32_s: return CompileFPToInt(FPToIntOp::F32ToI64, false, OP::NAMES[ins.opcode]);
+  case OP_i64_trunc_f32_u: return CompileFPToInt(FPToIntOp::F32ToU64, false, OP::NAMES[ins.opcode]);
+  case OP_i64_trunc_f64_s: return CompileFPToInt(FPToIntOp::F64ToI64, false, OP::NAMES[ins.opcode]);
+  case OP_i64_trunc_f64_u: return CompileFPToInt(FPToIntOp::F64ToU64, false, OP::NAMES[ins.opcode]);
   case OP_f32_convert_i32_s:
     return CompileUnaryOp<TE_i32, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateSIToFP,
                                                                        builder.getFloatTy(), OP::NAMES[ins.opcode]);
@@ -1184,6 +1360,36 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
   case OP_f64_reinterpret_i64:
     return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateBitCast,
                                                                        builder.getDoubleTy(), OP::NAMES[ins.opcode]);
+
+  case OP_i32_extend8_s: return CompileSignExtendOp(TE_i32, 8, OP::NAMES[ins.opcode]);
+  case OP_i32_extend16_s: return CompileSignExtendOp(TE_i32, 16, OP::NAMES[ins.opcode]);
+  case OP_i64_extend8_s: return CompileSignExtendOp(TE_i64, 8, OP::NAMES[ins.opcode]);
+  case OP_i64_extend16_s: return CompileSignExtendOp(TE_i64, 16, OP::NAMES[ins.opcode]);
+  case OP_i64_extend32_s: return CompileSignExtendOp(TE_i64, 32, OP::NAMES[ins.opcode]);
+
+  // Miscellaneous operations
+  case OP_misc_ops_prefix:
+    switch(ins.opcode[1])
+    {
+    case OP_i32_trunc_sat_f32_s: return CompileFPToInt(FPToIntOp::F32ToI32, true, OP::NAMES[ins.opcode]);
+    case OP_i32_trunc_sat_f32_u: return CompileFPToInt(FPToIntOp::F32ToU32, true, OP::NAMES[ins.opcode]);
+    case OP_i32_trunc_sat_f64_s: return CompileFPToInt(FPToIntOp::F64ToI32, true, OP::NAMES[ins.opcode]);
+    case OP_i32_trunc_sat_f64_u: return CompileFPToInt(FPToIntOp::F64ToU32, true, OP::NAMES[ins.opcode]);
+    case OP_i64_trunc_sat_f32_s: return CompileFPToInt(FPToIntOp::F32ToI64, true, OP::NAMES[ins.opcode]);
+    case OP_i64_trunc_sat_f32_u: return CompileFPToInt(FPToIntOp::F32ToU64, true, OP::NAMES[ins.opcode]);
+    case OP_i64_trunc_sat_f64_s: return CompileFPToInt(FPToIntOp::F64ToI64, true, OP::NAMES[ins.opcode]);
+    case OP_i64_trunc_sat_f64_u: return CompileFPToInt(FPToIntOp::F64ToU64, true, OP::NAMES[ins.opcode]);
+
+    case OP_memory_init: return CompileMemInit(ins.immediates[0]._varuint32, ins.immediates[1]._varuint32);
+    case OP_data_drop: return CompileDataDrop(ins.immediates[0]._varuint32);
+    case OP_memory_copy: return CompileMemCopy(ins.immediates[0]._varuint32, ins.immediates[1]._varuint32);
+    case OP_memory_fill: return CompileMemFill(ins.immediates[0]._varuint32);
+    case OP_table_init: return CompileTableInit(ins.immediates[0]._varuint32, ins.immediates[1]._varuint32);
+    case OP_elem_drop: return CompileElemDrop(ins.immediates[0]._varuint32);
+    case OP_table_copy: return CompileTableCopy(ins.immediates[0]._varuint32, ins.immediates[1]._varuint32);
+    default: return ERR_FATAL_UNKNOWN_INSTRUCTION;
+    }
+    break;
 
     // Atomic
   case OP_atomic_prefix: return CompileAtomicInstruction(ins);
@@ -1242,7 +1448,7 @@ IN_ERROR Compiler::CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst
     debugger->FuncParam(fn, index, desc);
     ++index;
     builder.CreateStore(&arg, locals.back(), false); // Store parameter (we can't use the parameter directly
-                                              // because wasm lets you store to parameters)
+                                                     // because wasm lets you store to parameters)
   }
 
   for(varuint32 i = 0; i < body.n_locals; ++i)
@@ -1326,4 +1532,110 @@ IN_ERROR Compiler::CompileInitConstant(Instruction& instruction, Module& m, llvm
   if(instruction.opcode[0] == OP_global_get)
     return CompileInitGlobal(m, instruction.immediates[0]._varuint32, out);
   return CompileConstant(instruction, out);
+}
+
+IN_ERROR Compiler::CompileSignExtendOp(WASM_TYPE_ENCODING argTy, unsigned valueBits, const char* name)
+{
+  IN_ERROR err;
+
+  llvmVal* value;
+  if(err = PopType(argTy, value))
+    return err;
+
+  auto dstTy   = value->getType();
+  auto valueTy = builder.getIntNTy(valueBits);
+  value        = builder.CreateTrunc(value, valueTy);
+  value        = builder.CreateSExt(value, dstTy, name);
+
+  return PushReturn(value);
+}
+
+IN_ERROR Compiler::CompileFPToInt(FPToIntOp op, bool saturating, const char* name)
+{
+  static const bool TRUNC_FPTOINT_SIGNED[8]              = { true, false, true, false, true, false, true, false };
+  static const WASM_TYPE_ENCODING TRUNC_FPTOINT_ARGTY[8] = {
+    TE_f32, TE_f32, TE_f64, TE_f64, TE_f32, TE_f32, TE_f64, TE_f64
+  };
+  static const WASM_TYPE_ENCODING TRUNC_FPTOINT_DSTTY[8] = {
+    TE_i32, TE_i32, TE_i32, TE_i32, TE_i64, TE_i64, TE_i64, TE_i64
+  };
+
+  static const struct
+  {
+    double min, max;
+  } TRUNC_FPTOINT_FBOUNDS[8] = {
+    { -2147483650.0, 2147483520.0 },                   // f32 -> i32
+    { -0.999999940, 4294967040.0 },                    // f32 -> u32
+    { -2147483648.0, 2147483647.0 },                   // f64 -> i32
+    { -0.99999999999999989, 4294967295.0 },            // f64 -> u32
+    { -9223372040000000000.0, 9223371490000000000.0 }, // f32 -> i64
+    { -0.999999940, 18446743000000000000.0 },          // f32 -> u64
+    { -9223372036854775800.0, 9223372036854774800.0 }, // f64 -> i64
+    { -0.99999999999999989, 18446744073709550000.0 },  // f64 -> u64
+  };
+  static const struct
+  {
+    uint64_t min, max;
+  } TRUNC_FPTOINT_IBOUNDS[8] = {
+    { std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max() },
+    { std::numeric_limits<uint32_t>::min(), std::numeric_limits<uint32_t>::max() },
+    { std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max() },
+    { std::numeric_limits<uint32_t>::min(), std::numeric_limits<uint32_t>::max() },
+    { std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max() },
+    { std::numeric_limits<uint64_t>::min(), std::numeric_limits<uint64_t>::max() },
+    { std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max() },
+    { std::numeric_limits<uint64_t>::min(), std::numeric_limits<uint64_t>::max() },
+  };
+
+  IN_ERROR err;
+
+  bool is_signed = TRUNC_FPTOINT_SIGNED[(int)op];
+  auto argTy     = TRUNC_FPTOINT_ARGTY[(int)op];
+  auto dstTy     = TRUNC_FPTOINT_DSTTY[(int)op];
+  auto fbounds   = TRUNC_FPTOINT_FBOUNDS[(int)op];
+  auto ibounds   = TRUNC_FPTOINT_IBOUNDS[(int)op];
+  auto fTy       = GetLLVMType(argTy);
+  auto iTy       = GetLLVMType(dstTy);
+
+  if(!saturating)
+  {
+    InsertTruncTrap(fbounds.max, fbounds.min, fTy);
+  }
+
+  llvmVal* value;
+  if(err = PopType(argTy, value))
+    return err;
+
+  llvmVal* fptosui_res;
+  if(is_signed)
+    fptosui_res = builder.CreateFPToSI(value, iTy, name);
+  else
+    fptosui_res = builder.CreateFPToUI(value, iTy, name);
+
+  if(!saturating)
+    return PushReturn(fptosui_res);
+
+  // Saturation tests!
+  auto h     = -1.0f < (float)fbounds.min;
+  auto f_min = CFloat::get(fTy, fbounds.min);
+  auto f_max = CFloat::get(fTy, fbounds.max);
+
+  auto less_or_nan = builder.CreateFCmpULT(value, f_min, "fptosui_sat.less_or_nan");
+  auto greater     = builder.CreateFCmpOGT(value, f_max, "fptosui_sat.greater");
+  auto int_min     = CInt::get(iTy, ibounds.min);
+  auto int_max     = CInt::get(iTy, ibounds.max);
+  auto s0          = builder.CreateSelect(less_or_nan, int_min, fptosui_res);
+  auto s1          = builder.CreateSelect(greater, int_max, s0);
+
+  llvmVal* result;
+  if(is_signed)
+  {
+    auto zero = CInt::get(iTy, 0);
+    auto cmp  = builder.CreateFCmpOEQ(value, value, "fptosui_sat.signed_notnan");
+    result    = builder.CreateSelect(cmp, s1, zero);
+  }
+  else
+    result = s1;
+
+  return PushReturn(result);
 }

@@ -204,6 +204,34 @@ enum WASM_INSTRUCTION_OPCODES
   OP_f32_reinterpret_i32 = 0xbe,
   OP_f64_reinterpret_i64 = 0xbf,
 
+  // Sign-extension ops
+  OP_i32_extend8_s  = 0xc0,
+  OP_i32_extend16_s = 0xc1,
+  OP_i64_extend8_s  = 0xc2,
+  OP_i64_extend16_s = 0xc3,
+  OP_i64_extend32_s = 0xc4,
+
+  // Miscellaneous Operations
+  OP_misc_ops_prefix = 0xfc,
+
+  OP_i32_trunc_sat_f32_s = 0x00,
+  OP_i32_trunc_sat_f32_u = 0x01,
+  OP_i32_trunc_sat_f64_s = 0x02,
+  OP_i32_trunc_sat_f64_u = 0x03,
+  OP_i64_trunc_sat_f32_s = 0x04,
+  OP_i64_trunc_sat_f32_u = 0x05,
+  OP_i64_trunc_sat_f64_s = 0x06,
+  OP_i64_trunc_sat_f64_u = 0x07,
+
+  // - Bulk mem ops (part of misc prefix)
+  OP_memory_init = 0x08,
+  OP_data_drop   = 0x09,
+  OP_memory_copy = 0x0a,
+  OP_memory_fill = 0x0b,
+  OP_table_init  = 0x0c,
+  OP_elem_drop   = 0x0d,
+  OP_table_copy  = 0x0e,
+
   // Atomics
   OP_atomic_prefix = 0xfe,
 
@@ -284,6 +312,10 @@ enum WASM_INSTRUCTION_OPCODES
   OP_i64_atomic_rmw8_cmpxchg_u  = 0x4C,
   OP_i64_atomic_rmw16_cmpxchg_u = 0x4D,
   OP_i64_atomic_rmw32_cmpxchg_u = 0x4E,
+
+  // reference-types proposal stubs
+  OP_ref_null = 0xd0,
+  OP_ref_func = 0xd2
 };
 
 #ifdef __cplusplus
