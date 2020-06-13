@@ -32,6 +32,7 @@ public:
   void test_parallel_parsing();
   void test_serializer();
   void test_whitelist();
+  void test_jit();
   void test_malloc();
   void test_embedding();
   void test_variadic();

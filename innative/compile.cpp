@@ -8,6 +8,7 @@
 #include "debug.h"
 #include "link.h"
 #include "innative/export.h"
+#include "jit.h"
 
 #define DIVIDER ":"
 
@@ -53,7 +54,7 @@ llvmTy* Compiler::GetLLVMTypes(varsint7* types, varuint32 count)
 
   llvm::SmallVector<llvmTy*, 4> llvmtypes;
   for(varuint32 i = 0; i < count; ++i)
-    llvmtypes.push_back(GetLLVMType(types[i]));
+    llvmtypes.push_back(GetLLVMType(types[count - i - 1]));
   return llvm::StructType::get(ctx, llvmtypes);
 }
 
@@ -68,6 +69,8 @@ llvmTy* Compiler::GetLLVMTypeSig(varsint64 sig)
 
 WASM_TYPE_ENCODING Compiler::GetTypeEncoding(llvmTy* t)
 {
+  assert(!t->isStructTy());
+
   if(t->isFloatTy())
     return TE_f32;
   if(t->isDoubleTy())
@@ -80,6 +83,8 @@ WASM_TYPE_ENCODING Compiler::GetTypeEncoding(llvmTy* t)
     return TE_i64;
   if(t->isPointerTy() && t->getPointerElementType()->isIntegerTy())
     return TE_cref;
+  if(t->isPointerTy() && t->getPointerElementType()->isStructTy())
+    assert(false);
 
   return TE_NONE;
 }
@@ -97,70 +102,6 @@ FuncTy* Compiler::GetFunctionType(FunctionType& signature)
     return FuncTy::get(ret, args, false);
   }
   return FuncTy::get(ret, false);
-}
-
-Func* Compiler::HomogenizeFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
-                                   llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv)
-{
-  std::vector<llvmTy*> types; // Replace the entire function with just i64
-  for(auto& arg : fn->args())
-    types.push_back(builder.getInt64Ty());
-
-  Func* wrap = Func::Create(FuncTy::get(builder.getInt64Ty(), types, false), linkage, canonical, mod);
-  wrap->setCallingConv(callconv);
-
-  if(fn->getSubprogram())
-    debugger->FunctionDebugInfo(wrap, name, env.optimize != 0, true, true, fn->getSubprogram()->getFile(),
-                                fn->getSubprogram()->getLine(), 0);
-
-  debugger->SetSPLocation(builder, wrap->getSubprogram());
-  auto prev = builder.GetInsertBlock();
-
-  BB* bb = BB::Create(ctx, "homogenize_block", wrap);
-  builder.SetInsertPoint(bb);
-
-  std::vector<llvmVal*> values;
-  int i = 0;
-  for(auto& arg : wrap->args())
-  {
-    llvmVal* v = nullptr;
-    auto ty    = fn->getFunctionType()->params()[i++];
-    if(ty->isIntegerTy()) // Directly convert all ints from i64
-      v = builder.CreateIntCast(&arg, ty, true);
-    else if(ty->isDoubleTy()) // Bitcast directly to double
-      v = builder.CreateBitCast(&arg, ty);
-    else if(ty->isFloatTy()) // Shrink from i64 to i32 then bitcast to float
-      v = builder.CreateBitCast(builder.CreateIntCast(&arg, builder.getInt32Ty(), true), ty);
-    else if(ty->isPointerTy())
-      v = builder.CreateIntToPtr(&arg, ty);
-    else
-      assert(false);
-
-    values.push_back(v);
-  }
-  llvmVal* val = builder.CreateCall(fn, values);
-  static_cast<CallInst*>(val)->setCallingConv(fn->getCallingConv());
-  static_cast<CallInst*>(val)->setAttributes(fn->getAttributes());
-
-  if(!fn->getReturnType()->isVoidTy())
-  {
-    if(fn->getReturnType()->isIntegerTy()) // Directly convert all ints to i64
-      val = builder.CreateIntCast(val, builder.getInt64Ty(), true);
-    else if(fn->getReturnType()->isDoubleTy()) // Bitcast directly to i64
-      val = builder.CreateBitCast(val, builder.getInt64Ty());
-    else if(fn->getReturnType()->isFloatTy()) // bitcast to i32, then expand to i64
-      val = builder.CreateIntCast(builder.CreateBitCast(val, builder.getInt32Ty()), builder.getInt64Ty(), true);
-    else if(fn->getReturnType()->isPointerTy())
-      val = builder.CreatePtrToInt(val, builder.getInt64Ty());
-    else
-      assert(false);
-    builder.CreateRet(val);
-  }
-  else
-    builder.CreateRet(builder.getInt64(0));
-
-  builder.SetInsertPoint(prev);
-  return wrap;
 }
 
 Func* Compiler::PassFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
@@ -208,6 +149,58 @@ Func* Compiler::WrapFunction(Func* fn, llvm::StringRef name, const llvm::Twine& 
   return wrap;
 }
 
+Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
+                                llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv)
+{ // generalize function into void(char* params, char* results)
+  auto functy   = FuncTy::get(llvmTy::getVoidTy(ctx), { llvmTy::getInt8PtrTy(ctx), llvmTy::getInt8PtrTy(ctx) }, false);
+  Func* generic = Func::Create(functy, linkage, canonical, mod);
+  generic->setCallingConv(callconv);
+  if(fn->getSubprogram())
+    debugger->FunctionDebugInfo(generic, name, env.optimize != 0, true, true, fn->getSubprogram()->getFile(),
+                                fn->getSubprogram()->getLine(), 0);
+
+  debugger->SetSPLocation(builder, generic->getSubprogram());
+  auto prev = builder.GetInsertBlock();
+
+  BB* bb = BB::Create(ctx, "generic_block", generic);
+  builder.SetInsertPoint(bb);
+
+  std::vector<llvmVal*> values;
+  auto params = generic->getArg(0);
+  auto results = generic->getArg(1);
+
+  int offset = 0;
+  for(auto& arg : fn->args())
+  {
+    values.push_back(builder.CreateLoad(builder.CreateBitCast(builder.CreateInBoundsGEP(params, { builder.getInt32(offset) }), arg.getType())));
+    offset += mod->getDataLayout().getTypeSizeInBits(arg.getType()) / 8;
+    // TODO: structs must be broken apart and repacked
+  }
+
+  auto val = builder.CreateCall(fn, values);
+  val->setCallingConv(fn->getCallingConv());
+  val->setAttributes(fn->getAttributes());
+
+  offset   = 0;
+  auto ret = fn->getReturnType();
+  if(ret->isStructTy()) {
+    for(unsigned int i = 0; i < ret->getStructNumElements(); ++i)
+    {
+      builder.CreateStore(builder.CreateInBoundsGEP(val, { builder.getInt32(0), builder.getInt32(i) }),
+                          builder.CreateBitCast(builder.CreateInBoundsGEP(results, { builder.getInt32(offset) }),
+                                                ret->getStructElementType(i)->getPointerTo()),
+                          false);
+      offset += mod->getDataLayout().getTypeSizeInBits(ret->getStructElementType(i));
+    }
+  }
+  else if(!ret->isVoidTy())
+    builder.CreateStore(val, results, false);
+
+  builder.CreateRetVoid();
+  builder.SetInsertPoint(prev);
+  return generic;
+}
+
 bool Compiler::CheckType(varsint7 ty, llvmTy* t)
 {
   switch(ty)
@@ -229,10 +222,16 @@ bool Compiler::CheckSig(varsint64 sig, llvmTy* t, Module& m)
     return CheckType(static_cast<varsint7>(sig), t);
   if(sig >= m.type.n_functypes)
     return false;
-
   auto n_sig = m.type.functypes[sig].n_returns;
+  if(n_sig == 0)
+    return CheckType(TE_void, t);
+  if(n_sig == 1)
+    return CheckType(m.type.functypes[sig].returns[0], t);
+
+  if(!t->isPointerTy() || !t->getPointerElementType()->isStructTy())
+    return false;
   for(varuint32 i = 0; i < n_sig; ++i)
-    if(!CheckType(m.type.functypes[sig].returns[i], t->getStructElementType(i)))
+    if(!CheckType(m.type.functypes[sig].returns[i], t->getPointerElementType()->getStructElementType(i)))
       return false;
   return true;
 }
@@ -247,10 +246,10 @@ IN_ERROR Compiler::PopType(varsint7 ty, llvmVal*& v, bool peek)
   {
     switch(ty)
     {
-    case TE_i32: v = builder.getInt32(0); break;
-    case TE_i64: v = builder.getInt64(0); break;
-    case TE_f32: v = ConstantFP::get(builder.getFloatTy(), 0.0f); break;
-    case TE_f64: v = ConstantFP::get(builder.getDoubleTy(), 0.0f); break;
+    case TE_i32:
+    case TE_i64:
+    case TE_f32:
+    case TE_f64: v = llvm::Constant::getNullValue(GetLLVMType(ty)); break;
     default: return ERR_INVALID_TYPE;
     }
   }
@@ -273,32 +272,48 @@ IN_ERROR Compiler::PopType(varsint7 ty, llvmVal*& v, bool peek)
 
 IN_ERROR Compiler::PopStruct(varsint64 sig, llvmVal*& v, bool peek)
 {
-  size_t n_sig = GetBlockSigResults(sig, m);
-
+  if(sig < 0)
+    return PopType(static_cast<varsint7>(sig), v, peek);
+  if(sig >= m.type.n_functypes)
+    return ERR_INVALID_FUNCTION_SIG;
+  auto n_sig = m.type.functypes[sig].n_returns;
   if(n_sig == 0)
-  {
-    v = 0;
-    return ERR_SUCCESS;
-  }
+    return PopType(TE_void, v);
+  if(n_sig == 1)
+    return PopType(m.type.functypes[sig].returns[0], v);
 
   if(!values.Size())
     return ERR_INVALID_VALUE_STACK;
 
-  if(!values.Peek()) // polymorphic value
-  {
-    auto ty = GetLLVMTypeSig(sig);
-    if(ty->isAggregateType())
-      v = llvm::ConstantAggregateZero::get(ty);
-    else
-      v = llvm::Constant::getNullValue(ty);
+  llvm::SmallVector<llvm::Value*, 4> elems;
+  llvm::SmallVector<llvm::Type*, 4> types;
 
-    return !v ? ERR_INVALID_VALUE_STACK : ERR_SUCCESS;
+  for(varuint32 i = 0; i < n_sig; ++i)
+  {
+    if((i < values.Size() && !values[i]) || (i >= values.Size() && !values[values.Size() - 1])) // polymorphic value
+      elems.push_back(llvm::Constant::getNullValue(GetLLVMType(m.type.functypes[sig].returns[n_sig - 1 - 1])));
+    else if(!CheckType(m.type.functypes[sig].returns[n_sig - i - 1], values[i]->getType()))
+      return ERR_INVALID_TYPE;
+    else
+      elems.push_back(values[i]);
+    types.push_back(elems.back()->getType());
   }
 
-  if(!CheckSig(sig, values.Peek()->getType(), m))
-    return ERR_INVALID_TYPE;
+  // Now we have to actually pop values off the stack
+  if(!peek)
+    for(varuint32 i = 0; i < n_sig; ++i)
+    {
+      if(!values.Peek())
+        break;
+      values.Pop();
+    }
 
-  v = peek ? values.Peek() : values.Pop();
+  auto s = llvm::StructType::get(ctx, types);
+  v      = builder.CreateAlloca(s);
+
+  for(varuint32 i = 0; i < n_sig; ++i)
+    builder.CreateStore(elems[i], builder.CreateInBoundsGEP(v, { builder.getInt32(0), builder.getInt32(i) }), false);
+
   return ERR_SUCCESS;
 }
 
@@ -327,14 +342,20 @@ llvmVal* Compiler::MaskShiftBits(llvmVal* value)
   return builder.CreateAnd(value, CInt::get(value->getType(), value->getType()->getIntegerBitWidth() - 1));
 }
 
-BB* Compiler::PushLabel(const char* name, varsint64 sig, uint8_t opcode, Func* fnptr, llvm::DILocalScope* scope)
+BB* Compiler::PushLabel(const char* name, varsint64 sig, uint8_t opcode, Func* fnptr, llvm::DILocalScope* scope,
+                        bool discard)
 {
   BB* bb = BB::Create(ctx, name, fnptr);
   debugger->PushBlock(scope, builder.getCurrentDebugLocation());
 
   control.Push(Block{ bb, 0, values.Limit(), sig, opcode });
-  values.SetLimit(values.Size() +
-                  values.Limit()); // Set limit to current stack size to prevent a block from popping past this
+
+  if(discard) // If discard is true, this is the function declaration, which ignores the function parameters
+    return bb;
+
+  assert(GetBlockSigParams(sig, m) <= values.Size());
+  // Set limit to current stack size (minus block parameters) to prevent a block from popping past it's parameters
+  values.SetLimit(values.Size() + values.Limit() - GetBlockSigParams(sig, m));
 
   if(values.Size() > 0 &&
      !values.Peek()) // If we're in an unreachable segment, just push another placeholder on to the stack
@@ -375,9 +396,9 @@ IN_ERROR Compiler::PushMultiReturn(llvmVal* arg, varsint64 sig)
     return PushReturn(arg);
 
   auto ty = arg->getType();
-  if(!ty->isStructTy() || sig >= m.type.n_functypes)
-    return ERR_MULTIPLE_RETURN_VALUES;
-  if(ty->getStructNumElements() != n_sig)
+  if(!ty->isPointerTy() || !ty->getPointerElementType()->isStructTy() || sig >= m.type.n_functypes)
+    return ERR_INVALID_FUNCTION_SIG;
+  if(ty->getPointerElementType()->getStructNumElements() != n_sig)
     return ERR_INVALID_BLOCK_SIGNATURE;
 
   // Push struct members in reverse order
@@ -414,16 +435,11 @@ IN_ERROR Compiler::AddBranch(Block& target)
 
 // Pops a label off the control stack, verifying that the value stack matches the signature and building PHI nodes as
 // necessary
-IN_ERROR Compiler::PopLabel(BB* block)
+IN_ERROR Compiler::PopLabel(BB* block, llvmVal* push)
 {
   varuint32 n_sig = GetBlockSigResults(control.Peek().sig, m);
-  llvmVal* push   = nullptr;
   if(n_sig > 0)
   {
-    IN_ERROR err;
-    if(err = PopStruct(control.Peek().sig, push, false))
-      return err;
-
     // If there are results from other branches, perform a PHI merge. Otherwise, leave the value stack alone
     if(control.Peek().results != nullptr)
     {
@@ -647,7 +663,8 @@ const Compiler::Intrinsic* Compiler::GetIntrinsic(Import& imp)
 
 Func* Compiler::TopLevelFunction(llvm::LLVMContext& context, llvm::IRBuilder<>& builder, const char* name, llvm::Module* m)
 {
-  Func* fn = Func::Create(FuncTy::get(builder.getVoidTy(), false), Func::ExternalLinkage, name, m);
+  auto test = builder.getVoidTy();
+  Func* fn  = Func::Create(FuncTy::get(builder.getVoidTy(), false), Func::ExternalLinkage, name, m);
 
   BB* initblock = BB::Create(context, "entry", fn);
   builder.SetInsertPoint(initblock);
@@ -710,8 +727,8 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
     return ERR_FATAL_FILE_ERROR;
 
   // Define a unique init function for performing module initialization
-  init = TopLevelFunction(ctx, builder,
-                          CanonicalName(StringSpan::From(m.name), StringSpan::From("innative_internal_init")).c_str(), mod);
+  init =
+    TopLevelFunction(ctx, builder, CanonicalName(StringSpan::From(m.name), StringSpan::From(IN_INIT_POSTFIX)).c_str(), mod);
 
   // Declare C runtime function prototypes that we assume exist on the system
   memgrow = Func::Create(FuncTy::get(builder.getInt8PtrTy(0),
@@ -743,8 +760,8 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
     Func::Create(FuncTy::get(builder.getVoidTy(), { builder.getInt8PtrTy(0), builder.getInt64Ty() }, false),
                  Func::ExternalLinkage, "_innative_internal_env_free_memory", mod);
 
-  debugger->FunctionDebugInfo(init, "innative_internal_init" DIVIDER + std::string(m.name.str()), env.optimize != 0, true,
-                              true, nullptr, 0, 0);
+  debugger->FunctionDebugInfo(init, IN_INIT_POSTFIX + (DIVIDER + std::string(m.name.str())), env.optimize != 0, true, true,
+                              nullptr, 0, 0);
 
   functions.reserve(m.importsection.functions + m.function.n_funcdecl);
   tables.reserve(m.importsection.tables - m.importsection.functions + m.table.n_tables);
@@ -888,7 +905,7 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
 
     debugger->FuncDecl(functions.back().internal, m.code.funcbody[i].column, decl.debug.line, env.optimize != 0);
     auto name      = functions.back().internal->getName() + DIVIDER "external";
-    auto wrapperfn = (env.flags & ENV_HOMOGENIZE_FUNCTIONS) ? &Compiler::HomogenizeFunction : &Compiler::PassFunction;
+    auto wrapperfn = &Compiler::PassFunction;
     ExportFunction(functions.back(), wrapperfn, name.str(), name);
   }
 
@@ -1040,11 +1057,11 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
   builder.CreateRetVoid();
 
   // Create cleanup function
-  exit = TopLevelFunction(ctx, builder,
-                          CanonicalName(StringSpan::From(m.name), StringSpan::From("innative_internal_exit")).c_str(), mod);
+  exit =
+    TopLevelFunction(ctx, builder, CanonicalName(StringSpan::From(m.name), StringSpan::From(IN_EXIT_POSTFIX)).c_str(), mod);
 
-  debugger->FunctionDebugInfo(exit, "innative_internal_exit" DIVIDER + std::string(m.name.str()), env.optimize != 0, true,
-                              true, nullptr, 0, 0);
+  debugger->FunctionDebugInfo(exit, IN_EXIT_POSTFIX + (DIVIDER + std::string(m.name.str())), env.optimize != 0, true, true,
+                              nullptr, 0, 0);
   debugger->SetSPLocation(builder, exit->getSubprogram());
 
   for(size_t i = m.importsection.memories - m.importsection.tables; i < memories.size();
@@ -1210,8 +1227,7 @@ void Compiler::AddMemLocalCaching()
 // Resolve all exports in the module they originated from (in case any module is exporting an import)
 void Compiler::ResolveModuleExports(const Environment* env, Module* root, llvm::LLVMContext& context)
 {
-  // Set ENV_HOMOGENIZE_FUNCTIONS flag appropriately.
-  auto wrapperfn = (env->flags & ENV_HOMOGENIZE_FUNCTIONS) ? &Compiler::HomogenizeFunction : &Compiler::PassFunction;
+  auto wrapperfn = &Compiler::PassFunction;
 
   for(varuint32 j = 0; j < root->exportsection.n_exports; ++j)
   {
@@ -1267,7 +1283,7 @@ void Compiler::ResolveModuleExports(const Environment* env, Module* root, llvm::
   }
 }
 
-IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
+IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile, bool generics)
 {
   if(!outfile || !outfile[0])
     return ERR_FATAL_NO_OUTPUT_FILE;
@@ -1521,4 +1537,196 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
     OptimizeModules(env);
 
   return LinkEnvironment(env, outfile);
+}
+
+void* innative::LoadJITFunction(void* env, const char* s)
+{
+  auto sym = reinterpret_cast<Environment*>(env)->jit->Lookup(s);
+  if(!sym)
+    return 0;
+  return reinterpret_cast<void*>(sym.get().getAddress());
+}
+
+#include "tools.h"
+
+IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
+{
+  // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
+  llvm::InitializeAllTargetInfos();
+  llvm::InitializeAllTargets();
+  llvm::InitializeAllTargetMCs();
+  llvm::InitializeAllAsmParsers();
+  llvm::InitializeAllAsmPrinters();
+
+  // Build the JIT and LLVM contexts
+  if(!env->jit)
+  {
+    if(!env->context)
+      env->context = new llvm::LLVMContext();
+
+    auto JTMB = llvm::orc::JITTargetMachineBuilder::detectHost();
+
+    if(!JTMB)
+      return ERR_JIT_TARGET_MACHINE_FAILURE;
+
+    auto DL = JTMB->getDefaultDataLayoutForTarget();
+    if(!DL)
+      return ERR_JIT_DATA_LAYOUT_ERROR;
+
+    // If the context already exists, we take ownership of it
+    env->jit =
+      new JITContext(std::move(*JTMB), std::move(*DL), std::unique_ptr<llvm::LLVMContext>(env->context), env->whitelist);
+    // env->context = nullptr;
+
+    if(expose_process)
+      if(env->jit->CompileObject(0))
+        return ERR_JIT_LINK_PROCESS_FAILURE;
+  }
+
+  auto machine = env->jit->GetTargetMachine();
+  if(!machine)
+    return ERR_JIT_TARGET_MACHINE_FAILURE;
+
+  llvm::IRBuilder<> builder(*env->context);
+  IN_ERROR err = ERR_SUCCESS;
+
+  if(!env->n_modules)
+    return ERR_FATAL_NO_MODULES;
+
+  if(env->optimize & ENV_OPTIMIZE_FAST_MATH)
+  {
+    llvm::FastMathFlags fmf;
+    if(env->optimize & ENV_OPTIMIZE_FAST_MATH_REASSOCIATE)
+      fmf.setAllowReassoc();
+    if(env->optimize & ENV_OPTIMIZE_FAST_MATH_NO_NAN)
+      fmf.setNoNaNs();
+    if(env->optimize & ENV_OPTIMIZE_FAST_MATH_NO_INF)
+      fmf.setNoInfs();
+    if(env->optimize & ENV_OPTIMIZE_FAST_MATH_NO_SIGNED_ZERO)
+      fmf.setNoSignedZeros();
+    if(env->optimize & ENV_OPTIMIZE_FAST_MATH_ALLOW_RECIPROCAL)
+      fmf.setAllowReassoc();
+    if(env->optimize & ENV_OPTIMIZE_FAST_MATH_CONTRACT)
+      fmf.setAllowContract();
+    if(env->optimize & ENV_OPTIMIZE_FAST_MATH_ALLOW_APPROXIMATE_FUNCTIONS)
+      fmf.setApproxFunc();
+    builder.setFastMathFlags(fmf);
+  }
+
+  std::vector<Module*> new_modules;
+
+  // Compile all modules
+  for(varuint32 i = 0; i < env->n_modules; ++i)
+  {
+    if(!i || !env->modules[i].cache) // Always recompile the 0th module because it stores the main entry point.
+    {
+      if(env->modules[i].cache)
+        DeleteCache(*env, env->modules[i]);
+      env->modules[i].cache = new Compiler{ *env,    env->modules[i],     env->jit->GetContext(), 0,
+                                            builder, machine.get().get(), kh_init_importhash(),   path() };
+
+      if((err = env->modules[i].cache->CompileModule(i)) < 0)
+        return err;
+
+      new_modules.push_back(env->modules + i);
+    }
+  }
+
+  for(auto m : new_modules)
+    Compiler::ResolveModuleExports(env, m, *env->context);
+
+  for(auto m : new_modules)
+    m->cache->AddMemLocalCaching();
+
+  // Create cleanup function, but only if the user would have to manually call it
+  if(env->flags & ENV_NO_INIT)
+  {
+    Compiler& mainctx = *env->modules[0].cache;
+    Func* cleanup     = Compiler::TopLevelFunction(*env->context, builder, IN_EXIT_FUNCTION, mainctx.mod);
+    mainctx.debugger->FunctionDebugInfo(cleanup, IN_EXIT_FUNCTION, mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+    mainctx.debugger->SetSPLocation(mainctx.builder, cleanup->getSubprogram());
+
+    builder.CreateCall(mainctx.exit, {})->setCallingConv(mainctx.exit->getCallingConv());
+
+    for(size_t i = 1; i < env->n_modules; ++i)
+    {
+      Func* stub = Func::Create(env->modules[i].cache->exit->getFunctionType(), env->modules[i].cache->exit->getLinkage(),
+                                env->modules[i].cache->exit->getName(),
+                                mainctx.mod); // Create function prototype in main module
+      builder.CreateCall(stub, {})->setCallingConv(stub->getCallingConv());
+    }
+
+    // For JIT, we always expose the main and cleanup functions
+    builder.CreateRetVoid();
+    cleanup->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+
+    // Create main function that calls all init functions for all modules and all start functions
+    Func* main = Compiler::TopLevelFunction(*env->context, builder, IN_INIT_FUNCTION, nullptr);
+    mainctx.debugger->FunctionDebugInfo(main, IN_INIT_FUNCTION, mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+    mainctx.debugger->SetSPLocation(mainctx.builder, main->getSubprogram());
+
+    builder.CreateCall(mainctx.init, {})->setCallingConv(mainctx.init->getCallingConv());
+
+    for(size_t i = 1; i < env->n_modules; ++i)
+    {
+      Func* stub = Func::Create(env->modules[i].cache->init->getFunctionType(), env->modules[i].cache->init->getLinkage(),
+                                env->modules[i].cache->init->getName(),
+                                mainctx.mod); // Create function prototype in main module
+      builder.CreateCall(stub, {})->setCallingConv(stub->getCallingConv());
+    }
+
+    // Call every single start function in all modules AFTER we initialize them.
+    if(mainctx.start != nullptr)
+      builder.CreateCall(mainctx.start, {})->setCallingConv(mainctx.start->getCallingConv());
+
+    for(size_t i = 1; i < env->n_modules; ++i)
+    {
+      if(env->modules[i].cache->start != nullptr)
+      {
+        // Catch the case where an import from this module is being called from another module
+        Func* stub = mainctx.mod->getFunction(env->modules[i].cache->start->getName());
+        if(!stub)
+        {
+          auto alias = mainctx.mod->getNamedAlias(env->modules[i].cache->start->getName());
+          if(alias)
+            stub = llvm::cast<Func>(alias->getAliasee());
+          else
+            stub = Func::Create(env->modules[i].cache->start->getFunctionType(), env->modules[i].cache->start->getLinkage(),
+                                env->modules[i].cache->start->getName(),
+                                mainctx.mod); // Create function prototype in main module
+        }
+        builder.CreateCall(stub, {})->setCallingConv(stub->getCallingConv());
+      }
+    }
+
+    builder.CreateRetVoid();
+    main->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+
+    mainctx.mod->getFunctionList().push_back(main);
+  }
+
+  // JIT all modules
+  for(varuint32 i = 0; i < env->n_modules; ++i)
+  {
+    if(env->jit->CompileModule(std::unique_ptr<llvm::Module>(env->modules[i].cache->mod)))
+      return ERR_JIT_COMPILE_FAILURE;
+  }
+
+  // If we're auto-initializing, call all the init functions, then all the start functions. Unfortunately, LLVM deletes
+  // function names after we JIT so we have to store them before calling them
+  if(!(env->flags & ENV_NO_INIT))
+  {
+    std::vector<llvm::StringRef> refs;
+
+    for(size_t i = 0; i < env->n_modules; ++i)
+      refs.push_back(env->modules[i].cache->init->getName());
+    for(size_t i = 0; i < env->n_modules; ++i)
+      if(env->modules[i].cache->start)
+        refs.push_back(env->modules[i].cache->start->getName());
+
+    for(auto n : refs)
+      reinterpret_cast<IN_Entrypoint>(env->jit->Lookup(n).get().getAddress())();
+  }
+
+  return ERR_SUCCESS;
 }

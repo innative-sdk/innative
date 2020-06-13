@@ -151,6 +151,10 @@ typedef struct IN__EXPORTS
   /// \param file The path of the output file that is produced.
   enum IN_ERROR (*Compile)(Environment* env, const char* file);
 
+  /// Compiles and verifies all the modules in the environment using a JIT context linked to the environment.
+  /// \param env The environment to compile.
+  enum IN_ERROR (*CompileJIT)(Environment* env, bool expose_process);
+
   /// Loads a WebAssembly binary (usually a dynamic library) produced by Compile into memory, allowing you to load functions
   /// and other exported symbols.
   /// \param file the path of the file to load.
@@ -160,12 +164,17 @@ typedef struct IN__EXPORTS
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   void (*FreeAssembly)(void* assembly);
 
+  /// Dumps the JIT state, if there is one, into the logfile buffer
+  /// \param env The environment containing the JIT
+  void (*DumpJITState)(Environment* env);
+
   /// Gets a function from a WebAssembly binary that has been loaded into memory. This function cannot determine the type
   /// signature, you must cast it manually to the correct function type.
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   /// \param module_name The name of the module the function is exported from.
   /// \param function The name of the function. If null, loads the entrypoint function.
   IN_Entrypoint (*LoadFunction)(void* assembly, const char* module_name, const char* function);
+  IN_Entrypoint (*LoadFunctionJIT)(Environment* env, const char* module_name, const char* function);
 
   /// Gets a function pointer from a table, given the specified index. If the index is out of bounds, returns null.
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
@@ -173,6 +182,7 @@ typedef struct IN__EXPORTS
   /// \param function The name of the table the function pointer belongs to.
   /// \param index The index of the function pointer. If this is out of bounds, the function returns null.
   IN_Entrypoint (*LoadTable)(void* assembly, const char* module_name, const char* table, varuint32 function_index);
+  IN_Entrypoint (*LoadTableJIT)(Environment* env, const char* module_name, const char* table, varuint32 function_index);
 
   /// Gets a pointer to a global from a WebAssembly binary loaded by LoadAssembly, which can potentially be modified if it
   /// is mutable (but this function cannot determine whether it was intended to be mutable).
@@ -180,11 +190,13 @@ typedef struct IN__EXPORTS
   /// \param module_name The name of the module the global is exported from.
   /// \param export_name The name of the global that has been exported.
   INGlobal* (*LoadGlobal)(void* assembly, const char* module_name, const char* export_name);
+  INGlobal* (*LoadGlobalJIT)(Environment* env, const char* module_name, const char* export_name);
 
   /// Gets the metadata associated with the module at the given zero-based index.
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   /// \param module_index A zero-based index. If this is out-of-bounds, the function returns null.
   INModuleMetadata* (*GetModuleMetadata)(void* assembly, uint32_t module_index);
+  INModuleMetadata* (*GetModuleMetadataJIT)(Environment* env, uint32_t module_index);
 
   /// Gets a function pointer from a table, given the specified index. This function has bounds checking.
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
@@ -192,18 +204,22 @@ typedef struct IN__EXPORTS
   /// \param table_index The index of the table the function pointer belongs to.
   /// \param function_index The index of the function pointer.
   IN_Entrypoint (*LoadTableIndex)(void* assembly, uint32_t module_index, uint32_t table_index, varuint32 function_index);
+  IN_Entrypoint (*LoadTableIndexJIT)(Environment* env, uint32_t module_index, uint32_t table_index,
+                                     varuint32 function_index);
 
   /// Gets a global value at the specified index, or returns null if the index is out of bounds.
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   /// \param module_index The index of the module the table is exported from.
   /// \param global_index The index of the global to retrieve.
   INGlobal* (*LoadGlobalIndex)(void* assembly, uint32_t module_index, uint32_t global_index);
+  INGlobal* (*LoadGlobalIndexJIT)(Environment* env, uint32_t module_index, uint32_t global_index);
 
   /// Gets a linear memory global at the specified index, or returns null if the index is out of bounds.
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   /// \param module_index The index of the module the table is exported from.
   /// \param global_index The index of the linear memory to retrieve.
   INGlobal* (*LoadMemoryIndex)(void* assembly, uint32_t module_index, uint32_t memory_index);
+  INGlobal* (*LoadMemoryIndexJIT)(Environment* env, uint32_t module_index, uint32_t memory_index);
 
   /// Searches for an exported function with the given name in a table and replaces the function pointer with another.
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.

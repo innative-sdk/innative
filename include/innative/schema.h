@@ -307,8 +307,10 @@ typedef struct IN_WASM_CUSTOM_SECTION
 #ifdef __cplusplus
 namespace innative {
   struct Compiler;
+  class JITContext;
 }
 typedef innative::Compiler IN_CODE_compiler;
+typedef innative::JITContext IN_JIT_context;
 namespace llvm {
   class LLVMContext;
 }
@@ -316,6 +318,7 @@ typedef llvm::LLVMContext LLVM_LLVM_compiler;
 #else
 typedef void IN_CODE_compiler;
 typedef void LLVM_LLVM_compiler;
+typedef void IN_JIT_context;
 #endif
 
 // Represents a single webassembly module
@@ -469,6 +472,7 @@ typedef struct IN_WASM_ENVIRONMENT
   struct kh_modulepair_s* whitelist;
   struct kh_cimport_s* cimports;
   LLVM_LLVM_compiler* context;
+  IN_JIT_context* jit;
 } Environment;
 
 #ifdef __cplusplus
