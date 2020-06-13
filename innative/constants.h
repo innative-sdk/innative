@@ -126,8 +126,9 @@ namespace innative {
 
     static const unsigned int WASM_MAGIC_COOKIE  = INNATIVE_WASM_MAGIC_COOKIE;
     static const unsigned int WASM_MAGIC_VERSION = INNATIVE_WASM_MAGIC_VERSION;
-    static const unsigned int WASM_SECTION_C_LINKAGE = (1 << 31); // magical internal section flag telling us to force c linkage
-    static const size_t VLQ_CONTINUATION_BIT     = 0b100000;
+    static const unsigned int WASM_SECTION_C_LINKAGE =
+      (1 << 31); // magical internal section flag telling us to force c linkage
+    static const size_t VLQ_CONTINUATION_BIT = 0b100000;
 
     struct OP
     {
@@ -147,7 +148,7 @@ namespace innative {
       inline const char* operator[](const uint8_t (&x)[MAX_OPCODE_BYTES]) const { return Get(ToInt(x)); }
 
       kh_mapenum_s* MAP;
-      static constexpr std::array<std::pair<std::array<uint8_t, 2>, const char*>, 239> LIST = {
+      static constexpr std::array<std::pair<std::array<uint8_t, 2>, const char*>, 261> LIST = {
         // Control flow operators
         std::pair<std::array<uint8_t, 2>, const char*>{ { 0x00, 0x00 }, "unreachable" },
         { { 0x01, 0x00 }, "nop" },
@@ -349,6 +350,32 @@ namespace innative {
         { { 0xbe, 0x00 }, "f32.reinterpret_i32" },
         { { 0xbf, 0x00 }, "f64.reinterpret_i64" },
 
+        // Sign extension ops
+        { { 0xc0, 0x00 }, "i32.extend8_s" },
+        { { 0xc1, 0x00 }, "i32.extend16_s" },
+        { { 0xc2, 0x00 }, "i64.extend8_s" },
+        { { 0xc3, 0x00 }, "i64.extend16_s" },
+        { { 0xc4, 0x00 }, "i64.extend32_s" },
+
+        // Nontrapping Float to Int conversions
+        { { 0xfc, 0x00 }, "i32.trunc_sat_f32_s" },
+        { { 0xfc, 0x01 }, "i32.trunc_sat_f32_u" },
+        { { 0xfc, 0x02 }, "i32.trunc_sat_f64_s" },
+        { { 0xfc, 0x03 }, "i32.trunc_sat_f64_u" },
+        { { 0xfc, 0x04 }, "i64.trunc_sat_f32_s" },
+        { { 0xfc, 0x05 }, "i64.trunc_sat_f32_u" },
+        { { 0xfc, 0x06 }, "i64.trunc_sat_f64_s" },
+        { { 0xfc, 0x07 }, "i64.trunc_sat_f64_u" },
+
+        // Bulk memory operations
+        { { 0xfc, 0x08 }, "memory.init" },
+        { { 0xfc, 0x09 }, "data.drop" },
+        { { 0xfc, 0x0a }, "memory.copy" },
+        { { 0xfc, 0x0b }, "memory.fill" },
+        { { 0xfc, 0x0c }, "table.init" },
+        { { 0xfc, 0x0d }, "elem.drop" },
+        { { 0xfc, 0x0e }, "table.copy" },
+
         // Atomics
         { { 0xfe, 0x00 }, "memory.atomic.notify" },
         { { 0xfe, 0x01 }, "memory.atomic.wait32" },
@@ -426,6 +453,10 @@ namespace innative {
         { { 0xfe, 0x4C }, "i64.atomic.rmw8.cmpxchg_u" },
         { { 0xfe, 0x4D }, "i64.atomic.rmw16.cmpxchg_u" },
         { { 0xfe, 0x4E }, "i64.atomic.rmw32.cmpxchg_u" },
+
+        // reference-types proposal stubs
+        { { 0xd0, 0x00 }, "ref.null" },
+        { { 0xd2, 0x00 }, "ref.func" },
       };
       static const OP NAMES;
     };

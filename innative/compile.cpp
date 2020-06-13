@@ -396,47 +396,69 @@ IN_ERROR Compiler::InsertConditionalTrap(llvmVal* cond)
   return ERR_SUCCESS;
 }
 
+IN_ERROR Compiler::InsertBoundsCheck(llvm::Type* inputTy, llvmVal* end, std::initializer_list<llvmVal*> offsets,
+                                     llvmVal* accessSize, llvmVal*& loc)
+{
+  auto sizet               = builder.getIntNTy(machine->getPointerSizeInBits(0));
+  bool bypass              = sizet->getBitWidth() > inputTy->getPrimitiveSizeInBits();
+  Func* uadd_with_overflow = llvm::Intrinsic::getDeclaration(mod, llvm::Intrinsic::uadd_with_overflow, { sizet });
+
+  end = builder.CreateZExtOrTrunc(end, sizet);
+  loc = CInt::get(sizet, 0);
+  llvmVal* upper;
+  llvmVal* cond = builder.getInt1(false);
+
+  auto appendVal = [&](llvmVal*& acc, llvmVal* val) {
+    val = builder.CreateZExtOrTrunc(val, sizet);
+    if(bypass)
+      acc = builder.CreateAdd(acc, val, "", true, true);
+    else
+    {
+      auto v = builder.CreateCall(uadd_with_overflow, { acc, val });
+      acc    = builder.CreateExtractValue(v, 0);
+      cond   = builder.CreateOr(cond, builder.CreateExtractValue(v, 1));
+    }
+  };
+
+  for(auto& val : offsets)
+  {
+    appendVal(loc, val);
+  }
+  appendVal(upper = loc, accessSize);
+
+  cond = builder.CreateOr(cond, builder.CreateICmpUGT(upper, end), "bounds_check_cond");
+  InsertConditionalTrap(cond);
+
+  return ERR_SUCCESS;
+}
+
 llvmVal* Compiler::GetMemPointer(llvmVal* base, llvm::PointerType* pointer_type, varuint32 memory, varuint32 offset)
 {
+  llvm::IntegerType* ty = machine->getPointerSizeInBits(0) == 32 ? builder.getInt32Ty() : builder.getInt64Ty();
+  llvmVal* elemSize     = CInt::get(ty, pointer_type->getPointerElementType()->getPrimitiveSizeInBits() / 8, false);
+
+  return GetMemPointerRegion(base, pointer_type, elemSize, memory, offset);
+}
+
+llvmVal* Compiler::GetMemPointerRegion(llvmVal* base, llvm::PointerType* pointer_type, llvmVal* byteLength,
+                                       varuint32 memory, varuint32 offset)
+{
   assert(memories.size() > 0);
-  llvmVal* src          = !memory ? memlocal : static_cast<llvmVal*>(GetPairPtr(memories[memory], 0));
-  llvm::IntegerType* ty = machine->getPointerSizeInBits(memory) == 32 ? builder.getInt32Ty() : builder.getInt64Ty();
+  llvmVal* src = !memory ? memlocal : nullptr;
+  if(!src)
+    src = static_cast<llvmVal*>(GetPairPtr(memories[memory], 0));
+  llvm::IntegerType* ty = machine->getPointerSizeInBits(0) == 32 ? builder.getInt32Ty() : builder.getInt64Ty();
 
   // If our native integer size is larger than the webassembly memory pointer size, then overflow is not possible and we
   // can bypass the check.
-  bool bypass = ty->getBitWidth() > base->getType()->getIntegerBitWidth();
+  bool bypass = ty->getBitWidth() > base->getType()->getIntegerBitWidth() && false;
   base        = builder.CreateZExtOrTrunc(base, ty);
 
   llvmVal* loc;
   if(env.flags & ENV_CHECK_MEMORY_ACCESS) // In strict mode, generate a check that traps if this is an invalid memory access
   {
-    llvmVal* end = builder.CreateIntCast(GetMemSize(memories[memory]), ty, false);
-    llvmVal* cond;
-    Func* uadd_with_overflow = llvm::Intrinsic::getDeclaration(mod, llvm::Intrinsic::uadd_with_overflow, { ty });
-
-    if(bypass) // If we can bypass the overflow check because we have enough bits, only check the upper bound
-    {
-      loc = builder.CreateAdd(base, CInt::get(ty, offset, false), "", true, true);
-      auto upper =
-        builder.CreateAdd(loc, CInt::get(ty, pointer_type->getPointerElementType()->getPrimitiveSizeInBits() / 8, false));
-      cond = builder.CreateICmpUGT(upper, end, "invalid_mem_access_cond");
-    }
-    else
-    {
-      llvmVal* v        = builder.CreateCall(uadd_with_overflow, { base, CInt::get(ty, offset, false) });
-      llvmVal* overflow = builder.CreateExtractValue(v, 1);
-      loc               = builder.CreateExtractValue(v, 0);
-
-      v          = builder.CreateCall(uadd_with_overflow,
-                             { loc,
-                               CInt::get(ty, pointer_type->getPointerElementType()->getPrimitiveSizeInBits() / 8, false) });
-      overflow   = builder.CreateOr(overflow, builder.CreateExtractValue(v, 1), "invalid_mem_access_cond_overflow");
-      auto upper = builder.CreateExtractValue(v, 0);
-      cond       = builder.CreateOr(overflow, builder.CreateICmpUGT(upper, end, "invalid_mem_access_cond_upper"),
-                              "invalid_mem_access_cond");
-    }
-
-    InsertConditionalTrap(cond);
+    llvmVal* end = GetMemSize(memories[memory]);
+    InsertBoundsCheck(base->getType(), end, { base, CInt::get(ty, offset) }, byteLength, loc);
   }
   else
     loc = builder.CreateAdd(base, CInt::get(ty, offset, false), "", true, true);
@@ -649,9 +671,27 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
                                Func::ExternalLinkage, "_innative_internal_env_atomic_wait64", mod);
   atomic_wait64->setCallingConv(llvm::CallingConv::C);
 
-  Func* fn_memcpy = Func::Create(
-    FuncTy::get(builder.getVoidTy(), { builder.getInt8PtrTy(0), builder.getInt8PtrTy(0), builder.getInt64Ty() }, false),
-    Func::ExternalLinkage, "_innative_internal_env_memcpy", mod);
+  memcpy = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
+                                    { builder.getInt8PtrTy(0), builder.getInt8PtrTy(0), builder.getInt64Ty() }, false),
+                        Func::ExternalLinkage, "_innative_internal_env_memcpy", mod);
+
+  memmove = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
+                                     { builder.getInt8PtrTy(), builder.getInt8PtrTy(),
+                                       builder.getIntNTy(machine->getPointerSizeInBits(0)) },
+                                     false),
+                         Func::ExternalLinkage, "_innative_internal_env_memmove", mod);
+
+  memset = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
+                                    { builder.getInt8PtrTy(), builder.getInt32Ty(),
+                                      builder.getIntNTy(machine->getPointerSizeInBits(0)) },
+                                    false),
+                        Func::ExternalLinkage, "_innative_internal_env_memset", mod);
+
+  memcmp = Func::Create(FuncTy::get(builder.getInt32Ty(),
+                                    { builder.getInt8PtrTy(), builder.getInt32Ty(),
+                                      builder.getIntNTy(machine->getPointerSizeInBits(0)) },
+                                    false),
+                        Func::ExternalLinkage, "_innative_internal_env_memcmp", mod);
 
   Func* fn_memfree =
     Func::Create(FuncTy::get(builder.getVoidTy(), { builder.getInt8PtrTy(0), builder.getInt64Ty() }, false),
@@ -889,6 +929,70 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
 
   debugger->SetSPLocation(builder, init->getSubprogram());
 
+  // Process element section by appending to the init function
+  for(varuint32 i = 0; i < m.element.n_elements; ++i)
+  {
+    TableInit& e = m.element.elements[i];
+    auto element_type = (e.flags & WASM_ELEM_CARRIES_ELEMEXPRS) ? e.elem_type : TE_funcref;
+
+    // Create a constant array of the data
+    auto target    = GetLLVMType(element_type);
+    auto null_val  = llvm::Constant::getNullValue(target);
+    auto no_ty_val = builder.getInt32(0);
+    auto elem_ty   = GetTableType(element_type);
+    auto array_ty  = llvm::ArrayType::get(elem_ty, e.n_elements);
+    std::vector<llvm::Constant*> elem_values;
+    elem_values.reserve(e.n_elements);
+    for(varuint32 j = 0; j < e.n_elements; ++j)
+    {
+      llvm::Optional<varuint32> elem = llvm::None;
+      if(e.flags & WASM_ELEM_CARRIES_ELEMEXPRS)
+      {
+        if(e.elemexprs[j].opcode[0] == OP_ref_func)
+          elem = e.elemexprs[j].immediates[0]._varuint32;
+      }
+      else
+        elem = e.elements[j];
+
+      llvm::Constant* value = null_val;
+      llvm::Constant* type  = no_ty_val;
+      if(elem.hasValue() && element_type == TE_funcref)
+      {
+        varuint32 index = GetFirstType(ModuleFunctionType(m, elem.getValue()));
+        if(index == ~0u)
+          return ERR_INVALID_FUNCTION_INDEX;
+
+        value = llvm::ConstantExpr::getPointerCast(functions[elem.getValue()].internal, target);
+        type  = builder.getInt32(index);
+      }
+
+      auto elem_val = llvm::ConstantStruct::get(elem_ty, value, type);
+      elem_values.push_back(elem_val);
+    }
+    auto elem   = llvm::ConstantArray::get(array_ty, elem_values);
+    auto global = new llvm::GlobalVariable(*mod, array_ty, true, llvm::GlobalValue::LinkageTypes::PrivateLinkage, elem,
+                                           CanonicalName(StringSpan{ 0, 0 }, StringSpan::From("elem"), i));
+    auto lenvar = new llvm::GlobalVariable(*mod, builder.getInt64Ty(), false,
+                                           llvm::GlobalValue::LinkageTypes::PrivateLinkage, builder.getInt64(elem_values.size()),
+                                           CanonicalName(StringSpan{ 0, 0 }, StringSpan::From("elem_len"), i));
+    debugger->DebugGlobal(global, global->getName(), 0);
+    debugger->DebugGlobal(lenvar, lenvar->getName(), 0);
+    elem_globals.push_back({ elem, global, lenvar });
+
+    if(!(e.flags & WASM_ELEM_PASSIVE))
+    {
+      llvm::Constant* offset;
+      if(err = CompileInitConstant(e.offset, m, offset))
+        return err;
+
+      values.Push(offset);
+      values.Push(builder.getInt32(0));
+      values.Push(builder.getInt32(e.n_elements));
+      CompileTableInit(e.index, i);
+      CompileElemDrop(i);
+    }
+  }
+
   // Process data section by appending to the init function
   for(varuint32 i = 0; i < m.data.n_data; ++i)
   {
@@ -896,57 +1000,27 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
     auto data = llvm::ConstantDataArray::get(ctx, llvm::makeArrayRef<uint8_t>(d.data.get(), d.data.get() + d.data.size()));
     auto val  = new llvm::GlobalVariable(*mod, data->getType(), true, llvm::GlobalValue::LinkageTypes::PrivateLinkage, data,
                                         CanonicalName(StringSpan{ 0, 0 }, StringSpan::From("data"), i));
+    auto lenvar = new llvm::GlobalVariable(*mod, builder.getInt64Ty(), false,
+                                           llvm::GlobalValue::LinkageTypes::PrivateLinkage, builder.getInt64(d.data.size()),
+                                           CanonicalName(StringSpan{ 0, 0 }, StringSpan::From("data_len"), i));
     debugger->DebugGlobal(val, val->getName(), 0);
+    debugger->DebugGlobal(lenvar, lenvar->getName(), 0);
+    data_globals.push_back({ data, val, lenvar });
 
-    llvm::Constant* offset;
-    if(err = CompileInitConstant(d.offset, m, offset))
-      return err;
-
-    // Then we create a memcpy call that copies this data to the appropriate location in the init function
-    builder
-      .CreateCall(fn_memcpy,
-                  { builder.CreateInBoundsGEP(builder.CreateLoad(GetPairPtr(memories[d.index], 0)), offset),
-                    builder.CreateInBoundsGEP(data->getType(), val, { builder.getInt32(0), builder.getInt32(0) }),
-                    builder.getInt64(GetTotalSize(data->getType())) })
-      ->setCallingConv(fn_memcpy->getCallingConv());
-  }
-
-  // Process element section by appending to the init function
-  for(varuint32 i = 0; i < m.element.n_elements; ++i)
-  {
-    TableInit& e = m.element.elements[i]; // First we declare a constant array that stores the data in the EXE
-    TableDesc* t = ModuleTable(m, e.index);
-    if(!t)
-      return ERR_INVALID_TABLE_INDEX;
-
-    if(t->element_type == TE_funcref)
+    // Only perform the init now if active
+    if(!(d.flags & WASM_DATA_PASSIVE))
     {
-      llvmTy* target = GetLLVMType(TE_funcref);
       llvm::Constant* offset;
-      if(err = CompileInitConstant(e.offset, m, offset))
+      if(err = CompileInitConstant(d.offset, m, offset))
         return err;
 
-      // Go through and resolve all indices to function pointers
-      for(varuint32 j = 0; j < e.n_elements; ++j)
-      {
-        if(e.elements[j] >= functions.size())
-          return ERR_INVALID_FUNCTION_INDEX;
-
-        // Store function pointer in correct table memory location
-        auto ptr =
-          builder.CreateGEP(builder.CreateLoad(GetPairPtr(tables[e.index], 0)),
-                            { builder.CreateAdd(offset, CInt::get(offset->getType(), j, true)), builder.getInt32(0) });
-        builder.CreateAlignedStore(builder.CreatePointerCast(functions[e.elements[j]].internal, target), ptr,
-                                   mod->getDataLayout().getPointerSize(), false);
-
-        varuint32 index = GetFirstType(ModuleFunctionType(m, e.elements[j]));
-        if(index == (varuint32)~0)
-          return ERR_INVALID_FUNCTION_INDEX;
-
-        ptr = builder.CreateGEP(builder.CreateLoad(GetPairPtr(tables[e.index], 0)),
-                                { builder.CreateAdd(offset, CInt::get(offset->getType(), j, true)), builder.getInt32(1) });
-        builder.CreateAlignedStore(builder.getInt32(index), ptr, 4, false);
-      }
+      // We have to actually check the bounds for this with a trap
+      // now so just reuse the instruction code
+      values.Push(offset);                                          // memory offset
+      values.Push(builder.getInt32(0));                             // data offset
+      values.Push(builder.getInt32(GetTotalSize(data->getType()))); // size
+      CompileMemInit(d.index, i);
+      CompileDataDrop(i);
     }
   }
 
@@ -1320,6 +1394,39 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   }
 
   builder.CreateRetVoid();
+
+  // Create memcpy function to satisfy the rtlibcalls
+  Func* memcpy = Func::Create(mainctx.memcpy->getFunctionType(), Func::WeakAnyLinkage, "memcpy", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", memcpy));
+  mainctx.debugger->FunctionDebugInfo(memcpy, "memcpy", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(builder, memcpy->getSubprogram());
+  CallInst* inner_memcpy = builder.CreateCall(mainctx.memcpy, { memcpy->getArg(0), memcpy->getArg(1), memcpy->getArg(2) });
+  builder.CreateRet(inner_memcpy);
+
+  // Create memmove function to satisfy the rtlibcalls
+  Func* memmove = Func::Create(mainctx.memmove->getFunctionType(), Func::WeakAnyLinkage, "memmove", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", memmove));
+  mainctx.debugger->FunctionDebugInfo(memmove, "memmove", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(builder, memmove->getSubprogram());
+  CallInst* inner_memmove =
+    builder.CreateCall(mainctx.memmove, { memmove->getArg(0), memmove->getArg(1), memmove->getArg(2) });
+  builder.CreateRet(inner_memmove);
+
+  // Create memset function to satisfy the rtlibcalls
+  Func* memset = Func::Create(mainctx.memset->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memset", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", memset));
+  mainctx.debugger->FunctionDebugInfo(memset, "memset", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(builder, memset->getSubprogram());
+  CallInst* inner_memset = builder.CreateCall(mainctx.memset, { memset->getArg(0), memset->getArg(1), memset->getArg(2) });
+  builder.CreateRet(inner_memset);
+
+  // Create memcmp function to satisfy the rtlibcalls
+  Func* memcmp = Func::Create(mainctx.memcmp->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memcmp", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", memcmp));
+  mainctx.debugger->FunctionDebugInfo(memcmp, "memcmp", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(builder, memcmp->getSubprogram());
+  CallInst* inner_memcmp = builder.CreateCall(mainctx.memcmp, { memcmp->getArg(0), memcmp->getArg(1), memcmp->getArg(2) });
+  builder.CreateRet(inner_memcmp);
 
   // Create main function that calls all init functions for all modules and all start functions
   Func* main = Compiler::TopLevelFunction(*env->context, builder, IN_INIT_FUNCTION, nullptr);

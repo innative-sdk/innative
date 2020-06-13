@@ -19,7 +19,7 @@ namespace innative {
   IN_ERROR ParseGlobalDecl(utility::Stream& s, GlobalDecl& g, const Environment& env);
   IN_ERROR ParseImport(utility::Stream& s, Import& i, const Environment& env);
   IN_ERROR ParseExport(utility::Stream& s, Export& e, const Environment& env);
-  IN_ERROR ParseInstruction(utility::Stream& s, Instruction& ins, const Environment& env);
+  IN_ERROR ParseInstruction(utility::Stream& s, Instruction& ins, const Environment& env, Module* m = nullptr);
   IN_ERROR ParseTableInit(utility::Stream& s, TableInit& init, Module& m, const Environment& env);
   IN_ERROR ParseFunctionBody(utility::Stream& s, FunctionBody& f, Module& m, const Environment& env);
   IN_ERROR ParseDataInit(utility::Stream& s, DataInit& data, const Environment& env);
@@ -30,6 +30,7 @@ namespace innative {
   IN_ERROR ParseModule(utility::Stream& s, const char* file, const Environment& env, Module& module, ByteArray name,
                        ValidationError*& errors);
   IN_ERROR ParseExportFixup(Module& module, ValidationError*& errors, const Environment& env);
+  IN_ERROR ParseMiscOpsInstruction(utility::Stream& s, Instruction& ins, const Environment& env, Module* m);
   IN_ERROR ParseAtomicInstruction(utility::Stream& s, Instruction& ins, const Environment& env);
 }
 
