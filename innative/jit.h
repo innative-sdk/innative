@@ -14,46 +14,53 @@
 #include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#include "innative/schema.h"
 
 namespace innative {
   class JITContext
   {
   public:
     JITContext(llvm::orc::JITTargetMachineBuilder JTMB, llvm::DataLayout DL, std::unique_ptr<llvm::LLVMContext> ctx,
-               struct kh_modulepair_s* whitelist);
+               Environment* env);
 
     inline llvm::LLVMContext& GetContext() { return *Ctx.getContext(); }
 
     inline llvm::Error CompileModule(std::unique_ptr<llvm::Module> m)
     {
-      return CompileLayer.add(MainJD, llvm::orc::ThreadSafeModule(std::move(m), Ctx));
+      return CL.add(MainJD, llvm::orc::ThreadSafeModule(std::move(m), Ctx));
     }
 
-    llvm::Error CompileObject(const char* file);
+    llvm::Error CompileEmbedding(const Embedding* embed);
 
     inline llvm::Expected<llvm::JITEvaluatedSymbol> Lookup(llvm::StringRef Name)
     {
       return ES.lookup(llvm::orc::JITDylibSearchOrder({ { &MainJD, llvm::orc::JITDylibLookupFlags::MatchAllSymbols } }),
-                       Mangle(Name.str()));
+                       Mangler(Name.str()));
     }
 
     inline llvm::Expected<std::unique_ptr<llvm::TargetMachine>> GetTargetMachine() { return jtmb.createTargetMachine(); }
     inline llvm::orc::ExecutionSession& GetSession() { return ES; }
 
-  protected:
-    bool WhitelistPredicate(const llvm::orc::SymbolStringPtr& s);
+    template<typename T> llvm::Error AddGenerator(llvm::Expected<std::unique_ptr<T>> gen) {
+      if(!gen)
+        return gen.takeError();
 
+      MainJD.addGenerator(std::move(gen.get()));
+      return llvm::Error::success();
+    }
+
+  protected:
     llvm::orc::JITTargetMachineBuilder jtmb;
     llvm::orc::ExecutionSession ES;
-    llvm::orc::RTDyldObjectLinkingLayer ObjectLayer;
-    llvm::orc::IRCompileLayer CompileLayer;
-    llvm::orc::IRTransformLayer TransformLayer;
-
+    llvm::orc::RTDyldObjectLinkingLayer OL;
+    llvm::orc::IRCompileLayer CL;
+    llvm::orc::IRTransformLayer TL;
+    
     llvm::DataLayout DL;
-    llvm::orc::MangleAndInterner Mangle;
+    llvm::orc::MangleAndInterner Mangler;
     llvm::orc::ThreadSafeContext Ctx;
     llvm::orc::JITDylib& MainJD;
-    struct kh_modulepair_s* Whitelist;
+    std::function<bool(const llvm::orc::SymbolStringPtr& s)> Whitelist;
   };
 }
 

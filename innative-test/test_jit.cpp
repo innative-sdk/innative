@@ -27,16 +27,19 @@ void TestHarness::test_jit()
     env->optimize = ENV_OPTIMIZE_O0;
 #endif
 
+    // Add our default environment just like normal, but we have to explicitly tag it so the JIT knows how to load it.
+    int err = (*_exports.AddEmbedding)(env, IN_TAG_STATIC, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
+
     path file = "../scripts/debugging.wasm";
-    int err;
-    (*_exports.AddModule)(env, file.u8string().c_str(), 0, file.stem().u8string().c_str(), &err);
+    if(err >= 0)
+      (*_exports.AddModule)(env, file.u8string().c_str(), 0, file.stem().u8string().c_str(), &err);
 
     if(err >= 0)
       err = (*_exports.FinalizeEnvironment)(env);
 
-    // JIT compile our script, exposing this process to it to it can access the static library
+    // JIT compile our script using the standard static library
     if(err >= 0)
-      err = (*_exports.CompileJIT)(env, true);
+      err = (*_exports.CompileJIT)(env, false);
 
     constexpr int n = 8;
     auto test       = (int (*)(int))(*_exports.LoadFunctionJIT)(env, "debugging", "debug");
@@ -67,16 +70,18 @@ void TestHarness::test_jit()
     env->optimize = ENV_OPTIMIZE_O0;
 #endif
 
+    int err   = (*_exports.AddEmbedding)(env, IN_TAG_STATIC, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
+
     path file = "../scripts/debugging.wasm";
-    int err;
-    (*_exports.AddModule)(env, file.u8string().c_str(), 0, file.stem().u8string().c_str(), &err);
+    if(err >= 0)
+      (*_exports.AddModule)(env, file.u8string().c_str(), 0, file.stem().u8string().c_str(), &err);
 
     if(err >= 0)
       err = (*_exports.FinalizeEnvironment)(env);
 
     // JIT compile our script, exposing this process to it to it can access the static library
     if(err >= 0)
-      err = (*_exports.CompileJIT)(env, true);
+      err = (*_exports.CompileJIT)(env, false);
 
     constexpr int n = 8;
     auto test       = (int (*)(int))(*_exports.LoadFunctionJIT)(env, "debugging", "debug");
