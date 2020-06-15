@@ -39,7 +39,7 @@ enum WASM_ENVIRONMENT_FLAGS
 
   // Forces all internal functions to use the standard C ABI instead of an fast internal representation. Not compatible with
   // multiple return values.
-  ENV_FORCE_C_ABI = (1 << 7),
+  ENV_FORCE_C_EXPORTS = (1 << 7),
 
   // Normally, inNative will create a dynamic library that automatically calls it's initialization function when it is
   // loaded into memory, using the operating system's global initialization handles, and free it's global resources when it
@@ -78,6 +78,10 @@ enum WASM_ENVIRONMENT_FLAGS
   // The webassembly standard currently does not allow tail calls to prevent stack overflows from turning into endless loops
   // that lock up a web browser. This option is provided purely for compatibility with the standard.
   ENV_DISABLE_TAIL_CALL = (1 << 15),
+
+  // Exposes additional function wrappers in the form `void Func(char* params, char* returns)` to allow calling arbitrary
+  // signatures at runtime
+  ENV_GENERALIZE_FUNCTIONS = (1 << 16),
 
   // DWARF's "is_stmt" flag marks which assembly lines are actually source code statements, but it is not always reliable.
   ENV_DEBUG_DETECT_IS_STMT = 0, // By default, we check if there are is_stmt flags anywhere and if they exist we use them.

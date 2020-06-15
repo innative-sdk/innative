@@ -371,7 +371,7 @@ namespace innative {
       return ERR_SUCCESS;
     }
 
-    IN_FORCEINLINE varuint32 GetBlockSigResults(varsint64 sig, Module& m)
+    IN_FORCEINLINE varuint32 GetBlockSigResults(varsint64 sig, const Module& m)
     {
       switch(sig)
       {
@@ -388,7 +388,7 @@ namespace innative {
       return 0;
     }
 
-    IN_FORCEINLINE varuint32 GetBlockSigParams(varsint64 sig, Module& m)
+    IN_FORCEINLINE varuint32 GetBlockSigParams(varsint64 sig, const Module& m)
     {
       if(sig >= 0 && sig < m.type.n_functypes)
         return m.type.functypes[sig].n_params;
@@ -396,7 +396,7 @@ namespace innative {
       return 0;
     }
 
-    IN_FORCEINLINE varsint7 GetBlockSigResult(varsint64 sig, varuint32 i, Module& m)
+    IN_FORCEINLINE varsint7 GetBlockSigResult(varsint64 sig, varuint32 i, const Module& m)
     {
       switch(sig)
       {
@@ -409,6 +409,14 @@ namespace innative {
 
       if(sig >= 0 && sig < m.type.n_functypes && i < m.type.functypes[sig].n_returns)
         return m.type.functypes[sig].returns[i];
+
+      return TE_NONE;
+    }
+
+    IN_FORCEINLINE varsint7 GetBlockSigParam(varsint64 sig, varuint32 i, const Module& m)
+    {
+      if(sig >= 0 && sig < m.type.n_functypes && i < m.type.functypes[sig].n_params)
+        return m.type.functypes[sig].params[i];
 
       return TE_NONE;
     }

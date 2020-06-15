@@ -30,9 +30,10 @@ namespace innative {
       llvm::BasicBlock* block;  // Label
       llvm::BasicBlock* ifelse; // Label for else statement
       size_t limit;             // Limit of value stack
-      varsint64 sig;             // Block signature
+      varsint64 sig;            // Block signature
       uint8_t op;               // instruction that pushed this label
       BlockResult* results;     // Holds alternative branch results targeting this block
+      llvm::PHINode* phi;       // Holds the phi node for the this block, if it already exists (for loops)
     };
 
     struct Intrinsic
@@ -106,12 +107,12 @@ namespace innative {
     Func* GenericFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
                           llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv);
     IN_ERROR PopType(varsint7 ty, llvmVal*& v, bool peek = false);
-    IN_ERROR PopStruct(varsint64 sig, llvmVal*& v, bool peek);
+    IN_ERROR PopStruct(varsint64 sig, llvmVal*& v, bool peek, bool loop);
     llvmVal* MaskShiftBits(llvmVal* value);
     BB* PushLabel(const char* name, varsint64 sig, uint8_t opcode, Func* fnptr, llvm::DILocalScope* scope, bool discard);
     BB* BindLabel(BB* block);
     IN_ERROR PushResult(BlockResult** root, llvmVal* result, BB* block, const Environment& env);
-    IN_ERROR AddBranch(Block& target);
+    IN_ERROR AddBranch(Block& target, bool loop);
     IN_ERROR PopLabel(BB* block, llvmVal* push);
     void PolymorphicStack();
     llvmVal* GetMemSize(llvm::GlobalVariable* target);
@@ -305,7 +306,7 @@ namespace innative {
     }
 
     // Pushes a single argument, splitting up the argument if it's a struct and the sig indicates multiple arguments
-    IN_ERROR PushMultiReturn(llvmVal* arg, varsint64 sig);
+    IN_ERROR PushMultiReturn(llvmVal* arg, varsint64 sig, bool loop);
 
   private:
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR, typename... Args>

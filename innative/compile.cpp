@@ -155,6 +155,8 @@ Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, const llvm::Twin
   auto functy   = FuncTy::get(llvmTy::getVoidTy(ctx), { llvmTy::getInt8PtrTy(ctx), llvmTy::getInt8PtrTy(ctx) }, false);
   Func* generic = Func::Create(functy, linkage, canonical, mod);
   generic->setCallingConv(callconv);
+  generic->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+
   if(fn->getSubprogram())
     debugger->FunctionDebugInfo(generic, name, env.optimize != 0, true, true, fn->getSubprogram()->getFile(),
                                 fn->getSubprogram()->getLine(), 0);
@@ -166,13 +168,14 @@ Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, const llvm::Twin
   builder.SetInsertPoint(bb);
 
   std::vector<llvmVal*> values;
-  auto params = generic->getArg(0);
+  auto params  = generic->getArg(0);
   auto results = generic->getArg(1);
 
-  int offset = 0;
+  uint32_t offset = 0;
   for(auto& arg : fn->args())
   {
-    values.push_back(builder.CreateLoad(builder.CreateBitCast(builder.CreateInBoundsGEP(params, { builder.getInt32(offset) }), arg.getType())));
+    values.push_back(builder.CreateLoad(builder.CreateBitCast(
+      builder.CreateInBoundsGEP(params, { builder.getInt32(offset) }), arg.getType()->getPointerTo())));
     offset += mod->getDataLayout().getTypeSizeInBits(arg.getType()) / 8;
     // TODO: structs must be broken apart and repacked
   }
@@ -183,18 +186,19 @@ Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, const llvm::Twin
 
   offset   = 0;
   auto ret = fn->getReturnType();
-  if(ret->isStructTy()) {
+  if(ret->isStructTy())
+  {
     for(unsigned int i = 0; i < ret->getStructNumElements(); ++i)
     {
-      builder.CreateStore(builder.CreateInBoundsGEP(val, { builder.getInt32(0), builder.getInt32(i) }),
+      builder.CreateStore(builder.CreateExtractValue(val, { i }),
                           builder.CreateBitCast(builder.CreateInBoundsGEP(results, { builder.getInt32(offset) }),
                                                 ret->getStructElementType(i)->getPointerTo()),
                           false);
-      offset += mod->getDataLayout().getTypeSizeInBits(ret->getStructElementType(i));
+      offset += mod->getDataLayout().getTypeSizeInBits(ret->getStructElementType(i)) / 8;
     }
   }
   else if(!ret->isVoidTy())
-    builder.CreateStore(val, results, false);
+    builder.CreateStore(val, builder.CreateBitCast(results, ret->getPointerTo()), false);
 
   builder.CreateRetVoid();
   builder.SetInsertPoint(prev);
@@ -270,17 +274,18 @@ IN_ERROR Compiler::PopType(varsint7 ty, llvmVal*& v, bool peek)
   return ERR_SUCCESS;
 }
 
-IN_ERROR Compiler::PopStruct(varsint64 sig, llvmVal*& v, bool peek)
+IN_ERROR Compiler::PopStruct(varsint64 sig, llvmVal*& v, bool peek, bool loop)
 {
   if(sig < 0)
-    return PopType(static_cast<varsint7>(sig), v, peek);
+    return PopType(loop ? TE_void : static_cast<varsint7>(sig), v, peek);
   if(sig >= m.type.n_functypes)
     return ERR_INVALID_FUNCTION_SIG;
-  auto n_sig = m.type.functypes[sig].n_returns;
+  auto n_sig = loop ? m.type.functypes[sig].n_params : m.type.functypes[sig].n_returns;
+  auto sigs  = loop ? m.type.functypes[sig].params : m.type.functypes[sig].returns;
   if(n_sig == 0)
-    return PopType(TE_void, v);
+    return PopType(TE_void, v, peek);
   if(n_sig == 1)
-    return PopType(m.type.functypes[sig].returns[0], v);
+    return PopType(sigs[0], v, peek);
 
   if(!values.Size())
     return ERR_INVALID_VALUE_STACK;
@@ -288,11 +293,14 @@ IN_ERROR Compiler::PopStruct(varsint64 sig, llvmVal*& v, bool peek)
   llvm::SmallVector<llvm::Value*, 4> elems;
   llvm::SmallVector<llvm::Type*, 4> types;
 
+  bool polyflag = false;
   for(varuint32 i = 0; i < n_sig; ++i)
   {
-    if((i < values.Size() && !values[i]) || (i >= values.Size() && !values[values.Size() - 1])) // polymorphic value
-      elems.push_back(llvm::Constant::getNullValue(GetLLVMType(m.type.functypes[sig].returns[n_sig - 1 - 1])));
-    else if(!CheckType(m.type.functypes[sig].returns[n_sig - i - 1], values[i]->getType()))
+    if(!polyflag && i > values.Size()) // Value stack is wrong size
+      return ERR_INVALID_VALUE_STACK;
+    if(polyflag || (polyflag = !values[i])) // polymorphic value
+      elems.push_back(llvm::Constant::getNullValue(GetLLVMType(sigs[n_sig - i - 1])));
+    else if(!CheckType(sigs[n_sig - i - 1], values[i]->getType()))
       return ERR_INVALID_TYPE;
     else
       elems.push_back(values[i]);
@@ -387,25 +395,34 @@ IN_ERROR Compiler::PushResult(BlockResult** root, llvmVal* result, BB* block, co
   return ERR_SUCCESS;
 }
 
-IN_ERROR Compiler::PushMultiReturn(llvmVal* arg, varsint64 sig)
+IN_ERROR Compiler::PushMultiReturn(llvmVal* arg, varsint64 sig, bool loop)
 {
-  varuint32 n_sig = GetBlockSigResults(sig, m);
+  varuint32 n_sig = loop ? GetBlockSigParams(sig, m) : GetBlockSigResults(sig, m);
   if(!n_sig)
     return ERR_INVALID_VALUE_STACK;
   if(n_sig == 1)
     return PushReturn(arg);
 
   auto ty = arg->getType();
-  if(!ty->isPointerTy() || !ty->getPointerElementType()->isStructTy() || sig >= m.type.n_functypes)
+  if(ty->isPointerTy() && ty->getPointerElementType()->isStructTy())
+    ty = ty->getPointerElementType();
+  if(!ty->isStructTy() || sig >= m.type.n_functypes)
     return ERR_INVALID_FUNCTION_SIG;
-  if(ty->getPointerElementType()->getStructNumElements() != n_sig)
+  if(ty->getStructNumElements() != n_sig)
     return ERR_INVALID_BLOCK_SIGNATURE;
+
+  auto sigs = loop ? m.type.functypes[sig].params : m.type.functypes[sig].returns;
 
   // Push struct members in reverse order
   for(varuint32 i = n_sig; i-- > 0;)
   {
-    llvmVal* val = builder.CreateLoad(builder.CreateInBoundsGEP(arg, { builder.getInt32(0), builder.getInt32(i) }));
-    if(m.type.functypes[sig].returns[i] == TE_cref && val->getType()->isIntegerTy())
+    llvmVal* val;
+    if(arg->getType()->isPointerTy())
+      val = builder.CreateLoad(builder.CreateInBoundsGEP(arg, { builder.getInt32(0), builder.getInt32(i) }));
+    else
+      val = builder.CreateExtractValue(arg, { i });
+
+    if(sigs[i] == TE_cref && val->getType()->isIntegerTy())
     { // If this is true, we need to do an int -> cref conversion
       auto v = builder.CreatePtrToInt(builder.CreateLoad(GetPairPtr(memories[0], 0)), builder.getInt64Ty());
       v      = builder.CreateAdd(builder.CreateZExt(val, builder.getInt64Ty()), v, "", true, true);
@@ -419,16 +436,21 @@ IN_ERROR Compiler::PushMultiReturn(llvmVal* arg, varsint64 sig)
 }
 
 // Adds current value stack to target branch according to that branch's signature.
-IN_ERROR Compiler::AddBranch(Block& target)
+IN_ERROR Compiler::AddBranch(Block& target, bool loop)
 {
   IN_ERROR err    = ERR_SUCCESS;
-  varuint32 n_sig = GetBlockSigResults(target.sig, m);
+  varuint32 n_sig = loop ? GetBlockSigParams(target.sig, m) : GetBlockSigResults(target.sig, m);
   if(n_sig > 0)
   {
     llvmVal* value;
-    err = PopStruct(target.sig, value, true);
-    if(!err)
-      err = PushResult(&target.results, value, builder.GetInsertBlock(), env); // Push result
+    err = PopStruct(target.sig, value, true, loop);
+    if(!err && value != nullptr)
+    {
+      if(!target.phi)
+        err = PushResult(&target.results, value, builder.GetInsertBlock(), env); // Push result
+      else
+        target.phi->addIncoming(value, builder.GetInsertBlock());
+    }
   }
   return err;
 }
@@ -447,8 +469,7 @@ IN_ERROR Compiler::PopLabel(BB* block, llvmVal* push)
       for(auto i = control.Peek().results; i != nullptr; i = i->next)
         ++count; // Count number of additional results
 
-      llvm::PHINode* phi = builder.CreatePHI(push->getType(), count,
-                                             "phi"); // TODO: Account for multiple return values once they are added
+      llvm::PHINode* phi = builder.CreatePHI(push->getType(), count, "phi");
       phi->addIncoming(push, block); // Pop this branches values off value stack, add using proper insert block
 
       for(auto i = control.Peek().results; i != nullptr; i = i->next)
@@ -466,7 +487,7 @@ IN_ERROR Compiler::PopLabel(BB* block, llvmVal* push)
     return ERR_INVALID_VALUE_STACK;
 
   if(push)
-    PushMultiReturn(push, control.Peek().sig);
+    PushMultiReturn(push, control.Peek().sig, false);
 
   values.SetLimit(control.Peek().limit);
   control.Pop();
@@ -1256,17 +1277,24 @@ void Compiler::ResolveModuleExports(const Environment* env, Module* root, llvm::
     switch(e->kind)
     {
     case WASM_KIND_FUNCTION:
-      if(!compiler->functions[e->index].exported)
+    {
+      auto name = std::string(e->name.str()) + DIVIDER + m->name.str();
+      auto& fn  = compiler->functions[e->index];
+
+      if(!fn.exported)
       {
-        auto name = std::string(e->name.str()) + DIVIDER + m->name.str();
-        compiler->ExportFunction(compiler->functions[e->index], wrapperfn, name, canonical);
-        compiler->functions[e->index].exported->setDLLStorageClass(
-          llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+        compiler->ExportFunction(fn, wrapperfn, name, canonical);
+        fn.exported->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
       }
       else
-        llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, compiler->functions[e->index].exported)
+        llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, fn.exported)
           ->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
-      break;
+
+      if(env->flags & ENV_GENERALIZE_FUNCTIONS)
+        compiler->GenericFunction(fn.imported ? fn.imported : fn.internal, name + IN_GENERIC_POSTFIX,
+                                  canonical + IN_GENERIC_POSTFIX, Func::ExternalLinkage, llvm::CallingConv::C);
+    }
+    break;
     case WASM_KIND_TABLE:
       llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, compiler->tables[e->index])
         ->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
@@ -1283,7 +1311,22 @@ void Compiler::ResolveModuleExports(const Environment* env, Module* root, llvm::
   }
 }
 
-IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile, bool generics)
+void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainctx)
+{
+  // Create __chkstk function to satisfy the rtlibcalls
+  auto chkstk_ms =
+    Func::Create(FuncTy::get(builder.getVoidTy(), {}, false), Func::ExternalLinkage, "__chkstk_ms", mainctx.mod);
+  chkstk_ms->addFnAttr(llvm::Attribute::Naked);
+
+  Func* chkstk = Func::Create(chkstk_ms->getFunctionType(), Func::WeakAnyLinkage, "__chkstk", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", chkstk));
+  mainctx.debugger->FunctionDebugInfo(chkstk, "chkstk", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(builder, chkstk->getSubprogram());
+  builder.CreateCall(chkstk_ms, {});
+  builder.CreateRetVoid();
+}
+
+IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
 {
   if(!outfile || !outfile[0])
     return ERR_FATAL_NO_OUTPUT_FILE;
@@ -1405,9 +1448,11 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile, boo
   for(auto m : new_modules)
     m->cache->AddMemLocalCaching();
 
-  // Create cleanup function
   Compiler& mainctx = *env->modules[0].cache;
-  Func* cleanup     = Compiler::TopLevelFunction(*env->context, builder, IN_EXIT_FUNCTION, mainctx.mod);
+  AddRTLibCalls(env, builder, mainctx);
+
+  // Create cleanup function
+  Func* cleanup = Compiler::TopLevelFunction(*env->context, builder, IN_EXIT_FUNCTION, mainctx.mod);
   mainctx.debugger->FunctionDebugInfo(cleanup, IN_EXIT_FUNCTION, mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
   mainctx.debugger->SetSPLocation(mainctx.builder, cleanup->getSubprogram());
 
@@ -1547,8 +1592,6 @@ void* innative::LoadJITFunction(void* env, const char* s)
   return reinterpret_cast<void*>(sym.get().getAddress());
 }
 
-#include "tools.h"
-
 IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
 {
   // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
@@ -1638,11 +1681,13 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
   for(auto m : new_modules)
     m->cache->AddMemLocalCaching();
 
+  Compiler& mainctx = *env->modules[0].cache;
+  AddRTLibCalls(env, builder, mainctx);
+
   // Create cleanup function, but only if the user would have to manually call it
   if(env->flags & ENV_NO_INIT)
   {
-    Compiler& mainctx = *env->modules[0].cache;
-    Func* cleanup     = Compiler::TopLevelFunction(*env->context, builder, IN_EXIT_FUNCTION, mainctx.mod);
+    Func* cleanup = Compiler::TopLevelFunction(*env->context, builder, IN_EXIT_FUNCTION, mainctx.mod);
     mainctx.debugger->FunctionDebugInfo(cleanup, IN_EXIT_FUNCTION, mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
     mainctx.debugger->SetSPLocation(mainctx.builder, cleanup->getSubprogram());
 

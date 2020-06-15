@@ -44,4 +44,12 @@
       <Filter>Resource Files</Filter>
     </Natvis>
   </ItemGroup>
+  <ItemGroup>
+    <MASM Include="chkstk.amd64.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
+    <MASM Include="chkstk.x86.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
+  </ItemGroup>
 </Project>
