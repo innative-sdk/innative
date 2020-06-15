@@ -409,10 +409,10 @@ void innative::ValidateBlockSignature(const Instruction& ins, Stack<varsint7>& v
         if(i >= values.Size())
           AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE,
                       "[%u] Block expected %u values but value stack only has %zu.", ins.line, ty.n_params, values.Size());
-        else if(values[i] != ty.params[i])
+        else if(values[i] != ty.params[ty.n_params - i - 1])
           AppendError(env, env.errors, m, ERR_INVALID_TYPE,
                       "[%u] block signature expected %s, but value stack had %s instead!", ins.line,
-                      EnumToString(TYPE_ENCODING_MAP, ty.params[i], buf, 10),
+                      EnumToString(TYPE_ENCODING_MAP, ty.params[ty.n_params - i - 1], buf, 10),
                       EnumToString(TYPE_ENCODING_MAP, values[i], buf, 10));
         else
           continue;
@@ -512,8 +512,8 @@ namespace innative {
 
   bool ValidateSigMatch(const internal::ControlBlock& a, const internal::ControlBlock& b, Module& m)
   {
-    auto asigs     = (a.type == OP_loop) ? GetBlockSigParams(a.sig, m) : GetBlockSigResults(a.sig, m);
-    auto bsigs     = (b.type == OP_loop) ? GetBlockSigParams(b.sig, m) : GetBlockSigResults(b.sig, m);
+    auto asigs = (a.type == OP_loop) ? GetBlockSigParams(a.sig, m) : GetBlockSigResults(a.sig, m);
+    auto bsigs = (b.type == OP_loop) ? GetBlockSigParams(b.sig, m) : GetBlockSigResults(b.sig, m);
     if(asigs != bsigs)
       return false;
 
@@ -733,9 +733,9 @@ namespace innative {
       ValidateBranch(ins, control.Size() - 1, values, control, env, m);
       control.SetLimit(cache);
 
-      //if(control.Size() > 0)
-        //ValidateBranchSignature(ins, control[0].sig, values, env, m, control[0].type == OP_loop);
-      //else
+      // if(control.Size() > 0)
+      // ValidateBranchSignature(ins, control[0].sig, values, env, m, control[0].type == OP_loop);
+      // else
       if(!control.Size())
         AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "[%u] Empty control stack at return statement.",
                     ins.line);
@@ -1282,9 +1282,11 @@ void innative::ValidateFunctionBody(varuint32 idx, const FunctionBody& body, Env
         AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "Mismatched end instruction at index %u!", i);
       else
       {
-        if(control.Peek().type == OP_if && GetBlockSigResults(control.Peek().sig, *m) > 0)
+        if(control.Peek().type == OP_if &&
+           GetBlockSigResults(control.Peek().sig, *m) != GetBlockSigParams(control.Peek().sig, *m))
           AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE,
-                      "If statement without else cannot have a non-void block signature, had %lli.", control.Peek().sig);
+                      "[%u] If statement without else must have matching params and results, had %lli.", cur[i].line,
+                      control.Peek().sig);
         ValidateEndBlock(cur[i], control.Pop(), values, env, m, true);
       }
       break;
@@ -1297,11 +1299,16 @@ void innative::ValidateFunctionBody(varuint32 idx, const FunctionBody& body, Env
         internal::ControlBlock block = control.Pop();
         if(block.type != OP_if)
           AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY,
-                      "Expected else instruction to terminate if block, but found %s instead.",
+                      "[%u] Expected else instruction to terminate if block, but found %s instead.", cur[i].line,
                       EnumToString(TYPE_ENCODING_MAP, block.type, buf, 10));
         ValidateEndBlock(cur[i], block, values, env, m, false);
-        control.Push(
-          { values.Limit(), block.sig, OP_else }); // Push a new else block that must be terminated by an end instruction
+        // The parameters were already checked, so restore them for the purposes of validation
+        for(varuint32 j = 0; j < GetBlockSigParams(block.sig, *m); ++j)
+          values.Push(GetBlockSigParam(block.sig, j, *m));
+
+        // Push a new else block that must be terminated by an end instruction
+        control.Push({ values.Limit(), block.sig, OP_else });
+
         values.SetLimit(values.Size() - GetBlockSigParams(control.Peek().sig, *m) + values.Limit());
       }
     }
