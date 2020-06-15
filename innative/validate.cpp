@@ -447,37 +447,45 @@ namespace innative {
     return 0;
   }
 
-  void ValidateBranchSignature(const Instruction& ins, varsint64 sig, Stack<varsint7>& values, Environment& env, Module* m)
+  void ValidateBranchSignature(const Instruction& ins, varsint64 sig, Stack<varsint7>& values, Environment& env, Module* m,
+                               bool loop)
   {
-    char buf[10];
-    varuint32 n_sigresults = GetBlockSigResults(sig, *m);
+    char buf[10]; // When targeting loops, we validate against the parameters, not results, since the branch goes to the top
+    auto countfn      = loop ? &GetBlockSigParams : &GetBlockSigResults;
+    auto getfn        = loop ? &GetBlockSigParam : &GetBlockSigResult;
+    auto n_sigresults = countfn(sig, *m);
     for(varuint32 i = 0; i < n_sigresults; ++i)
     {
-      varsint7 sigval = GetBlockSigResult(sig, n_sigresults - i - 1, *m);
-      if(values.Size() > 0)
+      varsint7 sigval = getfn(sig, n_sigresults - i - 1, *m);
+      if(i < values.Size())
       {
         char buf2[10];
-        // TE_POLY can count as 0
-        if(values[i] != TE_POLY && values[i] != sigval)
+        if(values[i] == TE_POLY) // If this is a polymorphic type, evaluation immediately succeeds
+          break;
+        if(values[i] != sigval)
           AppendError(env, env.errors, m, ERR_INVALID_TYPE,
                       "[%u] block signature expected %s, but value stack had %s instead!", ins.line,
                       EnumToString(TYPE_ENCODING_MAP, sigval, buf, 10),
                       EnumToString(TYPE_ENCODING_MAP, values[i], buf2, 10));
-        if(values[i] == TE_POLY) // If this is a polymorphic type, it now HAS to evaluate to this branch's type
-                                 // regardless of which branch is chosen.
-          values.Push(sigval);
       }
       else
         AppendError(env, env.errors, m, ERR_EMPTY_VALUE_STACK,
                     "[%u] block signature expected %s, but value stack was empty!", ins.line,
                     EnumToString(TYPE_ENCODING_MAP, sigval, buf, 10));
     }
+
+    // A polymorphic type now HAS to evaluate to this branch's type regardless of which branch is chosen.
+    for(varuint32 i = 0; i < n_sigresults; ++i)
+    {
+      if(i < values.Size() && values[i] == TE_POLY)
+        values.Push(getfn(sig, i, *m)); // These must be pushed in order, not in reverse
+    }
   }
 
   void ValidateSignature(const Instruction& ins, varsint64 sig, Stack<varsint7>& values, Environment& env, Module* m)
   {
     if(sig != TE_void)
-      ValidateBranchSignature(ins, sig, values, env, m);
+      ValidateBranchSignature(ins, sig, values, env, m, false);
     else if(values.Size() > 1 || (values.Size() == 1 && values.Peek() != TE_POLY)) // TE_POLY can count as 0
       AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK, "[%u] block signature was void, but stack wasn't empty!",
                   ins.line);
@@ -489,8 +497,8 @@ namespace innative {
     if(depth >= control.Size())
       AppendError(env, env.errors, m, ERR_INVALID_BRANCH_DEPTH, "[%u] Invalid branch depth: %u exceeds %zu", depth,
                   control.Size(), ins.line);
-    else if(control[depth].type != OP_loop) // A branch to a loop always has a signature of TE_void
-      ValidateBranchSignature(ins, control[depth].sig, values, env, m);
+    else
+      ValidateBranchSignature(ins, control[depth].sig, values, env, m, control[depth].type == OP_loop);
   }
 
   // Pops every single value off of the stack (the function assumes the types were already validated) and then pushes a
@@ -502,11 +510,22 @@ namespace innative {
     values.Push(TE_POLY);
   }
 
-  // IN_FORCEINLINE varsint7 GetBlockSig(const internal::ControlBlock& block)
-  //{
-  //  return block.type == OP_loop ? TE_void : block.sig;
-  //}
+  bool ValidateSigMatch(const internal::ControlBlock& a, const internal::ControlBlock& b, Module& m)
+  {
+    auto asigs     = (a.type == OP_loop) ? GetBlockSigParams(a.sig, m) : GetBlockSigResults(a.sig, m);
+    auto bsigs     = (b.type == OP_loop) ? GetBlockSigParams(b.sig, m) : GetBlockSigResults(b.sig, m);
+    if(asigs != bsigs)
+      return false;
 
+    for(varuint32 i = 0; i < asigs; ++i)
+    {
+      auto asig = (a.type == OP_loop) ? GetBlockSigParam(a.sig, i, m) : GetBlockSigResult(a.sig, i, m);
+      auto bsig = (b.type == OP_loop) ? GetBlockSigParam(b.sig, i, m) : GetBlockSigResult(b.sig, i, m);
+      if(asig != bsig)
+        return false;
+    }
+    return true;
+  }
   void ValidateBranchTable(const Instruction& ins, varuint32 n_table, varuint32* table, varuint32 def,
                            Stack<varsint7>& values, Stack<internal::ControlBlock>& control, Environment& env, Module* m)
   {
@@ -514,12 +533,12 @@ namespace innative {
     for(varuint32 i = 0; i < n_table; ++i)
       ValidateBranch(ins, table[i], values, control, env, m);
 
-    // Ensure all block label targets have the exact same signature as the default label
+    // Ensure all block label targets have the exact same target signature as the default label
     if(def < control.Size())
     {
       for(varuint32 i = 0; i < n_table; ++i)
       {
-        if(table[i] < control.Size() && control[table[i]].sig != control[def].sig)
+        if(table[i] < control.Size() && !ValidateSigMatch(control[table[i]], control[def], *m))
           AppendError(env, env.errors, m, ERR_INVALID_TYPE,
                       "[%u] Branch table target has type signature %lli, but default branch has %lli", ins.line,
                       control[table[i]].sig, control[def].sig);
@@ -709,14 +728,15 @@ namespace innative {
     case OP_return:
     {
       size_t cache = control.Limit();
-      control.SetLimit(
-        0); // A return statement is an unconditional branch to the end of the function, so we have to validate that branch
+      control.SetLimit(0);
+      // A return statement is an unconditional branch to the end of the function, so we have to validate that branch
       ValidateBranch(ins, control.Size() - 1, values, control, env, m);
       control.SetLimit(cache);
 
-      if(control.Size() > 0)
-        ValidateBranchSignature(ins, control[0].sig, values, env, m);
-      else
+      //if(control.Size() > 0)
+        //ValidateBranchSignature(ins, control[0].sig, values, env, m, control[0].type == OP_loop);
+      //else
+      if(!control.Size())
         AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_BODY, "[%u] Empty control stack at return statement.",
                     ins.line);
       PolymorphStack(values);
@@ -1003,13 +1023,21 @@ namespace innative {
     if(nsig > 0 && values.Size() > 0)
     {
       for(varuint32 i = 0; i < nsig; ++i)
-        if(values.Pop() == TE_POLY)
+      {
+        if(!values.Size())
+        {
+          AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK,
+                      "[%u] block signature wanted %i values, but value stack is empty!", ins.line, nsig, values.Size());
+          break;
+        }
+        else if(values.Pop() == TE_POLY)
           break; // If we popped a polymorphic value, assume we are finished
-
-      if(values.Size() > 0 && values.Peek() != TE_POLY)
-        AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK,
-                    "[%u] block signature wanted %i values, but found %i leftover values!", ins.line, nsig, values.Size());
+      }
     }
+
+    if(values.Size() > 0 && values.Peek() != TE_POLY)
+      AppendError(env, env.errors, m, ERR_INVALID_VALUE_STACK,
+                  "[%u] block signature wanted %i values, but found %i leftover values!", ins.line, nsig, values.Size());
 
     // Replace the value stack with the expected signature
     while(values.Size())

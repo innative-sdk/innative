@@ -51,6 +51,8 @@ namespace innative {
       assert(_size > _limit);
       return _array[_size - 1];
     }
+    inline const T& Back() const { return _array[_limit]; }
+    inline T& Back() { return _array[_limit]; }
     inline size_t Capacity() const { return _capacity; }
     inline size_t Size() const { return _size - _limit; }
     inline size_t Limit() const { return _limit; }

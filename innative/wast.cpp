@@ -211,12 +211,13 @@ int wat::IsolateInitCall(Environment& env, void*& cache, const char* out)
 int wat::CompileWast(Environment& env, const path& out, void*& cache, path& cachepath)
 {
   InvalidateCache(cache, cachepath);
+  env.flags |= ENV_GENERALIZE_FUNCTIONS;
 
   int err;
   ValidateEnvironment(env);
   if(env.errors)
     return ERR_VALIDATION_ERROR;
-  if(err = CompileEnvironment(&env, out.u8string().c_str(), true))
+  if(err = CompileEnvironment(&env, out.u8string().c_str()))
     return err;
 
   cachepath = out;
@@ -336,6 +337,7 @@ int wat::IsolateFunctionCall(Environment& env, FunctionType* ftype, void* f, std
       case OP_f32_const: n_parambytes += sizeof(int32_t); break;
       case OP_i64_const:
       case OP_f64_const: n_parambytes += sizeof(int64_t); break;
+      default: assert(false); break;
       }
     }
 
@@ -347,12 +349,12 @@ int wat::IsolateFunctionCall(Environment& env, FunctionType* ftype, void* f, std
       {
       case OP_i32_const:
       case OP_f32_const:
-        memcpy(parambytes + offset, &p.immediates[0]._varsint32, sizeof(int32_t));
+        *reinterpret_cast<int32_t*>(parambytes + offset) = p.immediates[0]._varsint32;
         offset += sizeof(int32_t);
         break;
       case OP_i64_const:
       case OP_f64_const:
-        memcpy(parambytes + offset, &p.immediates[0]._varsint64, sizeof(int64_t));
+        *reinterpret_cast<int64_t*>(parambytes + offset) = p.immediates[0]._varsint64;
         offset += sizeof(int64_t);
         break;
       }
@@ -367,12 +369,39 @@ int wat::IsolateFunctionCall(Environment& env, FunctionType* ftype, void* f, std
       case TE_f32: n_returnbytes += sizeof(int32_t); break;
       case TE_i64:
       case TE_f64: n_returnbytes += sizeof(int64_t); break;
+      default: assert(false); break;
       }
     }
 
     auto returnbytes = tmalloc<char>(env, n_returnbytes);
+    memset(returnbytes, 0xFD, n_returnbytes); // make it easier to recognize uninitialized memory
 
-    //reinterpret_cast<IN_GENERAL>(f)(parambytes, returnbytes);
+    reinterpret_cast<IN_GENERAL>(f)(parambytes, returnbytes);
+
+    offset = 0;
+    for(varuint32 i = ftype->n_returns; i-- > 0;)
+    {
+      switch(ftype->returns[i])
+      {
+      case TE_i32:
+        result.push_back(WastResult::get(*reinterpret_cast<int32_t*>(returnbytes + offset)));
+        offset += sizeof(int32_t);
+        break;
+      case TE_f32:
+        result.push_back(WastResult::get(*reinterpret_cast<float*>(returnbytes + offset)));
+        offset += sizeof(int32_t);
+        break;
+      case TE_i64:
+        result.push_back(WastResult::get(*reinterpret_cast<int64_t*>(returnbytes + offset)));
+        offset += sizeof(int64_t);
+        break;
+      case TE_f64:
+        result.push_back(WastResult::get(*reinterpret_cast<double*>(returnbytes + offset)));
+        offset += sizeof(double);
+        break;
+      }
+    }
+
 #ifdef IN_COMPILER_MSC
   }
   __except(1)
@@ -415,8 +444,6 @@ int wat::IsolateFunctionCall(Environment& env, FunctionType* ftype, void* f, std
 
   return ERR_SUCCESS;
 }
-
-std::vector<FunctionType> functypes;
 
 int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module*& last, void*& cache,
                          path& cachepath, int& counter, const path& file, std::vector<WastResult>& result)
@@ -489,7 +516,7 @@ int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname
       return cache_err;
     assert(cache);
     void* f = reinterpret_cast<void*>(
-      LoadDLLFunction(cache, utility::CanonicalName(StringSpan::From(m->name), StringSpan::From(func)).c_str()));
+      LoadDLLFunction(cache, (utility::CanonicalName(StringSpan::From(m->name), StringSpan::From(func)) + IN_GENERIC_POSTFIX).c_str()));
     if(!f)
       return ERR_INVALID_FUNCTION_INDEX;
 
@@ -527,25 +554,6 @@ int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname
           return false;
       return true;
     };
-
-    if(std::find_if(functypes.begin(), functypes.end(), pred) == functypes.end())
-    {
-      if(ftype->n_params)
-      {
-        varsint7* params = (varsint7*)malloc(ftype->n_params);
-        memcpy(params, ftype->params, ftype->n_params);
-        ftype->params = params;
-      }
-
-      if(ftype->n_returns)
-      {
-        varsint7* returns = (varsint7*)malloc(ftype->n_returns);
-        memcpy(returns, ftype->returns, ftype->n_returns);
-        ftype->returns = returns;
-      }
-
-      functypes.push_back(*ftype);
-    }
 
     err = IsolateFunctionCall(env, ftype, f, result, params);
 

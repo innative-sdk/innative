@@ -389,7 +389,7 @@ IN_ERROR innative::Compile(Environment* env, const char* file)
   if(err != ERR_SUCCESS)
     return err;
 
-  return CompileEnvironment(env, file, false);
+  return CompileEnvironment(env, file);
 }
 
 IN_Entrypoint innative::LoadFunctionLambda(void* p, void* (*load)(void*, const char*), const char* module_name,

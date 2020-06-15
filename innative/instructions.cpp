@@ -193,7 +193,7 @@ IN_ERROR Compiler::CompileElseBlock()
   {
     IN_ERROR err;
     llvmVal* value;
-    if(err = PopStruct(control.Peek().sig, value, false))
+    if(err = PopStruct(control.Peek().sig, value, false, false))
       return err;
     if(err = PushResult(&control.Peek().results, value, builder.GetInsertBlock(), env)) // Push result
       return err;
@@ -217,7 +217,7 @@ IN_ERROR Compiler::CompileElseBlock()
 IN_ERROR Compiler::CompileReturn(varsint64 sig)
 {
   llvmVal* val = nullptr;
-  IN_ERROR err = PopStruct(sig, val, false);
+  IN_ERROR err = PopStruct(sig, val, false, false);
   if(err)
     return err;
 
@@ -234,7 +234,7 @@ IN_ERROR Compiler::CompileReturn(varsint64 sig)
 IN_ERROR Compiler::CompileEndBlock()
 {
   llvmVal* push = nullptr;
-  IN_ERROR err = PopStruct(control.Peek().sig, push, false);
+  IN_ERROR err  = PopStruct(control.Peek().sig, push, false, false);
   if(err < 0)
     return err;
 
@@ -286,8 +286,7 @@ IN_ERROR Compiler::CompileBranch(varuint32 depth)
 
   Block& target = control[depth];
 
-  // Branches targeting loops just throw all their values away, so we don't need to build PHI nodes.
-  IN_ERROR err = (target.op != OP_loop) ? AddBranch(target) : ERR_SUCCESS;
+  IN_ERROR err = AddBranch(target, target.op == OP_loop);
   builder.CreateBr(target.block); // Create branch AFTER AddBranch because AddBranch can emit code.
   PolymorphicStack();
   return err;
@@ -309,11 +308,8 @@ IN_ERROR Compiler::CompileIfBranch(varuint32 depth)
   BB* block = BB::Create(ctx, "br_if_cont", builder.GetInsertBlock()->getParent());
 
   Block& target = control[depth];
-  if(target.op != OP_loop)
-  {
-    if(err = AddBranch(target))
-      return err;
-  }
+  if(err = AddBranch(target, target.op == OP_loop))
+    return err;
   builder.CreateCondBr(cmp, target.block, block);
 
   // Start inserting code into continuation AFTER we add the branch, so the branch goes to the right place
@@ -330,7 +326,7 @@ IN_ERROR Compiler::CompileBranchTable(varuint32 n_table, varuint32* table, varui
   if(def >= control.Size())
     return ERR_INVALID_BRANCH_DEPTH;
 
-  err                 = (control[def].op != OP_loop) ? AddBranch(control[def]) : ERR_SUCCESS;
+  err                 = AddBranch(control[def], control[def].op == OP_loop);
   llvm::SwitchInst* s = builder.CreateSwitch(index, control[def].block, n_table);
 
   for(varuint32 i = 0; i < n_table && err == ERR_SUCCESS; ++i)
@@ -339,7 +335,7 @@ IN_ERROR Compiler::CompileBranchTable(varuint32 n_table, varuint32* table, varui
       return ERR_INVALID_BRANCH_DEPTH;
 
     Block& target = control[table[i]];
-    err           = (target.op != OP_loop) ? AddBranch(target) : ERR_SUCCESS;
+    err           = AddBranch(target, target.op == OP_loop);
     s->addCase(builder.getInt32(i), target.block);
   }
 
@@ -400,7 +396,7 @@ IN_ERROR Compiler::CompileCall(varuint32 index)
   call->setAttributes(fn->getAttributes());
 
   if(!fn->getReturnType()->isVoidTy()) // Only push a value if there is one to push
-    return PushMultiReturn(call, ModuleFunctionType(m, index));
+    return PushMultiReturn(call, ModuleFunctionType(m, index), false);
 
   return ERR_SUCCESS;
 }
@@ -492,7 +488,7 @@ IN_ERROR Compiler::CompileIndirectCall(varuint32 index)
                                             // the internal wrapping function
 
   if(!ty->getReturnType()->isVoidTy()) // Only push a value if there is one to push
-    return PushMultiReturn(call, index);
+    return PushMultiReturn(call, index, false);
   return ERR_SUCCESS;
 }
 
@@ -692,10 +688,26 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     PushLabel("block", ins.immediates[0]._varsint64, OP_block, nullptr, debugger->_curscope, false);
     return ERR_SUCCESS;
   case OP_loop:
+  {
+    llvmVal* push = nullptr;
+    if(IN_ERROR err = PopStruct(ins.immediates[0]._varsint64, push, true, true))
+      return err;
+    auto prev = builder.GetInsertBlock();
     PushLabel("loop", ins.immediates[0]._varsint64, OP_loop, nullptr, debugger->_curscope, false);
     builder.CreateBr(control.Peek().block); // Branch into next block
     BindLabel(control.Peek().block);
+    if(push)
+    { 
+      auto n_sig = GetBlockSigParams(control.Peek().sig, m);
+      for(varuint32 i = 0; i < n_sig; ++i)
+        values.Pop(); // Pop the values so we can replace them with the phi node extraction
+
+      control.Peek().phi = builder.CreatePHI(push->getType(), 1, "loop_phi");
+      control.Peek().phi->addIncoming(push, prev);
+      PushMultiReturn(push, control.Peek().sig, true);
+    }
     return ERR_SUCCESS;
+  }
   case OP_if: return CompileIfBlock(ins.immediates[0]._varsint64);
   case OP_else: return CompileElseBlock();
   case OP_end: return CompileEndBlock();
