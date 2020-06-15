@@ -174,7 +174,16 @@ IN_ERROR Compiler::CompileIfBlock(varsint64 sig)
 
   builder.CreateCondBr(cmp, tblock, fblock); // Insert branch in current block
   builder.SetInsertPoint(fblock);            // Point else stub at end block
-  builder.CreateBr(endblock);
+
+  new(&control.Peek().ifstack) llvm::SmallVector<llvmVal*, 2>();
+  auto n_param = GetBlockSigParams(sig, m);
+  if(n_param > 0)
+  {
+    IN_ERROR err;
+    if(err = PopSig(control.Peek().sig, control.Peek().ifstack, true, true))
+      return err;
+    assert(control.Peek().ifstack.size() == n_param);
+  }
 
   builder.SetInsertPoint(tblock); // Start inserting code into true block
   return ERR_SUCCESS;
@@ -189,11 +198,11 @@ IN_ERROR Compiler::CompileElseBlock()
 
   // Instead of popping and pushing a new control label, we just re-purpose the existing one. This preserves the value
   // stack results.
-  if(control.Peek().sig != TE_void)
+  if(GetBlockSigResults(control.Peek().sig, m) > 0)
   {
     IN_ERROR err;
-    llvmVal* value;
-    if(err = PopStruct(control.Peek().sig, value, false, false))
+    llvm::SmallVector<llvmVal*, 2> value;
+    if(err = PopSig(control.Peek().sig, value, false, false))
       return err;
     if(err = PushResult(&control.Peek().results, value, builder.GetInsertBlock(), env)) // Push result
       return err;
@@ -205,9 +214,12 @@ IN_ERROR Compiler::CompileElseBlock()
   if(values.Size() > 1 && values.Peek() != nullptr)
     values.Pop();
 
+  // Restore parameter values in reverse order
+   for(varuint32 i = GetBlockSigParams(control.Peek().sig, m); i-- > 0;)
+    values.Push(control.Peek().ifstack[i]);
+
   control.Peek().op = OP_else;               // make this block an OP_else block
   BB* fblock        = control.Peek().ifelse; // Get stored else block
-  fblock->begin()->eraseFromParent();        // Erase stub instruction
   fblock->removeFromParent();                // Required for correct label binding behavior
   BindLabel(fblock);                         // Bind if_false block to current position
 
@@ -216,25 +228,25 @@ IN_ERROR Compiler::CompileElseBlock()
 
 IN_ERROR Compiler::CompileReturn(varsint64 sig)
 {
-  llvmVal* val = nullptr;
-  IN_ERROR err = PopStruct(sig, val, false, false);
+  llvm::SmallVector<llvmVal*, 2> val;
+  IN_ERROR err = PopSig(sig, val, false, false);
   if(err)
     return err;
 
-  if(!val)
+  if(!val.size())
     builder.CreateRetVoid();
-  else if(val->getType()->isPointerTy() && val->getType()->getPointerElementType()->isStructTy())
-    builder.CreateRet(builder.CreateLoad(val));
+  else if(val.size() == 1)
+    builder.CreateRet(val[0]);
   else
-    builder.CreateRet(val);
+    builder.CreateAggregateRet(val.data(), val.size());
 
   return ERR_SUCCESS;
 }
 
 IN_ERROR Compiler::CompileEndBlock()
 {
-  llvmVal* push = nullptr;
-  IN_ERROR err  = PopStruct(control.Peek().sig, push, false, false);
+  llvm::SmallVector<llvmVal*, 2> push;
+  IN_ERROR err = PopSig(control.Peek().sig, push, false, false);
   if(err < 0)
     return err;
 
@@ -256,8 +268,30 @@ IN_ERROR Compiler::CompileEndBlock()
   switch(cache.op) // Verify source operation
   {
   case OP_if:
-    if(GetBlockSigResults(control.Peek().sig, m) > 0) // An if statement with no else statement cannot return a value
+    if(GetBlockSigResults(control.Peek().sig, m) != GetBlockSigParams(control.Peek().sig, m))
       return ERR_EXPECTED_ELSE_INSTRUCTION;
+    {
+      BB* prev = builder.GetInsertBlock();
+      builder.SetInsertPoint(control.Peek().ifelse);
+
+      if(GetBlockSigParams(control.Peek().sig, m) > 0)
+      {
+        for(auto& v : control.Peek().ifstack)
+        {
+          auto a = builder.CreateAlloca(v->getType());
+          builder.CreateStore(v, a);
+          v = builder.CreateLoad(a);
+        }
+
+        auto view = control.Peek().ifstack[0];
+        if(err = PushResult(&control.Peek().results, control.Peek().ifstack, builder.GetInsertBlock(), env)) // Push result
+          return err;
+      }
+
+      builder.CreateBr(control.Peek().block);
+      control.Peek().ifstack.clear();
+      builder.SetInsertPoint(prev);
+    }
   case OP_else:
   case OP_block:
   case OP_loop:
@@ -396,7 +430,7 @@ IN_ERROR Compiler::CompileCall(varuint32 index)
   call->setAttributes(fn->getAttributes());
 
   if(!fn->getReturnType()->isVoidTy()) // Only push a value if there is one to push
-    return PushMultiReturn(call, ModuleFunctionType(m, index), false);
+    return PushStructReturn(call, ModuleFunctionType(m, index));
 
   return ERR_SUCCESS;
 }
@@ -488,7 +522,7 @@ IN_ERROR Compiler::CompileIndirectCall(varuint32 index)
                                             // the internal wrapping function
 
   if(!ty->getReturnType()->isVoidTy()) // Only push a value if there is one to push
-    return PushMultiReturn(call, index, false);
+    return PushStructReturn(call, index);
   return ERR_SUCCESS;
 }
 
@@ -689,22 +723,28 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return ERR_SUCCESS;
   case OP_loop:
   {
-    llvmVal* push = nullptr;
-    if(IN_ERROR err = PopStruct(ins.immediates[0]._varsint64, push, true, true))
+    llvm::SmallVector<llvmVal*, 2> push;
+    if(IN_ERROR err = PopSig(ins.immediates[0]._varsint64, push, true, true))
       return err;
     auto prev = builder.GetInsertBlock();
     PushLabel("loop", ins.immediates[0]._varsint64, OP_loop, nullptr, debugger->_curscope, false);
     builder.CreateBr(control.Peek().block); // Branch into next block
     BindLabel(control.Peek().block);
-    if(push)
-    { 
+    if(push.size() > 0)
+    {
       auto n_sig = GetBlockSigParams(control.Peek().sig, m);
       for(varuint32 i = 0; i < n_sig; ++i)
         values.Pop(); // Pop the values so we can replace them with the phi node extraction
 
-      control.Peek().phi = builder.CreatePHI(push->getType(), 1, "loop_phi");
-      control.Peek().phi->addIncoming(push, prev);
-      PushMultiReturn(push, control.Peek().sig, true);
+      control.Peek().n_phi = push.size();
+      control.Peek().phi   = utility::tmalloc<llvm::PHINode*>(env, control.Peek().n_phi);
+      for(size_t i = 0; i < push.size(); ++i)
+      {
+        control.Peek().phi[i] = builder.CreatePHI(push[i]->getType(), 1, "loop_phi" + std::to_string(i));
+        control.Peek().phi[i]->addIncoming(push[i], prev);
+        push[i] = control.Peek().phi[i]; // replace value with phi node
+      }
+      PushReturns(push);
     }
     return ERR_SUCCESS;
   }

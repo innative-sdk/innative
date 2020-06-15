@@ -20,7 +20,7 @@ namespace innative {
   {
     struct BlockResult
     {
-      llvm::Value* v;
+      llvm::SmallVector<llvm::Value*, 2> v;
       llvm::BasicBlock* b;
       BlockResult* next;
     };
@@ -28,12 +28,15 @@ namespace innative {
     struct Block
     {
       llvm::BasicBlock* block;  // Label
-      llvm::BasicBlock* ifelse; // Label for else statement
+      llvm::BasicBlock* ifelse; // Label before if statement
       size_t limit;             // Limit of value stack
       varsint64 sig;            // Block signature
       uint8_t op;               // instruction that pushed this label
       BlockResult* results;     // Holds alternative branch results targeting this block
-      llvm::PHINode* phi;       // Holds the phi node for the this block, if it already exists (for loops)
+      llvm::PHINode** phi;      // Holds phi nodes for the this block, if it already exists (for loops)
+      size_t n_phi;
+      llvm::Value* ifcmp;    // if comparison
+      llvm::SmallVector<llvm::Value*, 2> ifstack;
     };
 
     struct Intrinsic
@@ -107,13 +110,13 @@ namespace innative {
     Func* GenericFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
                           llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv);
     IN_ERROR PopType(varsint7 ty, llvmVal*& v, bool peek = false);
-    IN_ERROR PopStruct(varsint64 sig, llvmVal*& v, bool peek, bool loop);
+    IN_ERROR PopSig(varsint64 sig, llvm::SmallVector<llvmVal*, 2>& v, bool peek, bool loop);
     llvmVal* MaskShiftBits(llvmVal* value);
     BB* PushLabel(const char* name, varsint64 sig, uint8_t opcode, Func* fnptr, llvm::DILocalScope* scope, bool discard);
     BB* BindLabel(BB* block);
-    IN_ERROR PushResult(BlockResult** root, llvmVal* result, BB* block, const Environment& env);
+    IN_ERROR PushResult(BlockResult** root, llvm::SmallVector<llvmVal*, 2>& result, BB* block, const Environment& env);
     IN_ERROR AddBranch(Block& target, bool loop);
-    IN_ERROR PopLabel(BB* block, llvmVal* push);
+    IN_ERROR PopLabel(BB* block, llvm::SmallVector<llvmVal*, 2>& push);
     void PolymorphicStack();
     llvmVal* GetMemSize(llvm::GlobalVariable* target);
     varuint32 GetFirstType(varuint32 type);
@@ -305,8 +308,20 @@ namespace innative {
       return e;
     }
 
+    // Pushes an array of arguments in reverse order
+    inline IN_ERROR PushReturns(llvm::ArrayRef<llvmVal*> args)
+    {
+      IN_ERROR err = ERR_SUCCESS;
+      for(size_t i = args.size(); i-- > 0;)
+      {
+        if(err = PushReturn(args[i]))
+          return err;
+      }
+      return err;
+    }
+
     // Pushes a single argument, splitting up the argument if it's a struct and the sig indicates multiple arguments
-    IN_ERROR PushMultiReturn(llvmVal* arg, varsint64 sig, bool loop);
+    IN_ERROR PushStructReturn(llvmVal* arg, varsint64 sig);
 
   private:
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR, typename... Args>

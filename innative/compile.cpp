@@ -274,24 +274,35 @@ IN_ERROR Compiler::PopType(varsint7 ty, llvmVal*& v, bool peek)
   return ERR_SUCCESS;
 }
 
-IN_ERROR Compiler::PopStruct(varsint64 sig, llvmVal*& v, bool peek, bool loop)
+IN_ERROR Compiler::PopSig(varsint64 sig, llvm::SmallVector<llvmVal*, 2>& v, bool peek, bool loop)
 {
   if(sig < 0)
-    return PopType(loop ? TE_void : static_cast<varsint7>(sig), v, peek);
+  {
+    if(loop)
+      return ERR_SUCCESS;
+    llvmVal* push;
+    IN_ERROR err = PopType(static_cast<varsint7>(sig), push, peek);
+    if(push)
+      v.push_back(push);
+    return err;
+  }
+
   if(sig >= m.type.n_functypes)
     return ERR_INVALID_FUNCTION_SIG;
   auto n_sig = loop ? m.type.functypes[sig].n_params : m.type.functypes[sig].n_returns;
   auto sigs  = loop ? m.type.functypes[sig].params : m.type.functypes[sig].returns;
   if(n_sig == 0)
-    return PopType(TE_void, v, peek);
+    return ERR_SUCCESS;
   if(n_sig == 1)
-    return PopType(sigs[0], v, peek);
-
+  {
+    llvmVal* push;
+    IN_ERROR err = PopType(sigs[0], push, peek);
+    assert(push != nullptr);
+    v.push_back(push);
+    return err;
+  }
   if(!values.Size())
     return ERR_INVALID_VALUE_STACK;
-
-  llvm::SmallVector<llvm::Value*, 4> elems;
-  llvm::SmallVector<llvm::Type*, 4> types;
 
   bool polyflag = false;
   for(varuint32 i = 0; i < n_sig; ++i)
@@ -299,12 +310,11 @@ IN_ERROR Compiler::PopStruct(varsint64 sig, llvmVal*& v, bool peek, bool loop)
     if(!polyflag && i > values.Size()) // Value stack is wrong size
       return ERR_INVALID_VALUE_STACK;
     if(polyflag || (polyflag = !values[i])) // polymorphic value
-      elems.push_back(llvm::Constant::getNullValue(GetLLVMType(sigs[n_sig - i - 1])));
+      v.push_back(llvm::Constant::getNullValue(GetLLVMType(sigs[n_sig - i - 1])));
     else if(!CheckType(sigs[n_sig - i - 1], values[i]->getType()))
       return ERR_INVALID_TYPE;
     else
-      elems.push_back(values[i]);
-    types.push_back(elems.back()->getType());
+      v.push_back(values[i]);
   }
 
   // Now we have to actually pop values off the stack
@@ -315,12 +325,6 @@ IN_ERROR Compiler::PopStruct(varsint64 sig, llvmVal*& v, bool peek, bool loop)
         break;
       values.Pop();
     }
-
-  auto s = llvm::StructType::get(ctx, types);
-  v      = builder.CreateAlloca(s);
-
-  for(varuint32 i = 0; i < n_sig; ++i)
-    builder.CreateStore(elems[i], builder.CreateInBoundsGEP(v, { builder.getInt32(0), builder.getInt32(i) }), false);
 
   return ERR_SUCCESS;
 }
@@ -384,7 +388,7 @@ BB* Compiler::BindLabel(BB* block)
   return block;
 }
 
-IN_ERROR Compiler::PushResult(BlockResult** root, llvmVal* result, BB* block, const Environment& env)
+IN_ERROR Compiler::PushResult(BlockResult** root, llvm::SmallVector<llvmVal*, 2>& result, BB* block, const Environment& env)
 {
   BlockResult* next = *root;
   *root             = tmalloc<BlockResult>(env, 1);
@@ -395,32 +399,26 @@ IN_ERROR Compiler::PushResult(BlockResult** root, llvmVal* result, BB* block, co
   return ERR_SUCCESS;
 }
 
-IN_ERROR Compiler::PushMultiReturn(llvmVal* arg, varsint64 sig, bool loop)
+IN_ERROR Compiler::PushStructReturn(llvmVal* arg, varsint64 sig)
 {
-  varuint32 n_sig = loop ? GetBlockSigParams(sig, m) : GetBlockSigResults(sig, m);
+  varuint32 n_sig = GetBlockSigResults(sig, m);
   if(!n_sig)
     return ERR_INVALID_VALUE_STACK;
   if(n_sig == 1)
     return PushReturn(arg);
 
   auto ty = arg->getType();
-  if(ty->isPointerTy() && ty->getPointerElementType()->isStructTy())
-    ty = ty->getPointerElementType();
   if(!ty->isStructTy() || sig >= m.type.n_functypes)
     return ERR_INVALID_FUNCTION_SIG;
   if(ty->getStructNumElements() != n_sig)
     return ERR_INVALID_BLOCK_SIGNATURE;
 
-  auto sigs = loop ? m.type.functypes[sig].params : m.type.functypes[sig].returns;
+  auto sigs = m.type.functypes[sig].returns;
 
   // Push struct members in reverse order
   for(varuint32 i = n_sig; i-- > 0;)
   {
-    llvmVal* val;
-    if(arg->getType()->isPointerTy())
-      val = builder.CreateLoad(builder.CreateInBoundsGEP(arg, { builder.getInt32(0), builder.getInt32(i) }));
-    else
-      val = builder.CreateExtractValue(arg, { i });
+    llvmVal* val = builder.CreateExtractValue(arg, { i });
 
     if(sigs[i] == TE_cref && val->getType()->isIntegerTy())
     { // If this is true, we need to do an int -> cref conversion
@@ -442,14 +440,19 @@ IN_ERROR Compiler::AddBranch(Block& target, bool loop)
   varuint32 n_sig = loop ? GetBlockSigParams(target.sig, m) : GetBlockSigResults(target.sig, m);
   if(n_sig > 0)
   {
-    llvmVal* value;
-    err = PopStruct(target.sig, value, true, loop);
-    if(!err && value != nullptr)
+    llvm::SmallVector<llvmVal*, 2> value;
+    err = PopSig(target.sig, value, true, loop);
+    if(!err && value.size() > 0)
     {
-      if(!target.phi)
+      if(!target.n_phi)
         err = PushResult(&target.results, value, builder.GetInsertBlock(), env); // Push result
       else
-        target.phi->addIncoming(value, builder.GetInsertBlock());
+      {
+        if(target.n_phi != value.size())
+          return ERR_INVALID_VALUE_STACK;
+        for(size_t i = 0; i < target.n_phi; ++i)
+          target.phi[i]->addIncoming(value[i], builder.GetInsertBlock());
+      }
     }
   }
   return err;
@@ -457,7 +460,7 @@ IN_ERROR Compiler::AddBranch(Block& target, bool loop)
 
 // Pops a label off the control stack, verifying that the value stack matches the signature and building PHI nodes as
 // necessary
-IN_ERROR Compiler::PopLabel(BB* block, llvmVal* push)
+IN_ERROR Compiler::PopLabel(BB* block, llvm::SmallVector<llvmVal*, 2>& push)
 {
   varuint32 n_sig = GetBlockSigResults(control.Peek().sig, m);
   if(n_sig > 0)
@@ -469,13 +472,20 @@ IN_ERROR Compiler::PopLabel(BB* block, llvmVal* push)
       for(auto i = control.Peek().results; i != nullptr; i = i->next)
         ++count; // Count number of additional results
 
-      llvm::PHINode* phi = builder.CreatePHI(push->getType(), count, "phi");
-      phi->addIncoming(push, block); // Pop this branches values off value stack, add using proper insert block
+      llvm::SmallVector<llvm::PHINode*, 2> phi;
+      for(size_t i = 0; i < push.size(); ++i)
+      {
+        phi.push_back(builder.CreatePHI(push[i]->getType(), count, "phi" + std::to_string(i)));
+        phi.back()->addIncoming(push[i], block); // Pop this branches values off value stack, add using proper insert block
 
-      for(auto i = control.Peek().results; i != nullptr; i = i->next)
-        phi->addIncoming(i->v, i->b);
+        for(auto p = control.Peek().results; p != nullptr; p = p->next)
+        {
+          assert(i < p->v.size());
+          phi.back()->addIncoming(p->v[i], p->b);
+        }
 
-      push = phi; // Push phi nodes on to stack
+        push[i] = phi.back(); // Replace the value with the phi node
+      }
     }
   }
   else if(control.Peek().results != nullptr)
@@ -486,8 +496,7 @@ IN_ERROR Compiler::PopLabel(BB* block, llvmVal* push)
   if(values.Size() > 0) // value stack should be completely empty now
     return ERR_INVALID_VALUE_STACK;
 
-  if(push)
-    PushMultiReturn(push, control.Peek().sig, false);
+  PushReturns(push);
 
   values.SetLimit(control.Peek().limit);
   control.Pop();
