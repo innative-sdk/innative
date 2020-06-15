@@ -622,6 +622,130 @@ namespace innative {
                   ins.line, callee);
   }
 
+  void ValidateMiscOp(const Instruction& ins, Stack<varsint7>& values, Environment& env, Module* m)
+  {
+    switch(ins.opcode[1])
+    {
+    case OP_i32_trunc_sat_f32_s:
+    case OP_i32_trunc_sat_f32_u:
+      ValidatePopType(ins, values, TE_f32, env, m);
+      values.Push(TE_i32);
+      break;
+    case OP_i32_trunc_sat_f64_s:
+    case OP_i32_trunc_sat_f64_u:
+      ValidatePopType(ins, values, TE_f64, env, m);
+      values.Push(TE_i32);
+      break;
+    case OP_i64_trunc_sat_f32_s:
+    case OP_i64_trunc_sat_f32_u:
+      ValidatePopType(ins, values, TE_f32, env, m);
+      values.Push(TE_i64);
+      break;
+    case OP_i64_trunc_sat_f64_s:
+    case OP_i64_trunc_sat_f64_u:
+      ValidatePopType(ins, values, TE_f64, env, m);
+      values.Push(TE_i64);
+      break;
+
+    case OP_memory_init:
+    {
+      varuint32 dst_mem = ins.immediates[0]._varuint32;
+      varuint32 src_seg = ins.immediates[1]._varuint32;
+
+      if(!ModuleMemory(*m, dst_mem))
+        AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
+
+      if(!(m->knownsections & (1 << WASM_SECTION_DATA_COUNT)))
+        AppendError(env, env.errors, m, ERR_MISSING_DATA_COUNT_SECTION, "[%u] missing DataCount section", ins.line);
+      else if(src_seg >= m->data_count.count)
+        AppendError(env, env.errors, m, ERR_INVALID_DATA_INDEX, "[%u] data index out of bounds", ins.line);
+
+      ValidatePopType(ins, values, TE_i32, env, m);
+      ValidatePopType(ins, values, TE_i32, env, m);
+      ValidatePopType(ins, values, TE_i32, env, m);
+      break;
+    }
+    case OP_data_drop:
+    {
+      varuint32 segment = ins.immediates[0]._varuint32;
+
+      if(!(m->knownsections & (1 << WASM_SECTION_DATA_COUNT)))
+        AppendError(env, env.errors, m, ERR_MISSING_DATA_COUNT_SECTION, "[%u] missing DataCount section", ins.line);
+      else if(segment >= m->data_count.count)
+        AppendError(env, env.errors, m, ERR_INVALID_DATA_INDEX, "[%u] data index out of bounds", ins.line);
+      break;
+    }
+    case OP_memory_copy:
+    {
+      varuint32 dst_mem = ins.immediates[0]._varuint32;
+      varuint32 src_mem = ins.immediates[1]._varuint32;
+
+      if(!ModuleMemory(*m, dst_mem) || !ModuleMemory(*m, src_mem))
+        AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
+
+      ValidatePopType(ins, values, TE_i32, env, m);
+      ValidatePopType(ins, values, TE_i32, env, m);
+      ValidatePopType(ins, values, TE_i32, env, m);
+      break;
+    }
+    case OP_memory_fill:
+    {
+      varuint32 mem = ins.immediates[0]._varuint32;
+
+      if(!ModuleMemory(*m, mem))
+        AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "[%u] No default linear memory in module.", ins.line);
+
+      ValidatePopType(ins, values, TE_i32, env, m);
+      ValidatePopType(ins, values, TE_i32, env, m);
+      ValidatePopType(ins, values, TE_i32, env, m);
+      break;
+    }
+    case OP_table_init:
+    {
+      varuint32 dst_table = ins.immediates[0]._varuint32;
+      varuint32 src_seg   = ins.immediates[1]._varuint32;
+
+      if(!ModuleTable(*m, dst_table))
+        AppendError(env, env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", dst_table);
+      if(src_seg >= m->element.n_elements)
+        AppendError(env, env.errors, m, ERR_INVALID_ELEMENT_INDEX, "Invalid element segment index %u", src_seg);
+
+      ValidatePopType(ins, values, TE_i32, env, m);
+      ValidatePopType(ins, values, TE_i32, env, m);
+      ValidatePopType(ins, values, TE_i32, env, m);
+      break;
+    }
+    case OP_elem_drop:
+    {
+      varuint32 segment = ins.immediates[0]._varuint32;
+
+      if(segment >= m->element.n_elements)
+        AppendError(env, env.errors, m, ERR_INVALID_ELEMENT_INDEX, "Invalid element segment index %u", segment);
+
+      break;
+    }
+    case OP_table_copy:
+    {
+      varuint32 dst_table = ins.immediates[0]._varuint32;
+      varuint32 src_table = ins.immediates[1]._varuint32;
+
+      if(!ModuleTable(*m, dst_table))
+        AppendError(env, env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", dst_table);
+      if(!ModuleTable(*m, src_table))
+        AppendError(env, env.errors, m, ERR_INVALID_TABLE_INDEX, "Invalid table index %u", src_table);
+
+      ValidatePopType(ins, values, TE_i32, env, m);
+      ValidatePopType(ins, values, TE_i32, env, m);
+      ValidatePopType(ins, values, TE_i32, env, m);
+      break;
+    }
+
+    default:
+      AppendError(env, env.errors, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "[%u] Unknown instruction code %hhu", ins.line,
+                  ins.opcode);
+    }
+  }
+
   void ValidateAtomicOp(const Instruction& ins, Stack<varsint7>& values, Environment& env, Module* m)
   {
     namespace at = innative::atomic_details;
@@ -1001,8 +1125,19 @@ namespace innative {
     case OP_i32_reinterpret_f32: ValidateUnaryOp<TE_f32, TE_i32>(ins, values, env, m); break;
     case OP_i64_reinterpret_f64: ValidateUnaryOp<TE_f64, TE_i64>(ins, values, env, m); break;
     case OP_f32_reinterpret_i32: ValidateUnaryOp<TE_i32, TE_f32>(ins, values, env, m); break;
-    case OP_f64_reinterpret_i64:
-      ValidateUnaryOp<TE_i64, TE_f64>(ins, values, env, m);
+    case OP_f64_reinterpret_i64: ValidateUnaryOp<TE_i64, TE_f64>(ins, values, env, m); break;
+
+    case OP_i32_extend8_s:
+    case OP_i32_extend16_s: ValidateUnaryOp<TE_i32, TE_i32>(ins, values, env, m); break;
+    case OP_i64_extend8_s:
+    case OP_i64_extend16_s:
+    case OP_i64_extend32_s:
+      ValidateUnaryOp<TE_i64, TE_i64>(ins, values, env, m);
+      break;
+
+      // Bulk memory operations
+    case OP_misc_ops_prefix:
+      ValidateMiscOp(ins, values, env, m);
       break;
 
       // Atomics
@@ -1010,7 +1145,7 @@ namespace innative {
 
     default:
       AppendError(env, env.errors, m, ERR_FATAL_UNKNOWN_INSTRUCTION, "[%u] Unknown instruction code %hhu", ins.line,
-                  ins.opcode);
+                  ins.opcode[0]);
     }
   }
 
@@ -1081,7 +1216,7 @@ varsint7 innative::ValidateInitializer(const Instruction& ins, Environment& env,
   }
 
   AppendError(env, env.errors, m, ERR_INVALID_INITIALIZER,
-              "[%u] An initializer must be a get_global or const instruction, not %hhu", ins.line, ins.opcode);
+              "[%u] An initializer must be a get_global or const instruction, not %hhu", ins.line, ins.opcode[0]);
   return TE_NONE;
 }
 
@@ -1177,6 +1312,32 @@ varsint32 innative::EvalInitializerI32(const Instruction& ins, Environment& env,
 
 void innative::ValidateTableOffset(const TableInit& init, Environment& env, Module* m)
 {
+  if(init.flags & WASM_ELEM_INVALID_FLAGS)
+  {
+    AppendError(env, env.errors, m, ERR_INVALID_ELEMENT_SEGMENT, "Invalid element segment flags %x", init.flags);
+    return; // The rest of this validation is junk if the flags are junk
+  }
+
+  // Not "Legacy Active"
+  if((init.flags & 0b111) != 0)
+  {
+    if(init.flags & WASM_ELEM_CARRIES_ELEMEXPRS)
+    {
+      if(init.elem_type != TE_funcref)
+        AppendError(env, env.errors, m, ERR_INVALID_TABLE_ELEMENT_TYPE, "Invalid element segment type %d", init.elem_type);
+    }
+    else
+    {
+      if(init.extern_kind != 0)
+        AppendError(env, env.errors, m, ERR_INVALID_RESERVED_VALUE, "Invalid extern_kind reserved value %d (expected 0)",
+                    init.extern_kind);
+    }
+  }
+
+  // The rest of this validation doesn't matter for passive segments
+  if(init.flags & WASM_ELEM_PASSIVE)
+    return;
+
   varsint7 type = ValidateInitializer(init.offset, env, m);
   if(type != TE_NONE && type != TE_i32)
   {
@@ -1204,15 +1365,27 @@ void innative::ValidateTableOffset(const TableInit& init, Environment& env, Modu
     }
 
     varsint32 offset = EvalInitializerI32(init.offset, env, m);
-    if(offset < 0 || offset + init.n_elements > table->resizable.minimum)
+    // This is now a trap at start
+    /*if(offset < 0 || offset + init.n_elements > table->resizable.minimum)
       AppendError(env, env.errors, m, ERR_INVALID_TABLE_OFFSET,
                   "Offset (%i) plus element count (%u) exceeds minimum table length (%u)", offset, init.n_elements,
-                  table->resizable.minimum);
+                  table->resizable.minimum);*/
 
     for(varuint32 i = 0; i < init.n_elements; ++i)
-      if(!ModuleFunction(*m, init.elements[i]))
+    {
+      varuint32 idx;
+      if(init.flags & WASM_ELEM_CARRIES_ELEMEXPRS)
+      {
+        if(init.elemexprs[i].opcode[0] == OP_ref_null)
+          continue;
+        idx = init.elemexprs[i].immediates[0]._varuint32;
+      }
+      else
+        idx = init.elements[i];
+      if(!ModuleFunction(*m, idx))
         AppendError(env, env.errors, m, ERR_INVALID_FUNCTION_INDEX, "Invalid element initializer %u function index: %u", i,
                     init.elements[i]);
+    }
   }
   else
   {
@@ -1333,6 +1506,15 @@ void innative::ValidateFunctionBody(varuint32 idx, const FunctionBody& body, Env
 
 void innative::ValidateDataOffset(const DataInit& init, Environment& env, Module* m)
 {
+  if(init.flags > 2)
+    AppendError(env, env.errors, m, ERR_INVALID_DATA_SEGMENT, "Invalid data segment flags %x", init.flags);
+
+  if(init.flags & WASM_DATA_PASSIVE)
+  {
+    // None of the rest of this validation applies to passive segments
+    return;
+  }
+
   varsint7 type = ValidateInitializer(init.offset, env, m);
   if(type != TE_NONE && type != TE_i32)
   {
@@ -1359,11 +1541,12 @@ void innative::ValidateDataOffset(const DataInit& init, Environment& env, Module
         AppendError(env, env.errors, m, ERR_INVALID_MEMORY_INDEX, "Could not resolve memory import %u", init.index);
     }
 
-    varsint32 offset = EvalInitializerI32(init.offset, env, m);
+    // Offset out of bounds is now a trap at module start instead of a validation error
+    /*varsint32 offset = EvalInitializerI32(init.offset, env, m);
     if(offset < 0 || offset + (uint64_t)init.data.size() > (((uint64_t)memory->limits.minimum) << 16))
       AppendError(env, env.errors, m, ERR_INVALID_DATA_SEGMENT,
                   "Offset (%i) plus element count (%u) exceeds minimum memory length (%llu)", offset, init.data.size(),
-                  (((uint64_t)memory->limits.minimum) << 16));
+                  (((uint64_t)memory->limits.minimum) << 16));*/
   }
 }
 
@@ -1452,7 +1635,21 @@ void innative::ValidateModule(Environment& env, Module& m)
   }
 
   if(m.knownsections & (1 << WASM_SECTION_DATA))
+  {
+    if(m.knownsections & (1 << WASM_SECTION_DATA_COUNT))
+    {
+      if(m.data.n_data != m.data_count.count)
+        AppendError(env, env.errors, &m, ERR_INVALID_DATA_SEGMENT, "Data section count does not match DataCount section");
+    }
+
     ValidateSection<DataInit, &ValidateDataOffset>(m.data.data, m.data.n_data, env, &m);
+  }
+  else if(m.knownsections & (1 << WASM_SECTION_DATA_COUNT))
+  {
+    // DataCount but no Data is only a problem if the count is not 0
+    if(m.data_count.count != 0)
+      AppendError(env, env.errors, &m, ERR_INVALID_DATA_SEGMENT, "Data section count does not match DataCount section");
+  }
 }
 
 // Performs all post-load validation that couldn't be done during parsing
@@ -1464,4 +1661,26 @@ void innative::ValidateEnvironment(Environment& env)
     ValidateModule(env, env.modules[i]);
 }
 
-bool innative::ValidateSectionOrder(const uint32& sections, varuint7 opcode) { return (sections & ((~0) << opcode)) == 0; }
+bool innative::ValidateSectionOrder(const uint32& sections, varuint7 opcode)
+{
+  uint32 mask = 0;
+  switch(opcode)
+  {
+    // Reverse order of the sections, sets which sections are allowed to already be known
+  case WASM_SECTION_DATA: mask |= 1 << WASM_SECTION_DATA;
+  case WASM_SECTION_CODE: mask |= 1 << WASM_SECTION_CODE;
+  case WASM_SECTION_DATA_COUNT: mask |= 1 << WASM_SECTION_DATA_COUNT;
+  case WASM_SECTION_ELEMENT: mask |= 1 << WASM_SECTION_ELEMENT;
+  case WASM_SECTION_START: mask |= 1 << WASM_SECTION_START;
+  case WASM_SECTION_EXPORT: mask |= 1 << WASM_SECTION_EXPORT;
+  case WASM_SECTION_GLOBAL: mask |= 1 << WASM_SECTION_GLOBAL;
+  case WASM_SECTION_MEMORY: mask |= 1 << WASM_SECTION_MEMORY;
+  case WASM_SECTION_TABLE: mask |= 1 << WASM_SECTION_TABLE;
+  case WASM_SECTION_FUNCTION: mask |= 1 << WASM_SECTION_FUNCTION;
+  case WASM_SECTION_IMPORT: mask |= 1 << WASM_SECTION_IMPORT;
+  case WASM_SECTION_TYPE: mask |= 1 << WASM_SECTION_TYPE;
+  default: mask |= 1 << WASM_SECTION_CUSTOM;
+  }
+
+  return (sections & ~mask) == 0;
+}
