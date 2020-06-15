@@ -1407,6 +1407,39 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
   mainctx.debugger->SetSPLocation(builder, chkstk->getSubprogram());
   builder.CreateCall(chkstk_ms, {});
   builder.CreateRetVoid();
+  
+  // Create memcpy function to satisfy the rtlibcalls
+  Func* memcpy = Func::Create(mainctx.memcpy->getFunctionType(), Func::WeakAnyLinkage, "memcpy", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", memcpy));
+  mainctx.debugger->FunctionDebugInfo(memcpy, "memcpy", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(builder, memcpy->getSubprogram());
+  CallInst* inner_memcpy = builder.CreateCall(mainctx.memcpy, { memcpy->getArg(0), memcpy->getArg(1), memcpy->getArg(2) });
+  builder.CreateRet(inner_memcpy);
+
+  // Create memmove function to satisfy the rtlibcalls
+  Func* memmove = Func::Create(mainctx.memmove->getFunctionType(), Func::WeakAnyLinkage, "memmove", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", memmove));
+  mainctx.debugger->FunctionDebugInfo(memmove, "memmove", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(builder, memmove->getSubprogram());
+  CallInst* inner_memmove =
+    builder.CreateCall(mainctx.memmove, { memmove->getArg(0), memmove->getArg(1), memmove->getArg(2) });
+  builder.CreateRet(inner_memmove);
+
+  // Create memset function to satisfy the rtlibcalls
+  Func* memset = Func::Create(mainctx.memset->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memset", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", memset));
+  mainctx.debugger->FunctionDebugInfo(memset, "memset", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(builder, memset->getSubprogram());
+  CallInst* inner_memset = builder.CreateCall(mainctx.memset, { memset->getArg(0), memset->getArg(1), memset->getArg(2) });
+  builder.CreateRet(inner_memset);
+
+  // Create memcmp function to satisfy the rtlibcalls
+  Func* memcmp = Func::Create(mainctx.memcmp->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memcmp", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", memcmp));
+  mainctx.debugger->FunctionDebugInfo(memcmp, "memcmp", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
+  mainctx.debugger->SetSPLocation(builder, memcmp->getSubprogram());
+  CallInst* inner_memcmp = builder.CreateCall(mainctx.memcmp, { memcmp->getArg(0), memcmp->getArg(1), memcmp->getArg(2) });
+  builder.CreateRet(inner_memcmp);
 }
 
 IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
@@ -1550,39 +1583,6 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   }
 
   builder.CreateRetVoid();
-
-  // Create memcpy function to satisfy the rtlibcalls
-  Func* memcpy = Func::Create(mainctx.memcpy->getFunctionType(), Func::WeakAnyLinkage, "memcpy", mainctx.mod);
-  builder.SetInsertPoint(BB::Create(*env->context, "entry", memcpy));
-  mainctx.debugger->FunctionDebugInfo(memcpy, "memcpy", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
-  mainctx.debugger->SetSPLocation(builder, memcpy->getSubprogram());
-  CallInst* inner_memcpy = builder.CreateCall(mainctx.memcpy, { memcpy->getArg(0), memcpy->getArg(1), memcpy->getArg(2) });
-  builder.CreateRet(inner_memcpy);
-
-  // Create memmove function to satisfy the rtlibcalls
-  Func* memmove = Func::Create(mainctx.memmove->getFunctionType(), Func::WeakAnyLinkage, "memmove", mainctx.mod);
-  builder.SetInsertPoint(BB::Create(*env->context, "entry", memmove));
-  mainctx.debugger->FunctionDebugInfo(memmove, "memmove", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
-  mainctx.debugger->SetSPLocation(builder, memmove->getSubprogram());
-  CallInst* inner_memmove =
-    builder.CreateCall(mainctx.memmove, { memmove->getArg(0), memmove->getArg(1), memmove->getArg(2) });
-  builder.CreateRet(inner_memmove);
-
-  // Create memset function to satisfy the rtlibcalls
-  Func* memset = Func::Create(mainctx.memset->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memset", mainctx.mod);
-  builder.SetInsertPoint(BB::Create(*env->context, "entry", memset));
-  mainctx.debugger->FunctionDebugInfo(memset, "memset", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
-  mainctx.debugger->SetSPLocation(builder, memset->getSubprogram());
-  CallInst* inner_memset = builder.CreateCall(mainctx.memset, { memset->getArg(0), memset->getArg(1), memset->getArg(2) });
-  builder.CreateRet(inner_memset);
-
-  // Create memcmp function to satisfy the rtlibcalls
-  Func* memcmp = Func::Create(mainctx.memcmp->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memcmp", mainctx.mod);
-  builder.SetInsertPoint(BB::Create(*env->context, "entry", memcmp));
-  mainctx.debugger->FunctionDebugInfo(memcmp, "memcmp", mainctx.env.optimize != 0, true, true, nullptr, 0, 0);
-  mainctx.debugger->SetSPLocation(builder, memcmp->getSubprogram());
-  CallInst* inner_memcmp = builder.CreateCall(mainctx.memcmp, { memcmp->getArg(0), memcmp->getArg(1), memcmp->getArg(2) });
-  builder.CreateRet(inner_memcmp);
 
   // Create main function that calls all init functions for all modules and all start functions
   Func* main = Compiler::TopLevelFunction(*env->context, builder, IN_INIT_FUNCTION, nullptr);
@@ -1734,12 +1734,16 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
 
     // If the context already exists, we take ownership of it
     env->jit =
-      new JITContext(std::move(*JTMB), std::move(*DL), std::unique_ptr<llvm::LLVMContext>(env->context), env->whitelist);
+      new JITContext(std::move(*JTMB), std::move(*DL), std::unique_ptr<llvm::LLVMContext>(env->context), env);
     // env->context = nullptr;
 
     if(expose_process)
-      if(env->jit->CompileObject(0))
+      if(env->jit->CompileEmbedding(nullptr))
         return ERR_JIT_LINK_PROCESS_FAILURE;
+
+    for(Embedding* embed = env->embeddings; embed != nullptr; embed = embed->next)
+      if(env->jit->CompileEmbedding(embed))
+        return ERR_JIT_LINK_FAILURE;
   }
 
   auto machine = env->jit->GetTargetMachine();

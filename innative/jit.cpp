@@ -5,39 +5,53 @@
 #include "jit.h"
 #include "utility.h"
 #include "tools.h"
+#include "validate.h"
 
 using namespace innative;
 using namespace llvm;
 using namespace orc;
 
-JITContext::JITContext(llvm::orc::JITTargetMachineBuilder JTMB, llvm::DataLayout DL, std::unique_ptr<LLVMContext> ctx,
-                       struct kh_modulepair_s* whitelist) :
+JITContext::JITContext(JITTargetMachineBuilder JTMB, DataLayout DL, std::unique_ptr<LLVMContext> ctx, Environment* env) :
   jtmb(JTMB),
-  ObjectLayer(ES, []() { return std::make_unique<SectionMemoryManager>(); }),
-  CompileLayer(ES, ObjectLayer, std::make_unique<ConcurrentIRCompiler>(std::move(JTMB))),
-  TransformLayer(ES, CompileLayer /*, optimizeModule*/),
+  OL(ES, []() { return std::make_unique<SectionMemoryManager>(); }),
+  CL(ES, OL, std::make_unique<ConcurrentIRCompiler>(std::move(JTMB))),
+  TL(ES, CL /*, optimizeModule*/),
   DL(std::move(DL)),
-  Mangle(ES, this->DL),
+  Mangler(ES, this->DL),
   Ctx(std::move(ctx)),
-  MainJD(ES.createJITDylib("<+innative_main>")),
-  Whitelist(whitelist)
+  MainJD(ES.createJITDylib("<+innative_main>"))
 {
-  ES.setErrorReporter([](Error e) { assert(!e); });
+  ES.setErrorReporter([env](Error e) { AppendError(*env, env->errors, 0, ERR_RUNTIME_JIT_ERROR, "UNKNOWN JIT ERROR"); });
   MainJD.addGenerator(cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(DL.getGlobalPrefix())));
+
+  Whitelist = [env](const SymbolStringPtr& s) {
+    if(!(env->flags & ENV_WHITELIST))
+      return true;
+    khiter_t iterexport = kh_get_modulepair(env->whitelist, (*s).data());
+    return kh_exist2(env->whitelist, iterexport);
+  };
 }
 
-bool JITContext::WhitelistPredicate(const SymbolStringPtr& s) { return true; }
-
-llvm::Error JITContext::CompileObject(const char* file)
+Error JITContext::CompileEmbedding(const Embedding* embed)
 {
-  auto pred = [this](const SymbolStringPtr& s) { return WhitelistPredicate(s); };
-  auto gen  = !file ? DynamicLibrarySearchGenerator::GetForCurrentProcess(DL.getGlobalPrefix(), pred) :
-                     DynamicLibrarySearchGenerator::Load(file, DL.getGlobalPrefix(), pred);
-  if(!gen)
-    return gen.takeError();
+  if(!embed)
+    return AddGenerator<DynamicLibrarySearchGenerator>(
+      DynamicLibrarySearchGenerator::GetForCurrentProcess(DL.getGlobalPrefix(), Whitelist));
 
-  MainJD.addGenerator(std::move(gen.get()));
-  return llvm::Error::success();
+  switch(embed->tag)
+  {
+  case IN_TAG_ANY:
+    return make_error<StringError>("Cannot automatically determine if embedding is static or dynamic in JIT engine!",
+                                   llvm::errc::not_supported);
+  case IN_TAG_DYNAMIC:
+    return AddGenerator<DynamicLibrarySearchGenerator>(
+      DynamicLibrarySearchGenerator::Load(reinterpret_cast<const char*>(embed->data), DL.getGlobalPrefix(), Whitelist));
+  case IN_TAG_STATIC:
+    return AddGenerator<StaticLibraryDefinitionGenerator>(
+      StaticLibraryDefinitionGenerator::Load(OL, reinterpret_cast<const char*>(embed->data)));
+  }
+
+  return make_error<StringError>("Unknown tag type", llvm::errc::invalid_argument);
 }
 
 void innative::DumpJITState(Environment* env)
