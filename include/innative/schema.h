@@ -66,21 +66,41 @@ enum WASM_LIMIT_FLAGS
   WASM_LIMIT_SHARED      = 0x02,
 };
 
+// Flags for data segments
+enum WASM_DATA_FLAGS
+{
+  WASM_DATA_PASSIVE   = 0x01,
+  WASM_DATA_HAS_INDEX = 0x02,
+
+  WASM_DATA_INVALID_FLAGS = ~0x03,
+};
+
+enum WASM_ELEM_FLAGS
+{
+  WASM_ELEM_PASSIVE           = 0x01,
+  WASM_ELEM_ACTIVE_HAS_INDEX  = 0x02,
+  WASM_ELEM_PASSIVE_DECLARED  = 0x02,
+  WASM_ELEM_CARRIES_ELEMEXPRS = 0x04,
+
+  WASM_ELEM_INVALID_FLAGS = ~0x07,
+};
+
 // Known webassembly section opcodes
 enum WASM_SECTION_OPCODE
 {
-  WASM_SECTION_CUSTOM   = 0x00,
-  WASM_SECTION_TYPE     = 0x01,
-  WASM_SECTION_IMPORT   = 0x02,
-  WASM_SECTION_FUNCTION = 0x03,
-  WASM_SECTION_TABLE    = 0x04,
-  WASM_SECTION_MEMORY   = 0x05,
-  WASM_SECTION_GLOBAL   = 0x06,
-  WASM_SECTION_EXPORT   = 0x07,
-  WASM_SECTION_START    = 0x08,
-  WASM_SECTION_ELEMENT  = 0x09,
-  WASM_SECTION_CODE     = 0x0A,
-  WASM_SECTION_DATA     = 0x0B
+  WASM_SECTION_CUSTOM     = 0x00,
+  WASM_SECTION_TYPE       = 0x01,
+  WASM_SECTION_IMPORT     = 0x02,
+  WASM_SECTION_FUNCTION   = 0x03,
+  WASM_SECTION_TABLE      = 0x04,
+  WASM_SECTION_MEMORY     = 0x05,
+  WASM_SECTION_GLOBAL     = 0x06,
+  WASM_SECTION_EXPORT     = 0x07,
+  WASM_SECTION_START      = 0x08,
+  WASM_SECTION_ELEMENT    = 0x09,
+  WASM_SECTION_DATA_COUNT = 0x0C,
+  WASM_SECTION_CODE       = 0x0A,
+  WASM_SECTION_DATA       = 0x0B,
 };
 
 // Export or import kind enumeration.
@@ -260,10 +280,20 @@ typedef struct IN_WASM_EXPORT
 // Encodes initialization data for a table
 typedef struct IN_WASM_TABLE_INIT
 {
+  varuint32 flags;
   varuint32 index;
   Instruction offset;
+  union
+  {
+    varsint7 extern_kind;
+    varsint7 elem_type;
+  };
   varuint32 n_elements;
-  varuint32* elements;
+  union
+  {
+    varuint32* elements;
+    Instruction* elemexprs;
+  };
 } TableInit;
 
 // Stores a local declaration, which includes the count and debug information.
@@ -290,6 +320,7 @@ typedef struct IN_WASM_FUNCTION_BODY
 // Encodes initialization data for a data section
 typedef struct IN_WASM_DATA_INIT
 {
+  varuint32 flags;
   varuint32 index;
   Instruction offset;
   ByteArray data;
@@ -387,6 +418,11 @@ typedef struct IN_WASM_MODULE
     TableInit* elements;
   } element;
 
+  struct DataCountSection
+  {
+    varuint32 count;
+  } data_count;
+
   struct CodeSection
   {
     varuint32 n_funcbody;
@@ -404,7 +440,7 @@ typedef struct IN_WASM_MODULE
   SourceMap* sourcemap;
 
   struct kh_exports_s* exports;
-  const char* filepath;   // For debugging purposes, store path to the original file, if it exists
+  const char* filepath;    // For debugging purposes, store path to the original file, if it exists
   IN_CODE_compiler* cache; // If non-zero, points to a cached compilation of this module
 } Module;
 

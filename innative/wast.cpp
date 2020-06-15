@@ -57,6 +57,15 @@ namespace innative {
       { "result before parameter", "unexpected token" },
       { "unexpected end of section or function", "unexpected end" },
       { "junk after last section", "multiple start sections" },
+      { "unknown data segment 1", "unknown data segment" },
+      { "i32 constant out of range", "constant out of range" },
+      { "invalid elements segment kind", "invalid elem" },
+      { "unknown data segment", "data count section required" },
+      { "duplicate memory", "duplicate name" },
+      { "duplicate table", "duplicate name" },
+      { "duplicate global", "duplicate name" },
+      { "unknown elem segment 0", "unknown elem segment" },
+      { "unknown elem segment 4", "unknown elem segment" },
     });
 
     size_t GetWastMapping(kh_indexname_t* mapping, const WatToken& t);
