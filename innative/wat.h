@@ -55,7 +55,6 @@ namespace innative {
     int ParseMemory(Queue<WatToken>& tokens, WatToken token);
     int ParseImport(Queue<WatToken>& tokens);
     int ParseExport(Queue<WatToken>& tokens);
-    int ParseElemData(Queue<WatToken>& tokens, varuint32& index, Instruction& op, wat::kh_indexname_t* hash);
     int ParseElem(TableInit& e, Queue<WatToken>& tokens);
     int ParseElemList(TableInit& e, Queue<WatToken>& tokens);
     int ParseData(Queue<WatToken>& tokens);
