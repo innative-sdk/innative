@@ -5,17 +5,17 @@
 ;-----------------------------------------------------------------------------
                 .386
 _TEXT           segment use32 para public 'CODE'
-                public  __chkstk_ms
-                public  __alloca_probe
-                public  __alloca_probe_8
-                public  __alloca_probe_16
+                public  ___chkstk_ms
+                public  __alloca_probe_stub
+                public  __alloca_probe_8_stub
+                public  __alloca_probe_16_stub
          
 PAGESIZE        equ     4096
 
-__chkstk_ms     proc    near
+___chkstk_ms     proc    near
                 assume  cs:_TEXT
 
-__alloca_probe  =  __chkstk_ms
+__alloca_probe_stub  =  ___chkstk_ms
 
                 cmp     eax, PAGESIZE           ; more than one page?
                 jae     short probesetup        ;   yes, go setup probe loop
@@ -59,9 +59,9 @@ lastpage:
                                                 ; ...probe in case a page was crossed
                 ret
 
-__chkstk_ms     endp
+___chkstk_ms     endp
 
-__alloca_probe_16 proc                          ; 16 byte aligned alloca
+__alloca_probe_16_stub proc                          ; 16 byte aligned alloca
 
                 push    ecx
                 lea     ecx, [esp] + 8          ; TOS before entering this function
@@ -71,11 +71,11 @@ __alloca_probe_16 proc                          ; 16 byte aligned alloca
                 sbb     ecx, ecx                ; ecx = 0xFFFFFFFF if size wrapped around
                 or      eax, ecx                ; cap allocation size on wraparound
                 pop     ecx                     ; Restore ecx
-                jmp     __chkstk_ms
+                jmp     ___chkstk_ms
 
-__alloca_probe_16 endp
+__alloca_probe_16_stub endp
 
-__alloca_probe_8 proc                           ; 8 byte aligned alloca
+__alloca_probe_8_stub proc                           ; 8 byte aligned alloca
 
                 push    ecx
                 lea     ecx, [esp] + 8          ; TOS before entering this function
@@ -85,9 +85,9 @@ __alloca_probe_8 proc                           ; 8 byte aligned alloca
                 sbb     ecx, ecx                ; ecx = 0xFFFFFFFF if size wrapped around
                 or      eax, ecx                ; cap allocation size on wraparound
                 pop     ecx                     ; Restore ecx
-                jmp     __chkstk_ms
+                jmp     ___chkstk_ms
 
-__alloca_probe_8 endp
+__alloca_probe_8_stub endp
 
 _TEXT           ends
                 end
