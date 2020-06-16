@@ -1446,40 +1446,6 @@ int WatParser::ParseExport(Queue<WatToken>& tokens)
   return AppendArray(env, e, m.exportsection.exports, m.exportsection.n_exports);
 }
 
-int WatParser::ParseElemData(Queue<WatToken>& tokens, varuint32& index, Instruction& op, kh_indexname_t* hash)
-{
-  if(tokens[0].id == WatTokens::NUMBER || tokens[0].id == WatTokens::NAME)
-    index = GetFromHash(hash, tokens.Pop());
-
-  if(index == (varuint32)~0)
-    return ERR_WAT_INVALID_VAR;
-
-  if(MatchTokens<WatTokens::OPEN, WatTokens::MEMORY>(tokens))
-  {
-    index = GetFromHash(hash, tokens.Pop());
-    EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
-  }
-
-  if(tokens[0].id == WatTokens::OPEN)
-  {
-    bool offset = tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::OFFSET;
-    if(offset)
-    {
-      EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
-      EXPECTED(env, tokens, WatTokens::OFFSET, ERR_WAT_EXPECTED_TOKEN);
-    }
-
-    int err = ParseInitializerInstruction(tokens, op, !offset); // Without an offset wrapper, only an expression is allowed
-    if(err < 0)
-      return err;
-
-    if(offset)
-      EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
-  }
-
-  return ERR_SUCCESS;
-}
-
 // Rewritten based on the latest definition of ('elem' ...) in the
 // bulk-memory-operations spec reference.
 int WatParser::ParseElem(TableInit& e, Queue<WatToken>& tokens)
@@ -1575,11 +1541,30 @@ int WatParser::ParseData(Queue<WatToken>& tokens)
       return err;
   }
 
-  if(err = ParseElemData(tokens, d.index, d.offset, memoryhash))
-    return err;
+  if(MatchTokens<WatTokens::OPEN, WatTokens::MEMORY>(tokens))
+  {
+    d.flags |= WASM_DATA_HAS_INDEX;
+    d.index = GetFromHash(memoryhash, tokens.Pop());
+    if(d.index == ~0u)
+      return ERR_WAT_INVALID_VAR;
+    EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
+  }
 
-  if(d.offset.opcode[0] == 0)
+  // The next field that could appear would be the offset, which
+  // is the only valid next expression that starts with OPEN
+  if(tokens[0].id == WatTokens::OPEN)
+  {
+    bool offset = MatchTokens<WatTokens::OPEN, WatTokens::OFFSET>(tokens);
+    if(err = ParseInitializerInstruction(tokens, d.offset, !offset))
+      return err;
+    if(offset)
+      EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
+  }
+  // Otherwise this must be a passive segment
+  else
+  {
     d.flags |= WASM_DATA_PASSIVE;
+  }
 
   while(tokens[0].id != WatTokens::CLOSE)
   {
