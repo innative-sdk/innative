@@ -1,10 +1,10 @@
 PUBLIC __chkstk_ms
-PUBLIC __alloca_probe
+PUBLIC __alloca_probe_stub
 
 _TEXT	SEGMENT
 
 __chkstk_ms:
-__alloca_probe:
+__alloca_probe_stub:
 
 	PUSH	R10
 	PUSH	R11

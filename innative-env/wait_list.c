@@ -458,8 +458,13 @@ static void* grow_array(void* array, size_t elem_size, size_t new_count)
 
 static void free_array(void* array) { HeapFree(GetProcessHeap(), 0, array); }
 
+#ifdef _WIN64
 static size_t in_atomic_incr(size_t* value) { return InterlockedExchangeAdd64(value, 1) + 1; }
 static size_t in_atomic_decr(size_t* value) { return InterlockedExchangeAdd64(value, -1) - 1; }
+#else
+static size_t in_atomic_incr(size_t* value) { return InterlockedExchangeAdd(value, 1) + 1; }
+static size_t in_atomic_decr(size_t* value) { return InterlockedExchangeAdd(value, -1) - 1; }
+#endif
 
 #elif defined(IN_PLATFORM_POSIX)
 

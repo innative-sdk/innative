@@ -364,6 +364,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
   #elif defined(IN_CPU_x86)
       "/MACHINE:X86",
       "/LARGEADDRESSAWARE",
+      "/SAFESEH:NO",
   #elif defined(IN_CPU_ARM) || defined(IN_CPU_ARM64)
       "/MACHINE:ARM",
   #endif
