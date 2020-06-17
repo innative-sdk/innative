@@ -51,5 +51,28 @@
     <MASM Include="chkstk.x86.asm">
       <Filter>Source Files</Filter>
     </MASM>
+    <MASM Include="memset.amd64.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
+    <MASM Include="memcpy.amd64.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
+    <MASM Include="memcmp.amd64.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
+    <MASM Include="memcpy.x86.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
+    <MASM Include="memmove.x86.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
+    <MASM Include="memset.x86.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="vcruntime.x86.inc">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
