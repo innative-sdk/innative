@@ -105,7 +105,7 @@ namespace innative {
       return !err ? t : (T)~0;
     }
 
-    template<WatTokens T1> inline bool MatchTokens(Queue<WatToken>& tokens, WatToken* t1 = nullptr)
+    template<WatTokens T1> static inline bool MatchTokens(Queue<WatToken>& tokens, WatToken* t1 = nullptr)
     {
       if(tokens.Size() >= 1 && tokens[0].id == T1)
       {
@@ -117,7 +117,7 @@ namespace innative {
       return false;
     }
     template<WatTokens T1, WatTokens T2>
-    inline bool MatchTokens(Queue<WatToken>& tokens, WatToken* t1 = nullptr,  WatToken* t2 = nullptr)
+    static inline bool MatchTokens(Queue<WatToken>& tokens, WatToken* t1 = nullptr, WatToken* t2 = nullptr)
     {
       if(tokens.Size() >= 2 && tokens[0].id == T1 && tokens[1].id == T2)
       {

@@ -62,6 +62,11 @@ namespace innative {
       assert(limit <= _size);
       _limit = limit;
     }
+    inline void Resize(size_t size)
+    {
+      assert(_limit + size <= _size);
+      _size = _limit + size;
+    }
 
     static const int MINSIZE = 8;
 

@@ -224,6 +224,14 @@ int WatParser::ParseFunctionTypeInner(Environment& env, Queue<WatToken>& tokens,
         DebugInfo debug = { src.line, src.column };
         ParseName(env, debug.name, tokens.Peek());
 
+        // Check for duplicate param names
+        for (varuint32 i = 0; i < *n_info; ++i)
+        {
+          auto& other = (*info)[i];
+          if(debug.name == other.name)
+            return ERR_WAT_DUPLICATE_NAME;
+        }
+
         while(*n_info < sig.n_params)
           if(err = AppendArray<DebugInfo>(env, { 0 }, *info, *n_info))
             return err;
@@ -1039,9 +1047,10 @@ int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringSp
     return ParseTypeUse(tokens, i->func_desc.type_index, &i->func_desc.param_debug, 0, false);
 
   FunctionDesc desc = { 0 };
+  varuint32 n_paraminfo = 0;
   desc.debug.line   = body.line;
   desc.debug.column = body.column;
-  if(err = ParseTypeUse(tokens, desc.type_index, &desc.param_debug, 0, false))
+  if(err = ParseTypeUse(tokens, desc.type_index, &desc.param_debug, &n_paraminfo, false))
     return err;
 
   FunctionType& functy = m.type.functypes[desc.type_index];
@@ -1065,6 +1074,14 @@ int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringSp
       if(tokens.Peek().len > numeric_limits<varuint32>::max())
         return ERR_WAT_OUT_OF_RANGE;
       ParseName(env, local.debug.name, tokens.Pop());
+
+      // Check for name collisions, params first
+      for (varuint32 i = 0; i < n_paraminfo; ++i)
+        if(desc.param_debug[i].name == local.debug.name)
+          return ERR_WAT_DUPLICATE_NAME;
+      for(varuint32 i = 0; i < body.n_locals; ++i)
+        if(body.locals[i].debug.name == local.debug.name)
+          return ERR_WAT_DUPLICATE_NAME;
 
       if(err = ParseLocalAppend(env, local, body, tokens))
         return err;
@@ -1781,11 +1798,8 @@ int WatParser::ParseModule(Environment& env, Module& m, const char* file, Queue<
   }
 
   // Manually insert the DataCount section
-  if(m.knownsections & (1 << WASM_SECTION_DATA))
-  {
-    m.knownsections |= (1 << WASM_SECTION_DATA_COUNT);
-    m.data_count.count = m.data.n_data;
-  }
+  m.knownsections |= (1 << WASM_SECTION_DATA_COUNT);
+  m.data_count.count = m.data.n_data;
 
   m.filepath = utility::AllocString(env, file);
   m.exports  = kh_init_exports();
