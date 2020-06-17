@@ -333,8 +333,8 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
     if(env->flags & ENV_EMIT_LLVM)
     {
       std::error_code EC;
-      llvm::raw_fd_ostream dest(((file.parent_path() / env->modules[i].cache->mod->getName().str()) += ".llvm").u8string(),
-                                EC, llvm::sys::fs::F_None);
+      auto path = ((file.parent_path() / env->modules[i].cache->mod->getName().str()) += ".llvm").u8string();
+      llvm::raw_fd_ostream dest(path, EC, llvm::sys::fs::F_None);
       env->modules[i].cache->mod->print(dest, nullptr);
     }
 

@@ -60,10 +60,12 @@ namespace innative {
       { "unknown data segment 1", "unknown data segment" },
       { "i32 constant out of range", "constant out of range" },
       { "invalid elements segment kind", "invalid elem" },
-      { "unknown data segment", "data count section required" },
+      //{ "unknown data segment", "data count section required" },
       { "duplicate memory", "duplicate name" },
       { "duplicate table", "duplicate name" },
       { "duplicate global", "duplicate name" },
+      { "duplicate func", "duplicate name" },
+      { "duplicate local", "duplicate name" },
       { "unknown elem segment 0", "unknown elem segment" },
       { "unknown elem segment 4", "unknown elem segment" },
     });

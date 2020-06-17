@@ -536,13 +536,15 @@ IN_ERROR Compiler::InsertBoundsCheck(llvm::Type* inputTy, llvmVal* end, std::ini
   Func* uadd_with_overflow = llvm::Intrinsic::getDeclaration(mod, llvm::Intrinsic::uadd_with_overflow, { sizet });
 
   end = builder.CreateZExtOrTrunc(end, sizet);
-  loc = CInt::get(sizet, 0);
+  loc = nullptr;
   llvmVal* upper;
   llvmVal* cond = builder.getInt1(false);
 
   auto appendVal = [&](llvmVal*& acc, llvmVal* val) {
     val = builder.CreateZExtOrTrunc(val, sizet);
-    if(bypass)
+    if(!acc)
+      acc = val;
+    else if(bypass)
       acc = builder.CreateAdd(acc, val, "", true, true);
     else
     {
@@ -1065,7 +1067,7 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
   // Process element section by appending to the init function
   for(varuint32 i = 0; i < m.element.n_elements; ++i)
   {
-    TableInit& e = m.element.elements[i];
+    TableInit& e      = m.element.elements[i];
     auto element_type = (e.flags & WASM_ELEM_CARRIES_ELEMEXPRS) ? e.elem_type : TE_funcref;
 
     // Create a constant array of the data
@@ -1106,7 +1108,8 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
     auto global = new llvm::GlobalVariable(*mod, array_ty, true, llvm::GlobalValue::LinkageTypes::PrivateLinkage, elem,
                                            CanonicalName(StringSpan{ 0, 0 }, StringSpan::From("elem"), i));
     auto lenvar = new llvm::GlobalVariable(*mod, builder.getInt64Ty(), false,
-                                           llvm::GlobalValue::LinkageTypes::PrivateLinkage, builder.getInt64(elem_values.size()),
+                                           llvm::GlobalValue::LinkageTypes::PrivateLinkage,
+                                           builder.getInt64(elem_values.size()),
                                            CanonicalName(StringSpan{ 0, 0 }, StringSpan::From("elem_len"), i));
     debugger->DebugGlobal(global, global->getName(), 0);
     debugger->DebugGlobal(lenvar, lenvar->getName(), 0);
@@ -1396,6 +1399,17 @@ void Compiler::ResolveModuleExports(const Environment* env, Module* root, llvm::
 
 void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainctx)
 {
+  // Internal flags for asm mem functions
+  new llvm::GlobalVariable(*mainctx.mod, builder.getInt32Ty(), true, Func::ExternalLinkage, builder.getInt32(2), "__favor");
+
+  if(mainctx.machine->getPointerSizeInBits(0) == 64)
+  {
+    new llvm::GlobalVariable(*mainctx.mod, builder.getInt64Ty(), true, Func::ExternalLinkage, builder.getInt64(~0ll),
+                             "__memcpy_nt_iters");
+    new llvm::GlobalVariable(*mainctx.mod, builder.getInt64Ty(), true, Func::ExternalLinkage, builder.getInt64(63488),
+                             "__memset_nt_iters");
+  }
+
   // Create __chkstk function to satisfy the rtlibcalls
   auto chkstk_ms =
     Func::Create(FuncTy::get(builder.getVoidTy(), {}, false), Func::ExternalLinkage, "__chkstk_ms", mainctx.mod);
@@ -1407,7 +1421,7 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
   mainctx.debugger->SetSPLocation(builder, chkstk->getSubprogram());
   builder.CreateCall(chkstk_ms, {});
   builder.CreateRetVoid();
-  
+
   // Create memcpy function to satisfy the rtlibcalls
   Func* memcpy = Func::Create(mainctx.memcpy->getFunctionType(), Func::WeakAnyLinkage, "memcpy", mainctx.mod);
   builder.SetInsertPoint(BB::Create(*env->context, "entry", memcpy));
@@ -1733,8 +1747,7 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
       return ERR_JIT_DATA_LAYOUT_ERROR;
 
     // If the context already exists, we take ownership of it
-    env->jit =
-      new JITContext(std::move(*JTMB), std::move(*DL), std::unique_ptr<llvm::LLVMContext>(env->context), env);
+    env->jit = new JITContext(std::move(*JTMB), std::move(*DL), std::unique_ptr<llvm::LLVMContext>(env->context), env);
     // env->context = nullptr;
 
     if(expose_process)
