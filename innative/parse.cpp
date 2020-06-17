@@ -254,7 +254,7 @@ IN_ERROR innative::ParseExport(Stream& s, Export& e, const Environment& env)
   return err;
 }
 
-IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environment& env, Module* m)
+IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environment& env, Module* m, int* block_depth)
 {
   ins.line   = 1;
   ins.column = static_cast<decltype(ins.column)>(s.pos);
@@ -269,7 +269,15 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   {
   case OP_block:
   case OP_loop:
-  case OP_if: ins.immediates[0]._varsint64 = s.ReadVarInt64(err); break;
+  case OP_if:
+    ins.immediates[0]._varsint64 = s.ReadVarInt64(err);
+    if(block_depth)
+      ++*block_depth;
+    break;
+  case OP_end:
+    if(block_depth)
+      --*block_depth;
+    break;
   case OP_br:
   case OP_br_if:
   case OP_local_get:
@@ -351,7 +359,6 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_unreachable:
   case OP_nop:
   case OP_else:
-  case OP_end:
   case OP_return:
   case OP_drop:
   case OP_select:
@@ -583,6 +590,8 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, cons
     }
   }
 
+  int block_depth = 1;
+
   f.body = 0;
   if(err >= 0 && f.body_size > 0)
   {
@@ -591,8 +600,11 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, cons
       return ERR_FATAL_OUT_OF_MEMORY;
 
     for(f.n_body = 0; s.pos < end && err >= 0; ++f.n_body)
-      err = ParseInstruction(s, f.body[f.n_body], env, &m);
+      err = ParseInstruction(s, f.body[f.n_body], env, &m, &block_depth);
   }
+
+  if(err >= 0 && block_depth != 0)
+    return ERR_END_MISMATCH;
 
   // if(s.pos != end) // We can't fail on this error because the spec parser doesn't
   //  return ERR_FATAL_FUNCTION_SIZE_MISMATCH;

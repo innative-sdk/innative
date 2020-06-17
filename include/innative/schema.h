@@ -56,7 +56,7 @@ enum WASM_TYPE_ENCODING
 
   TE_iPTR = 0x70, // Internal values, never encoded
   TE_NONE = 0x71,
-  TE_POLY = 0x72,
+  TE_UNKNOWN = 0x72,
 };
 
 // Flags applicable to resizable limits
