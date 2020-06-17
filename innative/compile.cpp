@@ -828,14 +828,6 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
                                     false),
                         Func::ExternalLinkage, "_innative_internal_env_memcmp", mod);
 
-  env_print = Func::Create(FuncTy::get(builder.getVoidTy(), { builder.getInt64Ty() }, false), Func::ExternalLinkage,
-                           "_innative_internal_env_print", mod);
-
-  env_write =
-    Func::Create(FuncTy::get(builder.getVoidTy(),
-                             { builder.getInt8PtrTy(), builder.getIntNTy(machine->getPointerSizeInBits(0)) }, false),
-                 Func::ExternalLinkage, "_innative_internal_write_out", mod);
-
   Func* fn_memfree =
     Func::Create(FuncTy::get(builder.getVoidTy(), { builder.getInt8PtrTy(0), builder.getInt64Ty() }, false),
                  Func::ExternalLinkage, "_innative_internal_env_free_memory", mod);

@@ -701,8 +701,6 @@ IN_ERROR Compiler::CompileMemCopy(varuint32 dst_mem, varuint32 src_mem)
   return ERR_SUCCESS;
 }
 
-extern "C" int __favor;
-
 IN_ERROR innative::Compiler::CompileMemFill(varuint32 mem)
 {
   assert(mem < memories.size());
