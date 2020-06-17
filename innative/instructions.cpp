@@ -215,7 +215,7 @@ IN_ERROR Compiler::CompileElseBlock()
     values.Pop();
 
   // Restore parameter values in reverse order
-   for(varuint32 i = GetBlockSigParams(control.Peek().sig, m); i-- > 0;)
+  for(varuint32 i = GetBlockSigParams(control.Peek().sig, m); i-- > 0;)
     values.Push(control.Peek().ifstack[i]);
 
   control.Peek().op = OP_else;               // make this block an OP_else block
@@ -720,8 +720,7 @@ IN_ERROR innative::Compiler::CompileMemFill(varuint32 mem)
     return err;
 
   auto sizet = builder.getIntNTy(machine->getPointerSizeInBits(0));
-  if(machine->getPointerSizeInBits(0) != mem_size->getType()->getPrimitiveSizeInBits())
-    mem_size = builder.CreateZExtOrTrunc(mem_size, sizet);
+  mem_size   = builder.CreateZExtOrTrunc(mem_size, sizet);
 
   value        = builder.CreateTrunc(value, builder.getInt8Ty()); // Value must be truncated to i8
   llvmVal* dst = GetMemPointerRegion(dst_base, builder.getInt8PtrTy(), mem_size, mem, 0);
@@ -735,9 +734,9 @@ IN_ERROR Compiler::CompileTableInit(varuint32 dst_tbl, varuint32 src_elem)
 {
   assert(dst_tbl < tables.size() && src_elem < elem_globals.size());
 
-  auto& elem_desc    = m.element.elements[src_elem];
+  auto& elem_desc   = m.element.elements[src_elem];
   ElemSegment& elem = elem_globals[src_elem];
-  auto element_type  = (elem_desc.flags & WASM_ELEM_CARRIES_ELEMEXPRS) ? elem_desc.elem_type : TE_funcref;
+  auto element_type = (elem_desc.flags & WASM_ELEM_CARRIES_ELEMEXPRS) ? elem_desc.elem_type : TE_funcref;
 
   auto sizet     = builder.getIntNTy(machine->getPointerSizeInBits(0));
   auto elem_ty   = GetTableType(element_type);

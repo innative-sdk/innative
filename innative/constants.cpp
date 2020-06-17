@@ -216,7 +216,7 @@ namespace innative {
       { TE_void, "TE_void" },
       { TE_iPTR, "TE_iPTR" },
       { TE_NONE, "TE_NONE" },
-      { TE_POLY, "TE_POLY" },
+      { TE_UNKNOWN, "TE_UNKNOWN" },
     });
 
     const kh_mapenum_s* WAST_ASSERTION_MAP = GenMapEnum({
@@ -247,7 +247,7 @@ namespace innative {
       { ERR_WAT_EXPECTED_OPERATOR, "unexpected token" },
       { ERR_WAT_UNEXPECTED_NAME, "unexpected token" },
       { ERR_PARSE_INVALID_FILE_LENGTH, "unexpected end" },
-      { ERR_FATAL_UNKNOWN_SECTION, "section size mismatch" },
+      { ERR_FATAL_UNKNOWN_SECTION, "malformed section id" },
       { ERR_FATAL_SECTION_SIZE_MISMATCH, "section size mismatch" },
       { ERR_FUNCTION_BODY_MISMATCH, "function and code section have inconsistent lengths" },
       { ERR_FATAL_DUPLICATE_EXPORT, "duplicate export name" },

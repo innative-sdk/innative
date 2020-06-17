@@ -241,45 +241,19 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned 
   _innative_internal_write_out("\n", 1);
 }
 
-// Very simple memcpy implementation because we don't have access to the C library
-IN_COMPILER_DLLEXPORT extern char* _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz)
-{
-  char* end = dest + sz;
-  while(dest < end)
-    *dest++ = *src++;
-  return dest;
-}
+char* _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz);
 
-IN_COMPILER_DLLEXPORT extern char* _innative_internal_env_memmove(char* dest, const char* src, size_t sz)
-{
-  if(dest <= src) // Simple forward-up memcpy
-    return _innative_internal_env_memcpy(dest, src, sz);
-
-  // dest is after src, so copy back to front
-  char* d       = dest + sz;
-  const char* s = src + sz;
-  while(d > dest)
-    *--d = *--s;
-  return dest;
-}
-
-IN_COMPILER_DLLEXPORT extern char* _innative_internal_env_memset(char* dest, int val, size_t sz)
-{
-  const char b = (char)val;
-  while(sz--)
-    *dest++ = b;
-  return dest;
-}
-
+#ifdef IN_CPU_x86
 IN_COMPILER_DLLEXPORT extern int _innative_internal_env_memcmp(const char* s1, const char* s2, size_t sz)
 {
   const char* const end = s1 + sz;
   int d;
   while(s1 < end)
     if(d = *s1++ - *s2++) // if the difference between the current bytes is non-zero
-      return d; // return the difference between the current bytes
+      return d;           // return the difference between the current bytes
   return 0;
 }
+#endif
 
 // Platform-specific memory free, called by the exit function to clean up memory allocations
 IN_COMPILER_DLLEXPORT extern void _innative_internal_env_free_memory(void* p, uint64_t size)
