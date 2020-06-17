@@ -117,8 +117,6 @@ namespace innative {
     llvm::Function* atomic_notify;
     llvm::Function* atomic_wait32;
     llvm::Function* atomic_wait64;
-    llvm::Function* env_print;
-    llvm::Function* env_write;
     std::string natvis;
 
     using Func    = llvm::Function;
