@@ -11,7 +11,7 @@
 ;*******************************************************************************
 
     .xlist
-    include vcruntime.inc
+    include vcruntime.x86.inc
     .list
     .xmm
 

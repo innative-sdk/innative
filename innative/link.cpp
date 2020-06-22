@@ -341,7 +341,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
     // Verify module
     llvm::raw_fd_ostream dest(1, false, true);
     if(llvm::verifyModule(*env->modules[i].cache->mod, &dest))
-      return ERR_FATAL_INVALID_MODULE;
+      return ERR_FATAL_INVALID_LLVM_IR;
   }
 
   {
@@ -417,7 +417,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
 
 #elif defined(IN_PLATFORM_POSIX)
     LLD_FORMAT format                 = LLD_FORMAT::ELF;
-    std::vector<const char*> linkargs = { "--stack-first" };
+    std::vector<const char*> linkargs = { };
 
     if(env->flags & ENV_LIBRARY)
       linkargs.push_back("-shared");

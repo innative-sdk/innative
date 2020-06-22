@@ -160,6 +160,10 @@ typedef struct IN__EXPORTS
   /// \param file the path of the file to load.
   void* (*LoadAssembly)(const char* file);
 
+  /// If LoadAssembly failed, returns a string containing an error message. On windows, this string must be freed with LoadAssemblyErrorFree
+  char* (*LoadAssemblyError)();
+  void (*LoadAssemblyErrorFree)(char* e);
+
   /// Frees a WebAssembly binary, unloading it from memory and performing any cleanup required.
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   void (*FreeAssembly)(void* assembly);

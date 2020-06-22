@@ -25,4 +25,4 @@ int TestHarness::do_funcreplace(void* assembly)
   return err;
 }
 
-void TestHarness::test_funcreplace() { CompileWASM("../scripts/funcreplace.wasm", &TestHarness::do_funcreplace, "env"); }
+void TestHarness::test_funcreplace() { TESTERR(CompileWASM("../scripts/funcreplace.wasm", &TestHarness::do_funcreplace, "env"), ERR_SUCCESS); }

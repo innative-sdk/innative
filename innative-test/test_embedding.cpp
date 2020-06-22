@@ -130,7 +130,7 @@ void TestHarness::test_embedding()
   }
   auto old = utility::GetWorkingDir();
   utility::SetWorkingDir(_folder);
-  void* m = (*_exports.LoadAssembly)(_out.u8string().c_str());
+  void* m = LoadAssembly(_out);
   TEST(m != nullptr);
   if(m)
   {

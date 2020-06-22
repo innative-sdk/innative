@@ -37,6 +37,8 @@ void innative_runtime(INExports* exports)
   exports->LoadGlobalIndexJIT      = &LoadGlobalIndexJIT;
   exports->ReplaceTableFuncPtr     = &ReplaceTableFuncPtr;
   exports->LoadAssembly            = &LoadAssembly;
+  exports->LoadAssemblyError       = &utility::LoadDLLError;
+  exports->LoadAssemblyErrorFree   = &utility::LoadDLLErrorFree;
   exports->FreeAssembly            = &FreeAssembly;
   exports->ClearEnvironmentCache   = &ClearEnvironmentCache;
   exports->GetTypeEncodingString   = &GetTypeEncodingString;
@@ -59,11 +61,11 @@ void innative_runtime(INExports* exports)
   exports->InsertModuleReturn      = &InsertModuleReturn;
   exports->RemoveModuleReturn      = &RemoveModuleReturn;
 
-  #ifdef IN_DEBUG
+#ifdef IN_DEBUG
   // Because this is just a set of pointers, we can iterate through them all to check for NULL pointers
   for(size_t i = 0; i < sizeof(INExports) / sizeof(void*); ++i)
     assert(reinterpret_cast<void**>(exports)[i] != 0);
-  #endif
+#endif
 }
 
 void innative_set_work_dir_to_bin(const char* arg0)

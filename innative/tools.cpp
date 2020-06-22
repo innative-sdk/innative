@@ -587,9 +587,9 @@ int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bo
 
   if(err < 0)
   {
-    char buf[10];
+    char buf[32];
     if(env->loglevel >= LOG_FATAL)
-      FPRINTF(env->log, "Error loading environment: %s\n", EnumToString(ERR_ENUM_MAP, err, buf, 10));
+      FPRINTF(env->log, "Error loading environment: %s\n", EnumToString(ERR_ENUM_MAP, err, buf, 32));
     return err;
   }
 
@@ -597,8 +597,8 @@ int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bo
 
   if(env->loglevel >= LOG_ERROR && err < 0)
   {
-    char buf[10];
-    FPRINTF(env->log, "Error loading modules: %s\n", EnumToString(ERR_ENUM_MAP, err, buf, 10));
+    char buf[32];
+    FPRINTF(env->log, "Error loading modules: %s\n", EnumToString(ERR_ENUM_MAP, err, buf, 32));
   }
 
   if(env->loglevel >= LOG_NOTICE && target)
@@ -755,7 +755,7 @@ int innative::InsertModuleSection(Environment* env, Module* m, enum WASM_MODULE_
   case WASM_MODULE_CUSTOM: return InsertModuleType<CustomSection>(env, m->custom, m->n_custom, (size_t)index, { 0 });
   }
 
-  return ERR_FATAL_INVALID_MODULE;
+  return ERR_FATAL_UNKNOWN_SECTION;
 }
 
 template<class T, typename INT> int DeleteModuleType(Environment* env, T*& root, INT& sz, INT index)
@@ -806,7 +806,7 @@ int innative::DeleteModuleSection(Environment* env, Module* m, enum WASM_MODULE_
   case WASM_MODULE_CUSTOM: return DeleteModuleType<CustomSection>(env, m->custom, m->n_custom, (size_t)index);
   }
 
-  return ERR_FATAL_INVALID_MODULE;
+  return ERR_FATAL_UNKNOWN_SECTION;
 }
 
 int innative::SetByteArray(Environment* env, ByteArray* bytearray, const void* data, varuint32 size)

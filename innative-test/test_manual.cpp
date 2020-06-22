@@ -148,18 +148,18 @@ void TestHarness::test_manual()
   err = (*_exports.AddModuleObject)(env, &m);
   TEST(!err);
   err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
-  TEST(!err);
+  TESTERR(err, ERR_SUCCESS);
 
   TEST(!err);
   err = (*_exports.FinalizeEnvironment)(env);
-  TEST(!err);
+  TESTERR(err, ERR_SUCCESS);
 
   err = (*_exports.Compile)(env, dll_path.u8string().c_str());
-  TEST(!err);
+  TESTERR(err, ERR_SUCCESS);
 
   (*_exports.DestroyEnvironment)(env);
 
-  void* assembly = (*_exports.LoadAssembly)(dll_path.u8string().c_str());
+  void* assembly = LoadAssembly(dll_path);
   TEST(assembly);
   if(assembly)
   {

@@ -1410,6 +1410,7 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
                              "__memset_nt_iters");
   }
 
+#ifdef IN_PLATFORM_WIN32
   // Create __chkstk function to satisfy the rtlibcalls
   auto chkstk_ms =
     Func::Create(FuncTy::get(builder.getVoidTy(), {}, false), Func::ExternalLinkage, "__chkstk_ms", mainctx.mod);
@@ -1421,6 +1422,7 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
   mainctx.debugger->SetSPLocation(builder, chkstk->getSubprogram());
   builder.CreateCall(chkstk_ms, {});
   builder.CreateRetVoid();
+#endif
 
   // Create memcpy function to satisfy the rtlibcalls
   Func* memcpy = Func::Create(mainctx.memcpy->getFunctionType(), Func::WeakAnyLinkage, "memcpy", mainctx.mod);

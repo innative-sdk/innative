@@ -16,7 +16,7 @@ static void in_platform_mutex_lock(in_platform_mutex* mutex);
 static void in_platform_mutex_unlock(in_platform_mutex* mutex);
 static void in_platform_mutex_free(in_platform_mutex* mutex);
 
-static void in_platform_rwlock_init(in_platform_rwlock*mutex);
+static void in_platform_rwlock_init(in_platform_rwlock* mutex);
 static void in_platform_rwlock_lock(in_platform_rwlock* mutex);
 static void in_platform_rwlock_unlock(in_platform_rwlock* mutex);
 static void in_platform_rwlock_shared_lock(in_platform_rwlock* mutex);
@@ -29,8 +29,8 @@ static void in_platform_condvar_notify(in_platform_condvar* condvar);
 static void in_platform_condvar_free(in_platform_condvar* condvar);
 
 // Memory stuff
-static void* grow_array(void* array, size_t elem_size, size_t new_count);
-static void free_array(void* array);
+static void* grow_array(void* array, size_t elem_size, size_t old_count, size_t new_count);
+static void free_array(void* array, size_t elem_size, size_t old_count);
 
 static size_t in_atomic_incr(size_t* value);
 static size_t in_atomic_decr(size_t* value);
@@ -115,7 +115,7 @@ static void in_wait_map_grow(in_wait_map* map)
   struct in_wait_map_entry* old = map->entries;
   size_t old_cap                = map->cap;
   map->cap                      = IN_MAX(map->cap * 2, 32);
-  map->entries                  = grow_array(NULL, sizeof(*old), map->cap); // Unfortunately it can't be reused
+  map->entries                  = grow_array(NULL, sizeof(*old), 0, map->cap); // Unfortunately it can't be reused
 
   for(size_t i = 0; i < old_cap; ++i)
   {
@@ -125,7 +125,7 @@ static void in_wait_map_grow(in_wait_map* map)
     }
   }
 
-  free_array(old);
+  free_array(old, sizeof(*old), old_cap);
 }
 
 static size_t in_wait_map_insert(in_wait_map* map, void* key)
@@ -146,7 +146,7 @@ static size_t in_wait_map_insert(in_wait_map* map, void* key)
   }
   else
   {
-    list = grow_array(NULL, sizeof(*list), 1);
+    list = grow_array(NULL, sizeof(*list), 0, 1);
     in_platform_mutex_init(&list->lock);
   }
 
@@ -210,7 +210,7 @@ void _innative_internal_env_wait_map_return(in_wait_map* map, void* address, in_
       else
       {
         _innative_internal_env_wait_list_shrink(list);
-        free_array(list);
+        free_array(list, sizeof(*list), 1);
       }
 
       in_wait_map_entries_cleanup(map);
@@ -231,7 +231,7 @@ static void in_wait_map_free_list_cleanup(in_wait_map* map)
   {
     _innative_internal_env_wait_list_shrink(temp);
     map->free_lists = temp->next_free_list;
-    free_array(temp);
+    free_array(temp, sizeof(*temp), 1);
   }
 }
 
@@ -245,7 +245,7 @@ static void in_wait_map_entries_cleanup(in_wait_map* map)
       size_t old_cap                = map->cap;
 
       map->cap     = IN_MAX(map->len * 2, 32);
-      map->entries = grow_array(NULL, sizeof(*old), map->cap);
+      map->entries = grow_array(NULL, sizeof(*old), 0, map->cap);
 
       for(size_t i = 0; i < old_cap; ++i)
       {
@@ -255,12 +255,12 @@ static void in_wait_map_entries_cleanup(in_wait_map* map)
         }
       }
 
-      free_array(old);
+      free_array(old, sizeof(*old), old_cap);
     }
   }
   else
   {
-    free_array(map->entries);
+    free_array(map->entries, sizeof(*map->entries), map->cap);
     map->cap     = 0;
     map->entries = 0;
   }
@@ -285,8 +285,9 @@ in_wait_entry* _innative_internal_env_wait_list_push(in_wait_list* list)
 {
   if(list->len == list->cap)
   {
+    size_t old      = list->cap;
     list->cap     = IN_MAX(list->cap * 2, 1);
-    list->entries = grow_array(list->entries, sizeof(void*), list->cap);
+    list->entries = grow_array(list->entries, sizeof(void*), old, list->cap);
   }
 
   in_wait_entry* entry;
@@ -298,7 +299,7 @@ in_wait_entry* _innative_internal_env_wait_list_push(in_wait_list* list)
   }
   else
   {
-    entry = grow_array(NULL, sizeof(*entry), 1);
+    entry = grow_array(NULL, sizeof(*entry), 0, 1);
     in_platform_condvar_init(&entry->condvar);
   }
 
@@ -365,12 +366,13 @@ void _innative_internal_env_wait_list_shrink(in_wait_list* list)
 {
   in_wait_entry* temp;
 
+  size_t old    = list->cap;
   list->cap     = list->len;
-  list->entries = grow_array(list->entries, sizeof(void*), list->cap);
+  list->entries = grow_array(list->entries, sizeof(void*), old, list->cap);
   while((temp = list->free_list) != NULL)
   {
     list->free_list = temp->next_free_node;
-    free_array(temp);
+    free_array(temp, sizeof(void*), list->cap);
   }
 }
 
@@ -437,12 +439,12 @@ static void in_platform_condvar_notify(in_platform_condvar* condvar) { WakeCondi
 static void in_platform_condvar_free(in_platform_condvar* condvar) {}
 
 // Memory stuff
-static void* grow_array(void* array, size_t elem_size, size_t new_count)
+static void* grow_array(void* array, size_t elem_size, size_t old_count, size_t new_count)
 {
   if(new_count == 0)
   {
     if(array)
-      free_array(array);
+      free_array(array, elem_size, old_count);
     return 0;
   }
 
@@ -456,19 +458,19 @@ static void* grow_array(void* array, size_t elem_size, size_t new_count)
   }
 }
 
-static void free_array(void* array) { HeapFree(GetProcessHeap(), 0, array); }
+static void free_array(void* array, size_t elem_size, size_t old_count) { HeapFree(GetProcessHeap(), 0, array); }
 
-#ifdef _WIN64
+  #ifdef _WIN64
 static size_t in_atomic_incr(size_t* value) { return InterlockedExchangeAdd64(value, 1) + 1; }
 static size_t in_atomic_decr(size_t* value) { return InterlockedExchangeAdd64(value, -1) - 1; }
-#else
+  #else
 static size_t in_atomic_incr(size_t* value) { return InterlockedExchangeAdd(value, 1) + 1; }
 static size_t in_atomic_decr(size_t* value) { return InterlockedExchangeAdd(value, -1) - 1; }
-#endif
+  #endif
 
 #elif defined(IN_PLATFORM_POSIX)
 
-in_wait_map global_wait_map = { PTHREAD_RWLOCK_INITIALIZER };
+in_wait_map _innative_internal_env_global_wait_map = { PTHREAD_RWLOCK_INITIALIZER };
 
 static void in_platform_mutex_init(in_platform_mutex* mutex) { pthread_mutex_init(mutex, NULL); }
 static void in_platform_mutex_lock(in_platform_mutex* mutex) { pthread_mutex_lock(mutex); }
@@ -498,5 +500,34 @@ static int in_platform_condvar_wait(in_platform_condvar* condvar, in_platform_mu
 }
 static void in_platform_condvar_notify(in_platform_condvar* condvar) { pthread_cond_signal(condvar); }
 static void in_platform_condvar_free(in_platform_condvar* condvar) { pthread_cond_destroy(condvar); }
+
+// Memory stuff
+static void* grow_array(void* array, size_t elem_size, size_t old_count, size_t new_count)
+{
+  if(new_count == 0)
+  {
+    if(array)
+      free_array(array, elem_size, old_count);
+    return 0;
+  }
+
+  if(array == 0)
+    array = _innative_syscall(SYSCALL_MMAP, NULL, new_count * elem_size, PROT_READ | PROT_WRITE,
+                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  else
+    array = _innative_syscall(SYSCALL_MREMAP, array, old_count * elem_size, new_count * elem_size, MREMAP_MAYMOVE, 0, 0);
+
+  if(array >= (void*)0xfffffffffffff001) // This is a syscall error from -4095 to -1
+    return 0;
+  return array;
+}
+
+static void free_array(void* array, size_t elem_size, size_t old_count)
+{
+  _innative_syscall(SYSCALL_MUNMAP, array, elem_size * old_count, 0, 0, 0, 0);
+}
+
+static size_t in_atomic_incr(size_t* value) { return __atomic_fetch_add(value, 1, __ATOMIC_RELAXED) + 1; }
+static size_t in_atomic_decr(size_t* value) { return __atomic_fetch_add(value, -1, __ATOMIC_RELAXED) - 1; }
 
 #endif
