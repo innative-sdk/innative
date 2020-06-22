@@ -53,7 +53,6 @@ page
 
     CODESEG
 
-    extrn   __isa_available:dword
     extrn   __isa_enabled:dword
     extrn   __favor:dword
 

@@ -20,6 +20,7 @@ TestHarness::~TestHarness()
 size_t TestHarness::Run(FILE* out)
 {
   std::pair<const char*, void (TestHarness::*)()> tests[] = { { "wasm_malloc.c", &TestHarness::test_malloc },
+                                                              { "whitelist", &TestHarness::test_whitelist },
                                                               { "debugging.cpp", &TestHarness::test_debug },
                                                               { "JIT", &TestHarness::test_jit },
                                                               { "embedding", &TestHarness::test_embedding },
@@ -33,7 +34,6 @@ size_t TestHarness::Run(FILE* out)
                                                               //{ "assemblyscript", &TestHarness::test_assemblyscript },
                                                               { "allocator", &TestHarness::test_allocator },
                                                               { "parallel parsing", &TestHarness::test_parallel_parsing },
-                                                              { "whitelist", &TestHarness::test_whitelist },
                                                               { "serializer", &TestHarness::test_serializer },
                                                               { "errors", &TestHarness::test_errors },
                                                               { "atomic_waitnotify",

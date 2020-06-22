@@ -223,7 +223,7 @@ namespace innative {
     IN_COMPILER_DLLEXPORT void LoadDLLErrorFree(char* p);
     int Install(const char* arg0, bool full);
     int Uninstall();
-    IN_COMPILER_DLLEXPORT int AddCImport(const Environment& env, const char* id);
+    IN_COMPILER_DLLEXPORT int AddCImport(Environment& env, const char* id);
     const char* AllocString(Environment& env, const char* s, size_t n);
     IN_FORCEINLINE const char* AllocString(Environment& env, const char* s)
     {
