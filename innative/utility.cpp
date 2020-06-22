@@ -354,10 +354,10 @@ namespace innative {
 #endif
     }
 
-    int AddCImport(const Environment& env, const char* id)
+    int AddCImport(Environment& env, const char* id)
     {
       int r;
-      kh_put_cimport(env.cimports, ByteArray::Identifier(id, strlen(id)), &r);
+      kh_put_cimport(env.cimports, ByteArray::Identifier(AllocString(env, id), strlen(id)), &r);
       return r;
     }
 

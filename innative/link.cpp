@@ -271,7 +271,10 @@ void innative::AppendIntrinsics(Environment& env)
   int r;
   if(env.cimports)
     for(auto intrinsic : Compiler::intrinsics)
-      kh_put_cimport(env.cimports, ByteArray::Identifier(intrinsic.name, strlen(intrinsic.name)), &r);
+    {
+      auto mangled = ABIMangle(intrinsic.name, CURRENT_ABI, 0, 0);
+      kh_put_cimport(env.cimports, ByteArray::Identifier(AllocString(env, mangled.c_str()), mangled.size()), &r);
+    }
 }
 
 int innative::GetParameterBytes(const IN_WASM_MODULE& m, const Import& imp)

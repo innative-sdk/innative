@@ -3,6 +3,7 @@
 
 #include "test.h"
 #include "../innative/utility.h"
+#include "../innative/link.h"
 #include <functional>
 
 using namespace innative;
@@ -36,23 +37,15 @@ void TestHarness::test_whitelist()
     (*_exports.AddModule)(env, out.data(), out.size(), "whitelist", &err);
     TESTERR(err, ERR_SUCCESS);
     (*_exports.FinalizeEnvironment)(env);
-#if defined(IN_PLATFORM_WIN32) && defined(IN_CPU_x86)
-    AddCImport(*env, "_asdf");
-    AddCImport(*env, "_asdf2");
-    AddCImport(*env, "_a");
-    AddCImport(*env, "_A");
-    AddCImport(*env, "_AB");
-    AddCImport(*env, "_yz");
-    AddCImport(*env, "_[fake]");
-#else
-    AddCImport(*env, "asdf");
-    AddCImport(*env, "asdf2");
-    AddCImport(*env, "a");
-    AddCImport(*env, "A");
-    AddCImport(*env, "AB");
-    AddCImport(*env, "yz");
-    AddCImport(*env, "[fake]");
-#endif
+
+    AddCImport(*env, ABIMangle("asdf", CURRENT_ABI, 0, 0).c_str());
+    AddCImport(*env, ABIMangle("asdf2", CURRENT_ABI, 0, 0).c_str());
+    AddCImport(*env, ABIMangle("a", CURRENT_ABI, 0, 0).c_str());
+    AddCImport(*env, ABIMangle("A", CURRENT_ABI, 0, 0).c_str());
+    AddCImport(*env, ABIMangle("AB", CURRENT_ABI, 0, 0).c_str());
+    AddCImport(*env, ABIMangle("yz", CURRENT_ABI, 0, 0).c_str());
+    AddCImport(*env, ABIMangle("[fake]", CURRENT_ABI, 0, 0).c_str());
+
     err = (*_exports.Validate)(env);
     if(err != ERR_SUCCESS)
       err = env->errors->code;
