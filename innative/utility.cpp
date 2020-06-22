@@ -365,6 +365,19 @@ namespace innative {
     void* LoadDLL(const path& path) { return LoadLibraryW(path.c_str()); }
     void* LoadDLLFunction(void* dll, const char* name) { return GetProcAddress((HMODULE)dll, name); }
     void FreeDLL(void* dll) { FreeLibrary((HMODULE)dll); }
+    char* LoadDLLError()
+    {
+      char* p;
+      FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr,
+                     ::GetLastError(), 0, (LPTSTR)&p, 0, nullptr);
+      return p;
+    }
+    void LoadDLLErrorFree(char* p)
+    {
+      if(p)
+        LocalFree((HLOCAL)p);
+    }
+
 #elif defined(IN_PLATFORM_POSIX)
     void* LoadDLL(const path& path)
     {
@@ -372,6 +385,8 @@ namespace innative {
     } // We MUST load and initialize WASM dlls immediately for init function testing
     void* LoadDLLFunction(void* dll, const char* name) { return dlsym(dll, name); }
     void FreeDLL(void* dll) { dlclose(dll); }
+    char* LoadDLLError() { return dlerror(); }
+    void LoadDLLErrorFree(char* p) {}
 #endif
   }
 }

@@ -34,7 +34,7 @@ void TestHarness::test_whitelist()
 
     int err = 0;
     (*_exports.AddModule)(env, out.data(), out.size(), "whitelist", &err);
-    TEST(err == 0);
+    TESTERR(err, ERR_SUCCESS);
     (*_exports.FinalizeEnvironment)(env);
 #if defined(IN_PLATFORM_WIN32) && defined(IN_CPU_x86)
     AddCImport(*env, "_asdf");
@@ -62,68 +62,68 @@ void TestHarness::test_whitelist()
     return err;
   };
 
-  TEST(fn({ { "asdf", "asdf" } }, [](Environment* e, const INExports&) { e->flags &= ~ENV_WHITELIST; }) ==
+  TESTERR(fn({ { "asdf", "asdf" } }, [](Environment* e, const INExports&) { e->flags &= ~ENV_WHITELIST; }),
        ERR_UNKNOWN_MODULE);
-  TEST(fn({ { "", "asdf" } }, [](Environment* e, const INExports&) { e->flags &= ~ENV_WHITELIST; }) == ERR_SUCCESS);
-  TEST(fn({ { "sys", "asdf" } }, [](Environment* e, const INExports&) {
+  TESTERR(fn({ { "", "asdf" } }, [](Environment* e, const INExports&) { e->flags &= ~ENV_WHITELIST; }), ERR_SUCCESS);
+  TESTERR(fn({ { "sys", "asdf" } }, [](Environment* e, const INExports&) {
          e->system = "sys";
          e->flags &= ~ENV_WHITELIST;
-       }) == ERR_SUCCESS);
+       }), ERR_SUCCESS);
 
-  TEST(fn({ { "sys", "asdf" } }, [](Environment* e, const INExports&) {}) == ERR_UNKNOWN_MODULE);
-  TEST(fn({ { "sys", "asdf" } }, [](Environment* e, const INExports&) { e->system = "sys"; }) == ERR_ILLEGAL_C_IMPORT);
-  TEST(fn({ { "asdf", "asdf" } }, [](Environment* e, const INExports&) {}) == ERR_UNKNOWN_MODULE);
-  TEST(fn({ { "", "asdf" } }, [](Environment* e, const INExports&) {}) == ERR_ILLEGAL_C_IMPORT);
-  TEST(fn({ { "", "_innative_to_c" } }, [](Environment* e, const INExports&) {}) == ERR_ILLEGAL_C_IMPORT);
-  TEST(fn({ { "", "_innative_from_c" } }, [](Environment* e, const INExports&) {}) == ERR_ILLEGAL_C_IMPORT);
+  TESTERR(fn({ { "sys", "asdf" } }, [](Environment* e, const INExports&) {}), ERR_UNKNOWN_MODULE);
+  TESTERR(fn({ { "sys", "asdf" } }, [](Environment* e, const INExports&) { e->system = "sys"; }), ERR_ILLEGAL_C_IMPORT);
+  TESTERR(fn({ { "asdf", "asdf" } }, [](Environment* e, const INExports&) {}), ERR_UNKNOWN_MODULE);
+  TESTERR(fn({ { "", "asdf" } }, [](Environment* e, const INExports&) {}), ERR_ILLEGAL_C_IMPORT);
+  TESTERR(fn({ { "", "_innative_to_c" } }, [](Environment* e, const INExports&) {}), ERR_ILLEGAL_C_IMPORT);
+  TESTERR(fn({ { "", "_innative_from_c" } }, [](Environment* e, const INExports&) {}), ERR_ILLEGAL_C_IMPORT);
 
-  TEST(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) { (*exp.AddWhitelist)(e, "", "asdf"); }) ==
+  TESTERR(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) { (*exp.AddWhitelist)(e, "", "asdf"); }),
        ERR_SUCCESS);
-  TEST(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) { (*exp.AddWhitelist)(e, "asdf", "asdf"); }) ==
+  TESTERR(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) { (*exp.AddWhitelist)(e, "asdf", "asdf"); }),
        ERR_ILLEGAL_C_IMPORT);
-  TEST(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) { (*exp.AddWhitelist)(e, "", "asdf2"); }) ==
+  TESTERR(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) { (*exp.AddWhitelist)(e, "", "asdf2"); }),
        ERR_ILLEGAL_C_IMPORT);
-  TEST(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) {
+  TESTERR(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) {
          e->system = "sys";
          (*exp.AddWhitelist)(e, "sys", "asdf");
-       }) == ERR_SUCCESS);
-  TEST(fn({ { "sys", "asdf" } }, [](Environment* e, const INExports& exp) {
+       }), ERR_SUCCESS);
+  TESTERR(fn({ { "sys", "asdf" } }, [](Environment* e, const INExports& exp) {
          e->system = "sys";
          (*exp.AddWhitelist)(e, "", "asdf");
-       }) == ERR_SUCCESS);
-  TEST(fn({ { "sys", "asdf" } }, [](Environment* e, const INExports& exp) {
+       }), ERR_SUCCESS);
+  TESTERR(fn({ { "sys", "asdf" } }, [](Environment* e, const INExports& exp) {
          e->system = "sys";
          (*exp.AddWhitelist)(e, "sys", "asdf");
-       }) == ERR_SUCCESS);
-  TEST(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) {
+       }), ERR_SUCCESS);
+  TESTERR(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) {
          (*exp.AddWhitelist)(e, "", "a");
          (*exp.AddWhitelist)(e, "", "b");
-       }) == ERR_ILLEGAL_C_IMPORT);
+       }), ERR_ILLEGAL_C_IMPORT);
 
   // These whitelist names are designed to create hash collisions to expose a certain class of bugs.
-  TEST(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) {
+  TESTERR(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) {
          (*exp.AddWhitelist)(e, "", "a");
          (*exp.AddWhitelist)(e, "", "A");
-       }) == ERR_ILLEGAL_C_IMPORT);
-  TEST(fn({ { "", "a" }, { "", "A" } }, [](Environment* e, const INExports& exp) {
-         (*exp.AddWhitelist)(e, "", "a");
-         (*exp.AddWhitelist)(e, "", "A");
-         (*exp.AddWhitelist)(e, "", "AB");
-       }) == ERR_SUCCESS);
-  TEST(fn({ { "", "a" }, { "", "A" }, { "", "yz" } }, [](Environment* e, const INExports& exp) {
+       }), ERR_ILLEGAL_C_IMPORT);
+  TESTERR(fn({ { "", "a" }, { "", "A" } }, [](Environment* e, const INExports& exp) {
          (*exp.AddWhitelist)(e, "", "a");
          (*exp.AddWhitelist)(e, "", "A");
          (*exp.AddWhitelist)(e, "", "AB");
-       }) == ERR_ILLEGAL_C_IMPORT);
-  TEST(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) {
+       }), ERR_SUCCESS);
+  TESTERR(fn({ { "", "a" }, { "", "A" }, { "", "yz" } }, [](Environment* e, const INExports& exp) {
+         (*exp.AddWhitelist)(e, "", "a");
+         (*exp.AddWhitelist)(e, "", "A");
+         (*exp.AddWhitelist)(e, "", "AB");
+       }), ERR_ILLEGAL_C_IMPORT);
+  TESTERR(fn({ { "", "asdf" } }, [](Environment* e, const INExports& exp) {
          e->system = "sys";
          (*exp.AddWhitelist)(e, "", "a");
          (*exp.AddWhitelist)(e, "", "A");
          (*exp.AddWhitelist)(e, "sys", "asdf");
-       }) == ERR_SUCCESS);
+       }), ERR_SUCCESS);
 
-  TEST(fn({ { "sys", "asdf" } }, [](Environment* e, const INExports& exp) {
+  TESTERR(fn({ { "sys", "asdf" } }, [](Environment* e, const INExports& exp) {
          e->system = "sys";
          (*exp.AddWhitelist)(e, "asdf", "asdf");
-       }) == ERR_ILLEGAL_C_IMPORT);
+       }), ERR_ILLEGAL_C_IMPORT);
 }

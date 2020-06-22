@@ -11,6 +11,7 @@
 #elif defined(IN_PLATFORM_POSIX)
   #include <pthread.h>
   #include <errno.h>
+  #include <sys/mman.h>
 #else
   #error unknown platform!
 #endif

@@ -15,13 +15,13 @@ using namespace std::chrono_literals;
 // Use std::barrier instead if we get C++20 support
 struct spin_barrier
 {
-  spin_barrier(size_t count) : count(count), num(0) {}
+  spin_barrier(size_t c) : count(c), num(0) {}
 
-  void reset(size_t count = 0)
+  void reset(size_t c = 0)
   {
     num = 0;
-    if(count)
-      this->count = count;
+    if(c)
+      count = c;
   }
 
   void wait(size_t step)

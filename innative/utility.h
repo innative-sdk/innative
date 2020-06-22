@@ -219,6 +219,8 @@ namespace innative {
     void* LoadDLL(const path& path);
     void* LoadDLLFunction(void* dll, const char* name);
     void FreeDLL(void* dll);
+    IN_COMPILER_DLLEXPORT char* LoadDLLError();
+    IN_COMPILER_DLLEXPORT void LoadDLLErrorFree(char* p);
     int Install(const char* arg0, bool full);
     int Uninstall();
     IN_COMPILER_DLLEXPORT int AddCImport(const Environment& env, const char* id);

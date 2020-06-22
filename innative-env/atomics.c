@@ -13,8 +13,6 @@
   #error unknown platform!
 #endif
 
-#ifdef IN_PLATFORM_WIN32
-
 IN_COMPILER_DLLEXPORT int32_t _innative_internal_env_atomic_wait32(void* address, int32_t expected, int64_t timeoutns)
 {
   struct in_wait_list* wait_list = _innative_internal_env_wait_map_get(&_innative_internal_env_global_wait_map, address, 1);
@@ -75,10 +73,6 @@ IN_COMPILER_DLLEXPORT uint32_t _innative_internal_env_atomic_notify(void* addres
   return result;
 }
 
-#elif defined(IN_PLATFORM_POSIX)
-
-#endif
-
 // Atomic helpers
 #ifdef IN_PLATFORM_WIN32
 
@@ -113,7 +107,7 @@ int64_t _innative_internal_env_atomic_load64(int64_t* address)
   return value;
 }
 
-#elif defined(POSIX)
+#elif defined(IN_PLATFORM_POSIX)
 
 int32_t _innative_internal_env_atomic_load32(int32_t* address) { return __atomic_load_n(address, __ATOMIC_SEQ_CST); }
 int64_t _innative_internal_env_atomic_load64(int64_t* address) { return __atomic_load_n(address, __ATOMIC_SEQ_CST); }
