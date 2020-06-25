@@ -1373,8 +1373,12 @@ void Compiler::ResolveModuleExports(const Environment* env, Module* root, llvm::
         fn.exported->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
       }
       else
-        llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, fn.exported)
+      {
+        // llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, fn.exported)
+        //   ->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+        compiler->WrapFunction(fn.exported, name, canonical, Func::ExternalLinkage, fn.exported->getCallingConv())
           ->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+      }
 
       if(env->flags & ENV_GENERALIZE_FUNCTIONS)
         compiler->GenericFunction(fn.imported ? fn.imported : fn.internal, name + IN_GENERIC_POSTFIX,

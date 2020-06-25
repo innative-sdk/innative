@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?> 
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="llvm::StringMapEntry&lt;*&gt;">
+    <DisplayString>{(const char*)(this + 1)}</DisplayString>
+    <Expand>
+      <Item Name="Key">(const char*)this + sizeof(*this)</Item>
+      <Item Name="Value">second</Item>
+    </Expand>
+  </Type>
+  <Type Name="llvm::StringMap&lt;*,*&gt;">
+    <DisplayString>{{ {NumItems} entries }}</DisplayString>
+    <Expand>
+      <Item Name="[len]">NumItems</Item>
+      <CustomListItems>
+        <Variable Name="i" InitialValue="0"/>
+        <Size>NumItems</Size>
+        <Loop>
+          <Break Condition="i == NumBuckets" />
+          <Item Condition="TheTable[i] != nullptr" Name="{(char*)TheTable[i]+ItemSize}">($T1*)((size_t*)TheTable[i]+1)</Item>
+          <Exec>i++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+  <Type Name="llvm::DenseMap&lt;*,*,*&gt;">
+    <DisplayString Condition="NumEntries == 0">empty</DisplayString>
+    <DisplayString Condition="NumEntries != 0">{{ entries={NumEntries}, buckets={NumBuckets} }}</DisplayString>
+    <Expand>
+      <Item Name="[NumEntries]">NumEntries</Item>
+      <Item Name="[NumBuckets]">NumBuckets</Item>
+      <ArrayItems>
+        <Size>NumBuckets</Size>
+        <ValuePointer>Buckets</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="llvm::Expected&lt;*&gt;">
+    <DisplayString Condition="!HasError">Value {{ {*($T1*)TStorage.buffer} }}</DisplayString>
+    <DisplayString Condition="HasError">Error</DisplayString>
+    <Expand>
+      <Item Condition="!HasError" Name="Value">*($T1*)TStorage.buffer</Item>
+      <Item Condition="HasError" Name="Value">*(llvm::Error*)&amp;ErrorStorage.buffer</Item>
+    </Expand>
+  </Type>
+</AutoVisualizer>
