@@ -707,7 +707,7 @@ int main(int argc, char* argv[])
     {
       printerr(exports, env->log, "Error loading module ", commandline.inputs[i], errs[i]);
       if(err >= 0)
-        err = ERR_FATAL_INVALID_MODULE;
+        err = ERR_RUNTIME_INVALID_ASSEMBLY;
     }
   }
 

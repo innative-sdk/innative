@@ -1403,6 +1403,8 @@ void Compiler::ResolveModuleExports(const Environment* env, Module* root, llvm::
 
 void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainctx)
 {
+  
+#ifdef IN_PLATFORM_WIN32
   // Internal flags for asm mem functions
   new llvm::GlobalVariable(*mainctx.mod, builder.getInt32Ty(), true, Func::ExternalLinkage, builder.getInt32(2), "__favor");
 
@@ -1412,6 +1414,12 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
                              "__memcpy_nt_iters");
     new llvm::GlobalVariable(*mainctx.mod, builder.getInt64Ty(), true, Func::ExternalLinkage, builder.getInt64(63488),
                              "__memset_nt_iters");
+  }
+  else
+  {
+    new llvm::GlobalVariable(*mainctx.mod, builder.getInt32Ty(), true, Func::ExternalLinkage,
+                             builder.getInt32(mainctx.machine->getTargetFeatureString().contains("+sse2") ? 1 : 0),
+                             "__isa_enabled");
   }
 
   // Create __chkstk function to satisfy the rtlibcalls
@@ -1425,6 +1433,7 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
   mainctx.debugger->SetSPLocation(builder, chkstk->getSubprogram());
   builder.CreateCall(chkstk_ms, {});
   builder.CreateRetVoid();
+#endif
 
   // Create memcpy function to satisfy the rtlibcalls
   Func* memcpy = Func::Create(mainctx.memcpy->getFunctionType(), Func::WeakAnyLinkage, "memcpy", mainctx.mod);

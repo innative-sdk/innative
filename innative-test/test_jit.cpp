@@ -29,6 +29,7 @@ void TestHarness::test_jit()
 
     // Add our default environment just like normal, but we have to explicitly tag it so the JIT knows how to load it.
     int err = (*_exports.AddEmbedding)(env, IN_TAG_STATIC, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
+    TESTERR(err, ERR_SUCCESS);
 
     path file = "../scripts/debugging.wasm";
     if(err >= 0)
@@ -40,6 +41,7 @@ void TestHarness::test_jit()
     // JIT compile our script using the standard static library
     if(err >= 0)
       err = (*_exports.CompileJIT)(env, false);
+    TESTERR(err, ERR_SUCCESS);
 
     constexpr int n = 8;
     auto test       = (int (*)(int))(*_exports.LoadFunctionJIT)(env, "debugging", "debug");
@@ -71,6 +73,7 @@ void TestHarness::test_jit()
 #endif
 
     int err   = (*_exports.AddEmbedding)(env, IN_TAG_STATIC, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
+    TESTERR(err, ERR_SUCCESS);
 
     path file = "../scripts/debugging.wasm";
     if(err >= 0)
@@ -82,6 +85,7 @@ void TestHarness::test_jit()
     // JIT compile our script, exposing this process to it to it can access the static library
     if(err >= 0)
       err = (*_exports.CompileJIT)(env, false);
+    TESTERR(err, ERR_SUCCESS);
 
     constexpr int n = 8;
     auto test       = (int (*)(int))(*_exports.LoadFunctionJIT)(env, "debugging", "debug");

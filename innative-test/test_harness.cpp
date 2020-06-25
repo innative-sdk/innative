@@ -3,10 +3,14 @@
 
 #include "test.h"
 #include <stdio.h>
+#include "../innative/utility.h"
+#include "../innative/constants.h"
 
 TestHarness::TestHarness(const INExports& exports, const char* arg0, int loglevel, FILE* out, const path& folder) :
   _exports(exports), _arg0(arg0), _loglevel(loglevel), _target(out), _folder(folder), _testdata(0, 0)
-{}
+{
+  assert(_target);
+}
 TestHarness::~TestHarness()
 {
   // Clean up all the files we just produced
@@ -16,6 +20,7 @@ TestHarness::~TestHarness()
 size_t TestHarness::Run(FILE* out)
 {
   std::pair<const char*, void (TestHarness::*)()> tests[] = { { "wasm_malloc.c", &TestHarness::test_malloc },
+                                                              { "whitelist", &TestHarness::test_whitelist },
                                                               { "debugging.cpp", &TestHarness::test_debug },
                                                               { "JIT", &TestHarness::test_jit },
                                                               { "embedding", &TestHarness::test_embedding },
@@ -29,7 +34,6 @@ size_t TestHarness::Run(FILE* out)
                                                               //{ "assemblyscript", &TestHarness::test_assemblyscript },
                                                               { "allocator", &TestHarness::test_allocator },
                                                               { "parallel parsing", &TestHarness::test_parallel_parsing },
-                                                              { "whitelist", &TestHarness::test_whitelist },
                                                               { "serializer", &TestHarness::test_serializer },
                                                               { "errors", &TestHarness::test_errors },
                                                               { "atomic_waitnotify",
@@ -38,8 +42,8 @@ size_t TestHarness::Run(FILE* out)
   static const size_t NUMTESTS    = sizeof(tests) / sizeof(decltype(tests[0]));
   static constexpr int COLUMNS[3] = { 24, 11, 8 };
 
-  fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], "Internal Tests", COLUMNS[1], "Subtests", COLUMNS[2], "Pass/Fail");
-  fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], "--------------", COLUMNS[1], "--------", COLUMNS[2], "---------");
+  FPRINTF(out, "%-*s %-*s %-*s\n", COLUMNS[0], "Internal Tests", COLUMNS[1], "Subtests", COLUMNS[2], "Pass/Fail");
+  FPRINTF(out, "%-*s %-*s %-*s\n", COLUMNS[0], "--------------", COLUMNS[1], "--------", COLUMNS[2], "---------");
 
   size_t failures = 0;
   for(size_t i = 0; i < NUMTESTS; ++i)
@@ -50,7 +54,7 @@ size_t TestHarness::Run(FILE* out)
 
     char buf[COLUMNS[1] + 1] = { 0 };
     snprintf(buf, COLUMNS[1] + 1, "%u/%u", results.first, results.second);
-    fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], tests[i].first, COLUMNS[1], buf, COLUMNS[2],
+    FPRINTF(out, "%-*s %-*s %-*s\n", COLUMNS[0], tests[i].first, COLUMNS[1], buf, COLUMNS[2],
             (results.first == results.second) ? "PASS" : "FAIL");
   }
 
@@ -68,13 +72,39 @@ size_t TestHarness::Run(FILE* out)
     char buf[COLUMNS[1] + 1] = { 0 };
     auto results             = Results();
     snprintf(buf, COLUMNS[1] + 1, "%u/%u", results.first, results.second);
-    fprintf(out, "%-*s %-*s %-*s\n", COLUMNS[0], "aux tests", COLUMNS[1], buf, COLUMNS[2],
+    FPRINTF(out, "%-*s %-*s %-*s\n", COLUMNS[0], "aux tests", COLUMNS[1], buf, COLUMNS[2],
             (results.first == results.second) ? "PASS" : "FAIL");
   }
 
-  fprintf(out, "\n");
+  FPRINTF(out, "\n");
   return failures;
 }
+
+void TestHarness::DoTestError(int test, const char* text, int result, const char* file, int line)
+{
+  DoTest(test == result, text, file, line);
+  char buf[32];
+  if(test != result)
+    FPRINTF(_target, "  Return Value: %s\n",
+            innative::utility::EnumToString(innative::utility::ERR_ENUM_MAP, test, buf, 32));
+}
+
+void* TestHarness::LoadAssembly(const path& file)
+{
+  auto s  = file.u8string();
+  void* m = (*_exports.LoadAssembly)(s.c_str());
+  if(!m)
+  {
+    char* e = (*_exports.LoadAssemblyError)();
+    if(e && _target)
+    {
+      FPRINTF(_target, "  Failed to load %s: %s\n", s.c_str(), e);
+      (*_exports.LoadAssemblyErrorFree)(e);
+    }
+  }
+  return m;
+}
+
 
 int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), const char* system,
                              std::function<int(Environment*)> preprocess, const char* name)
@@ -114,6 +144,21 @@ int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), co
   if(err >= 0)
     err = (*_exports.Compile)(env, _out.u8string().c_str());
 
+  while(env->errors != nullptr)
+  {
+    fputs("  ", env->log);
+
+    if(env->errors->m >= 0)
+    {
+      fputs(env->modules[env->errors->m].name.str(), env->log);
+      fputs(": ", env->log);
+    }
+
+    fputs(env->errors->error, env->log);
+    fputc('\n', env->log);
+    env->errors = env->errors->next;
+  }
+
   (*_exports.DestroyEnvironment)(env);
 
   if(err < 0)
@@ -124,9 +169,9 @@ int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), co
   base.replace_extension(".lib");
   _garbage.push_back(base);
 #endif
-  void* m = (*_exports.LoadAssembly)(_out.u8string().c_str());
+  void* m = LoadAssembly(_out);
   if(!m)
-    return ERR_FATAL_INVALID_MODULE;
+    return ERR_RUNTIME_INVALID_ASSEMBLY;
   if(fn)
     err = (this->*fn)(m);
   (*_exports.FreeAssembly)(m);

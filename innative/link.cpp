@@ -271,7 +271,10 @@ void innative::AppendIntrinsics(Environment& env)
   int r;
   if(env.cimports)
     for(auto intrinsic : Compiler::intrinsics)
-      kh_put_cimport(env.cimports, ByteArray::Identifier(intrinsic.name, strlen(intrinsic.name)), &r);
+    {
+      auto mangled = ABIMangle(intrinsic.name, CURRENT_ABI, 0, 0);
+      kh_put_cimport(env.cimports, ByteArray::Identifier(AllocString(env, mangled.c_str()), mangled.size()), &r);
+    }
 }
 
 int innative::GetParameterBytes(const IN_WASM_MODULE& m, const Import& imp)
@@ -341,7 +344,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
     // Verify module
     llvm::raw_fd_ostream dest(1, false, true);
     if(llvm::verifyModule(*env->modules[i].cache->mod, &dest))
-      return ERR_FATAL_INVALID_MODULE;
+      return ERR_FATAL_INVALID_LLVM_IR;
   }
 
   {
@@ -417,7 +420,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
 
 #elif defined(IN_PLATFORM_POSIX)
     LLD_FORMAT format                 = LLD_FORMAT::ELF;
-    std::vector<const char*> linkargs = { "--stack-first" };
+    std::vector<const char*> linkargs = { };
 
     if(env->flags & ENV_LIBRARY)
       linkargs.push_back("-shared");

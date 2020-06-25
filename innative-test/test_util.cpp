@@ -123,5 +123,9 @@ void TestHarness::test_util()
 
   uintcpuinfo info = { 0 };
   GetCPUInfo(info, 0);
+#ifdef IN_32BIT
+  TEST(info[4] == 0);
+#else
   TEST(info[4] != 0);
+#endif
 }
