@@ -21,7 +21,7 @@ IN_ERROR Compiler::InsertAlignmentTrap(llvmVal* ptr, varuint32 memory, varuint32
   if(!memflags) // Only bother if alignment > 1
     return ERR_SUCCESS;
 
-  auto alignment = 1Ui64 << memflags;
+  auto alignment = 1ULL << memflags;
   auto sizet     = builder.getIntNTy(machine->getPointerSizeInBits(0));
   auto ptrtoint  = builder.CreatePtrToInt(ptr, sizet);
   auto zero      = CInt::get(sizet, 0);

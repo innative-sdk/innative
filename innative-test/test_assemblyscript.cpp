@@ -46,20 +46,20 @@ void TestHarness::test_assemblyscript()
 
     int err = (*_exports.AddWhitelist)(env, "env", "trace");
     err     = (*_exports.AddWhitelist)(env, "env", "abort");
-    TEST(!err);
+    TESTERR(err, ERR_SUCCESS);
 
     err = (*_exports.AddEmbedding)(env, 0, embed, sz, 0);
-    TEST(!err);
+    TESTERR(err, ERR_SUCCESS);
     err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
-    TEST(!err);
+    TESTERR(err, ERR_SUCCESS);
 
     (*_exports.AddModule)(env, wasm_path, 0, "astest", &err);
-    TEST(!err);
+    TESTERR(err, ERR_SUCCESS);
     err = (*_exports.FinalizeEnvironment)(env);
-    TEST(!err);
+    TESTERR(err, ERR_SUCCESS);
 
     err = (*_exports.Compile)(env, dll_path.u8string().c_str());
-    TEST(!err);
+    TESTERR(err, ERR_SUCCESS);
 
     (*_exports.DestroyEnvironment)(env);
 
@@ -77,7 +77,7 @@ void TestHarness::test_assemblyscript()
       __try
       {
 #endif
-        assembly = (*_exports.LoadAssembly)(dll_path.u8string().c_str());
+        assembly = LoadAssembly(dll_path);
 #ifdef IN_COMPILER_MSC
       }
       __except(1) // Only catch an illegal instruction

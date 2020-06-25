@@ -1629,14 +1629,14 @@ IN_ERROR Compiler::CompileFPToInt(FPToIntOp op, bool saturating, const char* nam
   {
     uint64_t min, max;
   } TRUNC_FPTOINT_IBOUNDS[8] = {
-    { std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max() },
-    { std::numeric_limits<uint32_t>::min(), std::numeric_limits<uint32_t>::max() },
-    { std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max() },
-    { std::numeric_limits<uint32_t>::min(), std::numeric_limits<uint32_t>::max() },
-    { std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max() },
-    { std::numeric_limits<uint64_t>::min(), std::numeric_limits<uint64_t>::max() },
-    { std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max() },
-    { std::numeric_limits<uint64_t>::min(), std::numeric_limits<uint64_t>::max() },
+    { static_cast<uint64_t>(std::numeric_limits<int32_t>::min()), std::numeric_limits<int32_t>::max() },
+    { static_cast<uint64_t>(std::numeric_limits<uint32_t>::min()), std::numeric_limits<uint32_t>::max() },
+    { static_cast<uint64_t>(std::numeric_limits<int32_t>::min()), std::numeric_limits<int32_t>::max() },
+    { static_cast<uint64_t>(std::numeric_limits<uint32_t>::min()), std::numeric_limits<uint32_t>::max() },
+    { static_cast<uint64_t>(std::numeric_limits<int64_t>::min()), std::numeric_limits<int64_t>::max() },
+    { static_cast<uint64_t>(std::numeric_limits<uint64_t>::min()), std::numeric_limits<uint64_t>::max() },
+    { static_cast<uint64_t>(std::numeric_limits<int64_t>::min()), std::numeric_limits<int64_t>::max() },
+    { static_cast<uint64_t>(std::numeric_limits<uint64_t>::min()), std::numeric_limits<uint64_t>::max() },
   };
 
   IN_ERROR err;

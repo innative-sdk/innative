@@ -54,6 +54,8 @@ public:
     return r;
   }
 
+  void* LoadAssembly(const path& file);
+
 protected:
   inline void DoTest(bool test, const char* text, const char* file, int line)
   {
@@ -71,6 +73,8 @@ protected:
       fprintf(_target, "%s[%i]: %s\n", file, line, text);
   }
 
+  void DoTestError(int test, const char* text, int result, const char* file, int line);
+
   std::pair<uint32_t, uint32_t> _testdata;
   FILE* _target;
   const INExports& _exports;
@@ -82,5 +86,5 @@ protected:
 };
 
 #define TEST(x) DoTest(x, "" #x, __FILE__, __LINE__)
-
+#define TESTERR(x, err) DoTestError(x, "" #x " == " #err, err, __FILE__, __LINE__)
 #endif

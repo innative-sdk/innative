@@ -106,8 +106,8 @@ namespace innative {
           r.type = TE_f64;
           r.f64  = v;
         }
-        else
-          static_assert(false, "invalid type");
+        else // This has to rely on the template parameter or it goes boom on GCC/clang
+          static_assert(std::is_same_v<T, void>, "invalid type"); 
         return r;
       }
     };
@@ -192,7 +192,12 @@ int wat::IsolateInitCall(Environment& env, void*& cache, const char* out)
 
   cache = LoadDLL(out);
   if(!cache)
+  {
+    auto estring = LoadDLLError();
+    FPRINTF(env.log, "Error loading %s: %s\n", out, estring);
+    LoadDLLErrorFree(estring);
     return ERR_RUNTIME_INIT_ERROR;
+  }
 
   if(env.wasthook != nullptr)
     (*env.wasthook)(cache);
@@ -794,9 +799,9 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       {
         if(err != ERR_RUNTIME_TRAP && err != ERR_RUNTIME_INIT_ERROR)
           return err;
-        char buf[10];
+        char buf[32];
         AppendError(env, errors, last, err, "[%zu] Runtime error %s while attempting to verify result.",
-                    WatLineNumber(start, t.pos), EnumToString(ERR_ENUM_MAP, err, buf, 10));
+                    WatLineNumber(start, t.pos), EnumToString(ERR_ENUM_MAP, err, buf, 32));
       }
       break;
     }
@@ -854,9 +859,9 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       {
         if(err != ERR_RUNTIME_TRAP && err != ERR_RUNTIME_INIT_ERROR)
           return err;
-        char buf[10];
+        char buf[32];
         AppendError(env, errors, last, err, "[%zu] Runtime error %s while attempting to verify result.",
-                    WatLineNumber(start, t.pos), EnumToString(ERR_ENUM_MAP, err, buf, 10));
+                    WatLineNumber(start, t.pos), EnumToString(ERR_ENUM_MAP, err, buf, 32));
       }
       EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
       Instruction value = {};

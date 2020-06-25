@@ -11,7 +11,7 @@
 ;*******************************************************************************
 
     .xlist
-    include vcruntime.inc
+    include vcruntime.x86.inc
     .list
     .xmm
 
@@ -53,7 +53,6 @@ page
 
     CODESEG
 
-    extrn   __isa_available:dword
     extrn   __isa_enabled:dword
     extrn   __favor:dword
 

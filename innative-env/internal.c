@@ -14,13 +14,6 @@
 
 #ifdef IN_PLATFORM_WIN32
 #elif defined(IN_PLATFORM_POSIX)
-const int SYSCALL_WRITE  = 1;
-const int SYSCALL_MMAP   = 9;
-const int SYSCALL_MUNMAP = 11;
-const int SYSCALL_MREMAP = 25;
-const int SYSCALL_EXIT   = 60;
-const int MREMAP_MAYMOVE = 1;
-
   #ifdef IN_CPU_x86_64
 IN_COMPILER_DLLEXPORT extern IN_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2,
                                                                        size_t p3, size_t p4, size_t p5, size_t p6)
@@ -241,9 +234,37 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_memdump(const unsigned 
   _innative_internal_write_out("\n", 1);
 }
 
+#ifdef IN_PLATFORM_WIN32
 char* _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz);
+#else
+IN_COMPILER_DLLEXPORT extern char* _innative_internal_env_memcpy(char* dest, const char* src, uint64_t sz)
+{
+  char* end = dest + sz;
+  while(dest < end)
+    *dest++ = *src++;
+  return dest;
+}
+IN_COMPILER_DLLEXPORT extern char* _innative_internal_env_memmove(char* dest, const char* src, size_t sz)
+{
+  if(dest <= src) // Simple forward-up memcpy
+    return _innative_internal_env_memcpy(dest, src, sz);
+  // dest is after src, so copy back to front
+  char* d       = dest + sz;
+  const char* s = src + sz;
+  while(d > dest)
+    *--d = *--s;
+  return dest;
+}
+IN_COMPILER_DLLEXPORT extern char* _innative_internal_env_memset(char* dest, int val, size_t sz)
+{
+  const char b = (char)val;
+  while(sz--)
+    *dest++ = b;
+  return dest;
+}
+#endif
 
-#ifdef IN_CPU_x86
+#if defined(IN_CPU_x86) || defined(IN_PLATFORM_POSIX)
 IN_COMPILER_DLLEXPORT extern int _innative_internal_env_memcmp(const char* s1, const char* s2, size_t sz)
 {
   const char* const end = s1 + sz;
