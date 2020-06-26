@@ -53,8 +53,8 @@ page
 
     CODESEG
 
-    extrn   _inative_internal_env__isa_enabled:dword
-    extrn   _inative_internal_env__favor:dword
+    extrn   _innative_internal_env__isa_enabled:dword
+    extrn   _innative_internal_env__favor:dword
 
     public  _innative_internal_env_memset
 _innative_internal_env_memset proc \
@@ -77,7 +77,7 @@ _innative_internal_env_memset proc \
         jbe     SmallMov
         cmp     ecx, 080h; For copies 32 < length < 128
         jb      XmmMovSmall
-        bt      _inative_internal_env__favor, __FAVOR_ENFSTRG
+        bt      _innative_internal_env__favor, __FAVOR_ENFSTRG
         jnc     XMMMov; no jump
 
 ; Enhanced Fast Strings
@@ -89,7 +89,7 @@ _innative_internal_env_memset proc \
 ; XMM register usage
 
 XMMMov :
-        bt      _inative_internal_env__isa_enabled, __ISA_AVAILABLE_SSE2
+        bt      _innative_internal_env__isa_enabled, __ISA_AVAILABLE_SSE2
         jnc     SmallMov                    ; if yes, use xmm large block set
         movd    xmm0, eax
         pshufd  xmm0, xmm0, 0
@@ -122,7 +122,7 @@ LargeRangeBytes :
 
 ; Do not require 16-byte alignment for sizes lesser than 128 bytes when using XMM registers
 XmmMovSmall :
-        bt      _inative_internal_env__isa_enabled, __ISA_AVAILABLE_SSE2
+        bt      _innative_internal_env__isa_enabled, __ISA_AVAILABLE_SSE2
         jnc     SmallMov                    ; if yes, use xmm large block set
         movd    xmm0, eax
         pshufd  xmm0, xmm0, 0
