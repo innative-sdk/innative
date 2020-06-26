@@ -405,16 +405,16 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_WASM_print(int32_t a) { _in
 // mem builtin flags
 #ifdef IN_PLATFORM_WIN32
 
-IN_COMPILER_DLLEXPORT uint32_t _inative_internal_env__favor = 0;
+IN_COMPILER_DLLEXPORT uint32_t _innative_internal_env__favor = 0;
 
   #if defined(IN_CPU_x86_64)
 
-IN_COMPILER_DLLEXPORT uint64_t _inative_internal_env__memcpy_nt_iters = ~0ull;
-IN_COMPILER_DLLEXPORT uint64_t _inative_internal_env__memset_nt_iters = 63488;
+IN_COMPILER_DLLEXPORT uint64_t _innative_internal_env__memcpy_nt_iters = ~0ull;
+IN_COMPILER_DLLEXPORT uint64_t _innative_internal_env__memset_nt_iters = 63488;
 
   #elif defined(IN_CPU_x86)
 
-IN_COMPILER_DLLEXPORT uint32_t _inative_internal_env__isa_enabled = 1;
+IN_COMPILER_DLLEXPORT uint32_t _innative_internal_env__isa_enabled = 1;
 
   #endif
 
@@ -423,7 +423,7 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_init_isa_flags(uint32_t
   int info[4];
   __cpuidex(info, 7, 0);
   if(info[1] & (1 << 9))
-    _inative_internal_env__favor = 2; // enable enhanced rep movsb
+    _innative_internal_env__favor = 2; // enable enhanced rep movsb
 
   #if defined(IN_CPU_x86)
 
@@ -438,10 +438,10 @@ IN_COMPILER_DLLEXPORT extern void _innative_internal_env_init_isa_flags(uint32_t
     __cpuidex(info, 1, 0);
     int family_id = (info[0] >> 8) & 0xF;
     if(family_id == 6)
-      _inative_internal_env__favor = 1; // Atom CPU
+      _innative_internal_env__favor = 1; // Atom CPU
   }
 
-  _inative_internal_env__isa_enabled = sse2;
+  _innative_internal_env__isa_enabled = sse2;
 
   #else
 

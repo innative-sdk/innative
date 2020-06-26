@@ -46,9 +46,9 @@ include ksamd64.inc
 ;Exceptions:
 ;
 ;*******************************************************************************
-    extrn   _inative_internal_env__favor:byte
+    extrn   _innative_internal_env__favor:byte
     extrn   __ImageBase:byte
-    extrn   _inative_internal_env__memset_nt_iters:qword            ; defined in cpu_disp.c
+    extrn   _innative_internal_env__memset_nt_iters:qword            ; defined in cpu_disp.c
 
 __FAVOR_ENFSTRG equ 1
 
@@ -106,7 +106,7 @@ __FAVOR_ENFSTRG equ 1
         ; r8  has the count
         align   16
 XmmSet:
-        test    _inative_internal_env__favor, 1 SHL __FAVOR_ENFSTRG  ; check if string set should be used
+        test    _innative_internal_env__favor, 1 SHL __FAVOR_ENFSTRG  ; check if string set should be used
         jnz     _innative_internal_env_memset_repmovs
 
         ; Aligned stores are much faster on AMD hardware. We need to do an unaligned
@@ -131,7 +131,7 @@ XmmSetLarge:
         mov     r9, r8                          ; copy count of bytes remaining
         shr     r9, 7                           ; compute number of 128-byte blocks
         jz      XmmSetSmall                     ; if z, no 128-byte blocks to fill
-        cmp     r9, _inative_internal_env__memset_nt_iters           ; threshold defined by cpu_disp.c
+        cmp     r9, _innative_internal_env__memset_nt_iters           ; threshold defined by cpu_disp.c
         ja      XmmSetLargeLoopNT
 ;
 ; Set 128-byte blocks
