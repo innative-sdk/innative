@@ -1408,7 +1408,7 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
   // Internal flags for asm mem functions
   new llvm::GlobalVariable(*mainctx.mod, builder.getInt32Ty(), true, Func::ExternalLinkage, builder.getInt32(2), "__favor");
 
-  if(isJIT)
+  if(isJIT) // The JIT on windows will just fail if we don't define this symbol here. It seems to have magic properties.
     new llvm::GlobalVariable(*mainctx.mod, builder.getInt8Ty(), true, Func::ExternalLinkage, builder.getInt8(0),
                              "__ImageBase");
 
