@@ -90,9 +90,9 @@ include ksamd64.inc
 ;
 ;Exceptions:
 ;*******************************************************************************
-        extrn   __favor:byte
+        extrn   _inative_internal_env__favor:byte
         extrn   __ImageBase:byte
-        extrn   __memcpy_nt_iters:qword     ; defined in cpu_disp.c
+        extrn   _inative_internal_env__memcpy_nt_iters:qword     ; defined in cpu_disp.c
 
 __FAVOR_ENFSTRG equ 1
 
@@ -148,7 +148,7 @@ __FAVOR_ENFSTRG equ 1
         cmp     r8, 128
         jbe     XmmCopySmall
 
-        test    __favor, 1 SHL __FAVOR_ENFSTRG ; check for ENFSTRG (enhanced fast strings)
+        test    _inative_internal_env__favor, 1 SHL __FAVOR_ENFSTRG ; check for ENFSTRG (enhanced fast strings)
         jz      XmmCopyUp               ; If Enhanced Fast String not available, use XMM
         jmp     _innative_internal_env_memcpy_repmovs
 
@@ -413,7 +413,7 @@ XmmCopyLargeTest:
         shr     r9, 7                   ; compute number of 128-byte blocks
         jz      XmmCopySmallTest        ; if z jump around to 2nd loop
         movaps  (-16)[rcx], xmm0        ; going into 1st loop, ok to store deferred bytes
-        cmp     r9, __memcpy_nt_iters   ; threshold defined by cpu_disp.c
+        cmp     r9, _inative_internal_env__memcpy_nt_iters   ; threshold defined by cpu_disp.c
         jna     short XmmCopyLargeInner ; jump into 1st loop
         jmp     XmmCopyLargeInnerNT     ; long enough so non-temporal worth it, jump into nt loop
 
