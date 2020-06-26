@@ -197,10 +197,20 @@ void innative::DeleteCache(const Environment& env, Module& m)
     if(env.jit)
     {
       if(!(env.flags & ENV_NO_INIT) && context->exit)
-        reinterpret_cast<IN_Entrypoint>(
-          env.jit->Lookup(CanonicalName(StringSpan::From(m.name), StringSpan::From(IN_EXIT_POSTFIX)).c_str())
-            .get()
-            .getAddress())();
+      {
+        auto exit_name = CanonicalName(StringSpan::From(m.name), StringSpan::From(IN_EXIT_POSTFIX));
+        if(auto sym = env.jit->Lookup(exit_name.c_str()))
+        {
+          reinterpret_cast<IN_Entrypoint>(sym.get().getAddress())();
+        }
+        else
+        {
+          std::string errMsg;
+          llvm::raw_string_ostream buf{ errMsg };
+          buf << sym.takeError();
+          fprintf(env.log, "Error looking up JIT symbol `%s`: %s\n", exit_name.c_str(), buf.str().c_str());
+        }
+      }
     }
     else
       delete context->mod;

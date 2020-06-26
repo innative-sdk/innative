@@ -1372,6 +1372,11 @@ void Compiler::ResolveModuleExports(const Environment* env, Module* root, llvm::
         compiler->ExportFunction(fn, wrapperfn, name, canonical);
         fn.exported->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
       }
+#ifdef IN_PLATFORM_WIN32
+      else if(env->jit) // GlobalAlias does the wrong thing on Windows JIT
+        compiler->WrapFunction(fn.exported, name, canonical, Func::ExternalLinkage, fn.exported->getCallingConv())
+          ->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+#endif
       else
         llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, fn.exported)
           ->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
@@ -1397,12 +1402,15 @@ void Compiler::ResolveModuleExports(const Environment* env, Module* root, llvm::
   }
 }
 
-void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainctx)
+void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainctx, bool isJIT)
 {
-  
 #ifdef IN_PLATFORM_WIN32
   // Internal flags for asm mem functions
   new llvm::GlobalVariable(*mainctx.mod, builder.getInt32Ty(), true, Func::ExternalLinkage, builder.getInt32(2), "__favor");
+
+  if(isJIT) // The JIT on windows will just fail if we don't define this symbol here. It seems to have magic properties.
+    new llvm::GlobalVariable(*mainctx.mod, builder.getInt8Ty(), true, Func::ExternalLinkage, builder.getInt8(0),
+                             "__ImageBase");
 
   if(mainctx.machine->getPointerSizeInBits(0) == 64)
   {
@@ -1588,7 +1596,7 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
     m->cache->AddMemLocalCaching();
 
   Compiler& mainctx = *env->modules[0].cache;
-  AddRTLibCalls(env, builder, mainctx);
+  AddRTLibCalls(env, builder, mainctx, false);
 
   // Create cleanup function
   Func* cleanup = Compiler::TopLevelFunction(*env->context, builder, IN_EXIT_FUNCTION, mainctx.mod);
@@ -1824,7 +1832,7 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
     m->cache->AddMemLocalCaching();
 
   Compiler& mainctx = *env->modules[0].cache;
-  AddRTLibCalls(env, builder, mainctx);
+  AddRTLibCalls(env, builder, mainctx, true);
 
   // Create cleanup function, but only if the user would have to manually call it
   if(env->flags & ENV_NO_INIT)
@@ -1912,7 +1920,21 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
         refs.push_back(env->modules[i].cache->start->getName());
 
     for(auto n : refs)
-      reinterpret_cast<IN_Entrypoint>(env->jit->Lookup(n).get().getAddress())();
+    {
+      if(auto sym = env->jit->Lookup(n))
+      {
+        auto addr = sym.get().getAddress();
+        reinterpret_cast<IN_Entrypoint>(addr)();
+      }
+      else
+      {
+        auto err = sym.takeError();
+        std::string errMsg;
+        llvm::raw_string_ostream buf{ errMsg };
+        buf << err;
+        fprintf(env->log, "Error loading JIT module entry point: %s\n", buf.str().c_str());
+      }
+    }
   }
 
   return ERR_SUCCESS;
