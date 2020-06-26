@@ -1372,6 +1372,11 @@ void Compiler::ResolveModuleExports(const Environment* env, Module* root, llvm::
         compiler->ExportFunction(fn, wrapperfn, name, canonical);
         fn.exported->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
       }
+#ifdef IN_PLATFORM_WIN32
+      else if(env->jit) // GlobalAlias does the wrong thing on Windows JIT
+        compiler->WrapFunction(fn.exported, name, canonical, Func::ExternalLinkage, fn.exported->getCallingConv())
+          ->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+#endif
       else
         llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, canonical, fn.exported)
           ->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
