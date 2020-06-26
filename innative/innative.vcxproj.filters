@@ -224,7 +224,7 @@
     </MASM>
   </ItemGroup>
   <ItemGroup>
-    <Natvis Include="LLVMIsHell.natvis">
+    <Natvis Include="LLVMVis.natvis">
       <Filter>Resource Files</Filter>
     </Natvis>
   </ItemGroup>
