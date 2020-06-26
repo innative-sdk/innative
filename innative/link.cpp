@@ -205,8 +205,10 @@ void innative::DeleteCache(const Environment& env, Module& m)
         }
         else
         {
-          llvm::outs() << "Error looking up `" << exit_name << "`\n";
-          llvm::outs() << sym.takeError() << "\n";
+          std::string errMsg;
+          llvm::raw_string_ostream buf{ errMsg };
+          buf << sym.takeError();
+          fprintf(env.log, "Error looking up JIT symbol `%s`: %s\n", exit_name.c_str(), buf.str().c_str());
         }
       }
     }
