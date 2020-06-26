@@ -599,7 +599,7 @@
     </MASM>
   </ItemGroup>
   <ItemGroup>
-    <Natvis Include="LLVMIsHell.natvis" />
+    <Natvis Include="LLVMVis.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
