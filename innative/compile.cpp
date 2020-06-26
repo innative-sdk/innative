@@ -784,6 +784,16 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
   init =
     TopLevelFunction(ctx, builder, CanonicalName(StringSpan::From(m.name), StringSpan::From(IN_INIT_POSTFIX)).c_str(), mod);
 
+#ifdef IN_PLATFORM_WIN32
+  // Insert the flag initialization into module 0 on win32
+  if(m_idx == 0)
+  {
+    builder.CreateCall(Func::Create(FuncTy::get(builder.getVoidTy(), { builder.getInt32Ty() }, false),
+                                    Func::ExternalLinkage, "_innative_internal_env_init_isa_flags", *mod),
+                       { builder.getInt32(machine->getTargetFeatureString().contains("+sse2") ? 1 : 0) });
+  }
+#endif
+
   // Declare C runtime function prototypes that we assume exist on the system
   memgrow = Func::Create(FuncTy::get(builder.getInt8PtrTy(0),
                                      { builder.getInt8PtrTy(0), builder.getInt64Ty(), builder.getInt64Ty(),
@@ -1405,26 +1415,9 @@ void Compiler::ResolveModuleExports(const Environment* env, Module* root, llvm::
 void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainctx, bool isJIT)
 {
 #ifdef IN_PLATFORM_WIN32
-  // Internal flags for asm mem functions
-  new llvm::GlobalVariable(*mainctx.mod, builder.getInt32Ty(), true, Func::ExternalLinkage, builder.getInt32(2), "__favor");
-
   if(isJIT) // The JIT on windows will just fail if we don't define this symbol here. It seems to have magic properties.
-    new llvm::GlobalVariable(*mainctx.mod, builder.getInt8Ty(), true, Func::ExternalLinkage, builder.getInt8(0),
+    new llvm::GlobalVariable(*mainctx.mod, builder.getInt8Ty(), true, Func::WeakAnyLinkage, builder.getInt8(0),
                              "__ImageBase");
-
-  if(mainctx.machine->getPointerSizeInBits(0) == 64)
-  {
-    new llvm::GlobalVariable(*mainctx.mod, builder.getInt64Ty(), true, Func::ExternalLinkage, builder.getInt64(~0ll),
-                             "__memcpy_nt_iters");
-    new llvm::GlobalVariable(*mainctx.mod, builder.getInt64Ty(), true, Func::ExternalLinkage, builder.getInt64(63488),
-                             "__memset_nt_iters");
-  }
-  else
-  {
-    new llvm::GlobalVariable(*mainctx.mod, builder.getInt32Ty(), true, Func::ExternalLinkage,
-                             builder.getInt32(mainctx.machine->getTargetFeatureString().contains("+sse2") ? 1 : 0),
-                             "__isa_enabled");
-  }
 
   // Create __chkstk function to satisfy the rtlibcalls
   auto chkstk_ms =
