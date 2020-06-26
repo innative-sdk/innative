@@ -1929,7 +1929,10 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
       else
       {
         auto err = sym.takeError();
-        llvm::outs() << "Error loading JIT module entry point: " << err << "\n";
+        std::string errMsg;
+        llvm::raw_string_ostream buf{ errMsg };
+        buf << err;
+        fprintf(env->log, "Error loading JIT module entry point: %s\n", buf.str().c_str());
       }
     }
   }
