@@ -59,8 +59,8 @@ PalignLoop&d&:
 
         CODESEG
 
-    extrn   __isa_enabled:dword
-    extrn   __favor:dword
+    extrn   _inative_internal_env__isa_enabled:dword
+    extrn   _inative_internal_env__favor:dword
 
 page
 ;***
@@ -183,12 +183,12 @@ CopyUp:
         jb      CopyUpDwordMov                  ; size smaller than 32 bytes, use dwords
         cmp     ecx, 080h
         jae     CopyUpLargeMov                  ; if greater than or equal to 128 bytes, use Enhanced fast Strings
-        bt      __isa_enabled, __ISA_AVAILABLE_SSE2
+        bt      _inative_internal_env__isa_enabled, __ISA_AVAILABLE_SSE2
         jc      XmmCopySmallTest
         jmp     Dword_align
 
 CopyUpLargeMov:
-        bt      __favor, __FAVOR_ENFSTRG        ; check if Enhanced Fast Strings is supported
+        bt      _inative_internal_env__favor, __FAVOR_ENFSTRG        ; check if Enhanced Fast Strings is supported
         jnc     CopyUpSSE2Check                 ; if not, check for SSE2 support
         rep     movsb
         mov     eax,[esp + 0Ch]                 ; return original destination pointer
@@ -204,11 +204,11 @@ CopyUpSSE2Check:
         xor     eax,esi
         test    eax,15
         jne     AtomChk   ; Not aligned go check Atom
-        bt      __isa_enabled, __ISA_AVAILABLE_SSE2
+        bt      _inative_internal_env__isa_enabled, __ISA_AVAILABLE_SSE2
         jc      XmmCopy ; yes, go SSE2 copy (params already set)
 AtomChk:
         ; Is Atom supported?
-        bt      __favor, __FAVOR_ATOM
+        bt      _inative_internal_env__favor, __FAVOR_ATOM
         jnc     Dword_align ; no,jump
 
         ; check if dst is 4 byte aligned
@@ -400,7 +400,7 @@ CopyDown:
         lea     edi,  [edi+ecx]
         cmp     ecx, 32
         jb      CopyDownSmall
-        bt      __isa_enabled, __ISA_AVAILABLE_SSE2
+        bt      _inative_internal_env__isa_enabled, __ISA_AVAILABLE_SSE2
         jc      XmmMovLargeAlignTest
 ; See if the destination start is dword aligned
 
