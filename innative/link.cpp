@@ -197,10 +197,18 @@ void innative::DeleteCache(const Environment& env, Module& m)
     if(env.jit)
     {
       if(!(env.flags & ENV_NO_INIT) && context->exit)
-        reinterpret_cast<IN_Entrypoint>(
-          env.jit->Lookup(CanonicalName(StringSpan::From(m.name), StringSpan::From(IN_EXIT_POSTFIX)).c_str())
-            .get()
-            .getAddress())();
+      {
+        auto exit_name = CanonicalName(StringSpan::From(m.name), StringSpan::From(IN_EXIT_POSTFIX));
+        if(auto sym = env.jit->Lookup(exit_name.c_str()))
+        {
+          reinterpret_cast<IN_Entrypoint>(sym.get().getAddress())();
+        }
+        else
+        {
+          llvm::outs() << "Error looking up `" << exit_name << "`\n";
+          llvm::outs() << sym.takeError() << "\n";
+        }
+      }
     }
     else
       delete context->mod;

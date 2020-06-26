@@ -1401,12 +1401,15 @@ void Compiler::ResolveModuleExports(const Environment* env, Module* root, llvm::
   }
 }
 
-void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainctx)
+void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainctx, bool isJIT)
 {
-  
 #ifdef IN_PLATFORM_WIN32
   // Internal flags for asm mem functions
   new llvm::GlobalVariable(*mainctx.mod, builder.getInt32Ty(), true, Func::ExternalLinkage, builder.getInt32(2), "__favor");
+
+  if(isJIT)
+    new llvm::GlobalVariable(*mainctx.mod, builder.getInt8Ty(), true, Func::ExternalLinkage, builder.getInt8(0),
+                             "__ImageBase");
 
   if(mainctx.machine->getPointerSizeInBits(0) == 64)
   {
@@ -1592,7 +1595,7 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
     m->cache->AddMemLocalCaching();
 
   Compiler& mainctx = *env->modules[0].cache;
-  AddRTLibCalls(env, builder, mainctx);
+  AddRTLibCalls(env, builder, mainctx, false);
 
   // Create cleanup function
   Func* cleanup = Compiler::TopLevelFunction(*env->context, builder, IN_EXIT_FUNCTION, mainctx.mod);
@@ -1828,7 +1831,7 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
     m->cache->AddMemLocalCaching();
 
   Compiler& mainctx = *env->modules[0].cache;
-  AddRTLibCalls(env, builder, mainctx);
+  AddRTLibCalls(env, builder, mainctx, true);
 
   // Create cleanup function, but only if the user would have to manually call it
   if(env->flags & ENV_NO_INIT)
@@ -1916,7 +1919,18 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
         refs.push_back(env->modules[i].cache->start->getName());
 
     for(auto n : refs)
-      reinterpret_cast<IN_Entrypoint>(env->jit->Lookup(n).get().getAddress())();
+    {
+      if(auto sym = env->jit->Lookup(n))
+      {
+        auto addr = sym.get().getAddress();
+        reinterpret_cast<IN_Entrypoint>(addr)();
+      }
+      else
+      {
+        auto err = sym.takeError();
+        llvm::outs() << "Error loading JIT module entry point: " << err << "\n";
+      }
+    }
   }
 
   return ERR_SUCCESS;

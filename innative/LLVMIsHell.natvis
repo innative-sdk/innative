@@ -22,12 +22,29 @@
       </CustomListItems>
     </Expand>
   </Type>
+  <Type Name="llvm::DenseMap&lt;llvm::orc::SymbolStringPtr,*,*&gt;">
+    <DisplayString Condition="NumEntries == 0">empty</DisplayString>
+    <DisplayString Condition="NumEntries != 0">{{ entries={NumEntries}, buckets={NumBuckets} }}</DisplayString>
+    <Expand>
+      <Item Name="[entries]">NumEntries</Item>
+      <Item Name="[buckets]">NumBuckets</Item>
+      <CustomListItems>
+        <Variable Name="i" InitialValue="0" />
+        <Size>NumEntries</Size>
+        <Loop>
+          <Break Condition="i == NumBuckets" />
+          <Item Condition="((size_t)Buckets[i].first.S &amp; 15) == 0" Name="{(const char*)(Buckets[i].first.S + 1)}">Buckets[i].second</Item>
+          <Exec>i++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
   <Type Name="llvm::DenseMap&lt;*,*,*&gt;">
     <DisplayString Condition="NumEntries == 0">empty</DisplayString>
     <DisplayString Condition="NumEntries != 0">{{ entries={NumEntries}, buckets={NumBuckets} }}</DisplayString>
     <Expand>
-      <Item Name="[NumEntries]">NumEntries</Item>
-      <Item Name="[NumBuckets]">NumBuckets</Item>
+      <Item Name="[entries]">NumEntries</Item>
+      <Item Name="[buckets]">NumBuckets</Item>
       <ArrayItems>
         <Size>NumBuckets</Size>
         <ValuePointer>Buckets</ValuePointer>
