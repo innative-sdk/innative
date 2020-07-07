@@ -83,10 +83,9 @@ size_t TestHarness::Run(FILE* out)
 void TestHarness::DoTestError(int test, const char* text, int result, const char* file, int line)
 {
   DoTest(test == result, text, file, line);
-  char buf[32];
   if(test != result)
-    FPRINTF(_target, "  Return Value: %s\n",
-            innative::utility::EnumToString(innative::utility::ERR_ENUM_MAP, test, buf, 32));
+    FPRINTF(_target, "  Return Value: %i\n", test);
+  // innative::utility::EnumToString(innative::utility::ERR_ENUM_MAP, test, buf, 32)); // Useful for debugging
 }
 
 void* TestHarness::LoadAssembly(const path& file)
@@ -105,18 +104,17 @@ void* TestHarness::LoadAssembly(const path& file)
   return m;
 }
 
-
 int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), const char* system,
                              std::function<int(Environment*)> preprocess, const char* name)
 {
   Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);
   if(!env)
     return ERR_UNKNOWN_ENVIRONMENT_ERROR;
-  env->flags       = ENV_ENABLE_WAT | ENV_LIBRARY;
-  env->optimize    = ENV_OPTIMIZE_O3;
-  env->features    = ENV_FEATURE_ALL;
-  env->log         = stdout;
-  env->loglevel    = _loglevel;
+  env->flags    = ENV_ENABLE_WAT | ENV_LIBRARY;
+  env->optimize = ENV_OPTIMIZE_O3;
+  env->features = ENV_FEATURE_ALL;
+  env->log      = stdout;
+  env->loglevel = _loglevel;
   if(system)
     env->system = system;
 
@@ -130,7 +128,7 @@ int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), co
       return err;
 
   auto stem = file.stem().u8string();
-  int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
+  int err   = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
   if(err >= 0)
     (*_exports.AddModule)(env, file.u8string().c_str(), 0, (!name ? stem.c_str() : name), &err);
 
