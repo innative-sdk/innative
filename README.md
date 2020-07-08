@@ -25,7 +25,6 @@ The inNative SDK comes with a command line utility with many useful features for
         debug
         library
         llvm
-        homogenize
         noinit
         check_stack_overflow
         check_float_trunc
@@ -74,7 +73,7 @@ inNative does not yet have a working CMake configuration, so build instructions 
 inNative currently requires C++17 to build, and only supports Visual Studio 2019. After installing the LLVM/LLD binaries or building it from source, open `innative.sln` in Visual Studio and build the project, or run `msbuild innative.sln`.
 
 ### Linux
-Once you've installed the LLVM/LLD binaries or built it from source, run `make` from the top level source directory to build all inNative projects. Use `make clean` to wipe the results, which may sometimes be necessary if `make` does not recognize a dependency changed.
+Once you've installed the LLVM/LLD binaries or built it from source, run `make` from the top level source directory to build all inNative projects. Use `make clean` to wipe the results, which may sometimes be necessary if `make` does not recognize a dependency changed. If you have `Nix` installed, you can build inNative by running `nix-shell` in the root directory and then running `make`.
 
 Any Linux system configured with [flatpak](https://flatpak.org/setup/) can build a standalone SDK bundle and install it to their system for development inside containers:
 
@@ -90,8 +89,6 @@ The benchmarks are already compiled to webassembly, but if you want to recompile
 
 ### Build Docker Image
 A `Dockerfile` is included in the source that uses a two-stage build process to create an alpine docker image. When assembling a docker image, it is recommended you make a *shallow clone* of the repository (without any submodules) and then run `docker build .` from the root directory, without building anything. Docker will copy the repository and clone the submodules itself, before building both LLVM and inNative, which can take quite some time. Once compiled, inNative will be copied into a fresh alpine image and installed so it is usable from the command line, while the LLVM compilation result will be discarded.
-
-A prebuilt version of this image is [available here](https://cloud.docker.com/u/blackhole12/repository/docker/blackhole12/innative)
     
 ## Targeting inNative
 To build a shared library that does not rely on WASI, you can use `wasm_malloc.c` and clang:
@@ -129,7 +126,7 @@ inNative is compiled as either a dynamic or static library, and can be integrate
     err = (*exports.Compile)(env, "your_script.out");
     void* assembly = (*exports.LoadAssembly)("your_script.out");
 
-    // Destroy environment (no longer needed after compilation is completed)
+    // Destroy environment (no longer needed after compilation, but will be needed if using JIT)
     (*exports.DestroyEnvironment)(env);
 
     // Load functions and execute
