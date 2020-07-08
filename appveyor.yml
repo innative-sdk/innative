@@ -10,6 +10,6 @@ test_script:
 - cmd: >-
     cd bin
 
-    innative-test.exe -auto -ignore=17
+    innative-test.exe -auto -ignore=16
 
     cd ..

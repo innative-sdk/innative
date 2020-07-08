@@ -1,26 +1,34 @@
 #!/bin/sh
 TARGET=llvm-10.0.0-x86-64-posix
+SRC=bin/llvm
 
-mkdir -p $TARGET/bin
-mkdir -p $TARGET/include/llvm
-mkdir -p $TARGET/include/llvm-c
-mkdir -p $TARGET/include/lld
-mkdir -p $TARGET/lib
-cp bin/llvm/lib/libLLVM*.a $TARGET/lib -f
-cp bin/llvm/lib/liblld*.a $TARGET/lib -f
+if [ "$1" != "" ]; then
+  SRC=$1
+fi
 
-cp bin/llvm/bin/* $TARGET/bin -f
-cd bin/llvm/include/llvm/
-find ./ -type f \( -iname \*.h -o -iname \*.inc -o -iname \*.def -o -iname \*.td -o -iname \*.modulemap \) -exec cp --parents {} ../../../../$TARGET/include/llvm/ -n \;
-cd ../../../../
+mkdir -p "$TARGET/bin"
+mkdir -p "$TARGET/include/llvm"
+mkdir -p "$TARGET/include/llvm-c"
+mkdir -p "$TARGET/include/lld"
+mkdir -p "$TARGET/lib"
+cp $SRC/lib/libLLVM*.a $TARGET/lib -f
+cp $SRC/lib/liblld*.a $TARGET/lib -f
 
-cd bin/llvm/include/llvm-c/
-find ./ -type f \( -iname \*.h -o -iname \*.inc -o -iname \*.def -o -iname \*.td -o -iname \*.modulemap \) -exec cp --parents {} ../../../../$TARGET/include/llvm-c/ -n \;
-cd ../../../../
+OLD=`pwd`
 
-cd bin/llvm/include/lld/
-find ./ -type f \( -iname \*.h -o -iname \*.inc -o -iname \*.def -o -iname \*.td -o -iname \*.modulemap \) -exec cp --parents {} ../../../../$TARGET/include/lld/ -n \;
-cd ../../../../
+cp $SRC/bin/* $TARGET/bin -f
+cd "$SRC/include/llvm/"
+find ./ -type f \( -iname \*.h -o -iname \*.inc -o -iname \*.def -o -iname \*.td -o -iname \*.modulemap \) -exec cp --parents {} "$OLD/$TARGET/include/llvm/" -n \;
+cd "$OLD"
+
+cd "$SRC/include/llvm-c/"
+find ./ -type f \( -iname \*.h -o -iname \*.inc -o -iname \*.def -o -iname \*.td -o -iname \*.modulemap \) -exec cp --parents {} "$OLD/$TARGET/include/llvm-c/" -n \;
+cd "$OLD"
+
+cd "$SRC/include/lld/"
+find ./ -type f \( -iname \*.h -o -iname \*.inc -o -iname \*.def -o -iname \*.td -o -iname \*.modulemap \) -exec cp --parents {} "$OLD/$TARGET/include/lld/" -n \;
+cd "$OLD"
+
 
 tar -czf $TARGET.tar.gz $TARGET/
-rm -r $TARGET/
+rm -rf $TARGET/
