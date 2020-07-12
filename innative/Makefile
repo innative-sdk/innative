@@ -1,5 +1,6 @@
-INNATIVE_SRC      := innative
-INNATIVE_FILES    := $(notdir $(wildcard $(INNATIVE_SRC)/*.cpp))
+INNATIVE_SRC   := .
+INNATIVE_FILES := $(notdir $(wildcard $(INNATIVE_SRC)/*.cpp))
+ENV_LIBDIR     ?= $(LIBDIR)
 
 INNATIVE_OBJDIR   := $(OBJDIR)/innative
 INNATIVE_OBJS     := $(foreach rule,$(INNATIVE_FILES:.cpp=.o),$(INNATIVE_OBJDIR)/$(rule))
@@ -11,23 +12,28 @@ INNATIVE_LIBS     := $(LIBS) -lrt -ldl -lpthread
 INNATIVE_LDFLAGS  := $(LDFLAGS) -Wl,-whole-archive $(INNATIVE_ARCHIVES) -Wl,-no-whole-archive $(INNATIVE_LIBS) -s
 
 # Automatically declare dependencies
--include $(INNATIVE_OBJS:.o=.d)
+#-include $(INNATIVE_OBJS:.o=.d)
 
-.PHONY: innative innative-clean
-
-innative: $(LIBDIR)/libinnative.so $(LIBDIR)/innative.a
-
-innative-clean:
+all: $(LIBDIR)/libinnative.so $(LIBDIR)/innative.a
+clean:
 	$(RM) $(LIBDIR)/libinnative.so
 	$(RM) $(LIBDIR)/innative.a
 	$(RM) -r $(INNATIVE_OBJDIR)
+	@- $(RM) $(INNATIVE_SRC)/llvm.h.gch
 
-$(LIBDIR)/libinnative.so: $(LIBDIR)/innative-env.a $(LIBDIR)/innative-env-d.a $(INNATIVE_OBJS)
-	$(CXXLD) $(INNATIVE_CPPFLAGS) $(INNATIVE_OBJS) $(INNATIVE_LDFLAGS) -shared -o $@
+PRECOMPILE:
+	$(CXX) $(INNATIVE_CPPFLAGS) $(INNATIVE_SRC)/llvm.h -o $(INNATIVE_SRC)/llvm.h.gch
 
-$(LIBDIR)/innative.a: $(LIBDIR)/innative-env.a $(LIBDIR)/innative-env-d.a $(INNATIVE_OBJS)
+$(LIBDIR)/libinnative.so: $(ENV_LIBDIR)/innative-env.a $(ENV_LIBDIR)/innative-env-d.a $(INNATIVE_OBJS)
+	@mkdir -p $(LIBDIR)
+	$(CXXLD) $(INNATIVE_OBJS) $(INNATIVE_LDFLAGS) -shared -o $@
+
+$(LIBDIR)/innative.a: $(ENV_LIBDIR)/innative-env.a $(ENV_LIBDIR)/innative-env-d.a $(INNATIVE_OBJS)
+	@mkdir -p $(LIBDIR)
 	$(AR) rcs $@ $(INNATIVE_OBJS)
 
-$(INNATIVE_OBJDIR)/%.o: innative/%.cpp
+$(INNATIVE_OBJDIR)/%.o: $(INNATIVE_SRC)/%.cpp
 	@mkdir -p $(INNATIVE_OBJDIR)
 	$(CXX) $(INNATIVE_CPPFLAGS) -MMD -c $< -o $@
+
+.PHONY: all clean
