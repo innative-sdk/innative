@@ -24,20 +24,16 @@ fi
 
 if [[ $(uname) = Linux ]]; then
   sudo apt-get update -qq
+  sudo apt-get install zlib1g-dev
   mkdir bin/
-  wget https://github.com/innative-sdk/llvm-project/releases/download/v9.0.0-innative/lld-9.0.0-x86-64-linux-ubuntu-18.tar.gz
-  wget https://github.com/innative-sdk/llvm-project/releases/download/v9.0.0-innative/llvm-9.0.0-x86-64-linux-ubuntu-18.tar.gz
-  tar -C bin/ -zxf lld-9.0.0-x86-64-linux-ubuntu-18.tar.gz
-  tar -C bin/ -zxf llvm-9.0.0-x86-64-linux-ubuntu-18.tar.gz
+  wget https://github.com/innative-sdk/llvm-project/releases/download/v10.0.0-innative/llvm-10.0.0-x86-64-posix.tar.gz
+  tar -C bin/ -zxf llvm-10.0.0-x86-64-posix.tar.gz
   pushd bin
-  mv llvm-9.0.0-x86-64-posix llvm
-  mv lld-9.0.0-x86-64-posix/include/lld llvm/include/lld
-  mv lld-9.0.0-x86-64-posix/bin/* llvm/bin
-  mv lld-9.0.0-x86-64-posix/lib/* llvm/lib
+  mv llvm-10.0.0-x86-64-posix llvm
   popd
 
   make
   pushd bin
-  ./innative-test
+  ./innative-test -ignore 14
   popd
 fi

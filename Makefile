@@ -1,40 +1,67 @@
 # Compiler directories
-OBJDIR ?= bin/obj
-BINDIR ?= bin
-LIBDIR ?= bin
+OBJREL = bin/obj
+BINREL = bin
+LIBREL = bin
+export OBJDIR ?= ../$(OBJREL)
+export BINDIR ?= ../$(BINREL)
+export LIBDIR ?= ../$(LIBREL)
 
 # Compiler selection
-AR    ?= ar
-CC    ?= gcc
-CXX   ?= g++
-CXXLD ?= $(CXX)
-
-# Compiler flags
-CPPFLAGS := $(CPPFLAGS) -Iinclude -Ibin/llvm/include -Ibin/lld/include
-CPPFLAGS += -Wall -Wshadow -Wno-attributes -Wno-unknown-pragmas -Wno-missing-braces \
-	    -Wno-unused-function -Wno-comment -Wno-char-subscripts -Wno-sign-compare \
-	    -Wno-unused-variable -Wno-switch
-LIBS     :=
-LDFLAGS  := -L$(LIBDIR) -Lbin/llvm/lib -Lbin/lld/lib
+export AR    ?= ar
+export CC    ?= gcc
+export CXX   ?= g++
+export CXXLD ?= $(CXX)
 
 # Destination settings
-PREFIX  ?= /usr/local
-DESTDIR ?=
-ARCHIVE_PREFIX ?= bin/llvm/lib/
+export PREFIX  ?= /usr/local
+export DESTDIR ?=
+export ARCHIVE_PREFIX ?= $(BINDIR)/llvm/lib/
+
+# Compiler flags
+export CPPFLAGS := $(CPPFLAGS) -I../include -I$(BINDIR)/llvm/include
+export CPPFLAGS += -Wall -Wshadow -Wno-attributes -Wno-unknown-pragmas -Wno-missing-braces \
+	    -Wno-unused-function -Wno-comment -Wno-char-subscripts -Wno-sign-compare \
+	    -Wno-unused-variable -Wno-switch
+export LDFLAGS  := -L$(LIBDIR) -L$(ARCHIVE_PREFIX)
+
 
 ifeq ($(MAKECMDGOALS), debug)
-CPPFLAGS += -DDEBUG -g
+export CPPFLAGS += -DDEBUG -g
 else
-CPPFLAGS += -DNDEBUG -O3
+export CPPFLAGS += -DNDEBUG -O3
 endif
 
-debug: innative-env innative-test-embedding innative innative-cmd innative-test innative-stub
-all: innative-env innative-test-embedding innative innative-cmd innative-test innative-stub
+.PHONY: all clean install uninstall benchmarks debug
 
-clean: innative-env-clean innative-test-embedding-clean innative-clean innative-cmd-clean innative-test-clean innative-stub-clean
-	#$(RM) -r $(LIBDIR)
-	#$(RM) -r $(BINDIR)
-	$(RM) -r $(OBJDIR)
+all: $(BINREL)/innative-cmd $(BINREL)/innative-test $(LIBREL)/innative-stub.a
+debug: $(BINREL)/innative-cmd $(BINREL)/innative-test $(LIBREL)/innative-stub.a
+
+$(BINREL)/innative-env.a: 
+	$(MAKE) -C innative-env
+
+$(LIBREL)/libinnative.so: $(BINREL)/innative-env.a $(BINREL)/innative-env-d.a
+	$(MAKE) -C innative
+
+$(LIBREL)/innative-stub.a:
+	$(MAKE) -C innative-stub
+
+$(LIBREL)/innative-test-embedding.a:
+	$(MAKE) -C innative-test-embedding
+  
+$(BINREL)/innative-test: $(LIBREL)/libinnative.so $(LIBREL)/innative-test-embedding.a
+	$(MAKE) -C innative-test
+  
+$(BINREL)/innative-cmd: $(LIBREL)/libinnative.so
+	$(MAKE) -C innative-cmd
+
+clean:
+	$(MAKE) -C innative-env clean
+	$(MAKE) -C innative clean
+	$(MAKE) -C innative-cmd clean
+	$(MAKE) -C innative-stub clean
+	$(MAKE) -C innative-test clean
+	$(MAKE) -C innative-test-embedding clean
+	$(RM) -r $(OBJREL)
 
 install: all
 	mkdir -p $(DESTDIR)$(PREFIX)/include/innative/
@@ -74,12 +101,8 @@ benchmarks: benchmark_n-body.wasm benchmark_fib.wasm benchmark_fannkuch-redux.wa
 
 %.wasm: innative-test/%.cpp
 	$(CC) $< -o scripts/$@ wasm_malloc.c --target=wasm32-unknown-unknown-wasm -nostdlib --optimize=3 -Xlinker --no-entry -Xlinker --export-dynamic
-  
-.PHONY: all clean install uninstall benchmarks debug
 
-include innative-env/Makefile
-include innative/Makefile
-include innative-cmd/Makefile
-include innative-test/Makefile
-include innative-stub/Makefile
-include innative-test-embedding/Makefile
+#innative-cmd: make -f innative-cmd/Makefile
+#innative-test: make -f innative-test/Makefile
+#innative-stub: make -f innative-stub/Makefile
+#innative-test-embedding: make -f innative-test-embedding/Makefile

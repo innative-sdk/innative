@@ -340,12 +340,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\wasm_malloc.c" />
+    <ClCompile Include="..\scripts\wasm_malloc.c" />
     <ClCompile Include="benchmark.cpp" />
     <ClCompile Include="benchmark_fannkuch-redux.cpp" />
     <ClCompile Include="benchmark_fib.cpp" />
     <ClCompile Include="benchmark_n-body.cpp" />
-    <ClCompile Include="debugging.cpp">
+    <ClCompile Include="..\scripts\debugging.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug Static|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release Static|Win32'">true</ExcludedFromBuild>

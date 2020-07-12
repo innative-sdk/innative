@@ -9,12 +9,10 @@ os:
   - linux
 compiler:
   - gcc
-  - clang
 env:
   matrix:
   #- CHECK_CLANG_FORMAT=1 # clang_format currently disagrees with visual studio
-  - LLVM_CONFIG=llvm-config-9 CLANG=clang-9
-  - LLVM_CONFIG=llvm-config-9 CLANG=clang-9
+  - LLVM_CONFIG=llvm-config-10 CLANG=clang-10
 
 matrix:
   exclude:

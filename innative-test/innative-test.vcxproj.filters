@@ -51,7 +51,7 @@
     <ClCompile Include="test_parallel_parsing.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\wasm_malloc.c">
+    <ClCompile Include="..\scripts\wasm_malloc.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="test_malloc.cpp">
@@ -87,7 +87,7 @@
     <ClCompile Include="test_debug.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="debugging.cpp">
+    <ClCompile Include="..\scripts\debugging.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="test_atomic_waitnotify.cpp">
