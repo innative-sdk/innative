@@ -3,8 +3,6 @@ sudo: required
 dist: bionic
 git:
   submodules: false
-before_install:
-  - git submodule update --init spec
 os:
   - linux
 compiler:
@@ -39,8 +37,8 @@ before_script:
 - mv llvm-10.0.0-x86-64-posix llvm
 - popd
 - make
+- git submodule update --init --recursive spec
 
 script:
 - pushd bin
-- ./innative-test -ignore 16
-- popd
+- ./innative-test -auto -ignore 16
