@@ -1,6 +1,6 @@
 language: cpp
 sudo: required
-dist: xenial
+dist: bionic
 git:
   submodules: false
 before_install:
@@ -11,16 +11,14 @@ compiler:
   - gcc
 env:
   matrix:
-  #- CHECK_CLANG_FORMAT=1 # clang_format currently disagrees with visual studio
   - LLVM_CONFIG=llvm-config-10 CLANG=clang-10
 
-matrix:
-  exclude:
-    # Only need one copy of this test.
-    - os: linux
-      compiler: clang
-      env: CHECK_CLANG_FORMAT=1
-
+addons:
+  apt:
+    packages:
+    - cmake
+    - gcc-9
+    - g++-9
 script:
   - ./travis.sh
 
