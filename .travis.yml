@@ -41,4 +41,4 @@ before_script:
 
 script:
 - pushd bin
-- ./innative-test -auto -ignore 16
+- ./innative-test -auto -ignore=16
