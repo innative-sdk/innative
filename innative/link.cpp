@@ -315,19 +315,19 @@ int innative::GetParameterBytes(const IN_WASM_MODULE& m, const Import& imp)
   return total;
 }
 
-std::string innative::ABIMangle(const std::string& src, ABI abi, int convention, int bytes)
+size_t innative::ABIMangleBuffer(const char* src, char* buffer, size_t count, ABI abi, int convention, int bytes)
 {
   if(abi == ABI::Win32)
   {
     switch(convention)
     {
-    case llvm::CallingConv::C: return "_" + src;
-    case llvm::CallingConv::X86_StdCall: return "_" + src + "@" + std::to_string(bytes);
-    case llvm::CallingConv::X86_FastCall: return "@" + src + "@" + std::to_string(bytes);
+    case llvm::CallingConv::C: return snprintf(buffer, count, "_%s", src);
+    case llvm::CallingConv::X86_StdCall: return snprintf(buffer, count, "_%s@%i", src, bytes);
+    case llvm::CallingConv::X86_FastCall: return snprintf(buffer, count, "@%s@%i", src, bytes);
     }
   }
 
-  return src;
+  return snprintf(buffer, count, "%s", src);
 }
 
 IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
@@ -430,7 +430,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
 
 #elif defined(IN_PLATFORM_POSIX)
     LLD_FORMAT format                 = LLD_FORMAT::ELF;
-    std::vector<const char*> linkargs = { };
+    std::vector<const char*> linkargs = {};
 
     if(env->flags & ENV_LIBRARY)
       linkargs.push_back("-shared");
