@@ -211,7 +211,7 @@ namespace innative {
     std::pair<Module*, Export*> ResolveTrueExport(const Environment& env, const Import& imp);
     Import* ResolveImport(const Module& m, const Export& imp);
     path GetProgramPath(const char* arg0);
-    IN_COMPILER_DLLEXPORT path GetWorkingDir();
+    path GetWorkingDir();
     IN_COMPILER_DLLEXPORT bool SetWorkingDir(const path& path);
     path GetAbsolutePath(const path& path);
     inline path GetPath(const char* utf8) { return u8path(!utf8 ? "" : utf8); }

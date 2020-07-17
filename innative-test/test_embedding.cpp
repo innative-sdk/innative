@@ -128,7 +128,6 @@ void TestHarness::test_embedding()
     base.replace_extension(".lib");
     _garbage.push_back(base);
   }
-  auto old = utility::GetWorkingDir();
   utility::SetWorkingDir(_folder);
   void* m = LoadAssembly(_out);
   TEST(m != nullptr);
@@ -140,8 +139,7 @@ void TestHarness::test_embedding()
     if(test)
       TEST((*test)(4, 1, 2) == 30);
     (*_exports.FreeAssembly)(m);
-  } 
-  utility::SetWorkingDir(old);
-
+  }
+  innative_set_work_dir_to_bin(_arg0);
 #endif
 }
