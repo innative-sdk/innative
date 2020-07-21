@@ -21,7 +21,12 @@ JITContext::JITContext(JITTargetMachineBuilder JTMB, DataLayout DL, std::unique_
   Ctx(std::move(ctx)),
   MainJD(ES.createJITDylib("<+innative_main>"))
 {
-  ES.setErrorReporter([env](Error e) { AppendError(*env, env->errors, 0, ERR_RUNTIME_JIT_ERROR, "UNKNOWN JIT ERROR"); });
+  ES.setErrorReporter([env](Error e) {
+    if(e)
+      llvm::outs() << "JIT Error: " << e << "\n";
+    AppendError(*env, env->errors, 0, ERR_RUNTIME_JIT_ERROR, "UNKNOWN JIT ERROR (check stdout)");
+  });
+
   MainJD.addGenerator(cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(DL.getGlobalPrefix())));
 
   Whitelist = [env](const SymbolStringPtr& s) {
