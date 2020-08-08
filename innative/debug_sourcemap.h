@@ -35,7 +35,7 @@ namespace innative {
     std::vector<llvm::DILocalScope*> scopecache;
     Stack<size_t> scopes; // stack of scope indexes
     size_t cursegment;
-    size_t curscopeindex;
+    size_t currangeindex;
   };
 }
 
