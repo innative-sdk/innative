@@ -13,7 +13,7 @@ using namespace llvm::dwarf;
 
 DebugSourceMap::DebugSourceMap(SourceMap* s, Compiler* compiler, llvm::Module& m, const char* name, const char* filepath,
                                char target) :
-  sourcemap(s), Debugger(compiler, m, name, filepath, target), curscopeindex(0), cursegment(0)
+  sourcemap(s), Debugger(compiler, m, name, filepath, target), currangeindex(0), cursegment(0)
 {
   // If we have a sourcemap, check to see if the files exist. If they don't, see if we can reconstruct them
   path root      = GetPath(sourcemap->sourceRoot);
@@ -109,14 +109,16 @@ void DebugSourceMap::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& d
   for(auto& i : subprograms)
     i = nullptr;
 
-  curscopeindex = 0;
+  currangeindex = 0;
   if(sourcemap->n_innative_ranges > 0)
   {
     auto end   = sourcemap->x_innative_ranges + sourcemap->n_innative_ranges;
     auto range = std::lower_bound(sourcemap->x_innative_ranges, end, body.column,
                                   [](const SourceMapRange& s, unsigned int i) { return s.low < i; });
-    if(range != end && range->scope < sourcemap->n_innative_scopes)
-      curscopeindex = range->scope;
+    if(range == end)
+      currangeindex = sourcemap->n_innative_ranges;
+    else
+      currangeindex = range - sourcemap->x_innative_ranges;
   }
 
   cursegment = 0;
@@ -196,13 +198,13 @@ void DebugSourceMap::DebugIns(llvm::Function* fn, Instruction& i)
   assert(_curscope);
 
   // push scopes and any variables they contain
-  while(curscopeindex < sourcemap->n_innative_ranges && i.column >= sourcemap->x_innative_ranges[curscopeindex].low)
+  while(currangeindex < sourcemap->n_innative_ranges && i.column >= sourcemap->x_innative_ranges[currangeindex].low)
   {
-    auto& cur = sourcemap->x_innative_ranges[curscopeindex];
+    auto& cur = sourcemap->x_innative_ranges[currangeindex];
     if(i.column <= cur.high && cur.scope < scopecache.size())
     {
       auto& scope = sourcemap->x_innative_scopes[cur.scope];
-      scopes.Push(curscopeindex);
+      scopes.Push(currangeindex);
       if(!scopecache[cur.scope])
       {
         llvm::DILocation* l   = _compiler->builder.getCurrentDebugLocation();
@@ -215,7 +217,7 @@ void DebugSourceMap::DebugIns(llvm::Function* fn, Instruction& i)
       UpdateVariables(fn, scope);
     }
 
-    ++curscopeindex;
+    ++currangeindex;
   }
 
   UpdateLocation(i);
