@@ -27,8 +27,14 @@ void TestHarness::test_jit()
     env->optimize = ENV_OPTIMIZE_O0;
 #endif
 
+    int err;
+
     // Add our default environment just like normal, but we have to explicitly tag it so the JIT knows how to load it.
-    int err = (*_exports.AddEmbedding)(env, IN_TAG_STATIC, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
+    err = (*_exports.AddEmbedding)(env, IN_TAG_STATIC, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
+    TESTERR(err, ERR_SUCCESS);
+
+    // Add kernel32
+    err = (*_exports.AddEmbedding)(env, IN_TAG_DYNAMIC, (void*)"C:\\Windows\\system32\\KERNEL32.DLL", 0, 0);
     TESTERR(err, ERR_SUCCESS);
 
     path file = "../scripts/debugging.wasm";
@@ -72,7 +78,11 @@ void TestHarness::test_jit()
     env->optimize = ENV_OPTIMIZE_O0;
 #endif
 
-    int err   = (*_exports.AddEmbedding)(env, IN_TAG_STATIC, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
+    int err = (*_exports.AddEmbedding)(env, IN_TAG_STATIC, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
+    TESTERR(err, ERR_SUCCESS);
+
+    // Add kernel32
+    err = (*_exports.AddEmbedding)(env, IN_TAG_DYNAMIC, (void*)"C:\\Windows\\system32\\KERNEL32.DLL", 0, 0);
     TESTERR(err, ERR_SUCCESS);
 
     path file = "../scripts/debugging.wasm";
