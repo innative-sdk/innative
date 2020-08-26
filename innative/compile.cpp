@@ -1779,6 +1779,16 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
   if(!env->n_modules)
     return ERR_FATAL_NO_MODULES;
 
+  switch(env->optimize & ENV_OPTIMIZE_OMASK)
+  {
+  case ENV_OPTIMIZE_O0: machine->get()->setOptLevel(llvm::CodeGenOpt::None); break;
+  case ENV_OPTIMIZE_O1: machine->get()->setOptLevel(llvm::CodeGenOpt::Less); break;
+  case ENV_OPTIMIZE_Os:
+  case ENV_OPTIMIZE_O2: machine->get()->setOptLevel(llvm::CodeGenOpt::Default); break;
+  case ENV_OPTIMIZE_O3: machine->get()->setOptLevel(llvm::CodeGenOpt::Aggressive); break;
+  default: assert(false);
+  }
+
   if(env->optimize & ENV_OPTIMIZE_FAST_MATH)
   {
     llvm::FastMathFlags fmf;
