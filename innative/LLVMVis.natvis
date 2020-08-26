@@ -59,4 +59,13 @@
       <Item Condition="HasError" Name="Value">*(llvm::Error*)&amp;ErrorStorage.buffer</Item>
     </Expand>
   </Type>
+  <Type Name="llvm::SmallVector&lt;*,*&gt;">
+    <DisplayString>{{ entries={Size} }}</DisplayString>
+    <Expand>
+      <ArrayItems>
+        <Size>Size</Size>
+        <ValuePointer>($T1 *)BeginX</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
 </AutoVisualizer>

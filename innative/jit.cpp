@@ -27,7 +27,7 @@ JITContext::JITContext(JITTargetMachineBuilder JTMB, DataLayout DL, std::unique_
     AppendError(*env, env->errors, 0, ERR_RUNTIME_JIT_ERROR, "UNKNOWN JIT ERROR (check stdout)");
   });
 
-  MainJD.addGenerator(cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(DL.getGlobalPrefix())));
+  //MainJD.addGenerator(cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(DL.getGlobalPrefix())));
 
   Whitelist = [env](const SymbolStringPtr& s) {
     if(!(env->flags & ENV_WHITELIST))
