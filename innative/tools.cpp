@@ -78,7 +78,9 @@ void innative::DestroyEnvironment(Environment* env)
     kh_destroy_exports(env->modules[i].exports);
     assert(!env->modules[i].cache);
   }
-
+  
+  if(env->jit)
+    delete env->jit;
   delete env->alloc;
   kh_destroy_modulepair(env->whitelist);
   kh_destroy_modules(env->modulemap);
@@ -296,6 +298,7 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
         if(!f)
         {
           fprintf(env->log, "Error loading file: %s\n", src.u8string().c_str());
+          fflush(env->log);
           return ERR_FATAL_FILE_ERROR;
         }
         fclose(f);
