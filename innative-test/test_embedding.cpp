@@ -11,6 +11,7 @@ using namespace innative;
 #else
   #define TEST_EMBEDDING "innative-test-embedding" IN_STATIC_EXTENSION
 #endif
+
 int TestHarness::do_embedding(void* assembly)
 {
   constexpr int i = 4;

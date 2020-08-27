@@ -105,8 +105,9 @@ llvm::DIType* Debugger::CreateDebugType(llvm::Type* t)
       align = std::max(align, elem->getAlignInBits());
     }
 
-    return _dbuilder->createStructType(dcu, !llvm::cast<llvm::StructType>(t)->isLiteral() ? t->getStructName() : "LiteralTuple", dunit, 0, offset, align,
-                                       llvm::DINode::FlagZero, nullptr,
+    return _dbuilder->createStructType(dcu,
+                                       !llvm::cast<llvm::StructType>(t)->isLiteral() ? t->getStructName() : "LiteralTuple",
+                                       dunit, 0, offset, align, llvm::DINode::FlagZero, nullptr,
                                        _dbuilder->getOrCreateArray(members));
   }
   if(t->isArrayTy())
@@ -280,19 +281,16 @@ Debugger* Debugger::Create(Compiler& compiler)
 {
   if(auto target = compiler.env.flags & ENV_DEBUG)
   {
-    if(!compiler.m.filepath)
-      return 0;
+    const char* fpath = !compiler.m.filepath ? "in_memory_module" : compiler.m.filepath;
     if(compiler.m.sourcemap)
     {
       if(target == ENV_DEBUG)
         target = llvm::Triple(compiler.mod->getTargetTriple()).isOSWindows() ? ENV_DEBUG_PDB : ENV_DEBUG_DWARF;
       if(target == ENV_DEBUG_PDB)
-        return new DebugPDB(compiler.m.sourcemap, &compiler, *compiler.mod, compiler.m.name.str(),
-                                  compiler.m.filepath);
-      return new DebugDWARF(compiler.m.sourcemap, &compiler, *compiler.mod, compiler.m.name.str(),
-                                  compiler.m.filepath);
+        return new DebugPDB(compiler.m.sourcemap, &compiler, *compiler.mod, compiler.m.name.str(), fpath);
+      return new DebugDWARF(compiler.m.sourcemap, &compiler, *compiler.mod, compiler.m.name.str(), fpath);
     }
-    return new DebugWat(&compiler, *compiler.mod, compiler.m.name.str(), compiler.m.filepath);
+    return new DebugWat(&compiler, *compiler.mod, compiler.m.name.str(), fpath);
   }
   return new Debugger();
 }

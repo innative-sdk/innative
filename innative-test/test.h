@@ -39,7 +39,8 @@ public:
   void test_errors();
   void test_funcreplace();
   int CompileWASM(const path& file, int (TestHarness::*fn)(void*), const char* system = nullptr,
-                  std::function<int(Environment*)> preprocess = std::function<int(Environment*)>(), const char* name = nullptr);
+                  std::function<int(Environment*)> preprocess = std::function<int(Environment*)>(), const char* name = nullptr, const char* out = nullptr);
+  void Clean();
   int do_debug(void* assembly);
   int do_debug_2(void* assembly);
   int do_funcreplace(void* assembly);

@@ -14,6 +14,9 @@ TestHarness::TestHarness(const INExports& exports, const char* arg0, int logleve
 TestHarness::~TestHarness()
 {
   // Clean up all the files we just produced
+  Clean();
+}
+void TestHarness::Clean() {
   for(auto f : _garbage)
     remove(f);
 }
@@ -22,8 +25,8 @@ size_t TestHarness::Run(FILE* out)
   std::pair<const char*, void (TestHarness::*)()> tests[] = { { "wasm_malloc.c", &TestHarness::test_malloc },
                                                               { "whitelist", &TestHarness::test_whitelist },
                                                               { "debugging.cpp", &TestHarness::test_debug },
-                                                              { "JIT", &TestHarness::test_jit },
                                                               { "embedding", &TestHarness::test_embedding },
+                                                              { "JIT", &TestHarness::test_jit },
                                                               { "funcreplace.c", &TestHarness::test_funcreplace },
                                                               { "internal.c", &TestHarness::test_environment },
                                                               { "queue.h", &TestHarness::test_queue },
@@ -105,7 +108,7 @@ void* TestHarness::LoadAssembly(const path& file)
 }
 
 int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), const char* system,
-                             std::function<int(Environment*)> preprocess, const char* name)
+                             std::function<int(Environment*)> preprocess, const char* name, const char* out)
 {
   Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);
   if(!env)
@@ -135,8 +138,8 @@ int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), co
   if(err >= 0)
     (*_exports.FinalizeEnvironment)(env);
 
-  path base = _folder / file.stem();
-  _out      = base;
+  path base = _folder / (!out ? file.stem() : out);
+  _out = base;
   _out.replace_extension(IN_LIBRARY_EXTENSION);
 
   if(err >= 0)
