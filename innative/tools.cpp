@@ -7,6 +7,7 @@
 #include "tools.h"
 #include "wast.h"
 #include "serialize.h"
+#include "jit.h"
 #include <atomic>
 #include <thread>
 #include <fstream>

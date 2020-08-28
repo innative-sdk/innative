@@ -69,6 +69,8 @@ void TestHarness::test_jit()
     (*_exports.DestroyEnvironment)(env);
   }
 
+// This doesn't make sense on linux
+#ifdef IN_PLATFORM_WIN32
   {
     // Test building a DLL and loading it directly via JIT
     TEST(CompileWASM(
@@ -126,6 +128,7 @@ void TestHarness::test_jit()
 
     (*_exports.DestroyEnvironment)(env);
   }
+#endif
 
   {
     // Normally, the JIT initializes everything when you call CompilerJIT and cleans up during DestroyEnvironment.
