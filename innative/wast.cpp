@@ -548,8 +548,8 @@ int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname
 
     // Don't need much stack space, we immediately longjmp()
     // back out of the signal handler
-    ss.ss_sp    = alloca(MINSIGSTKSZ);
-    ss.ss_size  = MINSIGSTKSZ;
+    ss.ss_sp    = alloca(MINSIGSTKSZ + 4096);
+    ss.ss_size  = MINSIGSTKSZ + 4096;
     ss.ss_flags = 0;
 
     sigaltstack(&ss, NULL);
