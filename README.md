@@ -73,7 +73,7 @@ inNative does not yet have a working CMake configuration, so build instructions 
 inNative currently requires C++17 to build, and only supports Visual Studio 2019. After installing the LLVM/LLD binaries or building it from source, open `innative.sln` in Visual Studio and build the project, or run `msbuild innative.sln`.
 
 ### Linux
-Once you've installed the LLVM/LLD binaries or built it from source, run `make` from the top level source directory to build all inNative projects. Use `make clean` to wipe the results, which may sometimes be necessary if `make` does not recognize a dependency changed. If you have `Nix` installed, you can build inNative by running `nix-shell` in the root directory and then running `make`.
+Since inNative requires C++17 to build, the minimum supported compiler is gcc-7 or clang-5. Once you've installed the LLVM/LLD binaries or built it from source, run `make` from the top level source directory to build all inNative projects. Use `make clean` to wipe the results, which may sometimes be necessary if `make` does not recognize a dependency changed. If you have `Nix` installed, you can build inNative by running `nix-shell` in the root directory and then running `make`.
 
 Any Linux system configured with [flatpak](https://flatpak.org/setup/) can build a standalone SDK bundle and install it to their system for development inside containers:
 

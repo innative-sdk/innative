@@ -86,8 +86,8 @@ void TestHarness::test_manual()
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_CODE, 0);
   TEST(!err);
-  Instruction get_a = { OP_local_get, { 0 } };
-  Instruction get_b = { OP_local_get, { 1 } };
+  Instruction get_a = { OP_local_get, 0 };
+  Instruction get_b = { OP_local_get, 1 };
   Instruction add   = { OP_i32_add };
   Instruction end   = { OP_end };
 
@@ -115,7 +115,7 @@ void TestHarness::test_manual()
 
   err = (*_exports.InsertModuleSection)(env, &m, WASM_MODULE_CODE, 1);
   TEST(!err);
-  Instruction call_0 = { OP_call, { 0 } };
+  Instruction call_0 = { OP_call, 0 };
 
   err = (*_exports.InsertModuleInstruction)(env, &m.code.funcbody[1], 0, &get_a);
   TEST(!err);
