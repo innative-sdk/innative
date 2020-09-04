@@ -41,7 +41,10 @@ namespace innative {
     bool DumpSourceMap(llvm::DWARFContext& DICtx, size_t code_section_offset);
     void ResolveDWARFBitSize(const llvm::DWARFDie& die, SourceMapType* ptype);
     void ResolveDWARFTypeFlags(const llvm::DWARFDie& die, SourceMapType* ptype);
-
+    void ParseDWARFSubprogram(IN_SOURCE_FUNCTION& v, llvm::DWARFContext& DICtx, const llvm::DWARFDie& die,
+                              llvm::DWARFUnit* CU);
+    void ParseDWARFVariable(IN_SOURCE_VARIABLE& v, llvm::DWARFContext& DICtx, const llvm::DWARFDie& die,
+                            llvm::DWARFUnit* CU);
     bool ParseDWARFChild(llvm::DWARFContext& DICtx, SourceMapScope* parent, const llvm::DWARFDie& die, llvm::DWARFUnit* CU,
                          size_t code_section_offset);
     enum IN_ERROR ParseDWARF(const char* obj, size_t len);

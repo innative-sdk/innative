@@ -26,6 +26,7 @@ namespace innative {
     virtual void PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc);
     virtual void PopBlock();
     virtual void Finalize();
+    virtual llvm::DIFile* GetSourceFile(size_t i) const { return dunit; }
 
     llvm::DIType* CreateDebugType(llvm::Type* t);
     llvm::DISubroutineType* CreateFunctionDebugType(llvm::FunctionType* fn, llvm::CallingConv::ID callconv);

@@ -60,7 +60,7 @@ DebugSourceMap::DebugSourceMap(SourceMap* s, Compiler* compiler, llvm::Module& m
     types.resize(s->n_innative_types);
 }
 
-llvm::DIFile* DebugSourceMap::GetSourceFile(size_t i) { return (i < files.size()) ? files[i] : dunit; }
+llvm::DIFile* DebugSourceMap::GetSourceFile(size_t i) const { return (i < files.size()) ? files[i] : dunit; }
 
 SourceMapFunction* DebugSourceMap::GetSourceFunction(unsigned int offset)
 {

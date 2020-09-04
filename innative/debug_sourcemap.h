@@ -23,9 +23,9 @@ namespace innative {
     virtual void DebugSetGlobal(int index) override;
     virtual llvm::DIType* GetDebugType(size_t index, llvm::DIType* parent = 0);
     virtual void UpdateVariables(llvm::Function* fn, SourceMapScope& scope);
+    virtual llvm::DIFile* GetSourceFile(size_t i) const override;
     void UpdateLocation(Instruction& i);
     SourceMapFunction* GetSourceFunction(unsigned int column);
-    llvm::DIFile* GetSourceFile(size_t i);
     static llvm::DINode::DIFlags GetFlags(unsigned short flags);
 
     SourceMap* sourcemap;
