@@ -149,8 +149,9 @@ llvm::DIType* DebugDWARF::GetDebugType(size_t index, llvm::DIType* parent)
     case DW_TAG_pointer_type:
       if(auto ty = GetDebugType(type.type_index))
       {
+        auto str = ty->getName().str();
         if(!name)
-          name = ty->getName().str().c_str();
+          name = str.c_str();
         auto pname = std::string("p<") + name;
         if(pname.back() == '*' || pname.back() == '&') // strip one pointer indirection layer off
           pname.pop_back();

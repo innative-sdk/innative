@@ -208,7 +208,8 @@ void innative::DeleteCache(const Environment& env, Module& m)
           std::string errMsg;
           llvm::raw_string_ostream buf{ errMsg };
           buf << sym.takeError();
-          fprintf(env.log, "Error looking up JIT symbol `%s`: %s\n", exit_name.c_str(), buf.str().c_str());
+          auto str = buf.str();
+          fprintf(env.log, "Error looking up JIT symbol `%s`: %s\n", exit_name.c_str(), str.c_str());
         }
       }
     }
