@@ -133,7 +133,7 @@ llvm::DISubroutineType* Debugger::CreateFunctionDebugType(llvm::FunctionType* fn
                                                                               llvm::dwarf::DW_CC_nocall);
 }
 
-void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool optimized, bool definition, bool artificial,
+void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool optimized, bool definition, bool artificial, llvm::DIScope* scope,
                                  llvm::DIFile* file, unsigned int line, unsigned int col, llvm::DISubroutineType* subtype)
 {
   if(!_dbuilder)
@@ -164,9 +164,17 @@ void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool 
 
   if(!file)
     file = dunit;
+  if(!scope)
+    scope = file;
   if(!subtype)
     subtype = CreateFunctionDebugType(fn->getFunctionType(), fn->getCallingConv());
-  fn->setSubprogram(_dbuilder->createFunction(file, name, fn->getName(), file, line, subtype, line, diflags, spflags));
+  
+  llvm::DISubprogram* p;
+  if(auto parent = llvm::dyn_cast<llvm::DIType>(scope))
+    p = _dbuilder->createMethod(scope, name, fn->getName(), file, line, subtype, 0, 0, parent, diflags, spflags);
+  else
+    p = _dbuilder->createFunction(scope, name, fn->getName(), file, line, subtype, line, diflags, spflags);
+  fn->setSubprogram(p);
 }
 void Debugger::PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc) { _curscope = scope; }
 void Debugger::PopBlock() {}

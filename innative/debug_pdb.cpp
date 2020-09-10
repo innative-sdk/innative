@@ -8,11 +8,7 @@
 #include <algorithm>
 
 namespace innative {
-#ifdef IN_64BIT
-  __KHASH_IMPL(intset, , size_t, char, 0, kh_int64_hash_func, kh_int64_hash_equal);
-#else
-  __KHASH_IMPL(intset, , size_t, char, 0, kh_int_hash_func, kh_int_hash_equal);
-#endif
+  __KHASH_IMPL(intmap, , const char*, size_t, 1, kh_str_hash_func, kh_str_hash_equal);
 }
 
 using namespace innative;
@@ -23,9 +19,9 @@ using namespace llvm::dwarf;
 #define XML(x)  TEXT(#x)
 
 DebugPDB::DebugPDB(SourceMap* s, Compiler* compiler, llvm::Module& m, const char* name, const char* filepath) :
-  DebugSourceMap(s, compiler, m, name, filepath, ENV_DEBUG_PDB), _uid(0), _deferred(kh_init_intset())
+  DebugSourceMap(s, compiler, m, name, filepath, ENV_DEBUG_PDB), _uid(0), _deferred(kh_init_intmap())
 {}
-DebugPDB::~DebugPDB() { kh_destroy_intset(_deferred); }
+DebugPDB::~DebugPDB() { kh_destroy_intmap(_deferred); }
 
 void DebugPDB::PostFuncBody(llvm::Function* fn, FunctionBody& body)
 {
@@ -45,63 +41,35 @@ enum DW_WASM_OP
 llvm::DIType* DebugPDB::StructOffsetType(size_t index, llvm::DIScope* scope, llvm::DIFile* file, llvm::StringRef name,
                                          uint64_t indice, llvm::Function* fn)
 {
-  llvm::DIType* ty          = GetDebugType(index);
-  llvm::StringRef type_name = sourcemap->x_innative_types[index].name_index < sourcemap->n_names ?
-                                sourcemap->names[sourcemap->x_innative_types[index].name_index] :
-                                ty->getName();
+  llvm::DIType* ty      = GetDebugType(index);
+  std::string type_name = GetTypeName(index, true, true);
+  std::string str;
+  llvm::DIType* base = nullptr;
 
-  auto member = _dbuilder->createMemberType(scope, name, file, 0, ty->getSizeInBits(), 1, 0, llvm::DINode::FlagZero, ty);
-  auto offset = _dbuilder->createStructType(
-    scope, FormatString(false, "{0}::${1}{2}", Compiler::CppString(_compiler->m.name.str()), name, _uid++, type_name), file,
-    0, ty->getSizeInBits(), 1, llvm::DINode::FlagZero, 0, _dbuilder->getOrCreateArray({ member }));
-
-  if(_compiler->globals.size() > 0 && _compiler->memories.size() > 0)
+  switch(sourcemap->x_innative_types[index].tag)
   {
-    llvm::SmallVector<llvm::DIGlobalVariableExpression*, 1> expr;
-    _compiler->globals[0]->getDebugInfo(expr);
-    auto global = expr[0]->getVariable()->getName();
-    expr.clear();
-    _compiler->memories[0]->getDebugInfo(expr);
-    auto mem = expr[0]->getVariable()->getName();
-
-    switch(sourcemap->x_innative_types[index].tag)
-    {
-    case DW_TAG_rvalue_reference_type:
-    case DW_TAG_reference_type:
-    case DW_TAG_pointer_type:
-      _compiler->natvis +=
-        FormatString(true,
-                     "<Type Name=\"{0}\">"
-                     "<DisplayString>{({1}*)(*(unsigned int*)({2}.m0 + {3} + {4}))}</DisplayString>"
-                     "<Expand><ExpandedItem>({1}*)(*(unsigned int*)({2}.m0 + {3} + {4}))</ExpandedItem></Expand>"
-                     "</Type>",
-                     offset->getName(), ty->getName(), mem, global, indice);
-      break;
-    case DW_TAG_array_type:
-    {
-      size_t base_index = index;
-      while(sourcemap->x_innative_types[base_index].type_index != (size_t)~0)
-        base_index = sourcemap->x_innative_types[base_index].type_index;
-
-      _compiler->natvis +=
-        FormatString(true,
-                     "<Type Name=\"{0}\"><DisplayString>{{{*({1}*)({2}.m0 + {3} + {4})}}}</DisplayString>"
-                     "<Expand><Item Name=\"[size]\">{5}</Item>"
-                     "<ArrayItems><Size>{5}</Size><ValuePointer>({1}*)({2}.m0 + {3} + {4})</ValuePointer></ArrayItems>"
-                     "</Expand></Type>",
-                     offset->getName(), GetDebugType(base_index)->getName(), mem, global, indice,
-                     sourcemap->x_innative_types[index].n_types);
-    }
+  case DW_TAG_rvalue_reference_type:
+  case DW_TAG_reference_type:
+  case DW_TAG_pointer_type:
+    str  = FormatString(false, "{0}_sp<{1},{2}>", _compiler->m.name.str(), type_name.c_str(), indice);
+    base = GetBaseType(index, 0);
     break;
-    default:
-      _compiler->natvis +=
-        FormatString(true, "<Type Name=\"{0}\"><DisplayString>{*({1}*)({2}.m0 + {3} + {4})}</DisplayString></Type>",
-                     offset->getName(), type_name, mem, global, indice);
-      break;
-    }
+  case DW_TAG_array_type:
+  {
+    size_t base_index = index;
+    while(sourcemap->x_innative_types[base_index].type_index != (size_t)~0)
+      base_index = sourcemap->x_innative_types[base_index].type_index;
+
+    str = FormatString(false, "{0}_sa<{1},{2},{3}>", _compiler->m.name.str(), GetTypeName(base_index, true, true).c_str(),
+                       indice, sourcemap->x_innative_types[index].n_types);
+    break;
+  }
+  default: str = FormatString(false, "{0}_sv<{1},{2}>", _compiler->m.name.str(), type_name.c_str(), indice); break;
   }
 
-  return offset;
+  auto member = _dbuilder->createMemberType(scope, "ptr", file, 0, ty->getSizeInBits(), 1, 0, llvm::DINode::FlagZero, ty);
+  return _dbuilder->createClassType(scope, str, file, 0, 32, 1, 0, llvm::DINode::FlagZero, base,
+                                    _dbuilder->getOrCreateArray({ member }));
 }
 
 void DebugPDB::UpdateVariables(llvm::Function* fn, SourceMapScope& scope)
@@ -169,6 +137,22 @@ void DebugPDB::UpdateVariables(llvm::Function* fn, SourceMapScope& scope)
   }
 }
 
+llvm::DIType* DebugPDB::GetBaseType(size_t index, llvm::DIType* parent)
+{
+  if(index == (size_t)~0)
+    return 0;
+  auto& type = sourcemap->x_innative_types[index];
+
+  switch(type.tag)
+  {
+  case DW_TAG_rvalue_reference_type:
+  case DW_TAG_reference_type:
+  case DW_TAG_pointer_type: return GetDebugType(type.type_index);
+  }
+
+  return 0;
+}
+
 llvm::DIType* DebugPDB::GetDebugType(size_t index, llvm::DIType* parent)
 {
   if(index == (size_t)~0)
@@ -185,7 +169,6 @@ llvm::DIType* DebugPDB::GetDebugType(size_t index, llvm::DIType* parent)
 
   if(index < types.size() && !types[index])
   {
-    const char* name   = type.name_index < sourcemap->n_names ? sourcemap->names[type.name_index] : 0;
     llvm::DIFile* file = GetSourceFile(type.source_index);
 
     switch(type.tag)
@@ -195,129 +178,166 @@ llvm::DIType* DebugPDB::GetDebugType(size_t index, llvm::DIType* parent)
     case DW_TAG_pointer_type:
       if(auto ty = GetDebugType(type.type_index))
       {
-        if(!name)
-          name = ty->getName().str().c_str();
-        auto pname = std::string("p<") + name;
-        if(pname.back() == '*' || pname.back() == '&') // strip one pointer indirection layer off
-          pname.pop_back();
-
+        if(ty == diVoid)
+          ty = diI32;
         auto member =
-          _dbuilder->createMemberType(dcu, name, file, 0, ty->getSizeInBits(), 1, 0, llvm::DINode::FlagZero, ty);
-        types[index] = _dbuilder->createStructType(dcu, pname + ">", file, 0, ty->getSizeInBits(), 1,
-                                                   llvm::DINode::FlagZero, 0, _dbuilder->getOrCreateArray({ member }));
+          _dbuilder->createMemberType(dcu, "ptr", file, 0, ty->getSizeInBits(), 1, 0, llvm::DINode::FlagZero, ty);
+        types[index] = _dbuilder->createStructType(dcu, GetTypeName(index, true, true), file, 0, 32, 1,
+                                                   llvm::DINode::FlagZero, nullptr,
+                                                   _dbuilder->getOrCreateArray({ member }));
+
+        // Only defer single pointers. Multiple indirections shouldn't be deferred.
+        size_t cur = type.type_index;
+        while(cur != (size_t)~0)
+        {
+          switch(sourcemap->x_innative_types[cur].tag)
+          {
+          case DW_TAG_rvalue_reference_type:
+          case DW_TAG_reference_type:
+          case DW_TAG_pointer_type: return llvm::dyn_cast<llvm::DIType>(types[index]);
+          }
+          cur = sourcemap->x_innative_types[cur].type_index;
+        }
+
         int r;
-        kh_put_intset(_deferred, index, &r);
+        auto pname = types[index]->getName().str();
+        auto iter  = kh_put_intmap(_deferred, pname.c_str(), &r);
+        if(r > 0)
+        {
+          kh_key(_deferred, iter) = AllocString(_compiler->env, kh_key(_deferred, iter));
+          kh_val(_deferred, iter) = index;
+        }
       }
       break;
     }
   }
 
   assert(types[index] != 0);
-  return types[index];
+  return llvm::dyn_cast<llvm::DIType>(types[index]);
 }
 
 void DebugPDB::Finalize()
 {
   llvm::SmallVector<llvm::DIGlobalVariableExpression*, 1> expr;
+  _compiler->globals[0]->getDebugInfo(expr);
+  auto global = expr[0]->getVariable()->getName();
+  expr.clear();
   _compiler->memories[0]->getDebugInfo(expr);
+  auto mem = expr[0]->getVariable()->getName();
+
+  _compiler->natvis += FormatString(
+    true,
+    "<Type Name=\"{2}_p&lt;*&gt;\"><DisplayString>{(({2}_p&lt;$T1&gt;*)({0}.m0+(unsigned int)this))->ptr}</DisplayString><Expand><ExpandedItem>(({2}_p&lt;$T1&gt;*)({0}.m0+(unsigned int)this))->ptr</ExpandedItem></Expand></Type>\n"
+    "<Type Name=\"{2}_pp&lt;*&gt;\"><DisplayString>{(({2}_pp&lt;$T1&gt;*)({0}.m0+*(unsigned int*)({0}.m0+(unsigned int)this)))->ptr.ptr}</DisplayString><Expand><ExpandedItem>(({2}_pp&lt;$T1&gt;*)({0}.m0+*(unsigned int*)({0}.m0+(unsigned int)this)))->ptr.ptr</ExpandedItem></Expand></Type>\n"
+    "<Type Name=\"{2}_ppp&lt;*&gt;\"><DisplayString>{(({2}_ppp&lt;$T1&gt;*)({0}.m0+*(unsigned int*)({0}.m0+*(unsigned int*)({0}.m0+(unsigned int)this))))->ptr.ptr.ptr}</DisplayString><Expand><ExpandedItem>(({2}_ppp&lt;$T1&gt;*)({0}.m0+*(unsigned int*)({0}.m0+*(unsigned int*)({0}.m0+(unsigned int)this))))->ptr.ptr.ptr</ExpandedItem></Expand></Type>\n"
+    "<Type Name=\"{2}_pppp&lt;*&gt;\"><DisplayString>{(({2}_pppp&lt;$T1&gt;*)({0}.m0+*(unsigned int*)({0}.m0+*(unsigned int*)({0}.m0+*(unsigned int*)({0}.m0+(unsigned int)this)))))->ptr.ptr.ptr.ptr}</DisplayString><Expand><ExpandedItem>(({2}_pppp&lt;$T1&gt;*)({0}.m0+*(unsigned int*)({0}.m0+*(unsigned int*)({0}.m0+*(unsigned int*)({0}.m0+(unsigned int)this)))))->ptr.ptr.ptr.ptr</ExpandedItem></Expand></Type>\n"
+    "<Type Name=\"{2}_sp&lt;*,*&gt;\"><DisplayString>{($T1*)(*(unsigned int*)({0}.m0 + {1} + $T2))}</DisplayString><Expand><ExpandedItem>($T1*)(*(unsigned int*)({0}.m0 + {1} + $T2))</ExpandedItem></Expand></Type>\n"
+    "<Type Name=\"{2}_sv&lt;*,*&gt;\"><DisplayString>{*($T1*)({0}.m0 + {1} + $T2)}</DisplayString><Expand><ExpandedItem>*($T1*)({0}.m0 + {1} + $T2)</ExpandedItem></Expand></Type>\n"
+    "<Type Name=\"{2}_sa&lt;*,*,*&gt;\"><DisplayString>{{{*($T1*)({0}.m0 + {1} + $T2)}}}</DisplayString><Expand><Item Name=\"[size]\">$T3</Item><ArrayItems><Size>$T3</Size><ValuePointer>($T1*)({0}.m0 + {1} + $T2)</ValuePointer></ArrayItems></Expand></Type>\n",
+    mem, global, _compiler->m.name.str());
 
   for(auto iter = kh_begin(_deferred); iter < kh_end(_deferred); ++iter)
   {
     if(!kh_exist(_deferred, iter))
       continue;
-    auto index = kh_key(_deferred, iter);
-    auto& type = sourcemap->x_innative_types[index];
-    if(auto ty = GetDebugType(type.type_index))
+    // printf("%s\n", kh_key(_deferred, iter));
+    _finalize(kh_key(_deferred, iter));
+  }
+
+  kh_clear_intmap(_deferred);
+  DebugSourceMap::Finalize();
+}
+
+void DebugPDB::_finalize(const char* str)
+{
+  auto iter = kh_get_intmap(_deferred, str);
+  if(!kh_exist2(_deferred, iter))
+    return;
+  auto index = kh_value(_deferred, iter);
+  if(index == (size_t)~0)
+    return;
+
+  auto& type = sourcemap->x_innative_types[index];
+  if(auto ty = GetDebugType(type.type_index))
+  {
+    // Mark this type as being processed
+    kh_value(_deferred, iter) = (size_t)~0;
+    std::string main;
+    std::string aux;
+
+    if(auto composite = llvm::dyn_cast<llvm::DICompositeType>(ty))
     {
-      // We cannot rely on the base type actually having a name, so we strip p<> from the name we know we have.
-      auto name = types[index]->getName().str();
-      name      = name.substr(2, name.size() - 3);
-      std::string aux;
-      _compiler->natvis +=
-        FormatString(true, "<Type Name=\"{0}\"><DisplayString>{*({2}*)({1}.m0+(unsigned int)this)}</DisplayString><Expand>",
-                     types[index]->getName(), expr[0]->getVariable()->getName(), name);
+      aux += FormatString(true, "<Type Name=\"{1}\"><DisplayString>{{", types[index]->getName(),
+                          GetTypeName(type.type_index, true, true));
 
-      if(auto composite = llvm::dyn_cast<llvm::DICompositeType>(ty))
+      for(const auto& e : composite->getElements())
       {
-        std::string expansion = "<Expand>";
-        aux += FormatString(true, "<Type Name=\"{2}\"><DisplayString>{{", types[index]->getName(),
-                            expr[0]->getVariable()->getName(), name);
-        for(const auto& e : composite->getElements())
-          if(auto element = llvm::dyn_cast<llvm::DIDerivedType>(e))
+        if(auto element = llvm::dyn_cast<llvm::DIDerivedType>(e))
+        {
+          auto sname = element->getBaseType()->getName().str();
+          auto iter  = kh_get_intmap(_deferred, sname.c_str());
+          if(kh_exist2(_deferred, iter))
           {
-            if(element->getBaseType()->getName().startswith("p<"))
+            /*auto basetype = llvm::dyn_cast<llvm::DICompositeType>(element->getBaseType());
+            if(basetype->getElements().size() > 0)
             {
-              auto basetype = llvm::dyn_cast<llvm::DICompositeType>(element->getBaseType());
-              if(basetype->getElements().size() > 0)
-              {
-                auto baseelement = llvm::dyn_cast<llvm::DIType>(basetype->getElements()[0]);
-                if(!baseelement->getName().empty())
-                  aux += FormatString(true, "{0}:{({1})({2}.m0 + *(unsigned int*)(&amp;this->{0}))}}", element->getName(),
-                                      baseelement->getName(), expr[0]->getVariable()->getName(),
-                                      element->getOffsetInBits() / 8);
-              }
+              auto baseelement = llvm::dyn_cast<llvm::DIType>(basetype->getElements()[0]);
+              if(!baseelement->getName().empty())
+                aux += FormatString(true, "{0}:{({1}*)(*(unsigned int*)(&amp;this->{0}))}}", element->getName(),
+                                    baseelement->getName(), expr[0]->getVariable()->getName(),
+                                    element->getOffsetInBits() / 8);
+            }*/
 
-              _compiler->natvis +=
-                FormatString(true, "<Item Name=\"{0}\">({1}*)(*(unsigned int*)({2}.m0+(unsigned int)this+{3}))</Item>",
-                             element->getName(), element->getBaseType()->getName(), expr[0]->getVariable()->getName(),
-                             element->getOffsetInBits() / 8);
-            }
-            else if(element->getTag() == DW_TAG_inheritance)
-            {
-              _compiler->natvis += FormatString(true, "<Item Name=\"[{0}]\">*({0}*)({1}.m0+(unsigned int)this+{2})</Item>",
-                                                element->getBaseType()->getName(), expr[0]->getVariable()->getName(),
-                                                element->getOffsetInBits() / 8);
-            }
-            else if(element->getBaseType()->getTag() == DW_TAG_array_type)
-            {
-              auto composite = llvm::cast<llvm::DICompositeType>(element->getBaseType());
-              auto base      = composite->getBaseType();
-              while(base->getName().empty())
-              {
-                if(auto derived = llvm::dyn_cast<llvm::DIDerivedType>(base))
-                  base = derived->getBaseType();
-                else if(auto comp = llvm::dyn_cast<llvm::DICompositeType>(base))
-                  base = comp->getBaseType();
-              }
-              auto count = !base->getSizeInBits() ? 0 : (composite->getSizeInBits() / base->getSizeInBits());
-              for(auto* e : composite->getElements())
-              {
-                if(auto* subrange = llvm::dyn_cast<llvm::DISubrange>(e))
-                {
-                  auto* data = subrange->getCount().dyn_cast<llvm::ConstantInt*>(); 
-                  if(data != nullptr)
-                    count = data->getSExtValue();
-                }
-              }
-
-              aux += FormatString(true, "{0}:{this->{0}} ", element->getName());
-              _compiler->natvis += FormatString(true,
-                                                "<Item Name=\"{0}\">*({1}*)({2}.m0+(unsigned int)this+{3})</Item>",
-                                                element->getName(), base->getName(), expr[0]->getVariable()->getName(),
-                                                element->getOffsetInBits() / 8, count);
-            }
-            else
-            {
-              aux += FormatString(true, "{0}:{this->{0}} ", element->getName());
-              _compiler->natvis += FormatString(true, "<Item Name=\"{0}\">*({1}*)({2}.m0+(unsigned int)this+{3})</Item>",
-                                                element->getName(), element->getBaseType()->getName(),
-                                                expr[0]->getVariable()->getName(), element->getOffsetInBits() / 8);
-            }
+            aux += FormatString(true, "{0}:{(void*)(*(unsigned int*)(&amp;this->{0}))} ", element->getName(),
+                                element->getBaseType()->getName());
+            main += FormatString(true, "  <Item Name=\"{0}\">({1}*)(*(unsigned int*)(&amp;this->{0}))</Item>\n",
+                                 element->getName(), element->getBaseType()->getName());
           }
+          else if(element->getTag() == DW_TAG_inheritance)
+          {
+            main += FormatString(true, "  <Item Name=\"[{0}]\">*({0}*)((char*)this+{1})</Item>\n",
+                                 element->getBaseType()->getName(), element->getOffsetInBits() / 8);
+          }
+          else if(element->getBaseType()->getTag() == DW_TAG_array_type)
+          {
+            auto composite = llvm::cast<llvm::DICompositeType>(element->getBaseType());
+            auto base      = composite->getBaseType();
+            while(base->getName().empty())
+            {
+              if(auto derived = llvm::dyn_cast<llvm::DIDerivedType>(base))
+                base = derived->getBaseType();
+              else if(auto comp = llvm::dyn_cast<llvm::DICompositeType>(base))
+                base = comp->getBaseType();
+            }
+            auto count = !base->getSizeInBits() ? 0 : (composite->getSizeInBits() / base->getSizeInBits());
+            for(auto* e : composite->getElements())
+            {
+              if(auto* subrange = llvm::dyn_cast<llvm::DISubrange>(e))
+              {
+                auto* data = subrange->getCount().dyn_cast<llvm::ConstantInt*>();
+                if(data != nullptr)
+                  count = data->getSExtValue();
+              }
+            }
 
-        if(aux.size()) // strip last space
-          aux.pop_back();
-
-        aux += "}}</DisplayString>";
-        aux += expansion;
-        aux += "</Expand></Type>";
+            aux += FormatString(true, "{0}:{this->{0}} ", element->getName());
+            main += FormatString(true, "  <Item Name=\"{0}\">this->{0}</Item>\n", element->getName());
+          }
+          else
+          {
+            aux += FormatString(true, "{0}:{this->{0}} ", element->getName());
+            main += FormatString(true, "  <Item Name=\"{0}\">this->{0}</Item>\n", element->getName());
+          }
+        }
       }
-      else
-        _compiler->natvis += FormatString(true, "<ExpandedItem>*({0}*)({1}.m0+(unsigned int)this)</ExpandedItem>", name,
-                                          expr[0]->getVariable()->getName());
-      _compiler->natvis += "</Expand></Type>";
+
+      if(aux.size() && aux.back() == ' ') // strip last space
+        aux.pop_back();
+
       _compiler->natvis += aux;
+      _compiler->natvis += "}}</DisplayString><Expand>\n";
+      _compiler->natvis += main;
+      _compiler->natvis += "</Expand></Type>\n";
     }
   }
-  DebugSourceMap::Finalize();
 }

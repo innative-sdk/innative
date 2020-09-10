@@ -158,12 +158,12 @@ size_t DWARFParser::GetSourceMapName(const char* name)
   return kh_value(mapname, iter);
 };
 
-void DWARFParser::ResolveDWARFBitSize(const DWARFDie& die, SourceMapType* ptype)
+void DWARFParser::ResolveDWARFBitSize(DWARFDie die, SourceMapType* ptype)
 {
   return ResolveBitAttribute<DW_AT_bit_size, DW_AT_byte_size>(die, ptype->bit_size);
 }
 
-void DWARFParser::ResolveDWARFTypeFlags(const DWARFDie& die, SourceMapType* ptype)
+void DWARFParser::ResolveDWARFTypeFlags(DWARFDie die, SourceMapType* ptype)
 {
   if(auto flag = die.find(DW_AT_accessibility))
   {
@@ -205,7 +205,7 @@ size_t DWARFParser::GetSourceMapTypeRef(llvm::DWARFUnit& unit, const DWARFFormVa
   return (size_t)~0;
 }
 
-const char* DWARFParser::GetDieName(const DWARFDie& die)
+const char* DWARFParser::GetDieName(DWARFDie die)
 {
   SourceMapType key = { die.getOffset() };
   auto iter         = kh_get_maptype(maptype, &key);
@@ -217,7 +217,7 @@ const char* DWARFParser::GetDieName(const DWARFDie& die)
   return 0;
 }
 
-size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
+size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, DWARFDie die)
 {
   switch(die.getTag())
   {
@@ -246,6 +246,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
   case DW_TAG_unspecified_parameters:
   case DW_TAG_member:
   case DW_TAG_inheritance:
+  case DW_TAG_namespace:
   case DW_TAG_typedef: break;
   default: return (size_t)~0;
   }
@@ -271,6 +272,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
     ptype->source_index     = (size_t)~0;
     ptype->type_index       = (size_t)~0;
     ptype->n_types          = 0;
+    ptype->types            = nullptr;
 
     if(auto decl = die.find(DW_AT_specification)) // If part of this type is specified elsewhere, copy from that first
     {
@@ -286,7 +288,8 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
       }
     }
 
-    ptype->tag = die.getTag();
+    ptype->tag    = die.getTag();
+    ptype->parent = GetSourceMapParent(unit, die);
 
     if(auto file = die.find(DW_AT_decl_file))
     {
@@ -338,45 +341,15 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
     case DW_TAG_volatile_type:
     case DW_TAG_ptr_to_member_type:
     case DW_TAG_typedef:
-    {
-      if(!ptype->n_types)
-        ptype->n_types = 1;
-      const char* basename = "void";
-
       if(auto innertype = die.find(DW_AT_type))
       {
         if(DWARFDie innerdie = AsReferencedDIE(innertype.getValue(), unit))
-        {
           ptype->type_index = GetSourceMapType(unit, innerdie);
-          auto diename      = GetDieName(innerdie);
-          if(diename != nullptr)
-            basename = diename;
-        }
-      } // If this is false, it's a void type, like const void*
-
-      if(ptype->name_index == (size_t)~0)
-      {
-        std::string modifier = basename;
-        switch(die.getTag())
-        {
-        case DW_TAG_atomic_type: modifier = "atomic " + modifier; break;
-        case DW_TAG_const_type: modifier = "const " + modifier; break;
-        case DW_TAG_immutable_type: modifier = "immutable " + modifier; break;
-        case DW_TAG_packed_type: modifier = "packed " + modifier; break;
-        case DW_TAG_pointer_type: modifier = modifier + "*"; break;
-        case DW_TAG_reference_type: modifier = modifier + "&"; break;
-        case DW_TAG_restrict_type: modifier = "restrict " + modifier; break;
-        case DW_TAG_rvalue_reference_type: modifier = modifier + "&&"; break;
-        case DW_TAG_shared_type: modifier = modifier + "shared "; break;
-        case DW_TAG_volatile_type: modifier = "volatile " + modifier; break;
-        case DW_TAG_ptr_to_member_type: modifier = "(*" + modifier + ")"; break;
-        case DW_TAG_array_type: modifier = modifier + "[" + std::to_string(ptype->n_types) + "]"; break;
-        }
-        ptype->name_index = GetSourceMapName(modifier.c_str());
       }
 
+      if(!ptype->n_types)
+        ptype->n_types = 1;
       break;
-    }
     case DW_TAG_enumeration_type:
     {
       ResolveDWARFBitSize(die, ptype);
@@ -507,6 +480,10 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
         ptype->type_index = GetSourceMapTypeRef(unit, innertype.getValue());
       }
       break;
+    case DW_TAG_namespace:
+      if(auto ext = die.find(DW_AT_extension))
+        ptype->type_index = GetSourceMapTypeRef(unit, ext.getValue());
+      break;
     default: return (size_t)~0;
     }
 
@@ -516,7 +493,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, const DWARFDie& die)
   return kh_value(maptype, iter);
 }
 
-void DWARFParser::ParseDWARFVariable(IN_SOURCE_VARIABLE& v, DWARFContext& DICtx, const DWARFDie& die, llvm::DWARFUnit* CU)
+void DWARFParser::ParseDWARFVariable(IN_SOURCE_VARIABLE& v, DWARFContext& DICtx, DWARFDie die, llvm::DWARFUnit* CU)
 {
   // If part of this type is specified elsewhere, copy from that first
   if(auto decl = die.find(DW_AT_specification))
@@ -592,12 +569,12 @@ void DWARFParser::ParseDWARFVariable(IN_SOURCE_VARIABLE& v, DWARFContext& DICtx,
     v.type_index = GetSourceMapTypeRef(*CU, type.getValue());
 }
 
-void DWARFParser::ParseDWARFSubprogram(IN_SOURCE_FUNCTION& v, DWARFContext& DICtx, const DWARFDie& die, llvm::DWARFUnit* CU)
+void DWARFParser::ParseDWARFSubprogram(IN_SOURCE_FUNCTION& v, DWARFDie die, llvm::DWARFUnit* CU)
 {
   if(auto decl = die.find(DW_AT_specification)) // If part of this type is specified elsewhere, copy from that first
   {
     if(DWARFDie innerdie = AsReferencedDIE(decl.getValue(), *CU))
-      ParseDWARFSubprogram(v, DICtx, innerdie, CU);
+      ParseDWARFSubprogram(v, innerdie, CU);
   }
   if(auto line = die.find(DW_AT_decl_line))
     v.original_line = static_cast<decltype(v.original_line)>(line->getAsUnsignedConstant().getValue());
@@ -608,9 +585,34 @@ void DWARFParser::ParseDWARFSubprogram(IN_SOURCE_FUNCTION& v, DWARFContext& DICt
     if(const auto* LT = CU->getContext().getLineTableForUnit(CU))
       v.source_index = static_cast<decltype(v.source_index)>(file->getAsUnsignedConstant().getValue() - 1) + file_offset;
   }
+  if(auto flag = die.find(DW_AT_accessibility))
+  {
+    switch(flag->getAsUnsignedConstant().getValueOr(0ULL))
+    {
+    case DW_ACCESS_public: v.flags |= IN_SOURCE_TYPE_PUBLIC; break;
+    case DW_ACCESS_private: v.flags |= IN_SOURCE_TYPE_PRIVATE; break;
+    case DW_ACCESS_protected: v.flags |= IN_SOURCE_TYPE_PROTECTED; break;
+    }
+  }
+
+  if(v.parent == (size_t)~0)
+    v.parent = GetSourceMapParent(*CU, die);
 }
 
-bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, const DWARFDie& die, llvm::DWARFUnit* CU,
+size_t DWARFParser::GetSourceMapParent(llvm::DWARFUnit& unit, llvm::DWARFDie die)
+{
+  size_t r = (size_t)~0;
+  while(r == (size_t)~0)
+  {
+    die = die.getParent();
+    if(!die.isValid())
+      break;
+    r = GetSourceMapType(unit, die);
+  }
+  return r;
+}
+
+bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, DWARFDie die, llvm::DWARFUnit* CU,
                                   size_t code_section_offset)
 {
   auto tag = die.getTag();
@@ -658,12 +660,14 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
       auto& v        = map->x_innative_functions[n_functions];
       v.type_index   = (size_t)~0;
       v.source_index = (size_t)~0;
+      v.parent       = (size_t)~0;
+      v.flags        = 0;
       assert(n_scopes < map->n_innative_scopes);
       scope = &map->x_innative_scopes[n_scopes];
 
       map->x_innative_functions[n_functions].range.scope = n_scopes;
 
-      ParseDWARFSubprogram(v, DICtx, die, CU);
+      ParseDWARFSubprogram(v, die, CU);
 
       if(auto addresses = die.getAddressRanges())
       {
@@ -684,8 +688,10 @@ bool DWARFParser::ParseDWARFChild(DWARFContext& DICtx, SourceMapScope* parent, c
     else if(tag == DW_TAG_inlined_subroutine)
       return true; // not currently handled
     else
+    {
+      GetSourceMapType(*CU, die);
       return true; // We don't throw an error here so unexpected debug entries can simply be ignored
-
+    }
     scope->name_index = (size_t)~0;
     if(auto name = die.find(DW_AT_name))
     {
@@ -838,7 +844,7 @@ bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
     {
       auto die = DWARFDie(CU.get(), &entry);
 
-      if(die.getTag() == DW_TAG_subprogram || (die.getTag() == DW_TAG_variable && entry.getDepth() == 1))
+      if(die.getTag() == DW_TAG_subprogram || entry.getDepth() == 1)
         if(!ParseDWARFChild(DICtx, &global_scope, die, CU.get(), code_section_offset))
           return false;
     }

@@ -21,15 +21,17 @@ namespace innative {
     virtual void DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t line) override;
     virtual void PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc) override;
     virtual void DebugSetGlobal(int index) override;
+    virtual llvm::DIScope* GetDebugScope(size_t index, llvm::DIFile* root);
     virtual llvm::DIType* GetDebugType(size_t index, llvm::DIType* parent = 0);
     virtual void UpdateVariables(llvm::Function* fn, SourceMapScope& scope);
     virtual llvm::DIFile* GetSourceFile(size_t i) const override;
     void UpdateLocation(Instruction& i);
     SourceMapFunction* GetSourceFunction(unsigned int column);
     static llvm::DINode::DIFlags GetFlags(unsigned short flags);
+    std::string GetTypeName(size_t index, bool pstructs, bool nested);
 
     SourceMap* sourcemap;
-    std::vector<llvm::DIType*> types;
+    std::vector<llvm::DIScope*> types;
     std::vector<llvm::DIFile*> files;             // sourcemap files
     std::vector<llvm::DISubprogram*> subprograms; // Seperate subprograms for when functions are split across files
     std::vector<llvm::DILocalScope*> scopecache;

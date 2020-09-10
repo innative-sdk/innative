@@ -13,7 +13,7 @@ DebugWat::DebugWat(Compiler* compiler, llvm::Module& m, const char* name, const 
 
 void DebugWat::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized)
 {
-  FunctionDebugInfo(fn, fn->getName(), optimized, true, false, dunit, line, 0);
+  FunctionDebugInfo(fn, fn->getName(), optimized, true, false, nullptr, dunit, line, 0);
 }
 
 void DebugWat::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body)
@@ -22,7 +22,8 @@ void DebugWat::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, F
   auto line   = body.line;
   auto column = body.column;
 
-  FunctionDebugInfo(fn, name + "|" + _compiler->m.name.str(), _compiler->env.optimize != 0, true, false, dunit, line, column);
+  FunctionDebugInfo(fn, name + "|" + _compiler->m.name.str(), _compiler->env.optimize != 0, true, false, nullptr, dunit,
+                    line, column);
   _compiler->builder.SetCurrentDebugLocation(llvm::DILocation::get(_compiler->ctx, line, column, fn->getSubprogram()));
 }
 

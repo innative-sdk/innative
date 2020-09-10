@@ -77,7 +77,7 @@ void DebugSourceMap::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned 
 
   if(!f)
   {
-    FunctionDebugInfo(fn, fn->getName(), optimized, true, false, dunit, line, 0);
+    FunctionDebugInfo(fn, fn->getName(), optimized, true, false, 0, dunit, line, 0);
     return;
   }
 
@@ -97,10 +97,11 @@ void DebugSourceMap::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned 
       dwarfTys.push_back(_dbuilder->createUnspecifiedParameter());
   }
   auto subtype =
-    _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(dwarfTys), llvm::DINode::FlagZero,
+    _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(dwarfTys), GetFlags(f->flags),
                                     (fn->getCallingConv() == llvm::CallingConv::C) ? DW_CC_normal : DW_CC_nocall);
 
-  FunctionDebugInfo(fn, name, optimized, true, false, GetSourceFile(f->source_index), f->original_line, 0, subtype);
+  auto file = GetSourceFile(f->source_index);
+  FunctionDebugInfo(fn, name, optimized, true, false, GetDebugScope(f->parent, file), file, f->original_line, 0, subtype);
 }
 
 void DebugSourceMap::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body)
@@ -247,22 +248,53 @@ llvm::DINode::DIFlags DebugSourceMap::GetFlags(unsigned short flags)
   return diflags;
 }
 
-llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
+llvm::DIScope* DebugSourceMap::GetDebugScope(size_t index, llvm::DIFile* root)
 {
   if(index == (size_t)~0)
-    return diVoid;
-  auto& type = sourcemap->x_innative_types[index];
+    return root;
 
   if(index < types.size() && !types[index])
   {
-    const char* name   = type.name_index < sourcemap->n_names ? sourcemap->names[type.name_index] : 0;
-    llvm::DIFile* file = GetSourceFile(type.source_index);
+    auto& type       = sourcemap->x_innative_types[index];
+    const char* name = type.name_index < sourcemap->n_names ? sourcemap->names[type.name_index] : 0;
 
     char namebuf[24] = { 0 };
     if(!name)
     {
-      SPRINTF(namebuf, 24, "t#%zu", index);
+      SPRINTF(namebuf, 24, "anonymous_scope%zu", index);
       name = namebuf;
+    }
+
+    switch(type.tag)
+    {
+    case DW_TAG_namespace:
+    {
+      types[index] =
+        _dbuilder->createNameSpace(GetDebugScope(type.parent, root), name, (type.flags & IN_SOURCE_TYPE_EXPORT) != 0);
+      break;
+    }
+    default: GetDebugType(index, nullptr); break; // Load the type, but let our null check return root
+    }
+  }
+
+  return (index < types.size() && types[index] != nullptr) ? types[index] : root;
+}
+
+llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
+{
+  if(index == (size_t)~0)
+    return diVoid;
+
+  if(index < types.size() && !types[index])
+  {
+    auto& type         = sourcemap->x_innative_types[index];
+    auto name          = GetTypeName(index, false, false);
+    llvm::DIFile* file = GetSourceFile(type.source_index);
+
+    if(name.empty())
+    {
+      name.resize(24);
+      name.resize(SPRINTF(name.data(), name.size(), "anonymous_%zu", index));
     }
 
     switch(type.tag)
@@ -295,7 +327,7 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
       break;
     case DW_TAG_typedef:
       if(auto ty = GetDebugType(type.type_index))
-        types[index] = _dbuilder->createTypedef(ty, name, file, type.original_line, file);
+        types[index] = _dbuilder->createTypedef(ty, name, file, type.original_line, GetDebugScope(type.parent, file));
       break;
     case DW_TAG_ptr_to_member_type:
       if(type.n_types == 2)
@@ -311,11 +343,13 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
     {
       llvm::DICompositeType* composite;
       if(type.tag == DW_TAG_class_type)
-        composite = _dbuilder->createClassType(file, name, file, type.original_line, type.bit_size, type.byte_align << 3,
-                                               type.bit_offset, llvm::DINode::FlagZero, nullptr, llvm::DINodeArray());
+        composite = _dbuilder->createClassType(GetDebugScope(type.parent, file), name, file, type.original_line,
+                                               type.bit_size, type.byte_align << 3, type.bit_offset, llvm::DINode::FlagZero,
+                                               nullptr, llvm::DINodeArray());
       else
-        composite = _dbuilder->createStructType(file, name, file, type.original_line, type.bit_size, type.byte_align << 3,
-                                                llvm::DINode::FlagZero, nullptr, llvm::DINodeArray());
+        composite = _dbuilder->createStructType(GetDebugScope(type.parent, file), name, file, type.original_line,
+                                                type.bit_size, type.byte_align << 3, llvm::DINode::FlagZero, nullptr,
+                                                llvm::DINodeArray());
       types[index] = composite;
 
       llvm::SmallVector<llvm::Metadata*, 8> elements;
@@ -328,8 +362,9 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
     }
     case DW_TAG_union_type:
     {
-      auto composite = _dbuilder->createUnionType(file, name, file, type.original_line, type.bit_size, type.byte_align << 3,
-                                                  GetFlags(type.flags), llvm::DINodeArray());
+      auto composite = _dbuilder->createUnionType(GetDebugScope(type.parent, file), name, file, type.original_line,
+                                                  type.bit_size, type.byte_align << 3, GetFlags(type.flags),
+                                                  llvm::DINodeArray());
       types[index]   = composite;
 
       llvm::SmallVector<llvm::Metadata*, 8> elements;
@@ -360,8 +395,9 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
       break;
     case DW_TAG_member:
       if(auto ty = GetDebugType(type.type_index))
-        types[index] = _dbuilder->createMemberType(file, name, file, type.original_line, type.bit_size,
-                                                   type.byte_align << 3, type.bit_offset, GetFlags(type.flags), ty);
+        types[index] = _dbuilder->createMemberType(GetDebugScope(type.parent, file), name, file, type.original_line,
+                                                   type.bit_size, type.byte_align << 3, type.bit_offset,
+                                                   GetFlags(type.flags), ty);
       break;
     case DW_TAG_enumeration_type:
     {
@@ -378,8 +414,9 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
           elements.push_back(_dbuilder->createEnumerator(id, e.val, false)); // TODO: check if base is unsigned
         }
       }
-      types[index] = _dbuilder->createEnumerationType(file, name, file, type.original_line, type.bit_size,
-                                                      type.byte_align << 3, _dbuilder->getOrCreateArray(elements), base, "",
+      types[index] = _dbuilder->createEnumerationType(GetDebugScope(type.parent, file), name, file, type.original_line,
+                                                      type.bit_size, type.byte_align << 3,
+                                                      _dbuilder->getOrCreateArray(elements), base, "",
                                                       (type.flags & IN_SOURCE_TYPE_ENUM_CLASS) != 0);
     }
     break;
@@ -395,6 +432,88 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
     }
   }
 
-  return index < types.size() ? types[index] : nullptr;
+  return index < types.size() ? llvm::dyn_cast<llvm::DIType>(types[index]) : nullptr;
 }
 void DebugSourceMap::PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc) {}
+
+std::string DebugSourceMap::GetTypeName(size_t index, bool pstructs, bool nested)
+{
+  if(index >= sourcemap->n_innative_types)
+    return {};
+
+  auto& ty = sourcemap->x_innative_types[index];
+
+  std::string name = GetTypeName(ty.type_index, pstructs, nested);
+  if(name.empty())
+    name = "void";
+
+  // For pointers, we have to skip intervening modifiers between all of our pointer levels
+  if(pstructs)
+  {
+    switch(ty.tag)
+    {
+    case DW_TAG_pointer_type:
+    case DW_TAG_reference_type:
+    case DW_TAG_rvalue_reference_type:
+    {
+      size_t last = index;
+      size_t cur  = index;
+      int c       = 0;
+
+      while(cur < sourcemap->n_innative_types)
+      {
+        switch(sourcemap->x_innative_types[cur].tag)
+        {
+        case DW_TAG_pointer_type:
+        case DW_TAG_reference_type:
+        case DW_TAG_rvalue_reference_type:
+          ++c;
+          last = cur;
+          break;
+        }
+        cur = sourcemap->x_innative_types[cur].type_index;
+      }
+
+      name = GetTypeName(sourcemap->x_innative_types[last].type_index, false, nested);
+      if(name.empty())
+        name = "void";
+
+      name.insert(0, "<");
+      name.append(">");
+
+      while(c-- > 0)
+        name.insert(0, "p");
+
+      name.insert(0, "_");
+      name.insert(0, _compiler->m.name.str());
+      return name;
+    }
+    }
+  }
+
+  switch(ty.tag)
+  {
+  default:
+    if(nested && ty.parent != (size_t)~0)
+    {
+      if(ty.name_index < sourcemap->n_names)
+        name = sourcemap->names[sourcemap->x_innative_types[index].name_index];
+      return GetTypeName(ty.parent, pstructs, true) + "::" + name;
+    }
+    return ty.name_index < sourcemap->n_names ? sourcemap->names[sourcemap->x_innative_types[index].name_index] : "";
+  case DW_TAG_atomic_type: name = "atomic " + name; break;
+  case DW_TAG_const_type: name = "const " + name; break;
+  case DW_TAG_immutable_type: name = "immutable " + name; break;
+  case DW_TAG_packed_type: name = "packed " + name; break;
+  case DW_TAG_pointer_type: name = name + "*"; break;
+  case DW_TAG_reference_type: name = name + "&"; break;
+  case DW_TAG_rvalue_reference_type: name = name + "&&"; break;
+  case DW_TAG_restrict_type: name = "restrict " + name; break;
+  case DW_TAG_shared_type: name = name + "shared "; break;
+  case DW_TAG_volatile_type: name = "volatile " + name; break;
+  case DW_TAG_ptr_to_member_type: name = "(*" + name + ")"; break;
+  case DW_TAG_array_type: name = name + "[" + std::to_string(ty.n_types) + "]"; break;
+  }
+
+  return name;
+}

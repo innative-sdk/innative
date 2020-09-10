@@ -4,6 +4,26 @@
 #include "test.h"
 #include "../innative/utility.h"
 
+#ifdef IN_PLATFORM_WIN32
+  #pragma pack(push)
+  #pragma pack(8)
+  #define WINVER        0x0600 // Vista
+  #define _WIN32_WINNT  0x0600
+  #define NTDDI_VERSION 0x06000000 // Vista
+  #define WIN32_LEAN_AND_MEAN
+  #ifndef NOMINMAX // Some compilers enable this by default
+    #define NOMINMAX
+  #endif
+  #define NODRAWTEXT
+  #define NOBITMAP
+  #define NOMCX
+  #define NOSERVICE
+  #define NOHELP
+  #define NOGDI
+  #include <windows.h>
+  #pragma pack(pop)
+#endif
+
 using namespace innative;
 extern void JIT_DUMP(Environment* env);
 
@@ -42,8 +62,12 @@ void TestHarness::test_jit()
     TESTERR(err, ERR_SUCCESS);
 
   #ifdef IN_PLATFORM_WIN32
+    HMODULE handle = GetModuleHandleA("kernel32.dll");
+    wchar_t sysdll[MAX_PATH];
+    GetModuleFileNameW(handle, sysdll, MAX_PATH);
+    auto syspath = path(sysdll).u8string();
     // Add kernel32
-    err = (*_exports.AddEmbedding)(env, IN_TAG_DYNAMIC, (void*)"C:\\Windows\\system32\\KERNEL32.DLL", 0, 0);
+    err = (*_exports.AddEmbedding)(env, IN_TAG_DYNAMIC, (void*)syspath.c_str(), 0, 0);
     TESTERR(err, ERR_SUCCESS);
   #endif
 
@@ -64,13 +88,13 @@ void TestHarness::test_jit()
     TEST(test != nullptr);
 
     if(test)
-      TEST((*test)(n) == 83);
+      TEST((*test)(n) == 84);
 
     (*_exports.DestroyEnvironment)(env);
   }
 
-// This doesn't make sense on linux
-#ifdef IN_PLATFORM_WIN32
+  // This doesn't make sense on linux
+  #ifdef IN_PLATFORM_WIN32
   {
     // Test building a DLL and loading it directly via JIT
     TEST(CompileWASM(
@@ -128,7 +152,7 @@ void TestHarness::test_jit()
 
     (*_exports.DestroyEnvironment)(env);
   }
-#endif
+  #endif
 
   {
     // Normally, the JIT initializes everything when you call CompilerJIT and cleans up during DestroyEnvironment.
@@ -153,8 +177,12 @@ void TestHarness::test_jit()
     TESTERR(err, ERR_SUCCESS);
 
   #ifdef IN_PLATFORM_WIN32
+    HMODULE handle = GetModuleHandleA("kernel32.dll");
+    wchar_t sysdll[MAX_PATH];
+    GetModuleFileNameW(handle, sysdll, MAX_PATH);
+    auto syspath = path(sysdll).u8string();
     // Add kernel32
-    err = (*_exports.AddEmbedding)(env, IN_TAG_DYNAMIC, (void*)"C:\\Windows\\system32\\KERNEL32.DLL", 0, 0);
+    err = (*_exports.AddEmbedding)(env, IN_TAG_DYNAMIC, (void*)syspath.c_str(), 0, 0);
     TESTERR(err, ERR_SUCCESS);
   #endif
 
@@ -181,7 +209,7 @@ void TestHarness::test_jit()
     if(init && exit && test)
     {
       init();
-      TEST((*test)(n) == 83);
+      TEST((*test)(n) == 84);
       // Then clean up before destroying the environment
       exit();
     }

@@ -34,8 +34,9 @@ namespace innative {
 
     inline llvm::Expected<llvm::JITEvaluatedSymbol> Lookup(llvm::StringRef Name)
     {
+      auto str = Name.str();
       return ES.lookup(llvm::orc::JITDylibSearchOrder({ { &MainJD, llvm::orc::JITDylibLookupFlags::MatchAllSymbols } }),
-                       Mangler(Name.str()));
+                       Mangler(str));
     }
 
     inline llvm::Expected<std::unique_ptr<llvm::TargetMachine>> GetTargetMachine() { return jtmb.createTargetMachine(); }

@@ -27,11 +27,12 @@ namespace innative {
     virtual void PopBlock();
     virtual void Finalize();
     virtual llvm::DIFile* GetSourceFile(size_t i) const { return dunit; }
+    virtual llvm::DISubroutineType* CreateFunctionDebugType(llvm::FunctionType* fn, llvm::CallingConv::ID callconv);
 
     llvm::DIType* CreateDebugType(llvm::Type* t);
-    llvm::DISubroutineType* CreateFunctionDebugType(llvm::FunctionType* fn, llvm::CallingConv::ID callconv);
     void FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool optimized, bool definition, bool artificial,
-                           llvm::DIFile* file, unsigned int line, unsigned int col, llvm::DISubroutineType* subtype = 0);
+                           llvm::DIScope* scope, llvm::DIFile* file, unsigned int line, unsigned int col,
+                           llvm::DISubroutineType* subtype = 0);
     void SetSPLocation(llvm::IRBuilder<>& builder, llvm::DISubprogram* sp);
 
     static Debugger* Create(Compiler& context);
