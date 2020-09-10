@@ -139,8 +139,13 @@ int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), co
     (*_exports.FinalizeEnvironment)(env);
 
   path base = _folder / (!out ? file.stem() : out);
-  _out = base;
+  _out      = base;
+#ifdef IN_PLATFORM_WIN32
+  base.replace_extension(".lib");
+  remove(base);
+#endif
   _out.replace_extension(IN_LIBRARY_EXTENSION);
+  remove(_out);
 
   if(err >= 0)
     err = (*_exports.Compile)(env, _out.u8string().c_str());
@@ -167,7 +172,6 @@ int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), co
 
   _garbage.push_back(_out);
 #ifdef IN_PLATFORM_WIN32
-  base.replace_extension(".lib");
   _garbage.push_back(base);
 #endif
   void* m = LoadAssembly(_out);
