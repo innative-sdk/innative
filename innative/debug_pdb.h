@@ -9,7 +9,7 @@
 #include <unordered_set>
 
 namespace innative {
-  KHASH_DECLARE(intset, size_t, char);
+  KHASH_DECLARE(intmap, const char*, size_t);
 
   class DebugPDB : public DebugSourceMap
   {
@@ -21,11 +21,14 @@ namespace innative {
     virtual void UpdateVariables(llvm::Function* fn, SourceMapScope& scope) override;
     llvm::DIType* StructOffsetType(size_t index, llvm::DIScope* scope, llvm::DIFile* file, llvm::StringRef name,
                                    uint64_t indice, llvm::Function* fn);
+    llvm::DIType* GetBaseType(size_t index, llvm::DIType* parent);
     virtual void Finalize() override;
     
   protected:
+    void _finalize(const char* name);
+
     uint64_t _uid;
-    kh_intset_t* _deferred;
+    kh_intmap_t* _deferred;
   };
 }
 

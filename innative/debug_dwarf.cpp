@@ -139,7 +139,6 @@ llvm::DIType* DebugDWARF::GetDebugType(size_t index, llvm::DIType* parent)
 
   if(index < types.size() && !types[index])
   {
-    const char* name   = type.name_index < sourcemap->n_names ? sourcemap->names[type.name_index] : 0;
     llvm::DIFile* file = GetSourceFile(type.source_index);
 
     switch(type.tag)
@@ -149,21 +148,14 @@ llvm::DIType* DebugDWARF::GetDebugType(size_t index, llvm::DIType* parent)
     case DW_TAG_pointer_type:
       if(auto ty = GetDebugType(type.type_index))
       {
-        auto str = ty->getName().str();
-        if(!name)
-          name = str.c_str();
-        auto pname = std::string("p<") + name;
-        if(pname.back() == '*' || pname.back() == '&') // strip one pointer indirection layer off
-          pname.pop_back();
-
-        auto member  = _dbuilder->createMemberType(file, name, file, 0, ty->getSizeInBits(), 0, 0x00000000000010008 << 3,
+        auto member  = _dbuilder->createMemberType(file, "ptr", file, 0, ty->getSizeInBits(), 0, 0x00000000000010008 << 3,
                                                   llvm::DINode::FlagZero, ty);
-        types[index] = _dbuilder->createStructType(file, pname + ">", file, 0, ty->getSizeInBits(), 0,
+        types[index] = _dbuilder->createStructType(file, GetTypeName(index, true, true), file, 0, ty->getSizeInBits(), 0,
                                                    llvm::DINode::FlagZero, 0, _dbuilder->getOrCreateArray({ member }));
       }
       break;
     }
   }
 
-  return types[index];
+  return llvm::dyn_cast_or_null<llvm::DIType>(types[index]);
 }

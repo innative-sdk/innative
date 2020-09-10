@@ -16,7 +16,7 @@ int TestHarness::do_debug(void* assembly)
   TEST(test != nullptr);
 
   if(test)
-    TEST((*test)(n) == 83);
+    TEST((*test)(n) == 84);
 
   return ERR_SUCCESS;
 }

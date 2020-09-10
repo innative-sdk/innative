@@ -55,6 +55,7 @@ typedef struct IN_SOURCE_TYPE
   unsigned short tag;
   unsigned short flags;
   size_t type_index; // Used for single types or a base type
+  size_t parent;
   union
   {
     size_t* types; // Child type indexes
@@ -109,6 +110,8 @@ typedef struct IN_SOURCE_FUNCTION
   size_t source_index;
   unsigned int original_line;
   size_t type_index;
+  size_t parent;
+  size_t flags; // Additional accessibility flags
 } SourceMapFunction;
 
 typedef struct IN_SOURCE_MAP

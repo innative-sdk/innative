@@ -37,20 +37,18 @@ namespace innative {
     bool handleFile(llvm::StringRef Filename, HandlerFn HandleObj);
     llvm::DWARFDie AsReferencedDIE(const llvm::DWARFFormValue& V, const llvm::DWARFUnit& unit);
     size_t GetSourceMapName(const char* name);
-    const char* GetDieName(const llvm::DWARFDie& die);
+    const char* GetDieName(llvm::DWARFDie die);
     bool DumpSourceMap(llvm::DWARFContext& DICtx, size_t code_section_offset);
-    void ResolveDWARFBitSize(const llvm::DWARFDie& die, SourceMapType* ptype);
-    void ResolveDWARFTypeFlags(const llvm::DWARFDie& die, SourceMapType* ptype);
-    void ParseDWARFSubprogram(IN_SOURCE_FUNCTION& v, llvm::DWARFContext& DICtx, const llvm::DWARFDie& die,
-                              llvm::DWARFUnit* CU);
-    void ParseDWARFVariable(IN_SOURCE_VARIABLE& v, llvm::DWARFContext& DICtx, const llvm::DWARFDie& die,
-                            llvm::DWARFUnit* CU);
-    bool ParseDWARFChild(llvm::DWARFContext& DICtx, SourceMapScope* parent, const llvm::DWARFDie& die, llvm::DWARFUnit* CU,
+    void ResolveDWARFBitSize(llvm::DWARFDie die, SourceMapType* ptype);
+    void ResolveDWARFTypeFlags(llvm::DWARFDie die, SourceMapType* ptype);
+    void ParseDWARFSubprogram(IN_SOURCE_FUNCTION& v, llvm::DWARFDie die, llvm::DWARFUnit* CU);
+    void ParseDWARFVariable(IN_SOURCE_VARIABLE& v, llvm::DWARFContext& DICtx, llvm::DWARFDie die, llvm::DWARFUnit* CU);
+    bool ParseDWARFChild(llvm::DWARFContext& DICtx, SourceMapScope* parent, llvm::DWARFDie die, llvm::DWARFUnit* CU,
                          size_t code_section_offset);
     enum IN_ERROR ParseDWARF(const char* obj, size_t len);
 
     template<llvm::dwarf::Attribute Attr1, llvm::dwarf::Attribute Attr2, typename T>
-    void ResolveBitAttribute(const llvm::DWARFDie& die, T& target)
+    void ResolveBitAttribute(llvm::DWARFDie die, T& target)
     {
       if(auto attr = die.find(Attr1))
         target = (T)attr->getAsUnsignedConstant().getValueOr(0);
@@ -73,8 +71,9 @@ namespace innative {
     }
 
   protected:
-    size_t GetSourceMapType(llvm::DWARFUnit& unit, const llvm::DWARFDie& die);
+    size_t GetSourceMapType(llvm::DWARFUnit& unit, llvm::DWARFDie die);
     size_t GetSourceMapTypeRef(llvm::DWARFUnit& unit, const llvm::DWARFFormValue& type);
+    size_t GetSourceMapParent(llvm::DWARFUnit& unit, llvm::DWARFDie die);
     bool HasIsStmt(size_t i, const llvm::DWARFDebugLine::LineTable::RowVector& rows);
 
     Environment* env;

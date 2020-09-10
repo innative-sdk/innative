@@ -111,7 +111,7 @@ Func* Compiler::PassFunction(Func* fn, llvm::StringRef name, const llvm::Twine& 
   fn->setLinkage(linkage);
   fn->setName(canonical);
   if(fn->getSubprogram())
-    debugger->FunctionDebugInfo(fn, name, env.optimize != 0, true, true, fn->getSubprogram()->getFile(),
+    debugger->FunctionDebugInfo(fn, name, env.optimize != 0, true, true, nullptr, fn->getSubprogram()->getFile(),
                                 fn->getSubprogram()->getLine(), 0);
 
   debugger->SetSPLocation(builder, fn->getSubprogram());
@@ -124,7 +124,7 @@ Func* Compiler::WrapFunction(Func* fn, llvm::StringRef name, const llvm::Twine& 
   Func* wrap = Func::Create(fn->getFunctionType(), linkage, canonical, mod);
   wrap->setCallingConv(callconv);
   if(fn->getSubprogram())
-    debugger->FunctionDebugInfo(wrap, name, env.optimize != 0, true, true, fn->getSubprogram()->getFile(),
+    debugger->FunctionDebugInfo(wrap, name, env.optimize != 0, true, true, nullptr, fn->getSubprogram()->getFile(),
                                 fn->getSubprogram()->getLine(), 0);
 
   debugger->SetSPLocation(builder, wrap->getSubprogram());
@@ -158,7 +158,7 @@ Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, const llvm::Twin
   generic->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
 
   if(fn->getSubprogram())
-    debugger->FunctionDebugInfo(generic, name, env.optimize != 0, true, true, fn->getSubprogram()->getFile(),
+    debugger->FunctionDebugInfo(generic, name, env.optimize != 0, true, true, nullptr, fn->getSubprogram()->getFile(),
                                 fn->getSubprogram()->getLine(), 0);
 
   debugger->SetSPLocation(builder, generic->getSubprogram());
@@ -843,7 +843,7 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
                  Func::ExternalLinkage, "_innative_internal_env_free_memory", mod);
 
   debugger->FunctionDebugInfo(init, IN_INIT_POSTFIX + (DIVIDER + std::string(m.name.str())), env.optimize != 0, true, true,
-                              debugger->GetSourceFile(0), 0, 0);
+                              nullptr, debugger->GetSourceFile(0), 0, 0);
 
   functions.reserve(m.importsection.functions + m.function.n_funcdecl);
   tables.reserve(m.importsection.tables - m.importsection.functions + m.table.n_tables);
@@ -1178,7 +1178,7 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
     TopLevelFunction(ctx, builder, CanonicalName(StringSpan::From(m.name), StringSpan::From(IN_EXIT_POSTFIX)).c_str(), mod);
 
   debugger->FunctionDebugInfo(exit, IN_EXIT_POSTFIX + (DIVIDER + std::string(m.name.str())), env.optimize != 0, true, true,
-                              debugger->GetSourceFile(0), 0, 0);
+                              nullptr, debugger->GetSourceFile(0), 0, 0);
   debugger->SetSPLocation(builder, exit->getSubprogram());
 
   for(size_t i = m.importsection.memories - m.importsection.tables; i < memories.size();
@@ -1426,7 +1426,7 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
 
   Func* chkstk = Func::Create(chkstk_ms->getFunctionType(), Func::WeakAnyLinkage, "__chkstk", mainctx.mod);
   builder.SetInsertPoint(BB::Create(*env->context, "entry", chkstk));
-  mainctx.debugger->FunctionDebugInfo(chkstk, "chkstk", mainctx.env.optimize != 0, true, true,
+  mainctx.debugger->FunctionDebugInfo(chkstk, "chkstk", mainctx.env.optimize != 0, true, true, nullptr,
                                       mainctx.debugger->GetSourceFile(0), 0, 0);
   mainctx.debugger->SetSPLocation(builder, chkstk->getSubprogram());
   builder.CreateCall(chkstk_ms, {});
@@ -1436,7 +1436,7 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
   // Create memcpy function to satisfy the rtlibcalls
   Func* memcpy = Func::Create(mainctx.memcpy->getFunctionType(), Func::WeakAnyLinkage, "memcpy", mainctx.mod);
   builder.SetInsertPoint(BB::Create(*env->context, "entry", memcpy));
-  mainctx.debugger->FunctionDebugInfo(memcpy, "memcpy", mainctx.env.optimize != 0, true, true,
+  mainctx.debugger->FunctionDebugInfo(memcpy, "memcpy", mainctx.env.optimize != 0, true, true, nullptr, 
                                       mainctx.debugger->GetSourceFile(0), 0, 0);
   mainctx.debugger->SetSPLocation(builder, memcpy->getSubprogram());
   CallInst* inner_memcpy = builder.CreateCall(mainctx.memcpy, { memcpy->getArg(0), memcpy->getArg(1), memcpy->getArg(2) });
@@ -1445,7 +1445,7 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
   // Create memmove function to satisfy the rtlibcalls
   Func* memmove = Func::Create(mainctx.memmove->getFunctionType(), Func::WeakAnyLinkage, "memmove", mainctx.mod);
   builder.SetInsertPoint(BB::Create(*env->context, "entry", memmove));
-  mainctx.debugger->FunctionDebugInfo(memmove, "memmove", mainctx.env.optimize != 0, true, true,
+  mainctx.debugger->FunctionDebugInfo(memmove, "memmove", mainctx.env.optimize != 0, true, true, nullptr, 
                                       mainctx.debugger->GetSourceFile(0), 0, 0);
   mainctx.debugger->SetSPLocation(builder, memmove->getSubprogram());
   CallInst* inner_memmove =
@@ -1455,7 +1455,7 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
   // Create memset function to satisfy the rtlibcalls
   Func* memset = Func::Create(mainctx.memset->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memset", mainctx.mod);
   builder.SetInsertPoint(BB::Create(*env->context, "entry", memset));
-  mainctx.debugger->FunctionDebugInfo(memset, "memset", mainctx.env.optimize != 0, true, true,
+  mainctx.debugger->FunctionDebugInfo(memset, "memset", mainctx.env.optimize != 0, true, true, nullptr, 
                                       mainctx.debugger->GetSourceFile(0), 0, 0);
   mainctx.debugger->SetSPLocation(builder, memset->getSubprogram());
   CallInst* inner_memset = builder.CreateCall(mainctx.memset, { memset->getArg(0), memset->getArg(1), memset->getArg(2) });
@@ -1464,7 +1464,7 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
   // Create memcmp function to satisfy the rtlibcalls
   Func* memcmp = Func::Create(mainctx.memcmp->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memcmp", mainctx.mod);
   builder.SetInsertPoint(BB::Create(*env->context, "entry", memcmp));
-  mainctx.debugger->FunctionDebugInfo(memcmp, "memcmp", mainctx.env.optimize != 0, true, true,
+  mainctx.debugger->FunctionDebugInfo(memcmp, "memcmp", mainctx.env.optimize != 0, true, true, nullptr, 
                                       mainctx.debugger->GetSourceFile(0), 0, 0);
   mainctx.debugger->SetSPLocation(builder, memcmp->getSubprogram());
   CallInst* inner_memcmp = builder.CreateCall(mainctx.memcmp, { memcmp->getArg(0), memcmp->getArg(1), memcmp->getArg(2) });
@@ -1598,7 +1598,7 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
 
   // Create cleanup function
   Func* cleanup = Compiler::TopLevelFunction(*env->context, builder, IN_EXIT_FUNCTION, mainctx.mod);
-  mainctx.debugger->FunctionDebugInfo(cleanup, IN_EXIT_FUNCTION, mainctx.env.optimize != 0, true, true,
+  mainctx.debugger->FunctionDebugInfo(cleanup, IN_EXIT_FUNCTION, mainctx.env.optimize != 0, true, true, nullptr, 
                                       mainctx.debugger->GetSourceFile(0), 0, 0);
   mainctx.debugger->SetSPLocation(mainctx.builder, cleanup->getSubprogram());
 
@@ -1616,7 +1616,7 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
 
   // Create main function that calls all init functions for all modules and all start functions
   Func* main = Compiler::TopLevelFunction(*env->context, builder, IN_INIT_FUNCTION, nullptr);
-  mainctx.debugger->FunctionDebugInfo(main, IN_INIT_FUNCTION, mainctx.env.optimize != 0, true, true,
+  mainctx.debugger->FunctionDebugInfo(main, IN_INIT_FUNCTION, mainctx.env.optimize != 0, true, true, nullptr, 
                                       mainctx.debugger->GetSourceFile(0), 0, 0);
   mainctx.debugger->SetSPLocation(mainctx.builder, main->getSubprogram());
 
@@ -1848,7 +1848,7 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
   if(env->flags & ENV_NO_INIT)
   {
     Func* cleanup = Compiler::TopLevelFunction(*env->context, builder, IN_EXIT_FUNCTION, mainctx.mod);
-    mainctx.debugger->FunctionDebugInfo(cleanup, IN_EXIT_FUNCTION, mainctx.env.optimize != 0, true, true,
+    mainctx.debugger->FunctionDebugInfo(cleanup, IN_EXIT_FUNCTION, mainctx.env.optimize != 0, true, true, nullptr, 
                                         mainctx.debugger->GetSourceFile(0), 0, 0);
     mainctx.debugger->SetSPLocation(mainctx.builder, cleanup->getSubprogram());
 
@@ -1868,7 +1868,7 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
 
     // Create main function that calls all init functions for all modules and all start functions
     Func* main = Compiler::TopLevelFunction(*env->context, builder, IN_INIT_FUNCTION, nullptr);
-    mainctx.debugger->FunctionDebugInfo(main, IN_INIT_FUNCTION, mainctx.env.optimize != 0, true, true,
+    mainctx.debugger->FunctionDebugInfo(main, IN_INIT_FUNCTION, mainctx.env.optimize != 0, true, true, nullptr, 
                                         mainctx.debugger->GetSourceFile(0), 0, 0);
     mainctx.debugger->SetSPLocation(mainctx.builder, main->getSubprogram());
 
