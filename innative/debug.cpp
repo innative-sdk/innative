@@ -56,7 +56,7 @@ Debugger::Debugger(Compiler* compiler, llvm::Module& m, const char* name, const 
   diI64  = _dbuilder->createBasicType("i64", 64, llvm::dwarf::DW_ATE_signed);
   diVoid = _dbuilder->createUnspecifiedType("void");
 }
-void Debugger::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized) {}
+void Debugger::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line) {}
 void Debugger::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body) {}
 void Debugger::FuncParam(llvm::Function* fn, size_t indice, FunctionDesc& desc) {}
 void Debugger::FuncLocal(llvm::Function* fn, size_t indice, FunctionDesc& desc) {}
@@ -133,7 +133,7 @@ llvm::DISubroutineType* Debugger::CreateFunctionDebugType(llvm::FunctionType* fn
                                                                               llvm::dwarf::DW_CC_nocall);
 }
 
-void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool optimized, bool definition, bool artificial, llvm::DIScope* scope,
+void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool definition, bool artificial, llvm::DIScope* scope,
                                  llvm::DIFile* file, unsigned int line, unsigned int col, llvm::DISubroutineType* subtype)
 {
   if(!_dbuilder)
@@ -147,7 +147,7 @@ void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool 
   if(definition)
     spflags |= llvm::DISubprogram::DISPFlags::SPFlagDefinition;
 
-  if(optimized)
+  if(_compiler->env.optimize != 0)
     spflags |= llvm::DISubprogram::DISPFlags::SPFlagOptimized;
 
   if(artificial)
@@ -169,12 +169,7 @@ void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool 
   if(!subtype)
     subtype = CreateFunctionDebugType(fn->getFunctionType(), fn->getCallingConv());
   
-  llvm::DISubprogram* p;
-  if(auto parent = llvm::dyn_cast<llvm::DIType>(scope))
-    p = _dbuilder->createMethod(scope, name, fn->getName(), file, line, subtype, 0, 0, parent, diflags, spflags);
-  else
-    p = _dbuilder->createFunction(scope, name, fn->getName(), file, line, subtype, line, diflags, spflags);
-  fn->setSubprogram(p);
+  fn->setSubprogram(_dbuilder->createFunction(scope, name, fn->getName(), file, line, subtype, line, diflags, spflags));
 }
 void Debugger::PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc) { _curscope = scope; }
 void Debugger::PopBlock() {}

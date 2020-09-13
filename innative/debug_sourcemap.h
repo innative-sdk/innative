@@ -12,7 +12,7 @@ namespace innative {
   {
   public:
     DebugSourceMap(SourceMap* s, Compiler* compiler, llvm::Module& m, const char* name, const char* filepath, char target);
-    virtual void FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized) override;
+    virtual void FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line) override;
     virtual void FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body) override;
     virtual void PostFuncBody(llvm::Function* fn, FunctionBody& body) override;
     virtual void FuncParam(llvm::Function* fn, size_t indice, FunctionDesc& desc) override;
@@ -21,8 +21,11 @@ namespace innative {
     virtual void DebugGlobal(llvm::GlobalVariable* v, llvm::StringRef name, size_t line) override;
     virtual void PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc) override;
     virtual void DebugSetGlobal(int index) override;
+    virtual void Finalize() override;
     virtual llvm::DIScope* GetDebugScope(size_t index, llvm::DIFile* root);
     virtual llvm::DIType* GetDebugType(size_t index, llvm::DIType* parent = 0);
+    virtual llvm::DISubprogram* GetDebugFunction(size_t index, const char* linkage, llvm::CallingConv::ID cc, bool noreturn,
+                                                 bool islocal = true);
     virtual void UpdateVariables(llvm::Function* fn, SourceMapScope& scope);
     virtual llvm::DIFile* GetSourceFile(size_t i) const override;
     void UpdateLocation(Instruction& i);
@@ -32,12 +35,16 @@ namespace innative {
 
     SourceMap* sourcemap;
     std::vector<llvm::DIScope*> types;
+    std::vector<llvm::DISubprogram*> functions;
     std::vector<llvm::DIFile*> files;             // sourcemap files
     std::vector<llvm::DISubprogram*> subprograms; // Seperate subprograms for when functions are split across files
     std::vector<llvm::DILocalScope*> scopecache;
     Stack<size_t> scopes; // stack of scope indexes
     size_t cursegment;
     size_t currangeindex;
+
+  protected:
+    void _finalizecomposite();
   };
 }
 

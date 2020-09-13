@@ -15,7 +15,7 @@ namespace innative {
   public:
     Debugger();
     virtual ~Debugger();
-    virtual void FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized);
+    virtual void FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line);
     virtual void FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body);
     virtual void PostFuncBody(llvm::Function* fn, FunctionBody& body);
     virtual void FuncParam(llvm::Function* fn, size_t indice, FunctionDesc& desc);
@@ -30,9 +30,8 @@ namespace innative {
     virtual llvm::DISubroutineType* CreateFunctionDebugType(llvm::FunctionType* fn, llvm::CallingConv::ID callconv);
 
     llvm::DIType* CreateDebugType(llvm::Type* t);
-    void FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool optimized, bool definition, bool artificial,
-                           llvm::DIScope* scope, llvm::DIFile* file, unsigned int line, unsigned int col,
-                           llvm::DISubroutineType* subtype = 0);
+    void FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool definition, bool artificial, llvm::DIScope* scope,
+                           llvm::DIFile* file, unsigned int line, unsigned int col, llvm::DISubroutineType* subtype = 0);
     void SetSPLocation(llvm::IRBuilder<>& builder, llvm::DISubprogram* sp);
 
     static Debugger* Create(Compiler& context);
