@@ -58,6 +58,8 @@ DebugSourceMap::DebugSourceMap(SourceMap* s, Compiler* compiler, llvm::Module& m
 
   if(s->n_innative_types)
     types.resize(s->n_innative_types);
+  if(s->n_innative_functions)
+    functions.resize(s->n_innative_functions);
 }
 
 llvm::DIFile* DebugSourceMap::GetSourceFile(size_t i) const { return (i < files.size()) ? files[i] : dunit; }
@@ -70,38 +72,70 @@ SourceMapFunction* DebugSourceMap::GetSourceFunction(unsigned int offset)
   return (i >= end /*|| i->range.low != offset*/) ? nullptr : i;
 }
 
-void DebugSourceMap::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized)
+llvm::DISubprogram* DebugSourceMap::GetDebugFunction(size_t index, const char* linkage, llvm::CallingConv::ID cc,
+                                                     bool noreturn, bool islocal)
+{
+  if(index >= sourcemap->n_innative_functions)
+    return nullptr;
+
+  if(index < functions.size() && functions[index] == nullptr)
+  {
+    SourceMapFunction& f = sourcemap->x_innative_functions[index];
+    assert(f.range.scope < sourcemap->n_innative_scopes);
+    if(f.range.scope >= sourcemap->n_innative_scopes)
+      return nullptr;
+
+    auto& scope = sourcemap->x_innative_scopes[f.range.scope];
+    auto name   = (scope.name_index < sourcemap->n_names) ? sourcemap->names[scope.name_index] : linkage;
+    if(!name)
+      name = "";
+    if(!linkage)
+      linkage = name;
+
+    llvm::SmallVector<llvm::Metadata*, 8> dwarfTys = { GetDebugType(f.type_index) };
+    for(unsigned int i = 0; i < scope.n_variables; ++i)
+    {
+      auto& v = sourcemap->x_innative_variables[scope.variables[i]];
+      if(v.tag == DW_TAG_formal_parameter)
+        dwarfTys.push_back(GetDebugType(v.type_index));
+      else if(v.tag == DW_TAG_unspecified_parameters)
+        dwarfTys.push_back(_dbuilder->createUnspecifiedParameter());
+    }
+    auto subtype = _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(dwarfTys), GetFlags(f.flags),
+                                                   (cc == llvm::CallingConv::C) ? DW_CC_normal : DW_CC_nocall);
+
+    llvm::DISubprogram::DISPFlags spflags = llvm::DISubprogram::DISPFlags::SPFlagZero;
+    llvm::DINode::DIFlags diflags         = llvm::DINode::FlagZero;
+
+    spflags |= llvm::DISubprogram::DISPFlags::SPFlagDefinition;
+
+    if(islocal)
+      spflags |= llvm::DISubprogram::DISPFlags::SPFlagLocalToUnit;
+
+    if(_compiler->env.optimize != 0)
+      spflags |= llvm::DISubprogram::DISPFlags::SPFlagOptimized;
+
+    if(noreturn)
+      diflags |= llvm::DINode::FlagNoReturn;
+
+    llvm::DIFile* file = GetSourceFile(f.source_index);
+    functions[index]   = _dbuilder->createFunction(GetDebugScope(f.parent, file), name, linkage, file, f.original_line,
+                                                 subtype, f.original_line, diflags, spflags);
+  }
+
+  return functions[index];
+}
+
+void DebugSourceMap::FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line)
 {
   // Use function low_PC to find the debug entry
   SourceMapFunction* f = GetSourceFunction(offset);
 
   if(!f)
-  {
-    FunctionDebugInfo(fn, fn->getName(), optimized, true, false, 0, dunit, line, 0);
-    return;
-  }
+    return FunctionDebugInfo(fn, fn->getName(), true, false, 0, dunit, line, 0);
 
-  assert(f->range.scope < sourcemap->n_innative_scopes);
-  if(f->range.scope >= sourcemap->n_innative_scopes)
-    return;
-  auto& scope = sourcemap->x_innative_scopes[f->range.scope];
-  auto name   = (scope.name_index < sourcemap->n_names) ? sourcemap->names[scope.name_index] : fn->getName();
-
-  llvm::SmallVector<llvm::Metadata*, 8> dwarfTys = { GetDebugType(f->type_index) };
-  for(unsigned int i = 0; i < scope.n_variables; ++i)
-  {
-    auto& v = sourcemap->x_innative_variables[scope.variables[i]];
-    if(v.tag == DW_TAG_formal_parameter)
-      dwarfTys.push_back(GetDebugType(v.type_index));
-    else if(v.tag == DW_TAG_unspecified_parameters)
-      dwarfTys.push_back(_dbuilder->createUnspecifiedParameter());
-  }
-  auto subtype =
-    _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(dwarfTys), GetFlags(f->flags),
-                                    (fn->getCallingConv() == llvm::CallingConv::C) ? DW_CC_normal : DW_CC_nocall);
-
-  auto file = GetSourceFile(f->source_index);
-  FunctionDebugInfo(fn, name, optimized, true, false, GetDebugScope(f->parent, file), file, f->original_line, 0, subtype);
+  fn->setSubprogram(GetDebugFunction(f - sourcemap->x_innative_functions, fn->getName().str().c_str(), fn->getCallingConv(),
+                                     fn->doesNotReturn(), !fn->hasValidDeclarationLinkage()));
 }
 
 void DebugSourceMap::FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body)
@@ -171,6 +205,11 @@ void DebugSourceMap::UpdateLocation(Instruction& i)
       if(!subprograms[s.source_index])
       {
         auto original = _curscope->getSubprogram();
+        auto f1       = _curscope->getFile();
+        auto f2       = original->getFile();
+        auto f3       = files[s.source_index];
+        auto f4       = dunit;
+
         subprograms[s.source_index] =
           _dbuilder->createFunction(original->getScope(), original->getName(), original->getLinkageName(),
                                     files[s.source_index], original->getLine(), original->getType(),
@@ -341,23 +380,15 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
     case DW_TAG_class_type:
     case DW_TAG_structure_type:
     {
-      llvm::DICompositeType* composite;
       if(type.tag == DW_TAG_class_type)
-        composite = _dbuilder->createClassType(GetDebugScope(type.parent, file), name, file, type.original_line,
-                                               type.bit_size, type.byte_align << 3, type.bit_offset, llvm::DINode::FlagZero,
-                                               nullptr, llvm::DINodeArray());
+        types[index] = _dbuilder->createClassType(GetDebugScope(type.parent, file), name, file,
+                                                              type.original_line, type.bit_size, type.byte_align << 3,
+                                                              type.bit_offset, llvm::DINode::FlagZero, nullptr,
+                                                              llvm::DINodeArray());
       else
-        composite = _dbuilder->createStructType(GetDebugScope(type.parent, file), name, file, type.original_line,
-                                                type.bit_size, type.byte_align << 3, llvm::DINode::FlagZero, nullptr,
-                                                llvm::DINodeArray());
-      types[index] = composite;
-
-      llvm::SmallVector<llvm::Metadata*, 8> elements;
-      for(size_t i = 0; i < type.n_types; ++i)
-        if(auto ty = GetDebugType(type.types[i], composite))
-          elements.push_back(ty);
-
-      _dbuilder->replaceArrays(composite, _dbuilder->getOrCreateArray(elements));
+        types[index] = _dbuilder->createStructType(GetDebugScope(type.parent, file), name, file,
+                                                               type.original_line, type.bit_size, type.byte_align << 3,
+                                                               llvm::DINode::FlagZero, nullptr, llvm::DINodeArray());
       break;
     }
     case DW_TAG_union_type:
@@ -516,4 +547,38 @@ std::string DebugSourceMap::GetTypeName(size_t index, bool pstructs, bool nested
   }
 
   return name;
+}
+
+void DebugSourceMap::Finalize()
+{
+  _finalizecomposite();
+  Debugger::Finalize();
+}
+
+void DebugSourceMap::_finalizecomposite()
+{
+  for(size_t index = 0; index < types.size(); ++index)
+  {
+    auto& type = sourcemap->x_innative_types[index];
+    switch(type.tag)
+    {
+    case DW_TAG_class_type:
+    case DW_TAG_structure_type:
+      if(auto composite = llvm::dyn_cast_or_null<llvm::DICompositeType>(types[index]))
+      {
+        llvm::SmallVector<llvm::Metadata*, 8> elements;
+        for(size_t i = 0; i < type.n_types; ++i)
+          if(auto ty = GetDebugType(type.types[i], composite))
+            elements.push_back(ty);
+
+        // Find all functions with this type as a parent
+        for(size_t i = 0; i < sourcemap->n_innative_functions; ++i)
+          if(sourcemap->x_innative_functions[i].parent == index)
+            if(auto fn = GetDebugFunction(i, nullptr, llvm::CallingConv::Fast, dunit, false))
+              elements.push_back(fn);
+
+        _dbuilder->replaceArrays(composite, _dbuilder->getOrCreateArray(elements));
+      }
+    }
+  }
 }

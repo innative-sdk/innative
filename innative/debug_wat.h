@@ -12,7 +12,7 @@ namespace innative {
   {
   public:
     DebugWat(Compiler* compiler, llvm::Module& m, const char* name, const char* filepath);
-    virtual void FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line, bool optimized) override;
+    virtual void FuncDecl(llvm::Function* fn, unsigned int offset, unsigned int line) override;
     virtual void FuncBody(llvm::Function* fn, size_t indice, FunctionDesc& desc, FunctionBody& body) override;
     virtual void FuncParam(llvm::Function* fn, size_t indice, FunctionDesc& desc) override;
     virtual void FuncLocal(llvm::Function* fn, size_t indice, FunctionDesc& desc) override;

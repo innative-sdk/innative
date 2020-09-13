@@ -218,6 +218,7 @@ llvm::DIType* DebugPDB::GetDebugType(size_t index, llvm::DIType* parent)
 
 void DebugPDB::Finalize()
 {
+  _finalizecomposite();
   llvm::SmallVector<llvm::DIGlobalVariableExpression*, 1> expr;
   _compiler->globals[0]->getDebugInfo(expr);
   auto global = expr[0]->getVariable()->getName();
@@ -245,7 +246,7 @@ void DebugPDB::Finalize()
   }
 
   kh_clear_intmap(_deferred);
-  DebugSourceMap::Finalize();
+  Debugger::Finalize();
 }
 
 void DebugPDB::_finalize(const char* str)
