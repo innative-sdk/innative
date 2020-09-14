@@ -77,7 +77,7 @@ float (*testfn)(int) = nullptr;
 extern "C" MODULE_EXPORT int debug(int n)
 {
   auto f     = new CTest[3];
-  int test[]   = { 1, 2, 3 };
+  int test[] = { 1, 2, 3 };
   f->z[0]    = test[0];
   f->z[1]    = test[1];
   f->z[2]    = test[2];
@@ -86,8 +86,9 @@ extern "C" MODULE_EXPORT int debug(int n)
   f[2].a     = n * n * n;
 
   testfn = &convertf;
-  f[0].b = (*testfn)(converti(&f[1]));
-
+  auto testfn2 = testfn;
+  f[0].b = (*testfn2)(converti(&f[1]));
+  
   auto& f1 = f[1].a;
   f1       = n * n + ENUM_USED;
 
@@ -98,7 +99,7 @@ extern "C" MODULE_EXPORT int debug(int n)
   lambda();
 
   CTest** pf = &f;
-  *pf     = f;
+  *pf        = f;
 
   f[0].c = &f[1];
   f[1].c = &f[2];
@@ -106,7 +107,23 @@ extern "C" MODULE_EXPORT int debug(int n)
 
   CBase* pBase2 = new CBase;
   Test::CTask t;
-  int result = t.Run() / 1234;
+  int result;
+  switch(t.Run())
+  {
+  case 0:
+  case 1:
+    result = 50;
+    break;
+  case 1234:
+    result = 1; 
+    break;
+  default: 
+    result = 0;
+    break;
+  }
 
   return f[0].c->c->c->a + addi(f[0].c->a, f[0].a) + result;
 }
+
+// Only used to build this as a normal EXE for comparing debug information
+//int main() { return debug(4); }

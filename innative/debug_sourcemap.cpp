@@ -381,14 +381,13 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
     case DW_TAG_structure_type:
     {
       if(type.tag == DW_TAG_class_type)
-        types[index] = _dbuilder->createClassType(GetDebugScope(type.parent, file), name, file,
-                                                              type.original_line, type.bit_size, type.byte_align << 3,
-                                                              type.bit_offset, llvm::DINode::FlagZero, nullptr,
-                                                              llvm::DINodeArray());
+        types[index] = _dbuilder->createClassType(GetDebugScope(type.parent, file), name, file, type.original_line,
+                                                  type.bit_size, type.byte_align << 3, type.bit_offset,
+                                                  llvm::DINode::FlagZero, nullptr, llvm::DINodeArray());
       else
-        types[index] = _dbuilder->createStructType(GetDebugScope(type.parent, file), name, file,
-                                                               type.original_line, type.bit_size, type.byte_align << 3,
-                                                               llvm::DINode::FlagZero, nullptr, llvm::DINodeArray());
+        types[index] = _dbuilder->createStructType(GetDebugScope(type.parent, file), name, file, type.original_line,
+                                                   type.bit_size, type.byte_align << 3, llvm::DINode::FlagZero, nullptr,
+                                                   llvm::DINodeArray());
       break;
     }
     case DW_TAG_union_type:
@@ -460,10 +459,12 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
       types[index] = _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(params), GetFlags(type.flags));
       break;
     }
+    case DW_TAG_formal_parameter: types[index] = GetDebugType(type.type_index); break;
+    case DW_TAG_unspecified_parameters: types[index] = _dbuilder->createUnspecifiedParameter(); break;
     }
   }
 
-  return index < types.size() ? llvm::dyn_cast<llvm::DIType>(types[index]) : nullptr;
+  return index < types.size() ? llvm::dyn_cast_or_null<llvm::DIType>(types[index]) : nullptr;
 }
 void DebugSourceMap::PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc) {}
 
