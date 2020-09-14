@@ -459,7 +459,10 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
       types[index] = _dbuilder->createSubroutineType(_dbuilder->getOrCreateTypeArray(params), GetFlags(type.flags));
       break;
     }
-    case DW_TAG_formal_parameter: types[index] = GetDebugType(type.type_index); break;
+    case DW_TAG_formal_parameter:
+      // we CANNOT cache this type, because then it would potentially be the exact same type as the parameter which can
+      // cause finalization problems
+      return GetDebugType(type.type_index);
     case DW_TAG_unspecified_parameters: types[index] = _dbuilder->createUnspecifiedParameter(); break;
     }
   }

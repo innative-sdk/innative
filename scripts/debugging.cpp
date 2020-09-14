@@ -45,11 +45,17 @@ public:
   int a;
 };
 
+union CIntFloat
+{
+  int i;
+  float f;
+};
+
 namespace Test {
   class CDerived : CBase
   {
   public:
-    int a;
+    CIntFloat a;
   };
 
   class CTask
@@ -59,8 +65,9 @@ namespace Test {
     {
       CBase* pBase       = new CBase;
       CDerived* pDerived = new CDerived;
-      pDerived->a        = pBase->a;
-      int a              = pDerived->a;
+      pDerived->a.i        = pBase->a;
+      int a              = pDerived->a.i;
+      CIntFloat* b = &pDerived->a;
       delete pDerived;
       delete pBase;
       return a;
