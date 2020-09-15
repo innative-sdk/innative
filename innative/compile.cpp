@@ -875,8 +875,8 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
         khiter_t iter            = kh_put_importhash(importhash, functions.back().internal->getName().data(), &r);
         kh_val(importhash, iter) = functions.back().internal;
       }
-      functions.back().internal->setMetadata(
-        IN_MEMORY_GROW_METADATA, llvm::MDNode::get(ctx, {})); // Assume all external functions invalidate the memory cache
+      // Assume all external functions invalidate the memory cache
+      functions.back().internal->setMetadata(IN_MEMORY_GROW_METADATA, llvm::MDNode::get(ctx, {}));
 
       auto e = ResolveExport(env, imp);
       if(!e.second)
@@ -1181,15 +1181,15 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
                               debugger->GetSourceFile(0), 0, 0);
   debugger->SetSPLocation(builder, exit->getSubprogram());
 
-  for(size_t i = m.importsection.memories - m.importsection.tables; i < memories.size();
-      ++i) // Don't accidentally delete imported linear memories
+  // Don't accidentally delete imported linear memories
+  for(size_t i = m.importsection.memories - m.importsection.tables; i < memories.size(); ++i)
     builder
       .CreateCall(fn_memfree,
                   { builder.CreateLoad(GetPairPtr(memories[i], 0)), builder.CreateLoad(GetPairPtr(memories[i], 1)) })
       ->setCallingConv(fn_memfree->getCallingConv());
 
-  for(size_t i = m.importsection.tables - m.importsection.functions; i < tables.size();
-      ++i) // Don't accidentally delete imported tables
+  // Don't accidentally delete imported tables
+  for(size_t i = m.importsection.tables - m.importsection.functions; i < tables.size(); ++i)
     builder
       .CreateCall(fn_memfree,
                   { builder.CreatePointerCast(builder.CreateLoad(GetPairPtr(tables[i], 0)), builder.getInt8PtrTy(0)),
@@ -1293,8 +1293,8 @@ void Compiler::AddMemLocalCaching()
   if(!memories.size())
     return;
 
-  for(auto fn : functions) // Because it's crucial we cover the entire call graph, we just go through every single
-                           // function that has a definition
+  // Because it's crucial we cover the entire call graph, we go through all functions with definitions
+  for(auto fn : functions)
   {
     PostOrderTraversal(fn.internal);
     PostOrderTraversal(fn.exported);
@@ -1303,9 +1303,9 @@ void Compiler::AddMemLocalCaching()
 
   for(auto fn : functions)
   {
+    // This cleanup is optional, but keeps the IR clean when inspecting it.
     if(fn.internal)
-      fn.internal->setMetadata(IN_FUNCTION_TRAVERSED,
-                               0); // This cleanup is optional, but keeps the IR clean when inspecting it.
+      fn.internal->setMetadata(IN_FUNCTION_TRAVERSED, 0);
     if(fn.exported)
       fn.exported->setMetadata(IN_FUNCTION_TRAVERSED, 0);
     if(fn.imported)
@@ -1328,8 +1328,8 @@ void Compiler::AddMemLocalCaching()
           {
             if(called->getMetadata(IN_MEMORY_GROW_METADATA) != nullptr)
             {
-              builder.SetInsertPoint(
-                &i); // Setting the insert point doesn't actually gaurantee the instructions come after the call
+              // Setting the insert point doesn't actually gaurantee the instructions come after the call
+              builder.SetInsertPoint(&i);
               auto load = builder.CreateLoad(GetPairPtr(memories[0], 0));
               load->moveAfter(&i); // So we manually move them after the call instruction just to be sure.
               builder.CreateStore(load, fn.memlocal, false)->moveAfter(load);
@@ -1640,10 +1640,9 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
         auto alias = mainctx.mod->getNamedAlias(env->modules[i].cache->start->getName());
         if(alias)
           stub = llvm::cast<Func>(alias->getAliasee());
-        else
+        else // Create function prototype in main module
           stub = Func::Create(env->modules[i].cache->start->getFunctionType(), env->modules[i].cache->start->getLinkage(),
-                              env->modules[i].cache->start->getName(),
-                              mainctx.mod); // Create function prototype in main module
+                              env->modules[i].cache->start->getName(), mainctx.mod);
       }
       builder.CreateCall(stub, {})->setCallingConv(stub->getCallingConv());
     }
