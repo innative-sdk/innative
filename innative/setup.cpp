@@ -172,6 +172,8 @@ namespace innative {
     };
 
 #elif defined(IN_PLATFORM_POSIX)
+  #define MAKESTRING2(x) #x
+  #define MAKESTRING(x)  MAKESTRING2(x)
   #define POSIX_VERSION_STR \
     "." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
     int FindLatestVersion(const std::string& prefix, const std::vector<std::string>& files)

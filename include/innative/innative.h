@@ -17,9 +17,14 @@ limitations under the License.
 #ifndef IN__INNATIVE_H
 #define IN__INNATIVE_H
 
-#define INNATIVE_VERSION_MAJOR       0
-#define INNATIVE_VERSION_MINOR       1
-#define INNATIVE_VERSION_REVISION    9
+#define INNATIVE_VERSION_MAJOR    0
+#define INNATIVE_VERSION_MINOR    1
+#define INNATIVE_VERSION_REVISION 9
+#define INNATIVE_VERSION_BUILD                                                                   \
+  ((((__TIME__[0] - '0') * 36000) + ((__TIME__[1] - '0') * 3600) + ((__TIME__[3] - '0') * 600) + \
+    ((__TIME__[4] - '0') * 60) + ((__TIME__[6] - '0') * 10) + (__TIME__[7] - '0')) &             \
+   0xFFFF)
+
 #define INNATIVE_WASM_MAGIC_COOKIE   0x6d736100
 #define INNATIVE_WASM_MAGIC_VERSION  0x01
 #define INNATIVE_VERSION(v, m, r, b) (((v | 0ULL) << 48) | ((m | 0ULL) << 32) | ((r | 0ULL) << 16) | (b | 0ULL))

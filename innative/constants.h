@@ -10,12 +10,6 @@
 #include <ostream>
 #include <array>
 
-#define MAKESTRING2(x) #x
-#define MAKESTRING(x)  MAKESTRING2(x)
-
-#define IN_VERSION_STRING \
-  MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
-
 KHASH_DECLARE(mapenum, int, const char*);
 
 namespace innative {

@@ -42,12 +42,12 @@ int main(int argc, char* argv[])
   int log              = LOG_WARNING;
   int stages           = 0;
   ptrdiff_t ignore     = 0;
-  ptrdiff_t failures      = 0;
+  ptrdiff_t failures   = 0;
   std::string temppath = temp_directory_path().u8string();
   bool wait            = true;
 
   std::cout << "inNative v" << INNATIVE_VERSION_MAJOR << "." << INNATIVE_VERSION_MINOR << "." << INNATIVE_VERSION_REVISION
-            << " Test Utility" << std::endl;
+            << "." << INNATIVE_VERSION_BUILD << " Test Utility" << std::endl;
   std::cout << std::endl;
 
   std::unique_ptr<kh_match_t, void (*)(kh_match_t*)> matchfiles(kh_init_match(), kh_destroy_match);

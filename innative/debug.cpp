@@ -45,7 +45,11 @@ Debugger::Debugger(Compiler* compiler, llvm::Module& m, const char* name, const 
   else
     dunit = _dbuilder->createFile(abspath.filename().u8string(), abspath.parent_path().u8string());
 
-  dcu = _dbuilder->createCompileUnit(llvm::dwarf::DW_LANG_C89, dunit, "inNative Runtime v" IN_VERSION_STRING,
+  char version[36];
+  SPRINTF(version, 36, "inNative Runtime v%i.%i.%i.%i", INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR,
+            INNATIVE_VERSION_REVISION, INNATIVE_VERSION_BUILD);
+
+  dcu = _dbuilder->createCompileUnit(llvm::dwarf::DW_LANG_C89, dunit, version,
                                      _compiler->env.optimize != 0, GenFlagString(_compiler->env), WASM_MAGIC_VERSION, name);
 
   diF32  = _dbuilder->createBasicType("f32", 32, llvm::dwarf::DW_ATE_float);
