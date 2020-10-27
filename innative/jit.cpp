@@ -21,6 +21,11 @@ JITContext::JITContext(JITTargetMachineBuilder JTMB, DataLayout DL, std::unique_
   Ctx(std::move(ctx)),
   MainJD(ES.createJITDylib("<+innative_main>"))
 {
+  #ifdef IN_PLATFORM_WIN32
+  OL.setOverrideObjectFlagsWithResponsibilityFlags(true);
+  OL.setAutoClaimResponsibilityForObjectSymbols(true);
+  #endif
+
   ES.setErrorReporter([env](Error e) {
     if(e)
       llvm::outs() << "JIT Error: " << e << "\n";
