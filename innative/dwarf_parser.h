@@ -60,11 +60,14 @@ namespace innative {
     {
       if(n <= size)
         return;
-      T* p = innative::utility::template tmalloc<T>(*env, n);
+      // Using tmalloc would be faster but causes unacceptable memory usage with large modules.
+      T* p = (T*)malloc(n * sizeof(T));
       if(p && root && size)
         innative::utility::template tmemcpy<T>(p, n, root, size);
       if(p)
         memset(p + size, 0, sizeof(T) * (n - size));
+      if(root)
+        free(root);
 
       size = n;
       root = p;
