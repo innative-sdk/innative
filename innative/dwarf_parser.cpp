@@ -750,7 +750,7 @@ bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
 
     resizeSourceMap(map->sources, map->n_sources, map->n_sources + filenames.size());
     resizeSourceMap(map->sourcesContent, map->n_sourcesContent, map->n_sourcesContent + filenames.size());
-    if(!map->sources || !map->sourcesContent)
+    if((!map->sources && map->n_sources > 0) || (!map->sourcesContent && map->n_sourcesContent > 0))
       return false;
 
     for(size_t i = 0; i < filenames.size(); ++i)
@@ -770,7 +770,7 @@ bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
     }
 
     resizeSourceMap(map->segments, map->n_segments, mapping_offset + linetable->Rows.size());
-    if(!map->segments)
+    if(!map->segments && map->n_segments > 0)
       return false;
 
     // If clang encounters an unused function that wasn't removed (because you compiled in debug mode), it generates
@@ -905,7 +905,7 @@ enum IN_ERROR DWARFParser::ParseDWARF(const char* obj, size_t len)
   else
     success =
       handleBuffer("memorybuf", MemoryBufferRef(llvm::StringRef(obj, len), "memorybuf"), &DWARFParser::DumpSourceMap);
-  return success ? ERR_SUCCESS : ERR_FATAL_FILE_ERROR;
+  return success ? ERR_SUCCESS : ERR_FATAL_DEBUG_ERROR;
 }
 
 enum IN_ERROR ParseDWARF(struct IN_WASM_ENVIRONMENT* env, SourceMap* map, const char* obj, size_t len)

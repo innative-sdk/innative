@@ -778,7 +778,7 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
 
   debugger.reset(Debugger::Create(*this));
   if(!debugger)
-    return ERR_FATAL_FILE_ERROR;
+    return ERR_FATAL_DEBUG_OBJ_ERROR;
 
   // Define a unique init function for performing module initialization
   init =

@@ -82,7 +82,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
   if(machine->addPassesToEmitFile(pass, dest, nullptr, FileType))
   {
     fputs("TheTargetMachine can't emit a file of this type.\n", log);
-    return ERR_FATAL_FILE_ERROR;
+    return ERR_FATAL_FORMAT_ERROR;
   }
 
   pass.run(*composite);
