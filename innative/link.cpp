@@ -36,7 +36,7 @@ IN_ERROR innative::OutputObjectFile(Compiler& context, const path& out)
   {
     if(context.env.loglevel >= LOG_FATAL)
       fputs("TheTargetMachine can't emit a file of this type", context.env.log);
-    return ERR_FATAL_FILE_ERROR;
+    return ERR_FATAL_FORMAT_ERROR;
   }
 
   pass.run(*context.mod);
