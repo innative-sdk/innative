@@ -168,12 +168,8 @@ int WatParser::ParseName(Environment& env, ByteArray& name, const WatToken& t)
   if(t.id != WatTokens::NAME || !t.pos || !t.len || t.len > numeric_limits<varuint32>::max())
     return ERR_PARSE_INVALID_NAME;
 
-  name.resize(static_cast<varuint32>(t.len), true, env);
-  if(!name.get())
-    return ERR_FATAL_OUT_OF_MEMORY;
-  tmemcpy(reinterpret_cast<char*>(name.get()), name.size(), t.pos, t.len);
-
-  return ERR_SUCCESS;
+  name.from((uint8_t*)t.pos, t.len, env);
+  return !name.get() ? ERR_FATAL_OUT_OF_MEMORY : ERR_SUCCESS;
 }
 
 varsint7 WatParser::WatValType(WatTokens id)
@@ -1367,7 +1363,7 @@ int WatParser::AddName(kh_indexname_t* h, WatToken t, varuint32 index, DebugInfo
     if(iter != kh_end(h))
       kh_val(h, iter) = index;
     if(info)
-      info->name = Identifier((uint8_t*)t.pos, t.len);
+      info->name.from((uint8_t*)t.pos, t.len, env);
   }
 
   return ERR_SUCCESS;
@@ -1402,21 +1398,21 @@ int WatParser::ParseImport(Queue<WatToken>& tokens)
     if(err = ParseGlobalDesc(i.global_desc, tokens))
       return err;
     hash                     = globalhash;
-    i.global_desc.debug.name = Identifier((uint8_t*)name.pos, name.len);
+    i.global_desc.debug.name.from((uint8_t*)name.pos, name.len, env);
     break;
   case WatTokens::TABLE:
     i.kind = WASM_KIND_TABLE;
     if(err = ParseTableDesc(i.table_desc, tokens))
       return err;
     hash                    = tablehash;
-    i.table_desc.debug.name = Identifier((uint8_t*)name.pos, name.len);
+    i.table_desc.debug.name.from((uint8_t*)name.pos, name.len, env);
     break;
   case WatTokens::MEMORY:
     i.kind = WASM_KIND_MEMORY;
     if(err = ParseMemoryDesc(i.mem_desc, tokens))
       return err;
     hash                  = memoryhash;
-    i.mem_desc.debug.name = Identifier((uint8_t*)name.pos, name.len);
+    i.mem_desc.debug.name.from((uint8_t*)name.pos, name.len, env);
     break;
   default: return ERR_WAT_EXPECTED_KIND;
   }

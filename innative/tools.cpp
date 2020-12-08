@@ -13,9 +13,19 @@
 #include <fstream>
 #include <stdio.h>
 #include <sstream>
+#include <stdarg.h>
 
 using namespace innative;
 using namespace utility;
+
+int innative::DefaultLog(const Environment* env, const char* f, ...)
+{
+  va_list args;
+  va_start(args, f);
+  int len = VPRINTF(f, args);
+  va_end(args);
+  return len;
+}
 
 Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxthreads, const char* arg0)
 {
@@ -40,7 +50,7 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
     env->features   = ENV_FEATURE_ALL;
     env->maxthreads = maxthreads;
     env->linker     = 0;
-    env->log        = stdout;
+    env->loghook    = &DefaultLog;
     env->loglevel   = LOG_WARNING;
     env->rootpath   = AllocString(*env, GetProgramPath(arg0).parent_path().u8string());
     env->libpath    = env->rootpath;
@@ -265,7 +275,7 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
 #endif
 
       if(embed->size)
-        symbols = GetSymbols(reinterpret_cast<const char*>(embed->data), (size_t)embed->size, env->log, format);
+        symbols = GetSymbols(reinterpret_cast<const char*>(embed->data), (size_t)embed->size, env, format);
       else
       {
         auto testpath = [](FILE* f, const path& file, path& out) -> FILE* {
@@ -298,8 +308,8 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
 #endif
         if(!f)
         {
-          fprintf(env->log, "Error loading file: %s\n", src.u8string().c_str());
-          fflush(env->log);
+          (*env->loghook)(env, "Error loading file: %s\n", src.u8string().c_str());
+          (*env->loghook)(env, "\n"); // flush buffer
           return ERR_FATAL_FILE_ERROR;
         }
         fclose(f);
@@ -311,7 +321,7 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
         tmemcpy<char>(tmp, buf.size() + 1, buf.c_str(), buf.size() + 1);
         embed->data = tmp;
 
-        symbols = GetSymbols(out.u8string().c_str(), 0, env->log, format);
+        symbols = GetSymbols(out.u8string().c_str(), 0, env, format);
       }
 
       int r;
@@ -593,7 +603,7 @@ int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bo
   {
     char buf[32];
     if(env->loglevel >= LOG_FATAL)
-      FPRINTF(env->log, "Error loading environment: %s\n", EnumToString(ERR_ENUM_MAP, err, buf, 32));
+      (*env->loghook)(env, "Error loading environment: %s\n", EnumToString(ERR_ENUM_MAP, err, buf, 32));
     return err;
   }
 
@@ -602,11 +612,11 @@ int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bo
   if(env->loglevel >= LOG_ERROR && err < 0)
   {
     char buf[32];
-    FPRINTF(env->log, "Error loading modules: %s\n", EnumToString(ERR_ENUM_MAP, err, buf, 32));
+    (*env->loghook)(env, "Error loading modules: %s\n", EnumToString(ERR_ENUM_MAP, err, buf, 32));
   }
 
   if(env->loglevel >= LOG_NOTICE && target)
-    FPRINTF(env->log, "Finished Script: %s\n", target);
+    (*env->loghook)(env, "Finished Script: %s\n", target);
   return err;
 }
 

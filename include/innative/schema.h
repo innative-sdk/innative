@@ -54,8 +54,8 @@ enum WASM_TYPE_ENCODING
   TE_func    = -0x20,
   TE_void    = -0x40,
 
-  TE_iPTR = 0x70, // Internal values, never encoded
-  TE_NONE = 0x71,
+  TE_iPTR    = 0x70, // Internal values, never encoded
+  TE_NONE    = 0x71,
   TE_UNKNOWN = 0x72,
 };
 
@@ -124,6 +124,8 @@ typedef struct IN_WASM_BYTE_ARRAY
   inline const uint8_t* get() const { return bytes; }
   inline const char* str() const { return !bytes ? "" : reinterpret_cast<const char*>(bytes); }
   inline varuint32 size() const { return n_bytes; }
+  void from(const char* s, const struct IN_WASM_ENVIRONMENT& env);
+  void from(const uint8_t* b, varuint32 n, const struct IN_WASM_ENVIRONMENT& env);
   void resize(varuint32 sz, bool terminator, const struct IN_WASM_ENVIRONMENT& env);
   void discard(varuint32 sz, bool terminator);
 
@@ -497,12 +499,13 @@ typedef struct IN_WASM_ENVIRONMENT
   const char* linker;  // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
   const char* system;  // prefix for the "system" module, which simply attempts to link the function name as a C function.
                        // Defaults to a blank string.
-  struct IN_WASM_ALLOCATOR* alloc; // Stores a pointer to the internal allocator
-  int loglevel;                    // IN_LOG_LEVEL
-  FILE* log;                       // Output stream for log messages
-  void (*wasthook)(void*);         // Optional hook for WAST debugging cases
-  const char** exports;            // Use AddCustomExport() to manage this list
+  struct IN_WASM_ALLOCATOR* alloc;                                      // Stores a pointer to the internal allocator
+  int loglevel;                                                         // IN_LOG_LEVEL
+  int (*loghook)(const struct IN_WASM_ENVIRONMENT*, const char* format, ...); // Output stream for log messages
+  void (*wasthook)(const struct IN_WASM_ENVIRONMENT*, void*);                 // Optional hook for WAST debugging cases
+  const char** exports;                                                 // Use AddCustomExport() to manage this list
   varuint32 n_exports;
+  void* user;
 
   struct kh_modules_s* modulemap;
   struct kh_modulepair_s* whitelist;

@@ -27,7 +27,7 @@ bool DWARFParser::error(llvm::StringRef Prefix, std::error_code EC)
 {
   if(!EC)
     return true;
-  fwrite(Prefix.begin(), 1, Prefix.size(), env->log);
+  (*env->loghook)(env, "%.*s", Prefix.size(), Prefix.begin());
   return false;
 }
 

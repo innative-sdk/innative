@@ -13,7 +13,7 @@ namespace innative {
   IN_ERROR LinkEnvironment(const Environment* env, const path& file);
   void DeleteCache(const Environment& env, Module& m);
   void DeleteContext(Environment& env, bool shutdown);
-  std::vector<std::string> GetSymbols(const char* file, size_t size, FILE* log, LLD_FORMAT format);
+  std::vector<std::string> GetSymbols(const char* file, size_t size, const Environment* log, LLD_FORMAT format);
   void AppendIntrinsics(Environment& env);
   IN_COMPILER_DLLEXPORT size_t ABIMangleBuffer(const char* src, char* buffer, size_t count, ABI abi, int convention,
                                                int bytes);

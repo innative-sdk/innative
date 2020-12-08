@@ -139,9 +139,9 @@ int main(int argc, char* argv[])
       env->optimize = ENV_OPTIMIZE_O3;
 #endif
       env->features = ENV_FEATURE_ALL;
-      env->log      = stdout;
+      env->loghook = &TestHarness::Log;
       env->loglevel = log;
-      env->wasthook = [](void*) {
+      env->wasthook = [](const Environment*, void*) {
         fputc('.', stdout);
         fflush(stdout);
       };
@@ -153,49 +153,49 @@ int main(int argc, char* argv[])
 
       if(err < 0)
       {
-        FPRINTF(env->log, "Error injecting test environment, aborting.");
+        (*env->loghook)(env, "Error injecting test environment, aborting.");
         (*exports.DestroyEnvironment)(env);
         return -1; // If the environment injection fails, abort everything
       }
 
-      FPRINTF(env->log, "%s: .", file.generic_u8string().c_str());
-      fflush(env->log);
+      (*env->loghook)(env, "%s: .", file.generic_u8string().c_str());
+      fflush(stdout);
       err = (*exports.CompileScript)(reinterpret_cast<const uint8_t*>(file.generic_u8string().data()), 0, env, true,
                                      temppath.c_str());
 
       if(!err && !env->errors)
-        fputs("SUCCESS\n", env->log);
+        fputs("SUCCESS\n", stdout);
       else
       {
-        fputs("FAILED\n", env->log);
+        fputs("FAILED\n", stdout);
 
         if(err < 0)
         {
           const char* strerr = (*exports.GetErrorString)(err);
           if(strerr)
-            FPRINTF(env->log, "Error running script %s: %s\n", file.generic_u8string().c_str(), strerr);
+            (*env->loghook)(env, "Error running script %s: %s\n", file.generic_u8string().c_str(), strerr);
           else
-            FPRINTF(env->log, "Error running script %s: %i\n", file.generic_u8string().c_str(), err);
+            (*env->loghook)(env, "Error running script %s: %i\n", file.generic_u8string().c_str(), err);
         }
 
         while(env->errors != nullptr)
         {
-          fputs("  ", env->log);
+          fputs("  ", stdout);
 
           if(env->errors->m >= 0)
           {
-            fputs(env->modules[env->errors->m].name.str(), env->log);
-            fputs(": ", env->log);
+            fputs(env->modules[env->errors->m].name.str(), stdout);
+            fputs(": ", stdout);
           }
 
-          fputs(env->errors->error, env->log);
-          fputc('\n', env->log);
+          fputs(env->errors->error, stdout);
+          fputc('\n', stdout);
           env->errors = env->errors->next;
           ++failures;
         }
 
-        fputc('\n', env->log);
-        fflush(env->log);
+        fputc('\n', stdout);
+        fflush(stdout);
       }
 
       (*exports.DestroyEnvironment)(env);

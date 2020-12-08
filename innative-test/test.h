@@ -56,6 +56,7 @@ public:
   }
 
   void* LoadAssembly(const path& file);
+  static int Log(const Environment* env, const char* f, ...);
 
 protected:
   inline void DoTest(bool test, const char* text, const char* file, int line)

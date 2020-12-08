@@ -47,7 +47,7 @@ void TestHarness::test_jit()
     env->flags    = ENV_ENABLE_WAT | ENV_LIBRARY;
     env->optimize = ENV_OPTIMIZE_O3;
     env->features = ENV_FEATURE_ALL;
-    env->log      = stdout;
+    env->loghook  = &TestHarness::Log;
     env->loglevel = _loglevel;
 
   #ifdef IN_DEBUG
@@ -121,7 +121,7 @@ void TestHarness::test_jit()
     env->flags    = ENV_ENABLE_WAT | ENV_LIBRARY;
     env->optimize = ENV_OPTIMIZE_O3;
     env->features = ENV_FEATURE_ALL;
-    env->log      = stdout;
+    env->loghook  = &TestHarness::Log;
     env->loglevel = _loglevel;
     env->system   = "env"; // Make sure we set this to env
 
@@ -165,7 +165,7 @@ void TestHarness::test_jit()
     env->flags    = ENV_ENABLE_WAT | ENV_LIBRARY | ENV_NO_INIT;
     env->optimize = ENV_OPTIMIZE_O3;
     env->features = ENV_FEATURE_ALL;
-    env->log      = stdout;
+    env->loghook  = &TestHarness::Log;
     env->loglevel = _loglevel;
 
   #ifdef IN_DEBUG

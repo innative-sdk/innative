@@ -194,13 +194,13 @@ int wat::IsolateInitCall(Environment& env, void*& cache, const char* out)
   if(!cache)
   {
     auto estring = LoadDLLError();
-    FPRINTF(env.log, "Error loading %s: %s\n", out, estring);
+    (*env.loghook)(&env, "Error loading %s: %s\n", out, estring);
     LoadDLLErrorFree(estring);
     return ERR_RUNTIME_INIT_ERROR;
   }
 
   if(env.wasthook != nullptr)
-    (*env.wasthook)(cache);
+    (*env.wasthook)(&env, cache);
 
   auto entry = LoadFunction(cache, 0, IN_INIT_FUNCTION);
 

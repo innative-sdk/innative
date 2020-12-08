@@ -83,7 +83,7 @@ void TestHarness::test_embedding()
   env->flags    = ENV_ENABLE_WAT | ENV_LIBRARY;
   env->optimize = ENV_OPTIMIZE_O3;
   env->features = ENV_FEATURE_ALL;
-  env->log      = stdout;
+  env->loghook  = &TestHarness::Log;
   env->loglevel = _loglevel;
   env->system   = "env"; // Make sure we set this to env
 

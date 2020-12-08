@@ -19,10 +19,7 @@ IN_ERROR innative::OutputObjectFile(Compiler& context, const path& out)
   if(EC)
   {
     if(context.env.loglevel >= LOG_FATAL)
-    {
-      fputs("Could not open file: ", context.env.log);
-      fputs(EC.message().c_str(), context.env.log);
-    }
+      (*context.env.loghook)(&context.env, "Could not open file: %s", EC.message().c_str());
     return ERR_FATAL_FILE_ERROR;
   }
 
@@ -35,7 +32,7 @@ IN_ERROR innative::OutputObjectFile(Compiler& context, const path& out)
   if(context.machine->addPassesToEmitFile(pass, dest, nullptr, FileType))
   {
     if(context.env.loglevel >= LOG_FATAL)
-      fputs("TheTargetMachine can't emit a file of this type", context.env.log);
+      (*context.env.loghook)(&context.env, "TheTargetMachine can't emit a file of this type");
     return ERR_FATAL_FORMAT_ERROR;
   }
 
@@ -141,23 +138,19 @@ int innative::CallLinker(const Environment* env, std::vector<const char*>& linka
     cmd += quote;
 
     if(env->loglevel >= LOG_DEBUG)
-      FPRINTF(env->log, "Executing external linker command: %s\n", cmd.c_str());
+      (*env->loghook)(env, "Executing external linker command: %s\n", cmd.c_str());
     err = system(cmd.c_str());
   }
   else
   {
     if(env->loglevel >= LOG_DEBUG)
     {
-      fputs("Executing internal linker command: ", env->log);
+      (*env->loghook)(env, "Executing internal linker command: ");
+
       for(auto arg : linkargs)
-      {
-        fputc(' ', env->log);
-        fputc('"', env->log);
-        fputs(arg, env->log);
-        fputc('"', env->log);
-      }
-      fputc('\n', env->log);
-      fflush(env->log);
+        (*env->loghook)(env, " \"%s\"", arg);
+
+      (*env->loghook)(env, "\n");
     }
 
     linkargs.insert(linkargs.begin(), "lld");
@@ -177,7 +170,7 @@ int innative::CallLinker(const Environment* env, std::vector<const char*>& linka
     {
       llvm_stream.flush(); // In certain error cases, the stream will not have been flushed properly
       if(env->loglevel < LOG_NOTICE)
-        fwrite(outbuf.data(), 1, outbuf.size(), env->log);
+        (*env->loghook)(env, "%.*s", outbuf.size(), outbuf.data());
       err = ERR_FATAL_LINK_ERROR;
     }
   }
@@ -209,7 +202,7 @@ void innative::DeleteCache(const Environment& env, Module& m)
           llvm::raw_string_ostream buf{ errMsg };
           buf << sym.takeError();
           auto str = buf.str();
-          fprintf(env.log, "Error looking up JIT symbol `%s`: %s\n", exit_name.c_str(), str.c_str());
+          (*env.loghook)(&env, "Error looking up JIT symbol `%s`: %s\n", exit_name.c_str(), str.c_str());
         }
       }
     }
@@ -240,7 +233,7 @@ void innative::DeleteContext(Environment& env, bool shutdown)
     llvm::llvm_shutdown();
 }
 
-std::vector<std::string> innative::GetSymbols(const char* file, size_t size, FILE* log, LLD_FORMAT format)
+std::vector<std::string> innative::GetSymbols(const char* file, size_t size, const Environment* env, LLD_FORMAT format)
 {
   std::string outbuf;
   llvm::raw_string_ostream sso(outbuf);
@@ -261,7 +254,7 @@ std::vector<std::string> innative::GetSymbols(const char* file, size_t size, FIL
     case 32 | (0 << 15): kind = 2; break;
     case 64 | (1 << 15): kind = 3; break;
     case 64 | (0 << 15): kind = 4; break;
-    default: fputs("ERROR: unknown arch bits or endian!\n", log); return symbols;
+    default: (*env->loghook)(env, "ERROR: unknown arch bits or endian!\n"); return symbols;
     }
 
     lld::elf::iterateSymbols(
@@ -273,7 +266,7 @@ std::vector<std::string> innative::GetSymbols(const char* file, size_t size, FIL
   }
 
   if(!symbols.size())
-    fputs(outbuf.c_str(), log);
+    (*env->loghook)(env, outbuf.c_str());
   return symbols;
 }
 

@@ -619,44 +619,42 @@ IN_ERROR Compiler::InsertTruncTrap(double max, double min, llvm::Type* ty)
 
 void Compiler::DumpCompilerState()
 {
-  FILE* out = env.log;
-  fputs("values: [", out);
+  (*env.loghook)(&env, "values: [");
 
   size_t total = values.Size() + values.Limit();
   for(size_t i = 0; i < total; ++i)
   {
     if(i == values.Limit())
-      fputs(" |", out);
+      (*env.loghook)(&env, " |");
     if(!values[i])
-      fputs(" Poly", out);
+      (*env.loghook)(&env, " Poly");
     else
       switch(GetTypeEncoding(values[i]->getType()))
       {
-      case TE_i32: fputs(" i32", out); break;
-      case TE_i64: fputs(" i64", out); break;
-      case TE_f32: fputs(" f32", out); break;
-      case TE_f64: fputs(" f64", out); break;
+      case TE_i32: (*env.loghook)(&env, " i32"); break;
+      case TE_i64: (*env.loghook)(&env, " i64"); break;
+      case TE_f32: (*env.loghook)(&env, " f32"); break;
+      case TE_f64: (*env.loghook)(&env, " f64"); break;
       }
   }
 
-  fputs(" ]\n", out);
-  fputs("control: [", out);
+  (*env.loghook)(&env, " ]\n");
+  (*env.loghook)(&env, "control: [");
 
   for(size_t i = 0; i < control.Size(); ++i)
   {
     switch(control[i].sig)
     {
-    case TE_i32: fputs(" i32", out); break;
-    case TE_i64: fputs(" i64", out); break;
-    case TE_f32: fputs(" f32", out); break;
-    case TE_f64: fputs(" f64", out); break;
+    case TE_i32: (*env.loghook)(&env, " i32"); break;
+    case TE_i64: (*env.loghook)(&env, " i64"); break;
+    case TE_f32: (*env.loghook)(&env, " f32"); break;
+    case TE_f64: (*env.loghook)(&env, " f64"); break;
     }
 
-    FPRINTF(out, ":%i", (int)control[i].op);
+    (*env.loghook)(&env, ":%i", (int)control[i].op);
   }
 
-  fputs(" ]\n\n", out);
-  fflush(out);
+  (*env.loghook)(&env, " ]\n\n");
 }
 
 uint64_t Compiler::GetLocalOffset(llvm::AllocaInst* p)
@@ -1509,8 +1507,7 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   if((!has_start || env->flags & ENV_NO_INIT) && !(env->flags & ENV_LIBRARY))
   {
     env->flags |= ENV_LIBRARY; // Attempting to compile a library as an EXE is a common error, so we fix it for you.
-    fprintf(
-      env->log,
+    (*env->loghook)(env,
       "WARNING: Compiling dynamic library because no start function was found! If this was intended, use '-f library' next time.\n");
   }
 
@@ -1939,7 +1936,7 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
         llvm::raw_string_ostream buf{ errMsg };
         buf << err;
         auto str = buf.str();
-        fprintf(env->log, "Error loading JIT module entry point: %s\n", str.c_str());
+        (*env->loghook)(env, "Error loading JIT module entry point: %s\n", str.c_str());
       }
     }
   }

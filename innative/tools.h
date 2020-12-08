@@ -71,7 +71,7 @@ namespace innative {
   INGlobal* LoadGlobalIndexLambda(void* p, void* (*load)(void*, const char*), uint32_t module_index, uint32_t global_index);
   INGlobal* LoadMemoryIndexLambda(void* p, void* (*load)(void*, const char*), uint32_t module_index, uint32_t memory_index);
   void DumpJITState(Environment* env);
-
+  int DefaultLog(const Environment* env, const char* f, ...);
 }
 
 #endif

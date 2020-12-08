@@ -413,13 +413,20 @@ struct CommandLine
   OptBase* last_cmd;
 };
 
-void printerr(INExports& exports, FILE* f, const char* prefix, const char* postfix, int err)
+void printerr(INExports& exports, const Environment* env, const char* prefix, const char* postfix, int err)
 {
   const char* errstring = (*exports.GetErrorString)(err);
-  if(errstring)
-    fprintf(f, "%s%s: %s\n", prefix, postfix, errstring);
+  if(env)
+  {
+    if(errstring)
+      (*env->loghook)(env, "%s%s: %s\n", prefix, postfix, errstring);
+    else
+      (*env->loghook)(env, "%s%s: %i\n", prefix, postfix, err);
+  }
+  else if(errstring)
+    fprintf(stderr, "%s%s: %s\n", prefix, postfix, errstring);
   else
-    fprintf(f, "%s%s: %i\n", prefix, postfix, err);
+    fprintf(stderr, "%s%s: %i\n", prefix, postfix, err);
 }
 
 void dump_validation_errors(INExports& exports, Environment* env)
@@ -428,9 +435,9 @@ void dump_validation_errors(INExports& exports, Environment* env)
   {
     const char* errstring = (*exports.GetErrorString)(error->code);
     if(errstring)
-      fprintf(env->log, "Error %s: %s\n", errstring, error->error);
+      (*env->loghook)(env, "Error %s: %s\n", errstring, error->error);
     else
-      fprintf(env->log, "Error %i: %s\n", error->code, error->error);
+      (*env->loghook)(env, "Error %i: %s\n", error->code, error->error);
   }
 }
 
@@ -513,7 +520,13 @@ int main(int argc, char* argv[])
     exports.CreateEnvironment = [](unsigned int modules, unsigned int maxthreads, const char* arg0) -> Environment* {
       Environment* env = reinterpret_cast<Environment*>(calloc(1, sizeof(Environment)));
       if(env)
-        env->log = stdout;
+        env->loghook = [](const Environment* env, const char* f, ...) -> int {
+          va_list args;
+          va_start(args, f);
+          int len = VPRINTF(f, args);
+          va_end(args);
+          return len;
+        };
       return env;
     };
     exports.AddModule = [](Environment* env, const void* data, size_t size, const char* name, int* err) {
@@ -631,11 +644,11 @@ int main(int argc, char* argv[])
     {
       err = ParseDWARF(env, &map, commandline.inputs[0], 0);
       if(err < 0)
-        printerr(exports, stderr, "Error parsing file ", commandline.inputs[0], err);
+        printerr(exports, nullptr, "Error parsing file ", commandline.inputs[0], err);
     }
     err = (*exports.SerializeSourceMap)(&map, commandline.output_file.value.u8string().c_str());
     if(err < 0)
-      printerr(exports, stderr, "Error saving file ", commandline.output_file.value.u8string().c_str(), err);
+      printerr(exports, nullptr, "Error saving file ", commandline.output_file.value.u8string().c_str(), err);
     return err;
   }
 
@@ -675,7 +688,7 @@ int main(int argc, char* argv[])
     if(err < 0)
     {
       STRTOK(NULL, ":", &ctx);
-      printerr(exports, env->log, "Error adding whitelist ", item.c_str(), err);
+      printerr(exports, env, "Error adding whitelist ", item.c_str(), err);
     }
   }
 
@@ -689,7 +702,7 @@ int main(int argc, char* argv[])
       IN_ERROR e = (*exp.AddEmbedding)(environment, tag, embedding.c_str(), 0, 0);
       if(e < 0)
       {
-        printerr(exp, environment->log, tag ? "Error loading shared library " : "Error loading embedding ",
+        printerr(exp, environment, tag ? "Error loading shared library " : "Error loading embedding ",
                  embedding.c_str(), e);
         result = e;
       }
@@ -732,12 +745,12 @@ int main(int argc, char* argv[])
 
     if(!second)
     {
-      fprintf(env->log, "No start function provided!\n");
+      (*env->loghook)(env, "No start function provided!\n");
       err = ERR_INVALID_COMMAND_LINE;
     }
     else
     {
-      int i = 0;
+      varuint32 i = 0;
       for(; i < m->exportsection.n_exports; ++i)
       {
         if(m->exportsection.exports[i].kind == WASM_KIND_FUNCTION &&
@@ -750,7 +763,7 @@ int main(int argc, char* argv[])
       }
       if(i == m->exportsection.n_exports)
       {
-        fprintf(env->log, "Couldn't find start function %s!\n", second);
+        (*env->loghook)(env, "Couldn't find start function %s!\n", second);
         err = ERR_INVALID_COMMAND_LINE;
       }
     }
@@ -764,7 +777,7 @@ int main(int argc, char* argv[])
   {
     if(errs[i] < 0)
     {
-      printerr(exports, env->log, "Error loading module ", commandline.inputs[i], errs[i]);
+      printerr(exports, env, "Error loading module ", commandline.inputs[i], errs[i]);
       if(err >= 0)
         err = ERR_RUNTIME_INVALID_ASSEMBLY;
     }
@@ -774,7 +787,7 @@ int main(int argc, char* argv[])
   {
     if(env->loglevel >= LOG_FATAL)
     {
-      printerr(exports, env->log, "Error loading environment", "", err);
+      printerr(exports, env, "Error loading environment", "", err);
       dump_validation_errors(exports, env);
     }
 
@@ -821,7 +834,7 @@ int main(int argc, char* argv[])
   {
     if(env->loglevel >= LOG_ERROR)
     {
-      printerr(exports, env->log, "Compile error", "", err);
+      printerr(exports, env, "Compile error", "", err);
       dump_validation_errors(exports, env);
     }
 
@@ -840,14 +853,14 @@ int main(int argc, char* argv[])
       void* assembly = (*exports.LoadAssembly)(commandline.output_file.value.u8string().c_str());
       if(!assembly)
       {
-        fprintf(env->log, "Generated file cannot be found! Does innative-cmd have permissions for this directory?\n");
+        (*env->loghook)(env, "Generated file cannot be found! Does innative-cmd have permissions for this directory?\n");
         return ERR_FATAL_FILE_ERROR;
       }
       IN_Entrypoint start = (*exports.LoadFunction)(assembly, 0, IN_INIT_FUNCTION);
       IN_Entrypoint exit  = (*exports.LoadFunction)(assembly, 0, IN_EXIT_FUNCTION);
       if(!start)
       {
-        fprintf(env->log, "Start function is invalid or cannot be found!\n");
+        (*env->loghook)(env, "Start function is invalid or cannot be found!\n");
         (*exports.FreeAssembly)(assembly);
         return ERR_INVALID_START_FUNCTION;
       }

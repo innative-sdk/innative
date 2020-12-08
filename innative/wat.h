@@ -61,6 +61,7 @@ namespace innative {
     int AppendImport(Module& m, const Import& i, varuint32* index);
     int InlineImportExport(Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out);
     int ParseBlockType(Queue<WatToken>& tokens, varsint64& out);
+    int AddName(wat::kh_indexname_t* h, WatToken t, varuint32 index, DebugInfo* info);
 
     static int ParseModule(Environment& env, Module& m, const char* file, Queue<WatToken>& tokens, utility::StringSpan name,
                            WatToken& internalname);
@@ -70,7 +71,6 @@ namespace innative {
     static void WriteUTF32(uint32_t ch, ByteArray& str, varuint32& index);
     static varsint7 WatValType(WatTokens id);
     static int ParseLocalAppend(const Environment& env, FunctionLocal& local, FunctionBody& body, Queue<WatToken>& tokens);
-    static int AddName(wat::kh_indexname_t* h, WatToken t, varuint32 index, DebugInfo* info);
 
     IN_FORCEINLINE static int WatString(const Environment& env, ByteArray& str, const WatToken& t)
     {
