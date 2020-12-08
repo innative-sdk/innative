@@ -3,6 +3,7 @@
 
 #include "test.h"
 #include <stdio.h>
+#include <stdarg.h>
 #include "../innative/utility.h"
 #include "../innative/constants.h"
 
@@ -11,15 +12,27 @@ TestHarness::TestHarness(const INExports& exports, const char* arg0, int logleve
 {
   assert(_target);
 }
+
 TestHarness::~TestHarness()
 {
   // Clean up all the files we just produced
   Clean();
 }
+
 void TestHarness::Clean() {
   for(auto f : _garbage)
     remove(f);
 }
+
+int TestHarness::Log(const Environment* env, const char* f, ...)
+{
+  va_list args;
+  va_start(args, f);
+  int len = VPRINTF(f, args);
+  va_end(args);
+  return len;
+}
+
 size_t TestHarness::Run(FILE* out)
 {
   std::pair<const char*, void (TestHarness::*)()> tests[] = { { "wasm_malloc.c", &TestHarness::test_malloc },
@@ -116,7 +129,7 @@ int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), co
   env->flags    = ENV_ENABLE_WAT | ENV_LIBRARY;
   env->optimize = ENV_OPTIMIZE_O3;
   env->features = ENV_FEATURE_ALL;
-  env->log      = stdout;
+  env->loghook  = &TestHarness::Log;
   env->loglevel = _loglevel;
   if(system)
     env->system = system;
@@ -152,16 +165,16 @@ int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), co
 
   while(env->errors != nullptr)
   {
-    fputs("  ", env->log);
+    fputs("  ", stdout);
 
     if(env->errors->m >= 0)
     {
-      fputs(env->modules[env->errors->m].name.str(), env->log);
-      fputs(": ", env->log);
+      fputs(env->modules[env->errors->m].name.str(), stdout);
+      fputs(": ", stdout);
     }
 
-    fputs(env->errors->error, env->log);
-    fputc('\n', env->log);
+    fputs(env->errors->error, stdout);
+    fputc('\n', stdout);
     env->errors = env->errors->next;
   }
 

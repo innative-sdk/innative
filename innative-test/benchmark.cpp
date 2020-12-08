@@ -40,8 +40,8 @@ void* Benchmarks::LoadWASM(const path& wasm, const char* name, int flags, int op
   env->flags    = flags | ENV_ENABLE_WAT | ENV_LIBRARY;
   env->optimize = optimize;
   env->features = ENV_FEATURE_ALL;
-  env->log      = stdout;
   env->loglevel = _loglevel;
+  env->loghook  = &TestHarness::Log;
 
   int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
 

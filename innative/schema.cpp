@@ -11,6 +11,14 @@ __KHASH_IMPL(cimport, , Identifier, char, 1, innative::internal::__ac_X31_hash_b
 __KHASH_IMPL(modules, , Identifier, size_t, 1, innative::internal::__ac_X31_hash_bytearray, kh_int_hash_equal);
 __KHASH_IMPL(modulepair, , kh_cstr_t, FunctionType, 1, innative::internal::__ac_X31_hash_string_pair, str_pair_hash_equal);
 
+void IN_WASM_BYTE_ARRAY::from(const char* s, const Environment& env) { from(reinterpret_cast<const uint8_t*>(s), strlen(s), env); }
+void IN_WASM_BYTE_ARRAY::from(const uint8_t* b, varuint32 n, const struct IN_WASM_ENVIRONMENT& env)
+{
+  resize(n, true, env);
+  if(bytes != nullptr)
+    innative::utility::tmemcpy<uint8_t>(bytes, n, b, n);
+}
+
 bool IN_WASM_BYTE_ARRAY::operator==(const IN_WASM_BYTE_ARRAY& r) const
 {
   if(r.n_bytes != n_bytes)
