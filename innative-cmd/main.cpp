@@ -256,6 +256,9 @@ struct CommandLine
     system(
       "Sets the environment/system module name. Any functions with the module name will have the module name stripped when linking with C functions",
       "<MODULE>"),
+    start(
+      "Sets or overrides the start function of a given module, in case it hasn't been properly specified. The function can't take any parameters and must return void.",
+      "<[MODULE:]FUNCTION>"),
     linker("Specifies an alternative linker executable to use instead of LLD."),
     install(
       "Installs this SDK to the host operating system. On Windows, also updates file associations unless 'lite' is specified.",
@@ -294,6 +297,7 @@ struct CommandLine
     Register("whitelist", &whitelist);
     Register("sys", &system);
     Register("system", &system);
+    Register("start", &start);
     Register("linker", &linker);
     Register("i", &install);
     Register("install", &install);
@@ -392,6 +396,7 @@ struct CommandLine
   Opt<bool> build_sourcemap;
   Opt<std::vector<std::string>> whitelist;
   Opt<std::string> system;
+  Opt<std::string> start;
   Opt<std::string> linker;
   Opt<optional<std::string>> install;
   Opt<bool> uninstall;
@@ -518,16 +523,18 @@ int main(int argc, char* argv[])
         auto file = LoadFile(reinterpret_cast<const char*>(data), sz);
         if(!sz)
           *err = ERR_FATAL_FILE_ERROR;
-        else if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_MODULE, name, 0, file.get(), static_cast<DWORD>(sz)))
+        else if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_MODULE, name, 0, file.get(),
+                                 static_cast<DWORD>(sz)))
           *err = ERR_FATAL_RESOURCE_ERROR;
       }
-      else if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_MODULE, name, 0, const_cast<void*>(data), static_cast<DWORD>(size)))
+      else if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_MODULE, name, 0,
+                               const_cast<void*>(data), static_cast<DWORD>(size)))
         *err = ERR_FATAL_RESOURCE_ERROR;
     };
 
     exports.AddWhitelist = [](Environment* env, const char* module_name, const char* export_name) -> IN_ERROR {
-      if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_WHITELIST, module_name, 0, const_cast<char*>(export_name),
-                          static_cast<DWORD>(strlen(export_name) + 1)))
+      if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_WHITELIST, module_name, 0,
+                          const_cast<char*>(export_name), static_cast<DWORD>(strlen(export_name) + 1)))
       {
         std::cout << "Failed to add whitelist entry: " << (!module_name ? "" : module_name) << "|" << export_name
                   << std::endl;
@@ -559,16 +566,20 @@ int main(int argc, char* argv[])
         if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_EMBEDDING, buf, 0, file.get(), sz))
           return ERR_FATAL_RESOURCE_ERROR;
       }
-      else if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_EMBEDDING, buf, 0, const_cast<void*>(data), static_cast<DWORD>(size)))
+      else if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_EMBEDDING, buf, 0,
+                               const_cast<void*>(data), static_cast<DWORD>(size)))
         return ERR_FATAL_RESOURCE_ERROR;
       return ERR_SUCCESS;
     };
     exports.FinalizeEnvironment = [](Environment* env) -> IN_ERROR {
-      if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_FLAGS, "flags", 0, &env->flags, sizeof(env->flags)))
+      if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_FLAGS, "flags", 0, &env->flags,
+                          sizeof(env->flags)))
         return ERR_FATAL_RESOURCE_ERROR;
-      if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_FLAGS, "optimize", 0, &env->optimize, sizeof(env->optimize)))
+      if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_FLAGS, "optimize", 0, &env->optimize,
+                          sizeof(env->optimize)))
         return ERR_FATAL_RESOURCE_ERROR;
-      if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_FLAGS, "features", 0, &env->features, sizeof(env->features)))
+      if(!UpdateResourceA(reinterpret_cast<HANDLE>(env->alloc), WIN32_RESOURCE_FLAGS, "features", 0, &env->features,
+                          sizeof(env->features)))
         return ERR_FATAL_RESOURCE_ERROR;
       return ERR_SUCCESS;
     };
@@ -600,10 +611,11 @@ int main(int argc, char* argv[])
     return ERR_UNKNOWN_ENVIRONMENT_ERROR;
 
   // Then create the runtime environment with the module count.
-  Environment* env = (*exports.CreateEnvironment)(static_cast<unsigned int>(commandline.inputs.size()), 0, (!argc ? 0 : argv[0]));
-  env->flags       = commandline.flags.value;
-  env->features    = ENV_FEATURE_ALL;
-  env->optimize    = commandline.flags.optimize;
+  Environment* env =
+    (*exports.CreateEnvironment)(static_cast<unsigned int>(commandline.inputs.size()), 0, (!argc ? 0 : argv[0]));
+  env->flags    = commandline.flags.value;
+  env->features = ENV_FEATURE_ALL;
+  env->optimize = commandline.flags.optimize;
 
   if(!env)
   {
@@ -629,7 +641,8 @@ int main(int argc, char* argv[])
 
 #ifdef IN_PLATFORM_WIN32
   if(commandline.generate_loader.value)
-    env->alloc = reinterpret_cast<IN_WASM_ALLOCATOR*>(BeginUpdateResourceA(commandline.output_file.value.u8string().c_str(), TRUE));
+    env->alloc =
+      reinterpret_cast<IN_WASM_ALLOCATOR*>(BeginUpdateResourceA(commandline.output_file.value.u8string().c_str(), TRUE));
   if(!env->alloc)
   {
     std::cout << "Failed to begin resource update!" << std::endl;
@@ -698,8 +711,54 @@ int main(int argc, char* argv[])
   for(size_t i = 0; i < commandline.inputs.size(); ++i)
     (*exports.AddModule)(env, commandline.inputs[i], 0, u8path(commandline.inputs[i]).stem().u8string().c_str(), &errs[i]);
 
+  // Override start if necessary
+  if(!commandline.start.value.empty() && env->n_modules > 0)
+  {
+    char* ctx;
+    char* first  = STRTOK(const_cast<char*>(commandline.start.value.data()), ":", &ctx);
+    char* second = STRTOK(NULL, ":", &ctx);
+
+    Module* m = &env->modules[0];
+    if(second && first)
+    {
+      for(int i = 0; i < env->n_modules; ++i)
+      {
+        if(!strncmp(env->modules[i].name.str(), first, env->modules[i].name.size()))
+          m = &env->modules[i];
+      }
+    }
+    else
+      second = first;
+
+    if(!second)
+    {
+      fprintf(env->log, "No start function provided!\n");
+      err = ERR_INVALID_COMMAND_LINE;
+    }
+    else
+    {
+      int i = 0;
+      for(; i < m->exportsection.n_exports; ++i)
+      {
+        if(m->exportsection.exports[i].kind == WASM_KIND_FUNCTION &&
+           !strncmp(m->exportsection.exports[i].name.str(), second, m->exportsection.exports[i].name.size()))
+        {
+          m->start = m->exportsection.exports[i].index;
+          m->knownsections |= (1 << WASM_SECTION_START);
+          break;
+        }
+      }
+      if(i == m->exportsection.n_exports)
+      {
+        fprintf(env->log, "Couldn't find start function %s!\n", second);
+        err = ERR_INVALID_COMMAND_LINE;
+      }
+    }
+  }
+
   // Ensure all modules are loaded, in case we have multithreading enabled
-  err = (*exports.FinalizeEnvironment)(env);
+  if(err >= 0)
+    err = (*exports.FinalizeEnvironment)(env);
 
   for(size_t i = 0; i < commandline.inputs.size(); ++i)
   {
