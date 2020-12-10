@@ -49,6 +49,10 @@ enum WASM_ENVIRONMENT_FLAGS
   // them from your code correctly.
   ENV_NO_INIT = (1 << 8),
 
+  // Emits a global IN_INSTRUCTION_COUNTER variable which is incremented every time a single webassembly
+  // instruction (not CPU instruction) has been executed.
+  ENV_COUNT_INSTRUCTIONS = (1 << 9),
+
   // Some platforms, like windows, always require a stack probe if there is any possibility of skipping the stack guard
   // page. This option ensures that a stack probe is always done, even on linux, if a large stack space is requested. This
   // is critical for sandboxing, because otherwise the stack overflow can be used to break out of the program memory space.

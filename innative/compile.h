@@ -117,6 +117,7 @@ namespace innative {
     llvm::Function* atomic_notify;
     llvm::Function* atomic_wait32;
     llvm::Function* atomic_wait64;
+    llvm::GlobalVariable* instruction_counter;
     std::string natvis;
 
     using Func    = llvm::Function;

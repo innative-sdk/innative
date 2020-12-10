@@ -1541,6 +1541,10 @@ IN_ERROR Compiler::CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst
   // Begin iterating through the instructions until there aren't any left
   for(varuint32 i = 0; i < body.n_body; ++i)
   {
+    // We have to insert the counter increment before the instruction in case it's a jump or return instruction
+    if(instruction_counter)
+      builder.CreateAtomicRMW(llvm::AtomicRMWInst::BinOp::Add, instruction_counter, builder.getInt64(1),
+                              llvm::AtomicOrdering::Monotonic);
     debugger->DebugIns(fn, body.body[i]);
     IN_ERROR err = CompileInstruction(body.body[i]);
     if(err < 0)
