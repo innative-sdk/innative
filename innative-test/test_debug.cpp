@@ -25,11 +25,15 @@ int TestHarness::do_debug_2(void* assembly)
 {
   constexpr long long n = 8008;
 
+  auto counter = (uint64_t*)(*_exports.LoadGlobal)(assembly, 0, IN_INSTRUCTION_COUNTER);
+  TEST(*counter == 0);
   auto test = (long long (*)(long long))(*_exports.LoadFunction)(assembly, "constparse", "test");
   TEST(test != nullptr);
 
   if(test)
     TEST((*test)(n) == (n - 9218868437227405313));
+
+  TEST(*counter > 0);
 
   return ERR_SUCCESS;
 }
@@ -48,5 +52,6 @@ int TestHarness::do_debug_2(void* assembly)
   flags = ENV_DEBUG_DWARF;
   TESTERR(CompileWASM("../scripts/debugging.wasm", &TestHarness::do_debug, "env", lambda), ERR_SUCCESS);
 
-  TESTERR(CompileWASM("../scripts/constparse.wasm", &TestHarness::do_debug_2, ""), ERR_SUCCESS);
+  flags = ENV_COUNT_INSTRUCTIONS;
+  TESTERR(CompileWASM("../scripts/constparse.wasm", &TestHarness::do_debug_2, "", lambda), ERR_SUCCESS);
 }

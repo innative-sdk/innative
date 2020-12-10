@@ -774,6 +774,13 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
   mod->setDataLayout(machine->createDataLayout());
   intptrty = builder.getIntPtrTy(mod->getDataLayout(), 0);
 
+  if(env.flags & ENV_COUNT_INSTRUCTIONS)
+  {
+    instruction_counter = new llvm::GlobalVariable(*mod, builder.getInt64Ty(), false, Func::CommonLinkage,
+                                                   builder.getInt64(0), IN_INSTRUCTION_COUNTER);
+    instruction_counter->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+  }
+
   debugger.reset(Debugger::Create(*this));
   if(!debugger)
     return ERR_FATAL_DEBUG_OBJ_ERROR;
@@ -1507,7 +1514,8 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   if((!has_start || env->flags & ENV_NO_INIT) && !(env->flags & ENV_LIBRARY))
   {
     env->flags |= ENV_LIBRARY; // Attempting to compile a library as an EXE is a common error, so we fix it for you.
-    (*env->loghook)(env,
+    (*env->loghook)(
+      env,
       "WARNING: Compiling dynamic library because no start function was found! If this was intended, use '-f library' next time.\n");
   }
 

@@ -27,6 +27,7 @@
 
 #define IN_INIT_FUNCTION "_innative_internal_start"
 #define IN_EXIT_FUNCTION "_innative_internal_exit"
+#define IN_INSTRUCTION_COUNTER "_innative_instruction_counter"
 
 #ifdef __cplusplus
 extern "C" {
