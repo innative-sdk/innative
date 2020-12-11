@@ -50,7 +50,7 @@
     i64.extend_u/i32
     call $impfunc)
   (table $T0 7 7 anyfunc)
-  (start 12)
+  (start $caller)
   (elem (i32.const 0) $t1 $t2 $t3 $u1 $u2 $t1 $t3)
   (data (i32.const 0)
     "Hello, world!\n\00"

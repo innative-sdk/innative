@@ -160,7 +160,7 @@ IN_ERROR sourcemap::ParseArrayInner(const Environment& env, const char*& data, c
     if(err == ERR_SUCCESS)
       out[i] = result;
   }
-  else if(!(out = utility::tmalloc<T>(env, count)))
+  else if(!(out = utility::tmalloc<T>(env, count)) && count >= 0)
     err = ERR_FATAL_OUT_OF_MEMORY;
   return err;
 }
@@ -274,11 +274,10 @@ IN_ERROR sourcemap::ParseMapping(const Environment& env, SourceMap* map, const c
 
   map->n_segments = n;
   map->segments   = utility::tmalloc<SourceMapSegment>(env, n);
-  if(!map->segments)
+  if(!map->segments && n >= 0)
     return ERR_FATAL_OUT_OF_MEMORY;
 
   // Then we iterate forwards again, assigning values to each subarray element.
-  assert(!n);
   uint64_t line                = 0;
   n                            = 0;
   size_t last_column           = 0;
