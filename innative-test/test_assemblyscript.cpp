@@ -37,7 +37,7 @@ void TestHarness::test_assemblyscript()
     constexpr const char wasm_path[] = "../scripts/assemblyscript.wasm";
 
     Environment* env = (*_exports.CreateEnvironment)(1, 0, 0);
-    env->flags |= ENV_LIBRARY;
+    env->flags |= ENV_LIBRARY | ENV_NO_INIT;
     env->system = "env";
 #ifdef IN_DEBUG
     env->optimize = ENV_OPTIMIZE_O0;
@@ -55,6 +55,9 @@ void TestHarness::test_assemblyscript()
 
     (*_exports.AddModule)(env, wasm_path, 0, "astest", &err);
     TESTERR(err, ERR_SUCCESS);
+    if(err < 0)
+      return;
+
     err = (*_exports.FinalizeEnvironment)(env);
     TESTERR(err, ERR_SUCCESS);
 
@@ -64,31 +67,38 @@ void TestHarness::test_assemblyscript()
     (*_exports.DestroyEnvironment)(env);
 
     bool caught = false;
-    void* assembly;
-
-    signal(SIGILL, TestCrashHandler);
-
-    if(SETJMP(jump_location) != 0)
-      caught = true;
-    else
+    void* assembly = LoadAssembly(dll_path);
+    IN_Entrypoint start = (*_exports.LoadFunction)(assembly, 0, IN_INIT_FUNCTION);
+    IN_Entrypoint exit  = (*_exports.LoadFunction)(assembly, 0, IN_EXIT_FUNCTION);
+    TEST(start);
+    if(start)
     {
-#ifdef IN_COMPILER_MSC
-      // On windows, signals can sometimes get promoted to SEH exceptions across DLL bounderies.
-      __try
-      {
-#endif
-        assembly = LoadAssembly(dll_path);
-#ifdef IN_COMPILER_MSC
-      }
-      __except(1) // Only catch an illegal instruction
-      {
-        caught = true;
-      }
-#endif
-    }
+      signal(SIGILL, TestCrashHandler);
 
-    TEST(caught);
-    signal(SIGILL, SIG_DFL);
+      if(SETJMP(jump_location) != 0)
+        caught = true;
+      else
+      {
+#ifdef IN_COMPILER_MSC
+        // On windows, signals can sometimes get promoted to SEH exceptions across DLL bounderies.
+        __try
+        {
+#endif
+          (*start)();
+#ifdef IN_COMPILER_MSC
+        }
+        __except(GetExceptionCode() == EXCEPTION_ILLEGAL_INSTRUCTION) // Only catch an illegal instruction
+        {
+          caught = true;
+        }
+#endif
+      }
+      if(exit)
+        (*exit)();
+
+      TEST(caught);
+      signal(SIGILL, SIG_DFL);
+    }
 
     if(assembly)
       (*_exports.FreeAssembly)(assembly);

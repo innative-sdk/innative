@@ -19,7 +19,7 @@ enum WASM_ENVIRONMENT_FLAGS
   // the resulting DLL or `.so` file will export all symbols that are exported from all the modules being compiled. These
   // symbol names will be mangled, but can be accessed from C if you know the resulting mangled name. This does not produce
   // a static library because the dynamic library performs initialization and cleanup of global variables when loaded and
-  // unloaded. If you know what you're doing, you can perform this initialization yourself by specifying ENV_NOINIT.
+  // unloaded. If you know what you're doing, you can perform this initialization yourself by specifying ENV_NO_INIT.
   ENV_LIBRARY = (1 << 2),
 
   // Enables the C function whitelist.If the whitelist is not enabled, the webassembly module will be able to call any C

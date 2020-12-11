@@ -1,6 +1,7 @@
 
 #include "innative/export.h"
 
+IN_COMPILER_DLLEXPORT extern void _innative_internal_env_print(uint64_t n);
 IN_COMPILER_DLLEXPORT extern void _innative_internal_write_out(const void* buf, size_t num);
 IN_COMPILER_DLLEXPORT extern void _innative_internal_abort();
 

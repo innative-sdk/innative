@@ -221,7 +221,7 @@ int WatParser::ParseFunctionTypeInner(Environment& env, Queue<WatToken>& tokens,
         ParseName(env, debug.name, tokens.Peek());
 
         // Check for duplicate param names
-        for (varuint32 i = 0; i < *n_info; ++i)
+        for(varuint32 i = 0; i < *n_info; ++i)
         {
           auto& other = (*info)[i];
           if(debug.name == other.name)
@@ -1042,10 +1042,10 @@ int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringSp
   if(i) // If this is an import, assemble the aux information and abort.
     return ParseTypeUse(tokens, i->func_desc.type_index, &i->func_desc.param_debug, 0, false);
 
-  FunctionDesc desc = { 0 };
+  FunctionDesc desc     = { 0 };
   varuint32 n_paraminfo = 0;
-  desc.debug.line   = body.line;
-  desc.debug.column = body.column;
+  desc.debug.line       = body.line;
+  desc.debug.column     = body.column;
   if(err = ParseTypeUse(tokens, desc.type_index, &desc.param_debug, &n_paraminfo, false))
     return err;
 
@@ -1072,7 +1072,7 @@ int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringSp
       ParseName(env, local.debug.name, tokens.Pop());
 
       // Check for name collisions, params first
-      for (varuint32 i = 0; i < n_paraminfo; ++i)
+      for(varuint32 i = 0; i < n_paraminfo; ++i)
         if(desc.param_debug[i].name == local.debug.name)
           return ERR_WAT_DUPLICATE_NAME;
       for(varuint32 i = 0; i < body.n_locals; ++i)
@@ -1397,21 +1397,21 @@ int WatParser::ParseImport(Queue<WatToken>& tokens)
     i.kind = WASM_KIND_GLOBAL;
     if(err = ParseGlobalDesc(i.global_desc, tokens))
       return err;
-    hash                     = globalhash;
+    hash = globalhash;
     i.global_desc.debug.name.from((uint8_t*)name.pos, name.len, env);
     break;
   case WatTokens::TABLE:
     i.kind = WASM_KIND_TABLE;
     if(err = ParseTableDesc(i.table_desc, tokens))
       return err;
-    hash                    = tablehash;
+    hash = tablehash;
     i.table_desc.debug.name.from((uint8_t*)name.pos, name.len, env);
     break;
   case WatTokens::MEMORY:
     i.kind = WASM_KIND_MEMORY;
     if(err = ParseMemoryDesc(i.mem_desc, tokens))
       return err;
-    hash                  = memoryhash;
+    hash = memoryhash;
     i.mem_desc.debug.name.from((uint8_t*)name.pos, name.len, env);
     break;
   default: return ERR_WAT_EXPECTED_KIND;
@@ -1742,13 +1742,16 @@ int WatParser::ParseModule(Environment& env, Module& m, const char* file, Queue<
   }
 
   auto procRef = [](WatParser& s, Module& mod, varuint32 e, int imm) {
+    // the range check for e is in the validation step, but we still have to catch a hash lookup failure
+    if(e == (varuint32)~0)
+      return ERR_INVALID_FUNCTION_INDEX;
     if(s.deferred[0].func < mod.importsection.functions ||
        s.deferred[0].func >= mod.code.n_funcbody + mod.importsection.functions)
       return ERR_INVALID_FUNCTION_INDEX;
     auto& f = mod.code.funcbody[s.deferred[0].func - mod.importsection.functions];
     if(s.deferred[0].index >= f.n_body)
       return ERR_INVALID_FUNCTION_BODY;
-    f.body[s.deferred[0].index].immediates[imm]._varuint32 = e;
+    f.body[s.deferred[0].index].immediates[imm]._varuint32 = e; 
     return ERR_SUCCESS;
   };
 
