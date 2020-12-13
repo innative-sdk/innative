@@ -163,11 +163,11 @@ namespace innative {
     llvmTy* GetLLVMTypes(varsint7* types, varuint32 count);
     llvmTy* GetLLVMTypeSig(varsint64 sig);
     FuncTy* GetFunctionType(FunctionType& signature);
-    Func* PassFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
+    Func* PassFunction(Func* fn, llvm::StringRef name, llvm::StringRef canonical,
                        llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv);
-    Func* WrapFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
+    Func* WrapFunction(Func* fn, llvm::StringRef name, llvm::StringRef canonical,
                        llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv);
-    Func* GenericFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
+    Func* GenericFunction(Func* fn, llvm::StringRef name, llvm::StringRef canonical,
                           llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv);
     IN_ERROR PopType(varsint7 ty, llvmVal*& v, bool peek = false);
     IN_ERROR PopSig(varsint64 sig, llvm::SmallVector<llvmVal*, 2>& v, bool peek, bool loop);
@@ -186,13 +186,13 @@ namespace innative {
     IN_ERROR InsertTruncTrap(double max, double min, llvm::Type* ty);
     llvm::Value* GetLocal(varuint32 index);
     llvm::GlobalVariable* CreateGlobal(llvmTy* ty, bool isconst, bool external, llvm::StringRef name,
-                                       const llvm::Twine& canonical, size_t line, llvm::Constant* init);
+                                       llvm::StringRef canonical, size_t line, llvm::Constant* init);
     uint64_t GetTotalSize(llvmTy* t);
     const Intrinsic* GetIntrinsic(Import& imp);
     void ExportFunction(FunctionSet& fn,
-                        Func* (Compiler::*wrapper)(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
+                        Func* (Compiler::*wrapper)(Func* fn, llvm::StringRef name, llvm::StringRef canonical,
                                                    llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv),
-                        llvm::StringRef name, const llvm::Twine& canonical);
+                        llvm::StringRef name, llvm::StringRef canonical);
     void AddMemLocalCaching();
 
     Func* CompileFunction(FunctionType& signature, const llvm::Twine& name);
