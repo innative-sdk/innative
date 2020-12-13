@@ -98,7 +98,7 @@ IN_ERROR Compiler::CompileSelectOp(const llvm::Twine& name, llvm::Instruction* f
     return err;
 
   if(!values.Size())
-    return ERR_INVALID_VALUE_STACK;
+    return LogErrorString(env, "%s: can't pop value from empty stack", ERR_INVALID_VALUE_STACK);
   if(!values.Peek()) // If a polymorphic type is on the stack, the result is a polymorphic type, so just do nothing
     return ERR_SUCCESS;
 
@@ -192,7 +192,8 @@ IN_ERROR Compiler::CompileIfBlock(varsint64 sig)
 IN_ERROR Compiler::CompileElseBlock()
 {
   if(control.Size() == 0 || control.Peek().op != OP_if)
-    return ERR_IF_ELSE_MISMATCH;
+    return LogErrorString(env, "%s: expected matching op to be OP_if but found %hhu", ERR_IF_ELSE_MISMATCH,
+                          control.Peek().op);
 
   builder.CreateBr(control.Peek().block); // Add a branch-to-merge instruction to our if_true block
 
@@ -269,7 +270,8 @@ IN_ERROR Compiler::CompileEndBlock()
   {
   case OP_if:
     if(GetBlockSigResults(control.Peek().sig, m) != GetBlockSigParams(control.Peek().sig, m))
-      return ERR_EXPECTED_ELSE_INSTRUCTION;
+      return LogErrorString(env, "%s: If the results don't equal the parameters, it should've had an OP_else in the.",
+                            ERR_EXPECTED_ELSE_INSTRUCTION);
     {
       BB* prev = builder.GetInsertBlock();
       builder.SetInsertPoint(control.Peek().ifelse);
@@ -296,7 +298,9 @@ IN_ERROR Compiler::CompileEndBlock()
   case OP_block:
   case OP_loop:
   case OP_return: break;
-  default: return ERR_END_MISMATCH;
+  default:
+    return LogErrorString(env, "%s: An end operator must end a block instruction, but found %hhu", ERR_END_MISMATCH,
+                          cache.op);
   }
 
   err = PopLabel(cur, push); // Pop the label to assemble the phi node before pushing it.
@@ -316,7 +320,7 @@ void Compiler::CompileTrap()
 IN_ERROR Compiler::CompileBranch(varuint32 depth)
 {
   if(depth >= control.Size())
-    return ERR_INVALID_BRANCH_DEPTH;
+    return LogErrorString(env, "%s:", ERR_INVALID_BRANCH_DEPTH);
 
   Block& target = control[depth];
 
@@ -329,7 +333,8 @@ IN_ERROR Compiler::CompileBranch(varuint32 depth)
 IN_ERROR Compiler::CompileIfBranch(varuint32 depth)
 {
   if(depth >= control.Size())
-    return ERR_INVALID_BRANCH_DEPTH;
+    return LogErrorString(env, "%s: Depth of %u greater than control stack size of %zu", ERR_INVALID_BRANCH_DEPTH, depth,
+                          control.Size());
 
   IN_ERROR err;
   llvmVal* cond;
@@ -358,7 +363,8 @@ IN_ERROR Compiler::CompileBranchTable(varuint32 n_table, varuint32* table, varui
     return err;
 
   if(def >= control.Size())
-    return ERR_INVALID_BRANCH_DEPTH;
+    return LogErrorString(env, "%s: Depth of %u greater than control stack size of %zu", ERR_INVALID_BRANCH_DEPTH, def,
+                          control.Size());
 
   err                 = AddBranch(control[def], control[def].op == OP_loop);
   llvm::SwitchInst* s = builder.CreateSwitch(index, control[def].block, n_table);
@@ -366,7 +372,8 @@ IN_ERROR Compiler::CompileBranchTable(varuint32 n_table, varuint32* table, varui
   for(varuint32 i = 0; i < n_table && err == ERR_SUCCESS; ++i)
   {
     if(table[i] >= control.Size())
-      return ERR_INVALID_BRANCH_DEPTH;
+      return LogErrorString(env, "%s: branch depth %u exceeds control stack size of %zu", ERR_INVALID_BRANCH_DEPTH,
+                            table[i], control.Size());
 
     Block& target = control[table[i]];
     err           = AddBranch(target, target.op == OP_loop);
@@ -380,7 +387,8 @@ IN_ERROR Compiler::CompileBranchTable(varuint32 n_table, varuint32* table, varui
 IN_ERROR Compiler::CompileCall(varuint32 index)
 {
   if(index >= functions.size())
-    return ERR_INVALID_FUNCTION_INDEX;
+    return LogErrorString(env, "%s: function index %u greater than total functions %zu", ERR_INVALID_FUNCTION_INDEX, index,
+                          functions.size());
 
   // Check if this is an intrinsic. If it is, we instead call the intrinsic with the parameters and immediately return the
   // value, if it exists
@@ -390,7 +398,7 @@ IN_ERROR Compiler::CompileCall(varuint32 index)
     int num         = functions[index].intrinsic->num;
     llvmVal** ArgsV = tmalloc<llvmVal*>(env, num);
     if(num > 0 && !ArgsV)
-      return ERR_FATAL_OUT_OF_MEMORY;
+      return LogErrorString(env, "%s: Ran out of memory at %s:%i", ERR_FATAL_OUT_OF_MEMORY, __func__, __LINE__);
 
     for(unsigned int i = num; i-- > 0;)
     {
@@ -415,7 +423,7 @@ IN_ERROR Compiler::CompileCall(varuint32 index)
   IN_ERROR err;
   llvmVal** ArgsV = tmalloc<llvmVal*>(env, num);
   if(num > 0 && !ArgsV)
-    return ERR_FATAL_OUT_OF_MEMORY;
+    return LogErrorString(env, "%s: Ran out of memory at %s()", ERR_FATAL_OUT_OF_MEMORY, __func__, __LINE__);
 
   for(unsigned int i = num; i-- > 0;)
   {
@@ -454,7 +462,8 @@ IN_ERROR Compiler::CompileIndirectCall(varuint32 index)
 {
   index = GetFirstType(index);
   if(index >= m.type.n_functypes)
-    return ERR_INVALID_TYPE_INDEX;
+    return LogErrorString(env, "%s: Type index %u exceeds number of types %zu", ERR_INVALID_TYPE_INDEX, index,
+                          m.type.n_functypes);
 
   IN_ERROR err;
   FunctionType& ftype = m.type.functypes[index];
@@ -463,12 +472,12 @@ IN_ERROR Compiler::CompileIndirectCall(varuint32 index)
     return err;
 
   if(tables.size() < 1)
-    return ERR_INVALID_TABLE_INDEX;
+    return LogErrorString(env, "%s: tables size is 0", ERR_INVALID_TABLE_INDEX);
 
   // Pop arguments in reverse order
   llvmVal** ArgsV = tmalloc<llvmVal*>(env, ftype.n_params);
   if(ftype.n_params > 0 && !ArgsV)
-    return ERR_FATAL_OUT_OF_MEMORY;
+    return LogErrorString(env, "%s: Ran out of memory at %s()", ERR_FATAL_OUT_OF_MEMORY, __func__, __LINE__);
 
   for(unsigned int i = ftype.n_params; i-- > 0;)
   {
@@ -536,7 +545,7 @@ IN_ERROR Compiler::CompileConstant(Instruction& instruction, llvm::Constant*& co
   case OP_i64_const: constant = CInt::get(ctx, llvm::APInt(64, instruction.immediates[0]._varuint64, true)); break;
   case OP_f32_const: constant = ConstantFP::get(ctx, llvm::APFloat(instruction.immediates[0]._float32)); break;
   case OP_f64_const: constant = ConstantFP::get(ctx, llvm::APFloat(instruction.immediates[0]._float64)); break;
-  default: return ERR_INVALID_INITIALIZER;
+  default: return LogErrorString(env, "%s: Invalid instruction %hhu", ERR_INVALID_INITIALIZER, instruction.opcode[0]);
   }
 
   return ERR_SUCCESS;
@@ -547,7 +556,8 @@ IN_ERROR Compiler::CompileLoad(varuint32 memory, varuint32 offset, varuint32 mem
                                llvmTy* ty)
 {
   if(memory >= memories.size())
-    return ERR_INVALID_MEMORY_INDEX;
+    return LogErrorString(env, "%s: memory index %u exceeds number of memories %zu", ERR_INVALID_MEMORY_INDEX, memory,
+                          memories.size());
 
   llvmVal* base;
   IN_ERROR err;
@@ -569,7 +579,8 @@ IN_ERROR Compiler::CompileStore(varuint32 memory, varuint32 offset, varuint32 me
                                 llvm::IntegerType* ext)
 {
   if(memory >= memories.size())
-    return ERR_INVALID_MEMORY_INDEX;
+    return LogErrorString(env, "%s: memory index %u exceeds number of memories %zu", ERR_INVALID_MEMORY_INDEX, memory,
+                          memories.size());
 
   IN_ERROR err;
   llvmVal *value, *base;
@@ -596,7 +607,8 @@ llvmVal* Compiler::CompileMemSize(llvm::GlobalVariable* target)
 IN_ERROR Compiler::CompileMemGrow(varuint32 memory, const char* name)
 {
   if(memories.size() < 1)
-    return ERR_INVALID_MEMORY_INDEX;
+    return LogErrorString(env, "%s: module has no linear memories, so the memgrow instruction is impossible.",
+                          ERR_INVALID_MEMORY_INDEX);
 
   IN_ERROR err;
   llvmVal* delta;
@@ -607,7 +619,7 @@ IN_ERROR Compiler::CompileMemGrow(varuint32 memory, const char* name)
 
   auto max =
     llvm::cast<llvm::ConstantAsMetadata>(memories[memory]->getMetadata(IN_MEMORY_MAX_METADATA)->getOperand(0))->getValue();
-  CallInst* call = builder.CreateCall(memgrow,
+  CallInst* call = builder.CreateCall(fn_memgrow,
                                       { builder.CreateLoad(GetPairPtr(memories[memory], 0)),
                                         builder.CreateShl(builder.CreateZExt(delta, builder.getInt64Ty()), 16), max,
                                         GetPairPtr(memories[memory], 1) },
@@ -970,7 +982,7 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     // Parametric operators
   case OP_drop:
     if(values.Size() < 1)
-      return ERR_INVALID_VALUE_STACK;
+      return LogErrorString(env, "%s: Can't drop anything because value stack is empty.", ERR_INVALID_VALUE_STACK);
     if(values.Peek() != nullptr)
       values.Pop(); // We do not delete the value because it could be referenced elsewhere (e.g. in a branch)
     return ERR_SUCCESS;
@@ -982,7 +994,8 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
   {
     auto local = GetLocal(ins.immediates[0]._varuint32);
     if(!local)
-      return ERR_INVALID_LOCAL_INDEX;
+      return LogErrorString(env, "%s: No local exists with index %u", ERR_INVALID_LOCAL_INDEX,
+                            ins.immediates[0]._varuint32);
     PushReturn(builder.CreateLoad(local));
     return ERR_SUCCESS;
   }
@@ -991,9 +1004,10 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
   {
     auto local = GetLocal(ins.immediates[0]._varuint32);
     if(!local)
-      return ERR_INVALID_LOCAL_INDEX;
+      return LogErrorString(env, "%s: No local exists with index %u", ERR_INVALID_LOCAL_INDEX,
+                            ins.immediates[0]._varuint32);
     if(values.Size() < 1)
-      return ERR_INVALID_VALUE_STACK;
+      return LogErrorString(env, "%s: Can't pop anything because the value stack is empty.", ERR_INVALID_VALUE_STACK);
     builder.CreateStore(!values.Peek() ? llvm::Constant::getAllOnesValue(
                                            llvm::cast<llvm::PointerType>(local->getType())->getElementType()) :
                                          values.Peek(),
@@ -1005,9 +1019,10 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
   }
   case OP_global_set:
     if(ins.immediates[0]._varuint32 >= globals.size())
-      return ERR_INVALID_GLOBAL_INDEX;
+      return LogErrorString(env, "%s: global index %u exceeds number of globals %zu", ERR_INVALID_GLOBAL_INDEX,
+                            ins.immediates[0]._varuint32, globals.size());
     if(values.Size() < 1)
-      return ERR_INVALID_VALUE_STACK;
+      return LogErrorString(env, "%s: Can't pop anything from an empty value stack.", ERR_INVALID_VALUE_STACK);
     builder.CreateStore(!values.Peek() ? llvm::Constant::getAllOnesValue(
                                            globals[ins.immediates[0]._varuint32]->getType()->getElementType()) :
                                          values.Pop(),
@@ -1016,7 +1031,8 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return ERR_SUCCESS;
   case OP_global_get:
     if(ins.immediates[0]._varuint32 >= globals.size())
-      return ERR_INVALID_GLOBAL_INDEX;
+      return LogErrorString(env, "%s: global index %u exceeds number of globals %zu", ERR_INVALID_GLOBAL_INDEX,
+                            ins.immediates[0]._varuint32, globals.size());
     PushReturn(builder.CreateLoad(globals[ins.immediates[0]._varuint32]));
     return ERR_SUCCESS;
 
@@ -1443,14 +1459,18 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     case OP_table_init: return CompileTableInit(ins.immediates[0]._varuint32, ins.immediates[1]._varuint32);
     case OP_elem_drop: return CompileElemDrop(ins.immediates[0]._varuint32);
     case OP_table_copy: return CompileTableCopy(ins.immediates[0]._varuint32, ins.immediates[1]._varuint32);
-    default: return ERR_FATAL_UNKNOWN_INSTRUCTION;
+    default:
+      return LogErrorString(env, "%s: unknown instruction OP_misc_ops_prefix-%hhu", ERR_FATAL_UNKNOWN_INSTRUCTION,
+                            ins.opcode[1]);
     }
     break;
 
     // Atomic
   case OP_atomic_prefix: return CompileAtomicInstruction(ins);
 
-  default: return ERR_FATAL_UNKNOWN_INSTRUCTION;
+  default:
+    return LogErrorString(env, "%s: unknown instruction %hhu-%hhu", ERR_FATAL_UNKNOWN_INSTRUCTION, ins.opcode[0],
+                          ins.opcode[1]);
   }
 
   assert(false); // ERROR NOT IMPLEMENTED
@@ -1465,11 +1485,13 @@ IN_ERROR Compiler::CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst
   assert(!values.Size() && !values.Limit());
 
   if(desc.type_index >= m.type.n_functypes)
-    return ERR_INVALID_TYPE_INDEX;
+    return LogErrorString(env, "%s: Type index %u exceeds number of types %zu", ERR_INVALID_TYPE_INDEX, desc.type_index,
+                          m.type.n_functypes);
   auto& sig = m.type.functypes[desc.type_index];
 
   if(sig.n_params != fn->arg_size())
-    return ERR_SIGNATURE_MISMATCH;
+    return LogErrorString(env, "%s: signature had %u params but function had %zu", ERR_SIGNATURE_MISMATCH, sig.n_params,
+                          fn->arg_size());
 
   debugger->FuncBody(fn, indice, desc, body);
   // Setup the function exit block that wraps everything, but discard the function parameters because they aren't really
@@ -1555,11 +1577,14 @@ IN_ERROR Compiler::CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst
   if(values.Size() > 0 && !values.Peek()) // Pop at most 1 polymorphic type off the stack. Any additional ones are an error.
     values.Pop();
   if(body.body[body.n_body - 1].opcode[0] != OP_end)
-    return ERR_FATAL_EXPECTED_END_INSTRUCTION;
+    return LogErrorString(env, "%s: Expected end instruction but found %hhu-%hhu", ERR_FATAL_EXPECTED_END_INSTRUCTION,
+                          body.body[body.n_body - 1].opcode[0], body.body[body.n_body - 1].opcode[1]);
   if(control.Size() > 0 || control.Limit() > 0)
-    return ERR_END_MISMATCH;
+    return LogErrorString(env, "%s: Expected empty control stack, but it had %zu values at a limit of %zu",
+                          ERR_END_MISMATCH, control.Size(), control.Limit());
   if(values.Size() > 0 || values.Limit() > 0)
-    return ERR_INVALID_VALUE_STACK;
+    return LogErrorString(env, "%s: Expected empty value stack, but it had %zu values at a limit of %zu",
+                          ERR_INVALID_VALUE_STACK, values.Size(), values.Limit());
   return ERR_SUCCESS;
 }
 
@@ -1570,17 +1595,19 @@ IN_ERROR Compiler::CompileInitGlobal(Module& m, varuint32 index, llvm::Constant*
   {
     auto external = ResolveExport(env, m.importsection.imports[i]);
     if(!external.first)
-      return ERR_UNKNOWN_MODULE;
+      return LogErrorString(env, "%s: Couldn't find %s", ERR_UNKNOWN_MODULE, m.importsection.imports[i].module_name.str());
     if(!external.second)
-      return ERR_UNKNOWN_EXPORT;
+      return LogErrorString(env, "%s: Couldn't find %s", ERR_UNKNOWN_EXPORT, m.importsection.imports[i].export_name.str());
     if(external.second->kind != WASM_KIND_GLOBAL)
-      return ERR_INVALID_GLOBAL_IMPORT_TYPE;
+      return LogErrorString(env, "%s: Tried to compile an initialization instruction for %hhu instead of WASM_KIND_GLOBAL.",
+                            ERR_INVALID_GLOBAL_IMPORT_TYPE, external.second->kind);
     return CompileInitGlobal(*external.first, external.second->index, out);
   }
   i -= m.importsection.globals;
   if(i < m.global.n_globals)
     return CompileInitConstant(m.global.globals[i].init, m, out);
-  return ERR_INVALID_GLOBAL_INDEX;
+  return LogErrorString(env, "%s: global index %zu out of range of global count %u", ERR_INVALID_GLOBAL_INDEX, i,
+                        m.global.n_globals);
 }
 
 IN_ERROR Compiler::CompileInitConstant(Instruction& instruction, Module& m, llvm::Constant*& out)

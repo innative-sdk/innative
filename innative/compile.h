@@ -5,7 +5,7 @@
 #define IN__COMPILE_H
 
 #include "innative/schema.h"
-#include "constants.h"
+#include "utility.h"
 #include "llvm.h"
 #include "filesys.h"
 #include "stack.h"
@@ -15,6 +15,39 @@
 
 namespace innative {
   KHASH_DECLARE(importhash, const char*, llvm::GlobalObject*);
+
+  namespace utility {
+    // ostream that dumps to the environment loghook
+    class raw_log_ostream : public llvm::raw_ostream
+    {
+      uint64_t pos;
+
+      void write_impl(const char* Ptr, size_t Size) override;
+      inline uint64_t current_pos() const override { return pos; }
+
+    public:
+      explicit raw_log_ostream(const Environment& e) : env(e) {}
+      ~raw_log_ostream() override;
+
+      const Environment& env;
+    };
+
+    template<typename... Args>
+    inline IN_ERROR LogErrorType(raw_log_ostream& ostream, const char* format, IN_ERROR err, const llvm::Type* ty,
+                                 Args... args)
+    {
+      if(ostream.env.loglevel < LOG_FATAL)
+        return err;
+
+      char buf[32];
+      (*ostream.env.loghook)(&ostream.env, format, utility::EnumToString(utility::ERR_ENUM_MAP, (int)err, buf, sizeof(buf)),
+                             args...);
+      ty->print(ostream, true);
+      (*ostream.env.loghook)(&ostream.env, "\n");
+      ostream.flush();
+      return err;
+    }
+  }
 
   struct Compiler
   {
@@ -83,7 +116,8 @@ namespace innative {
       F64ToI64 = 6,
       F64ToU64 = 7,
     };
-
+    Compiler(Environment& env, Module& m, llvm::LLVMContext& ctx, llvm::Module* mod, llvm::IRBuilder<>& builder,
+             llvm::TargetMachine* machine, kh_importhash_t* importhash, const path& objfile);
     Environment& env;
     Module& m;
     llvm::LLVMContext& ctx;
@@ -92,33 +126,36 @@ namespace innative {
     llvm::TargetMachine* machine;
     kh_importhash_t* importhash;
     path objfile; // If this module has been compiled to a .obj file, stores the path so we can reliably delete it.
-    llvm::IntegerType* intptrty;
-    llvm::StructType* mempairty;
     std::unique_ptr<Debugger> debugger;
     Stack<llvm::Value*> values; // Tracks the current value stack
     Stack<Block> control;       // Control flow stack
     std::vector<llvm::AllocaInst*> locals;
-    llvm::AllocaInst* memlocal;
     std::vector<llvm::GlobalVariable*> memories;
     std::vector<llvm::GlobalVariable*> tables;
     std::vector<llvm::GlobalVariable*> globals;
     std::vector<DataSegment> data_globals;
     std::vector<ElemSegment> elem_globals;
-    llvm::GlobalVariable* exported_functions;
     std::vector<FunctionSet> functions;
+    utility::raw_log_ostream raw_log;
+    std::string natvis;
+    llvm::GlobalVariable* exported_functions;
+    llvm::AllocaInst* memlocal;
+    llvm::IntegerType* intptrty;
+    llvm::StructType* mempairty;
     llvm::Function* init;
     llvm::Function* exit;
     llvm::Function* start;
-    llvm::Function* memgrow;
-    llvm::Function* memcpy;
-    llvm::Function* memmove;
-    llvm::Function* memset;
-    llvm::Function* memcmp;
+    llvm::Function* fn_memgrow;
+    llvm::Function* fn_memcpy;
+    llvm::Function* fn_memmove;
+    llvm::Function* fn_memset;
+    llvm::Function* fn_memcmp;
     llvm::Function* atomic_notify;
     llvm::Function* atomic_wait32;
     llvm::Function* atomic_wait64;
+    llvm::Function* current;
     llvm::GlobalVariable* instruction_counter;
-    std::string natvis;
+    char logbuf[32]; // This makes some errors easier to log
 
     using Func    = llvm::Function;
     using FuncTy  = llvm::FunctionType;
@@ -205,7 +242,7 @@ namespace innative {
     IN_ERROR IN_Intrinsic_FromC(llvm::Value** params, llvm::Value*& out);
     IN_ERROR IN_Intrinsic_Trap(llvm::Value** params, llvm::Value*& out);
     IN_ERROR IN_Intrinsic_FuncPtr(llvm::Value** params, llvm::Value*& out);
-
+    
     static WASM_TYPE_ENCODING GetTypeEncoding(llvm::Type* t);
     static bool CheckType(varsint7 ty, llvmTy* t);
     static bool CheckSig(varsint64 sig, llvmTy* t, Module& m);
@@ -417,6 +454,21 @@ namespace innative {
 
     IN_ERROR CompileAtomicRMW(Instruction& ins, WASM_TYPE_ENCODING varTy, llvm::AtomicRMWInst::BinOp Op, const char* name);
     IN_ERROR CompileAtomicCmpXchg(Instruction& ins, WASM_TYPE_ENCODING varTy, const char* name);
+
+    void _logprefix();
+    template<typename... Args>
+    inline IN_ERROR _log(const char* format, IN_ERROR err, Args... args)
+    {
+      _logprefix();
+      return utility::LogErrorString(env, format, err, args...);
+    }
+
+    template<typename... Args>
+    inline IN_ERROR _logtype(const char* format, IN_ERROR err, const llvm::Type* ty, Args... args)
+    {
+      _logprefix();
+      return utility::LogErrorType(raw_log, format, err, ty, args...);
+    }
   };
 
   template<typename... Args> IN_FORCEINLINE std::string FormatString(bool xml, const char* format, Args&&... args)

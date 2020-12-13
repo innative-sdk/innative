@@ -216,7 +216,6 @@ IN_ERROR Compiler::CompileAtomicCmpXchg(Instruction& ins, WASM_TYPE_ENCODING var
 IN_ERROR Compiler::CompileAtomicInstruction(Instruction& ins)
 {
   using RmwOp = llvm::AtomicRMWInst::BinOp;
-
   auto op = ins.opcode[1];
 
   switch(op)
@@ -231,7 +230,7 @@ IN_ERROR Compiler::CompileAtomicInstruction(Instruction& ins)
   }
 
   if(op < OP_START || op >= OP_END)
-    return ERR_FATAL_UNKNOWN_INSTRUCTION;
+    return LogErrorString(env, "%s: %hhi is not a recognized webassembly instruction.", ERR_FATAL_UNKNOWN_INSTRUCTION, op);
 
   auto opGroup = GetOpGroup(op);
   auto varTy   = GetOpTy(op);

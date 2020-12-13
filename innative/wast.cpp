@@ -737,7 +737,11 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
 
   kh_indexname_t* mapping =
     kh_init_indexname(); // This is a special mapping for all modules using the module name itself, not just registered ones.
-  DeferLambda<std::function<void()>> defer([&]() { kh_destroy_indexname(mapping); });
+  auto lastlog = env.loglevel;
+  DeferLambda<std::function<void()>> defer([&]() {
+    kh_destroy_indexname(mapping);
+    env.loglevel = lastlog;
+  });
 
   Module* last = nullptr; // For anything not providing a module name, this was the most recently defined module.
   void* cache  = nullptr;
@@ -986,6 +990,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     }
     case WatTokens::ASSERT_MALFORMED:
     {
+      env.loglevel = LOG_NONE; // Suppress output because we're expecting it
       WatToken t = tokens.Pop();
       EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
       Module m;
@@ -1002,12 +1007,14 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
         AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead",
                     WatLineNumber(start, t.pos), error.str(), assertcode.c_str());
       env.errors = 0;
+      env.loglevel = lastlog;
       break;
     }
     case WatTokens::ASSERT_INVALID:
     case WatTokens::ASSERT_UNLINKABLE:
     {
-      WatToken t = tokens.Pop();
+      env.loglevel = LOG_NONE; // Suppress output because we're expecting it
+      WatToken t   = tokens.Pop();
       EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
       Module m;
       int code = ParseWastModule(env, tokens, mapping, m, file);
@@ -1031,6 +1038,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
                       // must trump our normal validation
         ValidateModule(env, m);
       code = ERR_SUCCESS;
+      env.loglevel = lastlog;
 
       while(env.errors)
       {

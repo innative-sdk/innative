@@ -17,11 +17,7 @@ IN_ERROR innative::OutputObjectFile(Compiler& context, const path& out)
   llvm::raw_fd_ostream dest(out.u8string(), EC, llvm::sys::fs::F_None);
 
   if(EC)
-  {
-    if(context.env.loglevel >= LOG_FATAL)
-      (*context.env.loghook)(&context.env, "Could not open file: %s", EC.message().c_str());
-    return ERR_FATAL_FILE_ERROR;
-  }
+    return LogErrorString(context.env, "%s: Could not open file: %s", ERR_FATAL_FILE_ERROR, EC.message().c_str());
 
   llvm::legacy::PassManager pass;
   auto FileType = llvm::CGFT_ObjectFile;
@@ -30,11 +26,7 @@ IN_ERROR innative::OutputObjectFile(Compiler& context, const path& out)
   pass.add(createTargetTransformInfoWrapperPass(context.machine->getTargetIRAnalysis()));
 
   if(context.machine->addPassesToEmitFile(pass, dest, nullptr, FileType))
-  {
-    if(context.env.loglevel >= LOG_FATAL)
-      (*context.env.loghook)(&context.env, "TheTargetMachine can't emit a file of this type");
-    return ERR_FATAL_FORMAT_ERROR;
-  }
+    return LogErrorString(context.env, "%s: %s can't emit an object file.", ERR_FATAL_FORMAT_ERROR, context.machine->getTargetTriple().str().c_str());
 
   pass.run(*context.mod);
   dest.flush();
@@ -348,7 +340,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
     // Verify module
     llvm::raw_fd_ostream dest(1, false, true);
     if(llvm::verifyModule(*env->modules[i].cache->mod, &dest))
-      return ERR_FATAL_INVALID_LLVM_IR;
+      return LogErrorString(*env, "%s: %s failed validation", ERR_FATAL_INVALID_LLVM_IR, env->modules[i].name.str());
   }
 
   {
@@ -404,7 +396,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
       FILE* f;
       FOPEN(f, embed.c_str(), "wb");
       if(!f)
-        return ERR_FATAL_FILE_ERROR;
+        return LogErrorString(*env, "%s: Could not open file: %s", ERR_FATAL_FILE_ERROR, embed.c_str());
 
       const char prologue[] =
         "<?xml version=\"1.0\" encoding=\"utf-8\"?><AutoVisualizer xmlns=\"http://schemas.microsoft.com/vstudio/debugger/natvis/2010\">";
@@ -466,7 +458,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
         FILE* f;
         FOPEN(f, embed.c_str(), "wb");
         if(!f)
-          return ERR_FATAL_FILE_ERROR;
+          return LogErrorString(*env, "%s: Could not open file: %s", ERR_FATAL_FILE_ERROR, embed.c_str());
 
         fwrite(cur->data, 1, (size_t)cur->size, f);
         fclose(f);

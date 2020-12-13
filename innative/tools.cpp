@@ -212,7 +212,7 @@ int innative::AddModuleObject(Environment* env, const Module* m)
 IN_ERROR innative::AddWhitelist(Environment* env, const char* module_name, const char* export_name)
 {
   if(!export_name)
-    return ERR_PARSE_INVALID_NAME;
+    return utility::LogErrorString(*env, "%s: export name can't be empty", ERR_PARSE_INVALID_NAME);
 
   char* whitelist = tmalloc<char>(*env, CanonWhitelist(module_name, export_name, env->system, nullptr));
   if(!whitelist)
@@ -307,11 +307,7 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
         f = testpath(f, path("/usr/lib/") / src, out);
 #endif
         if(!f)
-        {
-          (*env->loghook)(env, "Error loading file: %s\n", src.u8string().c_str());
-          (*env->loghook)(env, "\n"); // flush buffer
-          return ERR_FATAL_FILE_ERROR;
-        }
+          return LogErrorString(*env, "%s: Error loading file: %s", ERR_FATAL_FILE_ERROR, src.u8string().c_str());
         fclose(f);
 
         std::string buf = out.u8string();
@@ -380,7 +376,7 @@ IN_ERROR innative::Validate(Environment* env)
     int r;
     khiter_t iter = kh_put_modules(env->modulemap, env->modules[i].name, &r);
     if(!r)
-      return ERR_FATAL_DUPLICATE_MODULE_NAME;
+      return utility::LogErrorString(*env, "%s: %s", ERR_FATAL_DUPLICATE_MODULE_NAME, env->modules[i].name.str());
     kh_val(env->modulemap, iter) = i;
   }
 
@@ -581,31 +577,23 @@ int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bo
     target      = reinterpret_cast<const char*>(data);
     data_module = LoadFile(GetPath(target), sz);
     if(data_module.get() == nullptr)
-      return ERR_FATAL_FILE_ERROR;
+      return LogErrorString(*env, "%s: Error loading file: %s", ERR_FATAL_FILE_ERROR, target);
     data = data_module.get();
   }
   else if(env->flags & ENV_DEBUG)
   {
     path out = u8path(output) / buf;
-    if(!DumpFile(out, data, sz))
-      return ERR_FATAL_FILE_ERROR;
     dumpfile = out.u8string();
     target   = dumpfile.c_str();
+    if(!DumpFile(out, data, sz))
+      return LogErrorString(*env, "%s: Error loading file: %s", ERR_FATAL_FILE_ERROR, target);
   }
 
   if(!env)
-  {
-    fputs("Environment cannot be null.\n", stderr);
-    return ERR_FATAL_NULL_POINTER;
-  }
+    return LogErrorString(*env, "%s: Environment cannot be null.", ERR_FATAL_NULL_POINTER);
 
   if(err < 0)
-  {
-    char buf[32];
-    if(env->loglevel >= LOG_FATAL)
-      (*env->loghook)(env, "Error loading environment: %s\n", EnumToString(ERR_ENUM_MAP, err, buf, 32));
-    return err;
-  }
+    return LogErrorString(*env, "%s: Error loading environment", (IN_ERROR)err);
 
   err = ParseWast(*env, data, sz, GetPath(target), always_compile, output);
 
@@ -648,7 +636,7 @@ int innative::SerializeModule(Environment* env, size_t m, const char* out, size_
     serializer.WriteTokens(ss);
     ss << std::endl;
     if(ss.tellp() < 0)
-      return ERR_FATAL_FILE_ERROR;
+      return LogErrorString(*env, "%s: Failed to write tokens to out parameter.", ERR_FATAL_FILE_ERROR);
 
     size_t pos = (size_t)ss.tellp();
     if(*len < pos)
@@ -664,7 +652,7 @@ int innative::SerializeModule(Environment* env, size_t m, const char* out, size_
 
   std::ofstream f(name, std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
   if(f.bad())
-    return ERR_FATAL_FILE_ERROR;
+    return LogErrorString(*env, "%s: Error loading file: %s", ERR_FATAL_FILE_ERROR, name.c_str());
 
   serializer.WriteTokens(f);
   f << std::endl;

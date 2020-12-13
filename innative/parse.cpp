@@ -64,7 +64,8 @@ namespace innative {
 
         T* r = tmalloc<T>(env, size);
         if(!r)
-          return ERR_FATAL_OUT_OF_MEMORY;
+          return LogErrorString(env, "%s: Ran out of memory at %s() [%s:%i]", ERR_FATAL_OUT_OF_MEMORY, __func__, __FILE__,
+                                __LINE__);
 
         memset(r, 0, sizeof(T) * size);
         ptr = r;
@@ -100,11 +101,13 @@ IN_ERROR innative::ParseByteArray(Stream& s, ByteArray& section, bool terminator
   if(n > 0)
   {
     if(!section.get())
-      return ERR_FATAL_OUT_OF_MEMORY;
+      return LogErrorString(env, "%s: Ran out of memory at %s() [%s:%i]", ERR_FATAL_OUT_OF_MEMORY, __func__, __FILE__,
+                            __LINE__);
 
     uint32 bytes = static_cast<uint32>(s.ReadBytes(section.get(), section.size()));
     if(bytes != section.size())
-      return ERR_PARSE_UNEXPECTED_EOF;
+      return LogErrorString(env, "%s: Read %u bytes from section with size of %u", ERR_PARSE_UNEXPECTED_EOF, bytes,
+                            section.size());
   }
 
   return ERR_SUCCESS;
@@ -125,7 +128,8 @@ IN_ERROR innative::ParseInitializer(Stream& s, Instruction& ins, const Environme
     err = ParseInstruction(s, end, env);
 
   if(err >= 0 && end.opcode[0] != OP_end)
-    err = ERR_FATAL_EXPECTED_END_INSTRUCTION;
+    err = LogErrorString(env, "%s: Expected end instruction but found %hhu-%hhu", ERR_FATAL_EXPECTED_END_INSTRUCTION,
+                         end.opcode[0], end.opcode[1]);
 
   return err;
 }
@@ -144,7 +148,7 @@ IN_ERROR innative::ParseFunctionType(Stream& s, FunctionType& sig, const Environ
       err = Parse<varsint7>::template Array<&ParseVarSInt7>(s, sig.returns, sig.n_returns, env);
   }
   else
-    err = ERR_FATAL_UNKNOWN_FUNCTION_SIGNATURE;
+    err = LogErrorString(env, "%s: Found unknown function signature %hhi", ERR_FATAL_UNKNOWN_FUNCTION_SIGNATURE, sig.form);
 
   return err;
 }
@@ -215,13 +219,13 @@ IN_ERROR innative::ParseImport(Stream& s, Import& i, const Environment& env)
     return err;
 
   if(!ValidateIdentifier(i.module_name))
-    return ERR_INVALID_UTF8_ENCODING;
+    return LogErrorString(env, "%s: %s", ERR_INVALID_UTF8_ENCODING, i.module_name.str());
 
   if(err = ParseIdentifier(s, i.export_name, env))
     return err;
 
   if(!ValidateIdentifier(i.export_name))
-    return ERR_INVALID_UTF8_ENCODING;
+    return LogErrorString(env, "%s: %s", ERR_INVALID_UTF8_ENCODING, i.export_name.str());
 
   if(err = ParseVarUInt7(s, i.kind))
     return err;
@@ -235,7 +239,7 @@ IN_ERROR innative::ParseImport(Stream& s, Import& i, const Environment& env)
   case WASM_KIND_TABLE: return ParseTableDesc(s, i.table_desc);
   case WASM_KIND_MEMORY: return ParseMemoryDesc(s, i.mem_desc);
   case WASM_KIND_GLOBAL: return ParseGlobalDesc(s, i.global_desc);
-  default: err = ERR_FATAL_UNKNOWN_KIND;
+  default: err = LogErrorString(env, "%s: %hhu", ERR_FATAL_UNKNOWN_KIND, i.kind);
   }
 
   return err;
@@ -487,12 +491,12 @@ IN_ERROR innative::ParseInstruction(Stream& s, Instruction& ins, const Environme
   case OP_f64_reinterpret_i64: break;
 
   case OP_misc_ops_prefix: err = ParseMiscOpsInstruction(s, ins, env, m); break;
-  case OP_atomic_prefix: err = ParseAtomicInstruction(s, ins, env); break;
+  case OP_atomic_prefix: err = ParseAtomicInstruction(s, ins, env, m); break;
 
   case OP_ref_null: ins.immediates[0]._varuint32 = s.ReadVarUInt32(err); break;
   case OP_ref_func: ins.immediates[0]._varuint32 = s.ReadVarUInt32(err); break;
 
-  default: err = ERR_FATAL_UNKNOWN_INSTRUCTION;
+  default: err = LogErrorString(env, "%s: found %hhu-%hhu", ERR_FATAL_UNKNOWN_INSTRUCTION, ins.opcode[0], ins.opcode[1]);
   }
 
   return err;
@@ -509,7 +513,7 @@ IN_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const E
     init.index = 0;
 
   if(init.flags & WASM_ELEM_INVALID_FLAGS)
-    return ERR_INVALID_ELEMENT_SEGMENT;
+    return LogErrorString(env, "%s [%s]: flags had valid of %u", ERR_INVALID_ELEMENT_SEGMENT, m.name.str(), init.flags);
 
   // Only parse if active (not passive)
   if(err >= 0 && !(init.flags & WASM_ELEM_PASSIVE))
@@ -536,16 +540,16 @@ IN_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const E
   {
     TableDesc* desc = ModuleTable(m, init.index);
     if(!desc)
-      return ERR_INVALID_TABLE_INDEX;
+      return LogErrorString(env, "%s: %u", ERR_INVALID_TABLE_INDEX, init.index);
     if(desc->element_type != TE_funcref)
-      return ERR_FATAL_BAD_ELEMENT_TYPE;
+      return LogErrorString(env, "%s: %hhi", ERR_FATAL_BAD_ELEMENT_TYPE, desc->element_type);
   }
 
   // Parse func indices or funcrefs elemexprs depending on the flag
   if(init.flags & WASM_ELEM_CARRIES_ELEMEXPRS)
   {
     if(init.elem_type != TE_funcref)
-      return ERR_FATAL_BAD_ELEMENT_TYPE;
+      return LogErrorString(env, "%s: %hhi", ERR_FATAL_BAD_ELEMENT_TYPE, init.elem_type);
 
     err = Parse<Instruction, const Environment&>::template Array<&ParseInitializer>(s, init.elemexprs, init.n_elements, env,
                                                                                     env);
@@ -555,7 +559,7 @@ IN_ERROR innative::ParseTableInit(Stream& s, TableInit& init, Module& m, const E
   else
   {
     if(init.extern_kind != 0)
-      return ERR_FATAL_BAD_ELEMENT_TYPE;
+      return LogErrorString(env, "%s: %hhi", ERR_FATAL_BAD_ELEMENT_TYPE, init.extern_kind);
 
     err = Parse<varuint32>::template Array<&ParseVarUInt32>(s, init.elements, init.n_elements, env);
   }
@@ -571,7 +575,8 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, cons
   size_t end    = s.pos + f.body_size; // body_size is the size of both local_entries and body in bytes.
   ptrdiff_t idx = &f - m.code.funcbody;
   if(idx >= static_cast<ptrdiff_t>(m.function.n_funcdecl))
-    return ERR_FUNCTION_BODY_MISMATCH;
+    return LogErrorString(env, "%s [%s]: index %zi greater than number of functions %u", ERR_FUNCTION_BODY_MISMATCH,
+                          m.name.str(), idx, m.function.n_funcdecl);
 
   auto& sig = m.type.functypes[m.function.funcdecl[idx].type_index];
 
@@ -585,7 +590,8 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, cons
     for(varuint32 i = 0; i < f.n_locals; ++i)
     {
       if(f.locals[i].count > (std::numeric_limits<uint32_t>::max() - f.local_size))
-        return ERR_FATAL_TOO_MANY_LOCALS; // Ensure we don't overflow the local count
+        return LogErrorString(env, "%s [%s]: %u", ERR_FATAL_TOO_MANY_LOCALS, m.name.str(),
+                              f.locals[i].count); // Ensure we don't overflow the local count
       f.local_size += f.locals[i].count;
     }
   }
@@ -597,14 +603,15 @@ IN_ERROR innative::ParseFunctionBody(Stream& s, FunctionBody& f, Module& m, cons
   {
     f.body = tmalloc<Instruction>(env, f.body_size); // Overallocate maximum number of possible instructions we might have
     if(!f.body)
-      return ERR_FATAL_OUT_OF_MEMORY;
+      return LogErrorString(env, "%s [%s]: Ran out of memory at %s() [%s:%i]", ERR_FATAL_OUT_OF_MEMORY, m.name.str(),
+                            __func__, __FILE__, __LINE__);
 
     for(f.n_body = 0; s.pos < end && err >= 0; ++f.n_body)
       err = ParseInstruction(s, f.body[f.n_body], env, &m, &block_depth);
   }
 
   if(err >= 0 && block_depth != 0)
-    return ERR_END_MISMATCH;
+    return LogErrorString(env, "%s [%s]: block depth was: %i", ERR_END_MISMATCH, m.name.str(), block_depth);
 
   // if(s.pos != end) // We can't fail on this error because the spec parser doesn't
   //  return ERR_FATAL_FUNCTION_SIZE_MISMATCH;
@@ -645,7 +652,8 @@ IN_ERROR innative::ParseNameSectionParam(Stream& s, size_t num, Module& m, Funct
       return err;
     DebugInfo* debug = (index >= n_params) ? (*fn)(s, m, desc, index - n_params, env) : &desc.param_debug[index];
     if(!debug)
-      return ERR_INVALID_LOCAL_INDEX;
+      return LogErrorString(env, "%s [%s]: index %u greater than n_params %u ", ERR_INVALID_LOCAL_INDEX, m.name.str(),
+                            index, n_params);
 
     debug->line   = 1;
     debug->column = static_cast<decltype(debug->column)>(s.pos);
@@ -691,7 +699,8 @@ IN_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Envi
         }
         index -= m.importsection.functions;
         if(index >= m.function.n_funcdecl)
-          return ERR_INVALID_FUNCTION_INDEX;
+          return LogErrorString(env, "%s [%s]: %u exceeds function count %u", ERR_INVALID_FUNCTION_INDEX, m.name.str(),
+                                index, m.function.n_funcdecl);
 
         err = ParseByteArray(s, m.function.funcdecl[index].debug.name, true, env);
       }
@@ -712,7 +721,8 @@ IN_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Envi
         {
           auto& desc = m.importsection.imports[fn].func_desc;
           if(desc.type_index >= m.type.n_functypes)
-            return ERR_INVALID_TYPE_INDEX;
+            return LogErrorString(env, "%s [%s]: %u exceeds type count %u", ERR_INVALID_TYPE_INDEX, m.name.str(),
+                                  desc.type_index, m.type.n_functypes);
 
           if(num > 0)
             err = ParseNameSectionParam(
@@ -725,11 +735,13 @@ IN_ERROR innative::ParseNameSection(Stream& s, size_t end, Module& m, const Envi
 
         fn -= m.importsection.functions;
         if(fn >= m.code.n_funcbody)
-          return ERR_INVALID_FUNCTION_INDEX;
+          return LogErrorString(env, "%s [%s]: %u exceeds function body count %u", ERR_INVALID_FUNCTION_INDEX, m.name.str(),
+                                fn, m.code.n_funcbody);
 
         auto& desc = m.function.funcdecl[fn];
         if(desc.type_index >= m.type.n_functypes)
-          return ERR_INVALID_TYPE_INDEX;
+          return LogErrorString(env, "%s [%s]: %u exceeds type count %u", ERR_INVALID_TYPE_INDEX, m.name.str(),
+                                desc.type_index, m.type.n_functypes);
 
         // We count the maximum possible number of splits (summation of all counts minus one) and limit num to that
         varuint32 worst_case = 0;
@@ -786,20 +798,29 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
 {
   m = { 0 };
 
+  if(!m.name.size())
+  {
+    m.name.resize(name.size(), true, env);
+    if(!m.name.get() && name.size() > 0)
+      return LogErrorString(env, "%s: Ran out of memory at %s() [%s:%i]", ERR_FATAL_OUT_OF_MEMORY, __func__, __FILE__,
+                            __LINE__);
+    tmemcpy(m.name.get(), m.name.size(), name.get(), name.size());
+  }
+
   IN_ERROR err   = ERR_SUCCESS;
   m.magic_cookie = s.ReadUInt32(err);
 
   if(err < 0)
     return err;
   if(m.magic_cookie != WASM_MAGIC_COOKIE)
-    return ERR_PARSE_INVALID_MAGIC_COOKIE;
+    return LogErrorString(env, "%s [%s]: %u", ERR_PARSE_INVALID_MAGIC_COOKIE, m.name.str(), m.magic_cookie);
 
   m.version = s.ReadUInt32(err);
 
   if(err < 0)
     return err;
   if(m.version != WASM_MAGIC_VERSION)
-    return ERR_PARSE_INVALID_VERSION;
+    return LogErrorString(env, "%s [%s]: %u", ERR_PARSE_INVALID_VERSION, m.name.str(), m.version);
 
   size_t begin = s.pos;
   m.n_custom   = 0; // Count the custom sections so we can preallocate them
@@ -810,7 +831,7 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
       return err;
 
     if(op > WASM_SECTION_DATA_COUNT) // require valid opcode to continue
-      return ERR_FATAL_UNKNOWN_SECTION;
+      return LogErrorString(env, "%s [%s]: %u", ERR_FATAL_UNKNOWN_SECTION, m.name.str(), op);
     if(op == WASM_SECTION_CUSTOM)
       ++m.n_custom;
     s.pos += s.ReadVarUInt32(err);
@@ -820,7 +841,7 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
   }
 
   if(s.pos != s.size)
-    return ERR_PARSE_INVALID_FILE_LENGTH;
+    return LogErrorString(env, "%s [%s]: %zu != %zu", ERR_PARSE_INVALID_FILE_LENGTH, m.name.str(), s.pos, s.size);
 
   size_t curcustom = 0;
   s.pos            = begin;
@@ -831,7 +852,8 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
   {
     m.custom = tmalloc<CustomSection>(env, m.n_custom);
     if(!m.custom)
-      return ERR_FATAL_OUT_OF_MEMORY;
+      return LogErrorString(env, "%s [%s]: Ran out of memory at %s() [%s:%i]", ERR_FATAL_OUT_OF_MEMORY, m.name.str(),
+                            __func__, __FILE__, __LINE__);
   }
 
   varuint32 funcbody = 0;
@@ -846,13 +868,15 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
       break;
     size_t expected_end = s.pos + payload;
     if(opcode == WASM_SECTION_START && (m.knownsections & (1 << opcode)))
-      return ERR_FATAL_MULTIPLE_START_SECTIONS;
+      return LogErrorString(env, "%s [%s]: You cannot have multiple start sections", ERR_FATAL_MULTIPLE_START_SECTIONS,
+                            m.name.str());
 
     if(opcode != WASM_SECTION_CUSTOM) // Section order only applies to known sections
     {
       if(!ValidateSectionOrder(m.knownsections, opcode))
-        return ERR_FATAL_INVALID_WASM_SECTION_ORDER; // This has to be a fatal error because some sections rely on others
-                                                     // being loaded
+        return LogErrorString(env, "%s [%s]: %hhu", ERR_FATAL_INVALID_WASM_SECTION_ORDER, m.name.str(),
+                              opcode); // This has to be a fatal error because some sections rely on others
+                                       // being loaded
       m.knownsections |= (1 << opcode);
     }
 
@@ -880,12 +904,15 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
         case WASM_KIND_TABLE: ++m.importsection.tables;
         case WASM_KIND_MEMORY: ++m.importsection.memories;
         case WASM_KIND_GLOBAL: ++m.importsection.globals; break;
-        default: return ERR_FATAL_UNKNOWN_KIND;
+        default:
+          return LogErrorString(env, "%s [%s]: %hhu", ERR_FATAL_UNKNOWN_KIND, m.name.str(),
+                                m.importsection.imports[i].kind);
         }
       }
 
       if(m.importsection.n_import != num) // n_import is the same as globals, check to make sure we derived it properly
-        return ERR_FATAL_INVALID_MODULE;
+        return LogErrorString(env, "%s [%s]: expected %u imports but only counted %u imports", ERR_FATAL_INVALID_MODULE,
+                              m.name.str(), num, m.importsection.n_import);
     }
     break;
     case WASM_SECTION_FUNCTION:
@@ -920,23 +947,27 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
     case WASM_SECTION_DATA:
       err = Parse<DataInit, const Environment&>::template Array<&ParseDataInit>(s, m.data.data, m.data.n_data, env, env);
       if((m.knownsections & (1 << WASM_SECTION_DATA_COUNT)) && m.data.n_data != m.data_count.count)
-        return ERR_FATAL_DATA_COUNT_MISMATCH;
+        return LogErrorString(env, "%s [%s]: expected %u from data count section but actual data only had %u",
+                              ERR_FATAL_DATA_COUNT_MISMATCH, m.name.str(), m.data_count.count, m.data.n_data);
       break;
     case WASM_SECTION_CUSTOM:
       if(payload < 1) // A custom section MUST have an identifier, which itself must take up at least 1 byte, so a payload
                       // of 0 bytes is impossible.
-        return ERR_PARSE_INVALID_FILE_LENGTH;
+        return LogErrorString(env, "%s [%s]: cannot have a 0 length payload in custom section",
+                              ERR_PARSE_INVALID_FILE_LENGTH, m.name.str());
       else
       {
-        // assert(curcustom < m.n_custom);
         if(curcustom >= m.n_custom)
-          return ERR_FATAL_SECTION_SIZE_MISMATCH;
+          return LogErrorString(env, "%s [%s]: Expected %zu custom sections, but found more.",
+                                ERR_FATAL_SECTION_SIZE_MISMATCH, m.name.str(), m.n_custom);
         m.custom[curcustom].payload = payload;
         m.custom[curcustom].data    = s.data + s.pos;
         size_t custom               = s.pos + payload;
         err                         = ParseIdentifier(s, m.custom[curcustom].name, env);
         if(err == ERR_SUCCESS && !ValidateIdentifier(m.custom[curcustom].name))
-          return ERR_INVALID_UTF8_ENCODING; // An invalid UTF8 encoding for the name is an actual parse error for some reason
+          return LogErrorString(env, "%s [%s]: %s", ERR_INVALID_UTF8_ENCODING, m.name.str(),
+                                m.custom[curcustom].name); // An invalid UTF8 encoding for the name is an actual parse error
+                                                           // for some reason
         if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), "name"))
           ParseNameSection(s, custom, m, env);
         else if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), "sourceMappingURL"))
@@ -945,14 +976,15 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
           ParseIdentifier(s, sourceMappingURL, env);
           m.sourcemap = tmalloc<SourceMap>(env, 1);
           if(!m.sourcemap)
-            return ERR_FATAL_OUT_OF_MEMORY;
+            return LogErrorString(env, "%s [%s]: Ran out of memory at %s() [%s:%i]", ERR_FATAL_OUT_OF_MEMORY, m.name.str(),
+                                  __func__, __FILE__, __LINE__);
           err = ParseSourceMap(&env, m.sourcemap, sourceMappingURL.str(), 0);
 
           if(err == ERR_FATAL_FILE_ERROR && m.filepath != nullptr)
             err = ParseSourceMap(&env, m.sourcemap,
                                  (GetPath(m.filepath).parent_path() / sourceMappingURL.str()).u8string().c_str(), 0);
           if(err)
-            return err;
+            return utility::LogErrorString(env, "%s: Failed to find %s", err, sourceMappingURL.str());
         }
         else if(err == ERR_SUCCESS && !strcmp(m.custom[curcustom].name.str(), "external_debug_info"))
         {
@@ -960,7 +992,8 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
           ParseIdentifier(s, externalDebugURL, env);
           m.sourcemap = tmalloc<SourceMap>(env, 1);
           if(!m.sourcemap)
-            return ERR_FATAL_OUT_OF_MEMORY;
+            return LogErrorString(env, "%s [%s]: Ran out of memory at %s() [%s:%i]", ERR_FATAL_OUT_OF_MEMORY, m.name.str(),
+                                  __func__, __FILE__, __LINE__);
           *m.sourcemap = { 0 };
 
           DWARFParser parser(const_cast<Environment*>(&env), m.sourcemap);
@@ -972,7 +1005,8 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
         {
           m.sourcemap = tmalloc<SourceMap>(env, 1);
           if(!m.sourcemap)
-            return ERR_FATAL_OUT_OF_MEMORY;
+            return LogErrorString(env, "%s [%s]: Ran out of memory at %s() [%s:%i]", ERR_FATAL_OUT_OF_MEMORY, m.name.str(),
+                                  __func__, __FILE__, __LINE__);
           *m.sourcemap = { 0 };
 
           DWARFParser parser(const_cast<Environment*>(&env), m.sourcemap);
@@ -987,7 +1021,9 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
           s.pos = custom; // Skip over the custom payload, minus the name
         break;
       }
-    default: return ERR_FATAL_UNKNOWN_SECTION;
+    default:
+      return LogErrorString(env, "%s [%s]: Found unknown section type %hhu", ERR_FATAL_UNKNOWN_SECTION, m.name.str(),
+                            opcode);
     }
 
     if(err >= 0 && s.pos != expected_end)
@@ -997,18 +1033,12 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
   if(err < 0)
     return err;
 
-  if(!m.name.size())
-  {
-    m.name.resize(name.size(), true, env);
-    if(!m.name.get())
-      return ERR_FATAL_OUT_OF_MEMORY;
-    tmemcpy(m.name.get(), m.name.size(), name.get(), name.size());
-  }
   if(!m.name.size() || !ValidateIdentifier(m.name))
-    return ERR_PARSE_INVALID_NAME;
+    return LogErrorString(env, "%s: %s", ERR_PARSE_INVALID_NAME, !m.name.size() ? "Name cannot be empty" : m.name.str());
 
   if(m.code.n_funcbody != m.function.n_funcdecl)
-    return ERR_FUNCTION_BODY_MISMATCH;
+    return LogErrorString(env, "%s [%s]: function bodies %u do not match function declarations %u",
+                          ERR_FUNCTION_BODY_MISMATCH, m.name.str(), m.code.n_funcbody, m.function.n_funcdecl);
 
   // If we are requesting debug information but none exists, generate a .wat file
   if(!m.sourcemap && (env.flags & ENV_DEBUG) != 0)
@@ -1035,7 +1065,7 @@ IN_ERROR innative::ParseExportFixup(Module& m, ValidationError*& errors, const E
     int r        = 0;
     khint_t iter = kh_put_exports(m.exports, m.exportsection.exports[i].name, &r);
     if(r < 0)
-      return ERR_FATAL_BAD_HASH;
+      return LogErrorString(env, "%s: failed to hash %s", ERR_FATAL_BAD_HASH, m.exportsection.exports[i].name.str());
     if(!r)
       AppendError(env, errors, &m, ERR_FATAL_DUPLICATE_EXPORT, "Duplicate export name %s",
                   m.exportsection.exports[i].name.str());
@@ -1066,7 +1096,7 @@ IN_ERROR innative::ParseMiscOpsInstruction(utility::Stream& s, Instruction& ins,
 
   case OP_memory_init:
     if(!m || !(m->knownsections & (1 << WASM_SECTION_DATA_COUNT)))
-      return ERR_MISSING_DATA_COUNT_SECTION;
+      return LogErrorString(env, "%s: %s", ERR_MISSING_DATA_COUNT_SECTION, m->name.str());
   case OP_memory_copy:
   case OP_table_init:
   case OP_table_copy:
@@ -1077,17 +1107,19 @@ IN_ERROR innative::ParseMiscOpsInstruction(utility::Stream& s, Instruction& ins,
 
   case OP_data_drop:
     if(!m || !(m->knownsections & (1 << WASM_SECTION_DATA_COUNT)))
-      return ERR_MISSING_DATA_COUNT_SECTION;
+      return LogErrorString(env, "%s: %s", ERR_MISSING_DATA_COUNT_SECTION, m->name.str());
   case OP_memory_fill:
   case OP_elem_drop: ins.immediates[0]._varuint32 = s.ReadVarUInt32(err); break;
 
-  default: err = ERR_FATAL_UNKNOWN_INSTRUCTION;
+  default:
+    err = LogErrorString(env, "%s [%s]: unknown instruction after OP_misc_ops_prefix - %hhu", ERR_FATAL_UNKNOWN_INSTRUCTION,
+                         m->name.str(), ins.opcode[1]);
   }
 
   return err;
 }
 
-IN_ERROR innative::ParseAtomicInstruction(utility::Stream& s, Instruction& ins, const Environment& env)
+IN_ERROR innative::ParseAtomicInstruction(utility::Stream& s, Instruction& ins, const Environment& env, Module* m)
 {
   namespace at = innative::atomic_details;
 
@@ -1114,7 +1146,8 @@ IN_ERROR innative::ParseAtomicInstruction(utility::Stream& s, Instruction& ins, 
 
   default:
     if(!at::IsLSRMWOp(ins.opcode[1]))
-      return ERR_FATAL_UNKNOWN_INSTRUCTION;
+      return LogErrorString(env, "%s [%s]: unknown instruction after OP_atomic_prefix - %hhu",
+                            ERR_FATAL_UNKNOWN_INSTRUCTION, !m ? "(none)" : m->name.str(), ins.opcode[1]);
     break;
   }
 
