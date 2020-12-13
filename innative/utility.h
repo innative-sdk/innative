@@ -325,6 +325,26 @@ namespace innative {
       return s;
     }
 
+    template<typename... Args> 
+    inline int LogError(const Environment& env, const char* format, Args... args)
+    {
+      if(env.loglevel < LOG_FATAL)
+        return 0;
+      int i = (*env.loghook)(&env, format, args...);
+      return i + (*env.loghook)(&env, "\n");
+    }
+
+    template<typename... Args>
+    inline IN_ERROR LogErrorString(const Environment& env, const char* format, IN_ERROR err, Args... args)
+    {
+      if(env.loglevel < LOG_FATAL)
+        return err;
+      char buf[32];
+      (*env.loghook)(&env, format, EnumToString(ERR_ENUM_MAP, (int)err, buf, sizeof(buf)), args...);
+      (*env.loghook)(&env, "\n");
+      return err;
+    }
+
     inline std::unique_ptr<uint8_t[]> LoadFile(const path& file, size_t& sz)
     {
       FILE* f = nullptr;

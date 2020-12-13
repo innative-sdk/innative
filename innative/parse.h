@@ -32,7 +32,7 @@ namespace innative {
                        ValidationError*& errors);
   IN_ERROR ParseExportFixup(Module& module, ValidationError*& errors, const Environment& env);
   IN_ERROR ParseMiscOpsInstruction(utility::Stream& s, Instruction& ins, const Environment& env, Module* m);
-  IN_ERROR ParseAtomicInstruction(utility::Stream& s, Instruction& ins, const Environment& env);
+  IN_ERROR ParseAtomicInstruction(utility::Stream& s, Instruction& ins, const Environment& env, Module* m);
 }
 
 #endif

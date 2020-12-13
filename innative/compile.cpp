@@ -27,6 +27,66 @@ namespace innative {
 using namespace innative;
 using namespace utility;
 
+void raw_log_ostream::write_impl(const char* Ptr, size_t Size) { (*env.loghook)(&env, "%.*s", (int)Size, Ptr); }
+raw_log_ostream::~raw_log_ostream() { flush(); }
+
+template<typename... Args>
+inline IN_ERROR LogErrorLLVM(const Environment& env, const char* format, IN_ERROR err, llvm::Error&& llvmerr, Args... args)
+{
+  if(env.loglevel < LOG_FATAL)
+    return err;
+
+  llvm::handleAllErrors(std::move(llvmerr), [&](const llvm::ErrorInfoBase& info) {
+    char buf[32];
+    (*env.loghook)(&env, format, EnumToString(ERR_ENUM_MAP, (int)err, buf, sizeof(buf)), args..., info.message().c_str());
+    (*env.loghook)(&env, "\n");
+  });
+  return err;
+}
+
+Compiler::Compiler(Environment& _env, Module& _m, llvm::LLVMContext& _ctx, llvm::Module* _mod, llvm::IRBuilder<>& _builder,
+                   llvm::TargetMachine* _machine, kh_importhash_t* _importhash, const path& _objfile) :
+  env(_env),
+  m(_m),
+  ctx(_ctx),
+  mod(_mod),
+  builder(_builder),
+  machine(_machine),
+  importhash(_importhash),
+  objfile(_objfile),
+  raw_log(_env),
+  exported_functions(0),
+  memlocal(0),
+  intptrty(0),
+  mempairty(0),
+  init(0),
+  exit(0),
+  start(0),
+  fn_memgrow(0),
+  fn_memcpy(0),
+  fn_memmove(0),
+  fn_memset(0),
+  fn_memcmp(0),
+  atomic_notify(0),
+  atomic_wait32(0),
+  atomic_wait64(0),
+  current(0),
+  instruction_counter(0)
+{
+  memset(logbuf, 0, sizeof(logbuf));
+}
+
+void Compiler::_logprefix()
+{
+  if(current != nullptr)
+  {
+    auto name = current->getName().str();
+    (*env.loghook)(&env, "[%s:%s] ", m.name.str(), name.c_str());
+  }
+  else
+    (*env.loghook)(&env, "[%s] ", m.name.str());
+}
+
 llvmTy* Compiler::GetLLVMType(varsint7 type)
 {
   switch(type)
@@ -245,7 +305,8 @@ IN_ERROR Compiler::PopType(varsint7 ty, llvmVal*& v, bool peek)
   if(ty == TE_void)
     v = 0;
   else if(!values.Size())
-    return ERR_INVALID_VALUE_STACK;
+    return _log("%s: Found empty stack while trying to pop %s", ERR_INVALID_VALUE_STACK,
+                EnumToString(TYPE_ENCODING_MAP, ty, logbuf, sizeof(logbuf)));
   else if(!values.Peek()) // polymorphic value
   {
     switch(ty)
@@ -254,7 +315,9 @@ IN_ERROR Compiler::PopType(varsint7 ty, llvmVal*& v, bool peek)
     case TE_i64:
     case TE_f32:
     case TE_f64: v = llvm::Constant::getNullValue(GetLLVMType(ty)); break;
-    default: return ERR_INVALID_TYPE;
+    default:
+      return _log("%s: can't pop polymorphic value of type %s", ERR_INVALID_TYPE,
+                  EnumToString(TYPE_ENCODING_MAP, ty, logbuf, sizeof(logbuf)));
     }
   }
   else if(ty == TE_cref && values.Peek()->getType()->isIntegerTy())
@@ -265,7 +328,8 @@ IN_ERROR Compiler::PopType(varsint7 ty, llvmVal*& v, bool peek)
     return ERR_SUCCESS;
   }
   else if(!CheckType(ty, values.Peek()->getType()))
-    return ERR_INVALID_TYPE;
+    _logtype("%s: Tried to pop %s but found ", ERR_INVALID_TYPE, values.Peek()->getType(),
+                 EnumToString(TYPE_ENCODING_MAP, ty, logbuf, sizeof(logbuf)));
   else if(peek)
     v = values.Peek();
   else
@@ -288,7 +352,7 @@ IN_ERROR Compiler::PopSig(varsint64 sig, llvm::SmallVector<llvmVal*, 2>& v, bool
   }
 
   if(sig >= m.type.n_functypes)
-    return ERR_INVALID_FUNCTION_SIG;
+    return _log("%s: type index %u is greater than n_functypes (%u)", ERR_INVALID_FUNCTION_SIG, sig, m.type.n_functypes);
   auto n_sig = loop ? m.type.functypes[sig].n_params : m.type.functypes[sig].n_returns;
   auto sigs  = loop ? m.type.functypes[sig].params : m.type.functypes[sig].returns;
   if(n_sig == 0)
@@ -302,17 +366,19 @@ IN_ERROR Compiler::PopSig(varsint64 sig, llvm::SmallVector<llvmVal*, 2>& v, bool
     return err;
   }
   if(!values.Size())
-    return ERR_INVALID_VALUE_STACK;
+    return _log("%s: Value stack cannot be empty if signature has length > 0", ERR_INVALID_VALUE_STACK);
 
   bool polyflag = false;
   for(varuint32 i = 0; i < n_sig; ++i)
   {
     if(!polyflag && i > values.Size()) // Value stack is wrong size
-      return ERR_INVALID_VALUE_STACK;
+      return _log("%s: Value stack was empty when trying to pop %s", ERR_INVALID_VALUE_STACK,
+                  EnumToString(TYPE_ENCODING_MAP, sigs[n_sig - i - 1], logbuf, sizeof(logbuf)));
     if(polyflag || (polyflag = !values[i])) // polymorphic value
       v.push_back(llvm::Constant::getNullValue(GetLLVMType(sigs[n_sig - i - 1])));
     else if(!CheckType(sigs[n_sig - i - 1], values[i]->getType()))
-      return ERR_INVALID_TYPE;
+      return _logtype("%s: %s cannot match with ", ERR_INVALID_TYPE, values[i]->getType(),
+                          EnumToString(TYPE_ENCODING_MAP, sigs[n_sig - i - 1], logbuf, sizeof(logbuf)));
     else
       v.push_back(values[i]);
   }
@@ -393,7 +459,7 @@ IN_ERROR Compiler::PushResult(BlockResult** root, llvm::SmallVector<llvmVal*, 2>
   BlockResult* next = *root;
   *root             = tmalloc<BlockResult>(env, 1);
   if(!*root)
-    return ERR_FATAL_OUT_OF_MEMORY;
+    return _log("%s: ran out of memory in %s()", ERR_FATAL_OUT_OF_MEMORY, __func__);
 
   new(*root) BlockResult{ result, block, next };
   return ERR_SUCCESS;
@@ -403,15 +469,16 @@ IN_ERROR Compiler::PushStructReturn(llvmVal* arg, varsint64 sig)
 {
   varuint32 n_sig = GetBlockSigResults(sig, m);
   if(!n_sig)
-    return ERR_INVALID_VALUE_STACK;
+    return _log("%s: Tried to push a struct but signature had no return values.", ERR_INVALID_VALUE_STACK);
   if(n_sig == 1)
     return PushReturn(arg);
 
   auto ty = arg->getType();
   if(!ty->isStructTy() || sig >= m.type.n_functypes)
-    return ERR_INVALID_FUNCTION_SIG;
+    return _logtype("%s: Expected struct ", ERR_INVALID_FUNCTION_SIG, ty);
   if(ty->getStructNumElements() != n_sig)
-    return ERR_INVALID_BLOCK_SIGNATURE;
+    return _log("%s: Struct had %u elements, but signature has %u returns.", ERR_INVALID_BLOCK_SIGNATURE,
+                ty->getStructNumElements(), n_sig);
 
   auto sigs = m.type.functypes[sig].returns;
 
@@ -449,7 +516,8 @@ IN_ERROR Compiler::AddBranch(Block& target, bool loop)
       else
       {
         if(target.n_phi != value.size())
-          return ERR_INVALID_VALUE_STACK;
+          return _log("%s: Target expected %u returns, but value stack only has %u.", ERR_INVALID_VALUE_STACK, target.n_phi,
+                      value.size());
         for(size_t i = 0; i < target.n_phi; ++i)
           target.phi[i]->addIncoming(value[i], builder.GetInsertBlock());
       }
@@ -489,12 +557,12 @@ IN_ERROR Compiler::PopLabel(BB* block, llvm::SmallVector<llvmVal*, 2>& push)
     }
   }
   else if(control.Peek().results != nullptr)
-    return ERR_INVALID_VALUE_STACK;
+    return _log("%s: Signature has 0 results but control stack results aren't empty.", ERR_INVALID_VALUE_STACK);
 
   if(values.Size() > 0 && !values.Peek()) // Pop at most 1 polymorphic type off the stack.
     values.Pop();
   if(values.Size() > 0) // value stack should be completely empty now
-    return ERR_INVALID_VALUE_STACK;
+    return _log("%s: Value stack should be empty but has %u values.", ERR_INVALID_VALUE_STACK, values.Size());
 
   PushReturns(push);
 
@@ -783,7 +851,7 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
 
   debugger.reset(Debugger::Create(*this));
   if(!debugger)
-    return ERR_FATAL_DEBUG_OBJ_ERROR;
+    return _log("%s: Failed to create Debugger in %s()", ERR_FATAL_DEBUG_OBJ_ERROR, __func__);
 
   // Define a unique init function for performing module initialization
   init =
@@ -800,12 +868,12 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
 #endif
 
   // Declare C runtime function prototypes that we assume exist on the system
-  memgrow = Func::Create(FuncTy::get(builder.getInt8PtrTy(0),
+  fn_memgrow = Func::Create(FuncTy::get(builder.getInt8PtrTy(0),
                                      { builder.getInt8PtrTy(0), builder.getInt64Ty(), builder.getInt64Ty(),
                                        builder.getInt64Ty()->getPointerTo() },
                                      false),
                          Func::ExternalLinkage, "_innative_internal_env_grow_memory", mod);
-  memgrow->setReturnDoesNotAlias(); // This is a system memory allocation function, so the return value does not alias
+  fn_memgrow->setReturnDoesNotAlias(); // This is a system memory allocation function, so the return value does not alias
 
   atomic_notify = Func::Create(FuncTy::get(builder.getInt32Ty(), { builder.getInt8PtrTy(0), builder.getInt32Ty() }, false),
                                Func::ExternalLinkage, "_innative_internal_env_atomic_notify", mod);
@@ -821,23 +889,23 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
                                Func::ExternalLinkage, "_innative_internal_env_atomic_wait64", mod);
   atomic_wait64->setCallingConv(llvm::CallingConv::C);
 
-  memcpy = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
+  fn_memcpy = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
                                     { builder.getInt8PtrTy(0), builder.getInt8PtrTy(0), builder.getInt64Ty() }, false),
                         Func::ExternalLinkage, "_innative_internal_env_memcpy", mod);
 
-  memmove = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
+  fn_memmove = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
                                      { builder.getInt8PtrTy(), builder.getInt8PtrTy(),
                                        builder.getIntNTy(machine->getPointerSizeInBits(0)) },
                                      false),
                          Func::ExternalLinkage, "_innative_internal_env_memmove", mod);
 
-  memset = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
+  fn_memset = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
                                     { builder.getInt8PtrTy(), builder.getInt32Ty(),
                                       builder.getIntNTy(machine->getPointerSizeInBits(0)) },
                                     false),
                         Func::ExternalLinkage, "_innative_internal_env_memset", mod);
 
-  memcmp = Func::Create(FuncTy::get(builder.getInt32Ty(),
+  fn_memcmp = Func::Create(FuncTy::get(builder.getInt32Ty(),
                                     { builder.getInt8PtrTy(), builder.getInt32Ty(),
                                       builder.getIntNTy(machine->getPointerSizeInBits(0)) },
                                     false),
@@ -866,7 +934,8 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
       auto index = imp.func_desc.type_index;
 
       if(index >= m.type.n_functypes)
-        return ERR_INVALID_TYPE_INDEX;
+        return _log("%s: There are only %u functypes, but type index was %u", ERR_INVALID_TYPE_INDEX, m.type.n_functypes,
+                    index);
 
       auto fname    = CanonImportName(imp, env.system);
       khiter_t iter = kh_get_importhash(importhash, fname.c_str());
@@ -975,7 +1044,8 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
 
   // Cache internal function start index
   if(m.function.n_funcdecl != m.code.n_funcbody)
-    return ERR_INVALID_FUNCTION_BODY;
+    return _log("%s: n_funcdecl (%u) does not match n_funcbody (%u)", ERR_INVALID_FUNCTION_BODY, m.function.n_funcdecl,
+                m.code.n_funcbody);
   size_t code_index = functions.size();
 
   // Declare function prototypes
@@ -983,7 +1053,8 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
   {
     auto decl = m.function.funcdecl[i];
     if(decl.type_index >= m.type.n_functypes)
-      return ERR_INVALID_TYPE_INDEX;
+      return _log("%s: There are %u types, but type_index was %u in function %u", ERR_INVALID_TYPE_INDEX,
+                  m.type.n_functypes, decl.type_index, i);
 
     functions.emplace_back();
     functions.back().internal = CompileFunction(m.type.functypes[decl.type_index],
@@ -1029,17 +1100,17 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
 
     uint64_t bytewidth = mod->getDataLayout().getTypeAllocSize(type->getElementType());
     if(!bytewidth)
-      return ERR_INVALID_TABLE_TYPE;
+      return _logtype("%s: Got bytewidth of 0 for ", ERR_INVALID_TABLE_TYPE, type);
 
     CallInst* call =
-      builder.CreateCall(memgrow, { llvm::ConstantPointerNull::get(builder.getInt8PtrTy(0)),
+      builder.CreateCall(fn_memgrow, { llvm::ConstantPointerNull::get(builder.getInt8PtrTy(0)),
                                     builder.getInt64(m.table.tables[i].resizable.minimum * bytewidth),
                                     builder.getInt64((m.table.tables[i].resizable.flags & WASM_LIMIT_HAS_MAXIMUM) ?
                                                        (m.table.tables[i].resizable.maximum * bytewidth) :
                                                        0),
                                     GetPairPtr(tables.back(), 1) });
 
-    call->setCallingConv(memgrow->getCallingConv());
+    call->setCallingConv(fn_memgrow->getCallingConv());
 
     InsertConditionalTrap(builder.CreateICmpEQ(builder.CreatePtrToInt(call, intptrty), CInt::get(intptrty, 0)));
     builder.CreateStore(builder.CreatePointerCast(call, type), GetPairPtr(tables.back(), 0), false);
@@ -1058,8 +1129,8 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
     memories.back()->setMetadata(IN_MEMORY_MAX_METADATA, llvm::MDNode::get(ctx, { llvm::ConstantAsMetadata::get(max) }));
 
     CallInst* call =
-      builder.CreateCall(memgrow, { llvm::ConstantPointerNull::get(type), sz, max, GetPairPtr(memories.back(), 1) });
-    call->setCallingConv(memgrow->getCallingConv());
+      builder.CreateCall(fn_memgrow, { llvm::ConstantPointerNull::get(type), sz, max, GetPairPtr(memories.back(), 1) });
+    call->setCallingConv(fn_memgrow->getCallingConv());
     InsertConditionalTrap(builder.CreateICmpEQ(builder.CreatePtrToInt(call, intptrty), CInt::get(intptrty, 0)));
     builder.CreateStore(call, GetPairPtr(memories.back(), 0), false);
   }
@@ -1110,7 +1181,7 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
       {
         varuint32 index = GetFirstType(ModuleFunctionType(m, elem.getValue()));
         if(index == ~0u)
-          return ERR_INVALID_FUNCTION_INDEX;
+          return _log("%s: Failed to hash functione type", ERR_INVALID_FUNCTION_INDEX);
 
         value = llvm::ConstantExpr::getPointerCast(functions[elem.getValue()].internal, target);
         type  = builder.getInt32(index);
@@ -1212,9 +1283,14 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
 
     if(fn)
     {
+      current = fn;
       if((err = CompileFunctionBody(fn, code_index, functions[code_index].memlocal, m.function.funcdecl[i],
                                     m.code.funcbody[i])) < 0)
+      {
+        current = nullptr;
         return err;
+      }
+      current = nullptr;
     }
     ++code_index;
   }
@@ -1223,7 +1299,8 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
   if(m.knownsections & (1 << WASM_SECTION_START))
   {
     if(m.start >= functions.size())
-      return ERR_INVALID_START_FUNCTION;
+      return _log("%s: There are only %zu functions, but start index was %u", ERR_INVALID_START_FUNCTION, functions.size(),
+                  m.start);
     assert(!functions[m.start].imported);
     start = functions[m.start].internal;
   }
@@ -1438,36 +1515,41 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
 #endif
 
   // Create memcpy function to satisfy the rtlibcalls
-  Func* memcpy = Func::Create(mainctx.memcpy->getFunctionType(), Func::WeakAnyLinkage, "memcpy", mainctx.mod);
-  builder.SetInsertPoint(BB::Create(*env->context, "entry", memcpy));
-  mainctx.debugger->FunctionDebugInfo(memcpy, "memcpy", true, true, nullptr, mainctx.debugger->GetSourceFile(0), 0, 0);
-  mainctx.debugger->SetSPLocation(builder, memcpy->getSubprogram());
-  CallInst* inner_memcpy = builder.CreateCall(mainctx.memcpy, { memcpy->getArg(0), memcpy->getArg(1), memcpy->getArg(2) });
+  Func* fn_memcpy = Func::Create(mainctx.fn_memcpy->getFunctionType(), Func::WeakAnyLinkage, "memcpy", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", fn_memcpy));
+  mainctx.debugger->FunctionDebugInfo(fn_memcpy, "memcpy", true, true, nullptr, mainctx.debugger->GetSourceFile(0), 0, 0);
+  mainctx.debugger->SetSPLocation(builder, fn_memcpy->getSubprogram());
+  CallInst* inner_memcpy =
+    builder.CreateCall(mainctx.fn_memcpy, { fn_memcpy->getArg(0), fn_memcpy->getArg(1), fn_memcpy->getArg(2) });
   builder.CreateRet(inner_memcpy);
 
   // Create memmove function to satisfy the rtlibcalls
-  Func* memmove = Func::Create(mainctx.memmove->getFunctionType(), Func::WeakAnyLinkage, "memmove", mainctx.mod);
-  builder.SetInsertPoint(BB::Create(*env->context, "entry", memmove));
-  mainctx.debugger->FunctionDebugInfo(memmove, "memmove", true, true, nullptr, mainctx.debugger->GetSourceFile(0), 0, 0);
-  mainctx.debugger->SetSPLocation(builder, memmove->getSubprogram());
+  Func* fn_memmove = Func::Create(mainctx.fn_memmove->getFunctionType(), Func::WeakAnyLinkage, "memmove", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", fn_memmove));
+  mainctx.debugger->FunctionDebugInfo(fn_memmove, "memmove", true, true, nullptr, mainctx.debugger->GetSourceFile(0), 0, 0);
+  mainctx.debugger->SetSPLocation(builder, fn_memmove->getSubprogram());
   CallInst* inner_memmove =
-    builder.CreateCall(mainctx.memmove, { memmove->getArg(0), memmove->getArg(1), memmove->getArg(2) });
+    builder.CreateCall(mainctx.fn_memmove, { fn_memmove->getArg(0), fn_memmove->getArg(1), fn_memmove->getArg(2) });
   builder.CreateRet(inner_memmove);
 
   // Create memset function to satisfy the rtlibcalls
-  Func* memset = Func::Create(mainctx.memset->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memset", mainctx.mod);
-  builder.SetInsertPoint(BB::Create(*env->context, "entry", memset));
-  mainctx.debugger->FunctionDebugInfo(memset, "memset", true, true, nullptr, mainctx.debugger->GetSourceFile(0), 0, 0);
-  mainctx.debugger->SetSPLocation(builder, memset->getSubprogram());
-  CallInst* inner_memset = builder.CreateCall(mainctx.memset, { memset->getArg(0), memset->getArg(1), memset->getArg(2) });
+  Func* fn_memset =
+    Func::Create(mainctx.fn_memset->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memset", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", fn_memset));
+  mainctx.debugger->FunctionDebugInfo(fn_memset, "memset", true, true, nullptr, mainctx.debugger->GetSourceFile(0), 0, 0);
+  mainctx.debugger->SetSPLocation(builder, fn_memset->getSubprogram());
+  CallInst* inner_memset =
+    builder.CreateCall(mainctx.fn_memset, { fn_memset->getArg(0), fn_memset->getArg(1), fn_memset->getArg(2) });
   builder.CreateRet(inner_memset);
 
   // Create memcmp function to satisfy the rtlibcalls
-  Func* memcmp = Func::Create(mainctx.memcmp->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memcmp", mainctx.mod);
-  builder.SetInsertPoint(BB::Create(*env->context, "entry", memcmp));
-  mainctx.debugger->FunctionDebugInfo(memcmp, "memcmp", true, true, nullptr, mainctx.debugger->GetSourceFile(0), 0, 0);
-  mainctx.debugger->SetSPLocation(builder, memcmp->getSubprogram());
-  CallInst* inner_memcmp = builder.CreateCall(mainctx.memcmp, { memcmp->getArg(0), memcmp->getArg(1), memcmp->getArg(2) });
+  Func* fn_memcmp =
+    Func::Create(mainctx.fn_memcmp->getFunctionType(), Func::LinkageTypes::WeakAnyLinkage, "memcmp", mainctx.mod);
+  builder.SetInsertPoint(BB::Create(*env->context, "entry", fn_memcmp));
+  mainctx.debugger->FunctionDebugInfo(fn_memcmp, "memcmp", true, true, nullptr, mainctx.debugger->GetSourceFile(0), 0, 0);
+  mainctx.debugger->SetSPLocation(builder, fn_memcmp->getSubprogram());
+  CallInst* inner_memcmp =
+    builder.CreateCall(mainctx.fn_memcmp, { fn_memcmp->getArg(0), fn_memcmp->getArg(1), fn_memcmp->getArg(2) });
   builder.CreateRet(inner_memcmp);
 }
 
@@ -1504,7 +1586,7 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   if(!arch)
   {
     llvm::errs() << llvm_err;
-    return ERR_FATAL_UNKNOWN_TARGET;
+    return LogErrorString(*env, "%s: %s does not exist - %s", ERR_FATAL_UNKNOWN_TARGET, triple.c_str(), llvm_err.c_str());
   }
 
   for(varuint32 i = 0; i < env->n_modules; ++i)
@@ -1572,8 +1654,8 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
       if(env->modules[i].cache)
         DeleteCache(*env, env->modules[i]);
       env->modules[i].cache =
-        new Compiler{ *env,    env->modules[i], *env->context,        0,
-                      builder, machine,         kh_init_importhash(), GetLinkerObjectPath(*env, env->modules[i], file) };
+        new Compiler(*env,    env->modules[i], *env->context,        0,
+                      builder, machine,         kh_init_importhash(), GetLinkerObjectPath(*env, env->modules[i], file));
       if(!env->modules[i].cache->objfile.empty())
         remove(env->modules[i].cache->objfile);
 
@@ -1585,7 +1667,8 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   }
 
   if((!has_start || env->flags & ENV_NO_INIT) && !(env->flags & ENV_LIBRARY))
-    return ERR_INVALID_START_FUNCTION;
+    return LogErrorString(*env, "%s: Can't compile an executable without a start function in at least one module.",
+                          ERR_INVALID_START_FUNCTION);
 
   for(auto m : new_modules)
     Compiler::ResolveModuleExports(env, m, *env->context);
@@ -1756,11 +1839,11 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
     auto JTMB = llvm::orc::JITTargetMachineBuilder::detectHost();
 
     if(!JTMB)
-      return ERR_JIT_TARGET_MACHINE_FAILURE;
+      return LogErrorLLVM(*env, "%s: ", ERR_JIT_TARGET_MACHINE_FAILURE, JTMB.takeError());
 
     auto DL = JTMB->getDefaultDataLayoutForTarget();
     if(!DL)
-      return ERR_JIT_DATA_LAYOUT_ERROR;
+      return LogErrorLLVM(*env, "%s: ", ERR_JIT_DATA_LAYOUT_ERROR, DL.takeError());
 
     // If the context already exists, we take ownership of it
     env->jit = new JITContext(std::move(*JTMB), std::move(*DL), std::unique_ptr<llvm::LLVMContext>(env->context), env);
@@ -1768,16 +1851,16 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
 
     if(expose_process)
       if(env->jit->CompileEmbedding(nullptr))
-        return ERR_JIT_LINK_PROCESS_FAILURE;
+        return LogErrorString(*env, "%s: Failed to expose current executable to JIT", ERR_JIT_LINK_PROCESS_FAILURE);
 
     for(Embedding* embed = env->embeddings; embed != nullptr; embed = embed->next)
       if(env->jit->CompileEmbedding(embed))
-        return ERR_JIT_LINK_FAILURE;
+        return LogErrorString(*env, "%s: Failed to link %s (%i) to JIT", ERR_JIT_LINK_FAILURE, embed->name, embed->tag);
   }
 
   auto machine = env->jit->GetTargetMachine();
   if(!machine)
-    return ERR_JIT_TARGET_MACHINE_FAILURE;
+    return LogErrorLLVM(*env, "%s: ", ERR_JIT_TARGET_MACHINE_FAILURE, machine.takeError());
 
   llvm::IRBuilder<> builder(*env->context);
   IN_ERROR err = ERR_SUCCESS;
@@ -1824,8 +1907,8 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
     {
       if(env->modules[i].cache)
         DeleteCache(*env, env->modules[i]);
-      env->modules[i].cache = new Compiler{ *env,    env->modules[i],     env->jit->GetContext(), 0,
-                                            builder, machine.get().get(), kh_init_importhash(),   path() };
+      env->modules[i].cache = new Compiler(*env, env->modules[i], env->jit->GetContext(), 0, builder, machine.get().get(),
+                                           kh_init_importhash(), path());
 
       if((err = env->modules[i].cache->CompileModule(i)) < 0)
         return err;
@@ -1914,8 +1997,9 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
   // JIT all modules
   for(varuint32 i = 0; i < env->n_modules; ++i)
   {
-    if(env->jit->CompileModule(std::unique_ptr<llvm::Module>(env->modules[i].cache->mod)))
-      return ERR_JIT_COMPILE_FAILURE;
+    if(auto e = env->jit->CompileModule(std::unique_ptr<llvm::Module>(env->modules[i].cache->mod)))
+      return LogErrorLLVM(*env, "%s: failed to compile %s: ", ERR_JIT_COMPILE_FAILURE, std::move(e),
+                          env->modules[i].name.str());
   }
 
   // If we're auto-initializing, call all the init functions, then all the start functions. Unfortunately, LLVM deletes

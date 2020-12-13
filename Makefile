@@ -39,6 +39,9 @@ debug: $(BINREL)/innative-cmd $(BINREL)/innative-test $(LIBREL)/innative-stub.a
 $(BINREL)/innative-env.a: 
 	$(MAKE) -C innative-env
 
+$(BINREL)/innative-assemblyscript.a: 
+	$(MAKE) -C innative-assemblyscript
+  
 $(LIBREL)/libinnative.so: $(BINREL)/innative-env.a $(BINREL)/innative-env-d.a
 	$(MAKE) -C innative
 
@@ -48,7 +51,7 @@ $(LIBREL)/innative-stub.a:
 $(LIBREL)/innative-test-embedding.a:
 	$(MAKE) -C innative-test-embedding
   
-$(BINREL)/innative-test: $(LIBREL)/libinnative.so $(LIBREL)/innative-test-embedding.a
+$(BINREL)/innative-test: $(LIBREL)/libinnative.so $(LIBREL)/innative-test-embedding.a $(BINREL)/innative-assemblyscript.a
 	$(MAKE) -C innative-test
   
 $(BINREL)/innative-cmd: $(LIBREL)/libinnative.so
@@ -56,6 +59,7 @@ $(BINREL)/innative-cmd: $(LIBREL)/libinnative.so
 
 clean:
 	$(MAKE) -C innative-env clean
+	$(MAKE) -C innative-assemblyscript clean
 	$(MAKE) -C innative clean
 	$(MAKE) -C innative-cmd clean
 	$(MAKE) -C innative-stub clean
