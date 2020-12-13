@@ -17,34 +17,22 @@ namespace innative {
   KHASH_DECLARE(importhash, const char*, llvm::GlobalObject*);
 
   namespace utility {
-    // ostream that dumps to the environment loghook
-    class raw_log_ostream : public llvm::raw_ostream
-    {
-      uint64_t pos;
-
-      void write_impl(const char* Ptr, size_t Size) override;
-      inline uint64_t current_pos() const override { return pos; }
-
-    public:
-      explicit raw_log_ostream(const Environment& e) : env(e) {}
-      ~raw_log_ostream() override;
-
-      const Environment& env;
-    };
-
     template<typename... Args>
-    inline IN_ERROR LogErrorType(raw_log_ostream& ostream, const char* format, IN_ERROR err, const llvm::Type* ty,
+    inline IN_ERROR LogErrorType(const Environment& env, const char* format, IN_ERROR err, const llvm::Type* ty,
                                  Args... args)
     {
-      if(ostream.env.loglevel < LOG_FATAL)
+      if(env.loglevel < LOG_FATAL)
         return err;
 
       char buf[32];
-      (*ostream.env.loghook)(&ostream.env, format, utility::EnumToString(utility::ERR_ENUM_MAP, (int)err, buf, sizeof(buf)),
+      (*env.loghook)(&env, format, utility::EnumToString(utility::ERR_ENUM_MAP, (int)err, buf, sizeof(buf)),
                              args...);
+
+      std::string errMsg;
+      llvm::raw_string_ostream ostream{ errMsg };
       ty->print(ostream, true);
-      (*ostream.env.loghook)(&ostream.env, "\n");
       ostream.flush();
+      (*env.loghook)(&env, "%s\n", errMsg.c_str());
       return err;
     }
   }
@@ -136,7 +124,6 @@ namespace innative {
     std::vector<DataSegment> data_globals;
     std::vector<ElemSegment> elem_globals;
     std::vector<FunctionSet> functions;
-    utility::raw_log_ostream raw_log;
     std::string natvis;
     llvm::GlobalVariable* exported_functions;
     llvm::AllocaInst* memlocal;
@@ -467,7 +454,7 @@ namespace innative {
     inline IN_ERROR _logtype(const char* format, IN_ERROR err, const llvm::Type* ty, Args... args)
     {
       _logprefix();
-      return utility::LogErrorType(raw_log, format, err, ty, args...);
+      return utility::LogErrorType(env, format, err, ty, args...);
     }
   };
 

@@ -27,9 +27,6 @@ namespace innative {
 using namespace innative;
 using namespace utility;
 
-void raw_log_ostream::write_impl(const char* Ptr, size_t Size) { (*env.loghook)(&env, "%.*s", (int)Size, Ptr); }
-raw_log_ostream::~raw_log_ostream() { flush(); }
-
 template<typename... Args>
 inline IN_ERROR LogErrorLLVM(const Environment& env, const char* format, IN_ERROR err, llvm::Error&& llvmerr, Args... args)
 {
@@ -54,7 +51,6 @@ Compiler::Compiler(Environment& _env, Module& _m, llvm::LLVMContext& _ctx, llvm:
   machine(_machine),
   importhash(_importhash),
   objfile(_objfile),
-  raw_log(_env),
   exported_functions(0),
   memlocal(0),
   intptrty(0),
