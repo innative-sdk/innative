@@ -160,7 +160,7 @@ FuncTy* Compiler::GetFunctionType(FunctionType& signature)
   return FuncTy::get(ret, false);
 }
 
-Func* Compiler::PassFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
+Func* Compiler::PassFunction(Func* fn, llvm::StringRef name, llvm::StringRef canonical,
                              llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv)
 {
   // fn->setCallingConv(callconv);
@@ -174,7 +174,7 @@ Func* Compiler::PassFunction(Func* fn, llvm::StringRef name, const llvm::Twine& 
   return fn;
 }
 
-Func* Compiler::WrapFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
+Func* Compiler::WrapFunction(Func* fn, llvm::StringRef name, llvm::StringRef canonical,
                              llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv)
 {
   Func* wrap = Func::Create(fn->getFunctionType(), linkage, canonical, mod);
@@ -205,7 +205,7 @@ Func* Compiler::WrapFunction(Func* fn, llvm::StringRef name, const llvm::Twine& 
   return wrap;
 }
 
-Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
+Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, llvm::StringRef canonical,
                                 llvm::GlobalValue::LinkageTypes linkage, llvm::CallingConv::ID callconv)
 { // generalize function into void(char* params, char* results)
   auto functy   = FuncTy::get(llvmTy::getVoidTy(ctx), { llvmTy::getInt8PtrTy(ctx), llvmTy::getInt8PtrTy(ctx) }, false);
@@ -746,7 +746,7 @@ llvm::Value* Compiler::GetLocal(varuint32 index)
 }
 
 llvm::GlobalVariable* Compiler::CreateGlobal(llvmTy* ty, bool isconst, bool external, llvm::StringRef name,
-                                             const llvm::Twine& canonical, size_t line, llvm::Constant* init = 0)
+                                             llvm::StringRef canonical, size_t line, llvm::Constant* init = 0)
 {
   auto r = new llvm::GlobalVariable(*mod, ty, isconst,
                                     external ? llvm::GlobalValue::LinkageTypes::ExternalLinkage :
@@ -788,10 +788,10 @@ Func* Compiler::TopLevelFunction(llvm::LLVMContext& context, llvm::IRBuilder<>& 
 }
 
 void Compiler::ExportFunction(FunctionSet& fn,
-                              Func* (Compiler::*wrapper)(Func* fn, llvm::StringRef name, const llvm::Twine& canonical,
+                              Func* (Compiler::*wrapper)(Func* fn, llvm::StringRef name, llvm::StringRef canonical,
                                                          llvm::GlobalValue::LinkageTypes linkage,
                                                          llvm::CallingConv::ID callconv),
-                              llvm::StringRef name, const llvm::Twine& canonical)
+                              llvm::StringRef name, llvm::StringRef canonical)
 {
   if(!fn.exported)
   {
@@ -956,7 +956,7 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
         functions.back().imported->setCallingConv(GetCallingConvention(imp));
 
         auto& debugname = imp.func_desc.debug.name;
-        auto canonical  = !(debugname.get()) ? functions.back().imported->getName() + DIVIDER "internal" :
+        std::string canonical  = !(debugname.get()) ? functions.back().imported->getName().str() + DIVIDER "internal" :
                                               debugname.str() + ("_" + std::to_string(i));
         auto name = !(debugname.get()) ? std::string(imp.export_name.str()) + DIVIDER "internal" : debugname.str();
         WrapFunction(functions.back().imported, name, canonical, Func::ExternalLinkage, InternalConvention);
@@ -1058,9 +1058,9 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
                                                   "_" + std::to_string(functions.size()) + DIVIDER + m.name.str());
 
     debugger->FuncDecl(functions.back().internal, m.code.funcbody[i].column, decl.debug.line);
-    auto name      = functions.back().internal->getName() + DIVIDER "external";
+    std::string name      = functions.back().internal->getName().str() + DIVIDER "external";
     auto wrapperfn = &Compiler::PassFunction;
-    ExportFunction(functions.back(), wrapperfn, name.str(), name);
+    ExportFunction(functions.back(), wrapperfn, name, name);
   }
 
   {

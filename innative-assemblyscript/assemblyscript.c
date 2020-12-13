@@ -14,7 +14,7 @@ HMODULE GetCurrentModule()
   return hModule;
 }
 
-void* LoadDLLFunction(const char* name)
+void* _loadDLL(const char* name)
 {
   HMODULE dll = GetCurrentModule();
   void* p     = GetProcAddress(dll, name);
@@ -26,7 +26,7 @@ void* LoadDLLFunction(const char* name)
   #include <sys/mman.h>
   #include <dlfcn.h>
 
-void* LoadDLLFunction(const char* name)
+void* _loadDLL(const char* name)
 {
   void* dll = dlopen(NULL, RTLD_LAZY);
   if(!dll)
@@ -71,7 +71,7 @@ void _innative_dump_double(double d)
 IN_COMPILER_DLLEXPORT extern void env_WASM_trace(uint32_t message, int32_t n, double a0, double a1, double a2, double a3,
                                                  double a4)
 {
-  INModuleMetadata* p = (INModuleMetadata*)LoadDLLFunction("$_innative_module#0");
+  INModuleMetadata* p = (INModuleMetadata*)_loadDLL("$_innative_module#0");
   if(!p || p->n_memories < 1)
     return;
 
