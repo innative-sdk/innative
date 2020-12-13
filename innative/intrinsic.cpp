@@ -44,7 +44,7 @@ IN_ERROR Compiler::IN_Intrinsic_Trap(llvm::Value** params, llvm::Value*& out)
 IN_ERROR Compiler::IN_Intrinsic_FuncPtr(llvm::Value** params, llvm::Value*& out)
 {
   if(!params[0]->getType()->isIntegerTy())
-    return LogErrorType(raw_log, "%s: Expected integer type, got ", ERR_INVALID_ARGUMENT_TYPE, params[0]->getType());
+    return _logtype("%s: Expected integer type, got ", ERR_INVALID_ARGUMENT_TYPE, params[0]->getType());
 
   InsertConditionalTrap(
     builder.CreateICmpUGE(builder.CreateIntCast(params[0], builder.getInt64Ty(), false),
