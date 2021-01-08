@@ -444,35 +444,56 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
     // Write all in-memory environments to cache files
     for(Embedding* cur = env->embeddings; cur != nullptr; cur = cur->next)
     {
-      if(cur->size > 0) // If the size is greater than 0, this is an in-memory embedding
+#ifndef IN_PLATFORM_WIN32
+      if(cur->tag == 2)
       {
-        union
-        {
-          Embedding* p;
-          size_t z;
-        } u        = { cur };
-        auto embed = objpath / std::to_string(u.z);
-        embed += IN_ENV_EXTENSION;
-        embed += IN_STATIC_EXTENSION;
-        cache.emplace_back(embed.u8string());
-        FILE* f;
-        FOPEN(f, embed.c_str(), "wb");
-        if(!f)
-          return LogErrorString(*env, "%s: Could not open file: %s", ERR_FATAL_FILE_ERROR, embed.c_str());
+        if(cur->size > 0) // not supported
+          return LogErrorString(*env, "%s: in-memory shared libraries are not supported.", ERR_FATAL_LINK_ERROR);
 
-        fwrite(cur->data, 1, (size_t)cur->size, f);
-        fclose(f);
-        garbage.emplace_back(embed);
+        path src = reinterpret_cast<const char*>(cur->data);
+        if(!src.has_filename())
+        {
+          auto str = src.u8string();
+          return LogErrorString(*env, "%s: %s is a folder, not a file.", ERR_FATAL_FILE_ERROR, str.c_str());
+        }
+        auto filename = src.filename().u8string();
+        src.remove_filename();
+        if(!src.empty())
+        {
+          cache.emplace_back(src.u8string());
+          cache.back().insert(0, "-L");
+        }
+
+        cache.emplace_back(filename);
+        cache.back().insert(0, "-l:");
       }
       else
-        cache.emplace_back(reinterpret_cast<const char*>(cur->data));
-
-#ifdef IN_PLATFORM_POSIX
-      if(cur->tag == 2)
-        cache.back().insert(0, (cache.back()[0] == '/') ? "-l:" : "-l");
 #endif
-    }
+      {
+        if(cur->size > 0) // If the size is greater than 0, this is an in-memory embedding
+        {
+          union
+          {
+            Embedding* p;
+            size_t z;
+          } u        = { cur };
+          auto embed = objpath / std::to_string(u.z);
+          embed += IN_ENV_EXTENSION;
+          embed += IN_STATIC_EXTENSION;
+          cache.emplace_back(embed.u8string());
+          FILE* f;
+          FOPEN(f, embed.c_str(), "wb");
+          if(!f)
+            return LogErrorString(*env, "%s: Could not open file: %s", ERR_FATAL_FILE_ERROR, embed.c_str());
 
+          fwrite(cur->data, 1, (size_t)cur->size, f);
+          fclose(f);
+          garbage.emplace_back(embed);
+        }
+        else
+          cache.emplace_back(reinterpret_cast<const char*>(cur->data));
+      }
+    }
     for(auto& v : cache) // We can only do this after we're finished adding everything to cache
       linkargs.push_back(v.c_str());
 
