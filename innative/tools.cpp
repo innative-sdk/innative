@@ -347,12 +347,7 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
 
         auto iter                     = kh_put_cimport(env->cimports, key, &r);
         kh_value(env->cimports, iter) = key.get() != id.get();
-        // On windows, because .lib files map to DLLs, they can have duplicate symbols from the dependent DLLs
-        // that the DLL itself depends on. As a result, we cannot enforce this check until the linker resolves the symbols.
-#ifndef IN_PLATFORM_WIN32
-        if(!r)
-          return ERR_INVALID_EMBEDDING;
-#endif
+        // It would be nice to check for duplicate symbols here, but that's not how linkers work.
       }
     }
   }
