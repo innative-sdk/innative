@@ -369,7 +369,7 @@ namespace innative {
     {
       char* p;
       FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr,
-                     ::GetLastError(), 0, (LPTSTR)&p, 0, nullptr);
+                     ::GetLastError(), 0, (LPSTR)&p, 0, nullptr);
       return p;
     }
     void LoadDLLErrorFree(char* p)

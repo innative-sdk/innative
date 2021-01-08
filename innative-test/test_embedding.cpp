@@ -92,7 +92,7 @@ void TestHarness::test_embedding()
   env->optimize = ENV_OPTIMIZE_O0;
   #endif
 
-  path lib = _out;
+  path lib = _out.u8string().c_str();
   lib.replace_extension(".lib");
   auto libstr = lib.u8string();
 
