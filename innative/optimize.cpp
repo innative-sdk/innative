@@ -32,10 +32,11 @@ using namespace innative;
 IN_ERROR innative::OptimizeModules(const Environment* env)
 {
   llvm::PassBuilder passBuilder;
-  llvm::LoopAnalysisManager loopAnalysisManager(env->loglevel >= LOG_DEBUG);
-  llvm::FunctionAnalysisManager functionAnalysisManager(env->loglevel >= LOG_DEBUG);
-  llvm::CGSCCAnalysisManager cGSCCAnalysisManager(env->loglevel >= LOG_DEBUG);
-  llvm::ModuleAnalysisManager moduleAnalysisManager(env->loglevel >= LOG_DEBUG);
+  // We only enabled this analysis if a secret log level above DEBUG is enabled because they overwhelm the output completely.
+  llvm::LoopAnalysisManager loopAnalysisManager(env->loglevel > LOG_DEBUG);
+  llvm::FunctionAnalysisManager functionAnalysisManager(env->loglevel > LOG_DEBUG);
+  llvm::CGSCCAnalysisManager cGSCCAnalysisManager(env->loglevel > LOG_DEBUG);
+  llvm::ModuleAnalysisManager moduleAnalysisManager(env->loglevel > LOG_DEBUG);
 
   // Pass debugging
   /*llvm::PassInstrumentationCallbacks PIC;
@@ -75,7 +76,7 @@ IN_ERROR innative::OptimizeModules(const Environment* env)
   }
 
   llvm::ModulePassManager modulePassManager =
-    passBuilder.buildPerModuleDefaultPipeline(optlevel, env->loglevel >= LOG_DEBUG);
+    passBuilder.buildPerModuleDefaultPipeline(optlevel, env->loglevel > LOG_DEBUG);
 
   // Optimize all modules
   for(size_t i = 0; i < env->n_modules; ++i)

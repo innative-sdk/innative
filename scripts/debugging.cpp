@@ -132,5 +132,14 @@ extern "C" MODULE_EXPORT int debug(int n)
   return f[0].c->c->c->a + addi(f[0].c->a, f[0].a) + result;
 }
 
-// Only used to build this as a normal EXE for comparing debug information
+/*extern "C" MODULE_EXPORT int debug(int n)
+{
+  int a;
+  a = 2;
+  a = 4;
+  int res = a;
+  return res;
+}*/
+
+  // Only used to build this as a normal EXE for comparing debug information
 //int main() { return debug(4); }

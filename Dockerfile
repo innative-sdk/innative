@@ -3,16 +3,16 @@ FROM alpine:latest as builder
 ADD . /
 RUN chmod 644 /include/innative/
 RUN chmod 644 /scripts/
-RUN chmod 644 /wasm_malloc.c
 RUN chmod 755 ./build-llvm.sh
 RUN apk add --no-cache git
 RUN apk add --no-cache clang alpine-sdk
+RUN apk add --no-cache ninja-build
 RUN apk add --no-cache cmake
 RUN apk add --no-cache python3
 RUN apk add --no-cache zlib-dev
-RUN /build-llvm.sh
+RUN /build-llvm.sh ninja
 RUN chmod 644 /spec/test/core/
-RUN make
+RUN make dist
 
 FROM alpine:latest
 RUN apk add --no-cache libstdc++

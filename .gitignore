@@ -40,3 +40,4 @@
 /innative-sdk-setup/ScriptFileList.wxs
 /innative-sdk-setup/CoreFileList.wxs
 /.vs/
+/build/
