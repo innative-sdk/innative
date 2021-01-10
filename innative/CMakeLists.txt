@@ -5,16 +5,6 @@ else()
 project(innative LANGUAGES CXX VERSION ${PROJECT_VERSION})
 endif()
 
-option(BUILD_SHARED_LIBS "enable shared library" ON)
-option(DYNAMIC_RUNTIME "if true, dynamically links (/MD) to the C++ runtime on MSVC. Otherwise, statically links (/MT)" OFF)
-
-if(USE32bit)
-  message(STATUS "Using 32-bit LLVM")
-  set(BIN_DIR "bin-Win32")
-else()
-  set(BIN_DIR "bin")
-endif()
-
 set(CMAKE_PREFIX_PATH "../${BIN_DIR}/llvm;${CMAKE_PREFIX_PATH}")
   
 find_package(LLVM REQUIRED CONFIG)
@@ -66,11 +56,6 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 file(GLOB_RECURSE inNative_SOURCES "./*.cpp")
 
 if(MSVC)
-  set(RUNTIME_FLAG "MT")
-  if(DYNAMIC_RUNTIME)
-    set(RUNTIME_FLAG "MD")
-  endif()
-
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /${RUNTIME_FLAG}d")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Oi /Ot /GL /${RUNTIME_FLAG}")
