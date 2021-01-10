@@ -1,15 +1,6 @@
 cmake_minimum_required(VERSION 3.13.4)
 project(innative-loader LANGUAGES CXX VERSION ${PROJECT_VERSION})
 
-option(BUILD_SHARED_LIBS "enable shared library" ON)
-option(DYNAMIC_RUNTIME "if true, dynamically links (/MD) to the C++ runtime on MSVC. Otherwise, statically links (/MT)" OFF)
-
-if(USE32bit)
-  set(BIN_DIR "bin-Win32")
-else()
-  set(BIN_DIR "bin")
-endif()
-
 file(GLOB_RECURSE loader_SOURCES "./*.c")
 
 if(WIN32)
@@ -22,11 +13,6 @@ set(CMAKE_VERBOSE_MAKEFILE FALSE)
 set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
 
 if(MSVC)
-  set(RUNTIME_FLAG "MT")
-  if(DYNAMIC_RUNTIME)
-    set(RUNTIME_FLAG "MD")
-  endif()
-
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /${RUNTIME_FLAG}d")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Oi /Ot /GL /${RUNTIME_FLAG}")

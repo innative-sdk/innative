@@ -1,5 +1,20 @@
 cmake_minimum_required(VERSION 3.13.4)
 project(innative_sdk VERSION 0.1.10)
+option(DYNAMIC_RUNTIME "if true, dynamically links (/MD) to the C++ runtime on MSVC. Otherwise, statically links (/MT)" OFF)
+option(BUILD_SHARED_LIBS "enable shared library" ON)
+
+if(MSVC)
+  set(RUNTIME_FLAG "MT")
+  if(DYNAMIC_RUNTIME)
+    set(RUNTIME_FLAG "MD")
+  endif()
+endif()
+
+if(USE32bit)
+  set(BIN_DIR "bin-Win32")
+else()
+  set(BIN_DIR "bin")
+endif()
 
 add_subdirectory(innative)
 add_subdirectory(innative-env)

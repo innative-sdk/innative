@@ -1,28 +1,16 @@
 cmake_minimum_required(VERSION 3.13.4)
 project(innative-assemblyscript LANGUAGES C VERSION ${PROJECT_VERSION})
 
-option(DYNAMIC_RUNTIME "if true, dynamically links (/MD) to the C++ runtime on MSVC. Otherwise, statically links (/MT)" OFF)
-
-if(USE32bit)
-  set(BIN_DIR "bin-Win32")
-else()
-  set(BIN_DIR "bin")
-endif()
-
 set(CMAKE_VERBOSE_MAKEFILE FALSE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 file(GLOB_RECURSE assemblyscript_SOURCES "./*.c")
 
 if(MSVC)
-  set(RUNTIME_FLAG "MT")
-  if(DYNAMIC_RUNTIME)
-    set(RUNTIME_FLAG "MD")
-  endif()
-
-  string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+  string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
+  string(REGEX REPLACE "/RTC1" "" CMAKE_C_FLAGS_DEBUG ${CMAKE_C_FLAGS_DEBUG})
 else()
-  string(REGEX REPLACE "-fexceptions" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+  string(REGEX REPLACE "-fexceptions" "" CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
 endif()
 
@@ -34,8 +22,8 @@ add_library(innative-assemblyscript-d STATIC ${assemblyscript_SOURCES})
 set(CMAKE_BUILD_TYPE "")
 
 if(MSVC)
-  target_compile_options(innative-assemblyscript PRIVATE /D "NDEBUG" /${RUNTIME_FLAG} /WX-)
-  target_compile_options(innative-assemblyscript-d PRIVATE /D "DEBUG" /Zi /Od /Ob0 /${RUNTIME_FLAG}d /Gd /Gm-)
+  target_compile_options(innative-assemblyscript PRIVATE /D "NDEBUG" /${RUNTIME_FLAG} /WX- /GS-)
+  target_compile_options(innative-assemblyscript-d PRIVATE /D "DEBUG" /Zi /Od /Ob0 /${RUNTIME_FLAG}d /Gd /Gm- /GS-)
 else()
   target_compile_options(innative-assemblyscript PRIVATE -fno-stack-protector -DNDEBUG -O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16)
   target_compile_options(innative-assemblyscript-d PRIVATE -fno-stack-protector -DDEBUG -g)

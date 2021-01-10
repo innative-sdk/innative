@@ -5,8 +5,6 @@ else()
 project(innative-env LANGUAGES C VERSION ${PROJECT_VERSION})
 endif()
 
-option(DYNAMIC_RUNTIME "if true, dynamically links (/MD) to the C++ runtime on MSVC. Otherwise, statically links (/MT)" OFF)
-
 if(USE32bit)
   set(BIN_DIR "bin-Win32")
 else()
@@ -31,15 +29,11 @@ if(WIN32)
 endif()
 
 if(MSVC)
-  set(RUNTIME_FLAG "MT")
-  if(DYNAMIC_RUNTIME)
-    set(RUNTIME_FLAG "MD")
-  endif()
-
-  string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+  string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
+  string(REGEX REPLACE "/RTC1" "" CMAKE_C_FLAGS_DEBUG ${CMAKE_C_FLAGS_DEBUG})
 else()
-  string(REGEX REPLACE "-fexceptions" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
+  string(REGEX REPLACE "-fexceptions" "" CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-exceptions")
 endif()
 
 # add library and include directories
