@@ -29,10 +29,10 @@ if(WIN32)
 endif()
 
 if(MSVC)
-  string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
-  string(REGEX REPLACE "/RTC1" "" CMAKE_C_FLAGS_DEBUG ${CMAKE_C_FLAGS_DEBUG})
+  string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+  string(REPLACE "/RTC1" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 else()
-  string(REGEX REPLACE "-fexceptions" "" CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
+  string(REPLACE "-fexceptions" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-exceptions")
 endif()
 
