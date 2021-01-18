@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.13.4)
 project(innative-assemblyscript LANGUAGES C VERSION ${PROJECT_VERSION})
 
-set(CMAKE_VERBOSE_MAKEFILE FALSE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 file(GLOB_RECURSE assemblyscript_SOURCES "./*.c")
@@ -10,8 +9,7 @@ if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
   string(REPLACE "/RTC1" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 else()
-  string(REPLACE "-fexceptions" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-exceptions")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPP_WARNINGS} -fno-stack-protector")
 endif()
 
 # add library and include directories
@@ -25,8 +23,8 @@ if(MSVC)
   target_compile_options(innative-assemblyscript PRIVATE /D "NDEBUG" /${RUNTIME_FLAG} /WX- /GS-)
   target_compile_options(innative-assemblyscript-d PRIVATE /D "DEBUG" /Zi /Od /Ob0 /${RUNTIME_FLAG}d /Gd /Gm- /GS-)
 else()
-  target_compile_options(innative-assemblyscript PRIVATE -fno-stack-protector -DNDEBUG -O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16)
-  target_compile_options(innative-assemblyscript-d PRIVATE -fno-stack-protector -DDEBUG -g)
+  target_compile_options(innative-assemblyscript PRIVATE -DNDEBUG -O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16)
+  target_compile_options(innative-assemblyscript-d PRIVATE -DDEBUG -g)
 endif()
 
 target_include_directories(innative-assemblyscript PUBLIC ${CMAKE_SOURCE_DIR}/include)
@@ -45,6 +43,7 @@ set_target_properties(innative-assemblyscript
     ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
     LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
     RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
+    PREFIX ""
 )
 
 set_target_properties(innative-assemblyscript-d
@@ -58,6 +57,7 @@ set_target_properties(innative-assemblyscript-d
     ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
     LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
     RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
+    PREFIX ""
 )
 
 if(WIN32)

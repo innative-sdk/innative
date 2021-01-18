@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.13.4)
 project(innative-test-embedding LANGUAGES C VERSION ${PROJECT_VERSION})
 
-set(CMAKE_VERBOSE_MAKEFILE FALSE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 file(GLOB_RECURSE testembed_SOURCES "./*.c")
@@ -10,8 +9,7 @@ if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
   string(REPLACE "/RTC1" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 else()
-  string(REPLACE "-fexceptions" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-exceptions")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPP_WARNINGS} -fno-stack-protector")
 endif()
 
 # add library and include directories
@@ -25,8 +23,8 @@ if(MSVC)
   target_compile_options(innative-test-embedding PRIVATE /D "NDEBUG" /${RUNTIME_FLAG} /WX- /GS-)
   target_compile_options(innative-test-embedding-d PRIVATE /D "DEBUG" /Zi /Od /Ob0 /${RUNTIME_FLAG}d /Gd /Gm- /GS-)
 else()
-  target_compile_options(innative-test-embedding PRIVATE -fno-stack-protector -DNDEBUG -O3)
-  target_compile_options(innative-test-embedding-d PRIVATE -fno-stack-protector -DDEBUG -g)
+  target_compile_options(innative-test-embedding PRIVATE -DNDEBUG -O3)
+  target_compile_options(innative-test-embedding-d PRIVATE -DDEBUG -g)
 endif()
 
 target_include_directories(innative-test-embedding PUBLIC ${CMAKE_SOURCE_DIR}/include)
@@ -43,6 +41,7 @@ set_target_properties(innative-test-embedding
     ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
     LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
     RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
+    PREFIX ""
 )
 
 set_target_properties(innative-test-embedding-d
@@ -56,6 +55,7 @@ set_target_properties(innative-test-embedding-d
     ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
     LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
     RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
+    PREFIX ""
 )
 
 if(WIN32)

@@ -51,9 +51,6 @@ else()
   find_library(LIB_RT rt REQUIRED)
 endif()
 
-set(CMAKE_VERBOSE_MAKEFILE FALSE)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 file(GLOB_RECURSE inNative_SOURCES "./*.cpp")
@@ -66,7 +63,7 @@ if(MSVC)
   set(CMAKE_CXX_FLAGS_RELWITHDEBINFO ${CMAKE_CXX_FLAGS_RELEASE})
 else()
   string(REPLACE "-fexceptions" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti ${CPP_WARNINGS} -Wno-reorder")
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -DDEBUG")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16 -DNDEBUG")
   set(CMAKE_CXX_FLAGS_MINSIZEREL ${CMAKE_CXX_FLAGS_RELEASE})
@@ -82,7 +79,10 @@ set_target_properties(innative PROPERTIES OUTPUT_NAME_DEBUG "innative-d")
 
 # Append LLD libraries because LLD doesn't have CMake info and remove libraries we don't need
 list(APPEND LLVM_AVAILABLE_LIBS "lldCOFF" "lldCommon" "lldCore" "lldDriver" "lldELF" "lldMachO" "lldMinGW" "lldReaderWriter" "lldWasm" "lldYAML")
-list(REMOVE_ITEM LLVM_AVAILABLE_LIBS "LLVM-C" "FrontendOpenMP" "LTO" "Remarks")
+list(REMOVE_ITEM LLVM_AVAILABLE_LIBS "LLVM-C" "FrontendOpenMP" "Remarks")
+if(WIN32)
+  list(REMOVE_ITEM LLVM_AVAILABLE_LIBS "LTO")
+endif()
 
 set_target_properties(innative
     PROPERTIES
@@ -113,7 +113,7 @@ else()
 endif()
 
 # Link against LLVM libraries
-target_link_libraries(innative PRIVATE ${LLVM_AVAILABLE_LIBS})
+target_link_libraries(innative PRIVATE -Wl,--whole-archive ${LLVM_AVAILABLE_LIBS} -Wl,--no-whole-archive)
 target_link_directories(innative PRIVATE ${LLVM_LIBRARY_DIR})
 
 if(WIN32)
