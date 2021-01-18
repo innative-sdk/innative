@@ -58,8 +58,8 @@ varuint32 WatParser::GetJump(WatToken var)
 
 void WatParser::WriteUTF32(uint32_t ch, ByteArray& str, varuint32& index)
 {
-  static const uint32_t UNI_REPLACEMENT_CHAR = 0x0000FFFD;
-  static const uint32_t UNI_MAX_LEGAL_UTF32  = 0x0010FFFF;
+  static const uint32_t UNICODE_REPLACEMENT_CHAR = 0x0000FFFD;
+  static const uint32_t UNICODE_MAX_LEGAL_UTF32  = 0x0010FFFF;
   static const uint8_t firstByteMark[7]      = { 0x00, 0x00, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC };
   static const uint32_t byteMask             = 0xBF;
   static const uint32_t byteMark             = 0x80;
@@ -71,12 +71,12 @@ void WatParser::WriteUTF32(uint32_t ch, ByteArray& str, varuint32& index)
     bytesToWrite = 2;
   else if(ch < 0x10000)
     bytesToWrite = 3;
-  else if(ch <= UNI_MAX_LEGAL_UTF32)
+  else if(ch <= UNICODE_MAX_LEGAL_UTF32)
     bytesToWrite = 4;
   else
   {
     bytesToWrite = 3;
-    ch           = UNI_REPLACEMENT_CHAR;
+    ch           = UNICODE_REPLACEMENT_CHAR;
   }
 
   varuint32 target = index + bytesToWrite;

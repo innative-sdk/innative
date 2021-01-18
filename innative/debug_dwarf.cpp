@@ -19,7 +19,7 @@ void DebugDWARF::PostFuncBody(llvm::Function* fn, FunctionBody& body)
 {
   SourceMapFunction* f = GetSourceFunction(_curbody->column);
 
-  if(_compiler->globals.size() > 0)
+  if(_compiler->globals.size() > 0 && f)
   {
     _dbuilder->insertDeclare(
       _compiler->memlocal,

@@ -23,9 +23,6 @@ else()
   find_library(LIB_RT rt REQUIRED)
 endif()
 
-set(CMAKE_VERBOSE_MAKEFILE FALSE)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
 
 if(MSVC)
@@ -36,7 +33,7 @@ if(MSVC)
   set(CMAKE_CXX_FLAGS_RELWITHDEBINFO ${CMAKE_CXX_FLAGS_RELEASE})
 else()
   string(REPLACE "-fexceptions" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions ${CPP_WARNINGS} -Wno-reorder")
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -DDEBUG")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx1 -DNDEBUG")
   set(CMAKE_CXX_FLAGS_MINSIZEREL ${CMAKE_CXX_FLAGS_RELEASE})
@@ -47,7 +44,7 @@ endif()
 add_executable(innative-cmd ${cmd_SOURCES})
 target_include_directories(innative-cmd PUBLIC ${CMAKE_SOURCE_DIR}/include)
 set_target_properties(innative-cmd PROPERTIES OUTPUT_NAME_DEBUG "innative-cmd-d")
-target_link_libraries(innative-cmd innative)
+target_link_libraries(innative-cmd innative stdc++fs)
 
 set_target_properties(innative-cmd
     PROPERTIES
