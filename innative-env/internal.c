@@ -19,8 +19,8 @@
   #ifdef IN_CPU_x86_64
   asm(".globl _innative_syscall\n\t"
       ".type  _innative_syscall, @function\n"
-      ".cfi_startproc\n\t"
       "_innative_syscall:\n\t"
+      ".cfi_startproc\n\t"
       "movq %rdi, %rax\n\t"
       "movq %rsi, %rdi\n\t"
       "movq %rdx, %rsi\n\t"
