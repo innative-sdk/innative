@@ -1,4 +1,4 @@
-// Copyright (c)2020 Black Sphere Studios
+// Copyright (c)2021 Fundament Software
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "validate.h"
@@ -10,6 +10,7 @@
 #include <stdarg.h>
 #include <atomic>
 #include <limits>
+#include <inttypes.h>
 
 using namespace innative;
 using namespace utility;
@@ -471,7 +472,7 @@ namespace innative {
     Stack<varsint7> opds;
     Stack<CtrlFrame> ctrls;
 
-    ValidationStack(Environment& env, Module* m) : env(env), m(m) {}
+    ValidationStack(Environment& envi, Module* mod) : env(envi), m(mod) {}
 
     void PushOpd(varsint7 type) { opds.Push(type); }
 
@@ -845,7 +846,8 @@ namespace innative {
       auto frame = vstack.PopCtrl(ins);
       if(frame.op == OP_if && !vstack.EndTypes(frame.sig).SigEq(vstack.StartTypes(frame.sig)))
         AppendError(env, env.errors, m, ERR_INVALID_BLOCK_SIGNATURE,
-                    "[%u] If statement without else must have matching params and results, had %lli.", ins.line, frame.sig);
+                    "[%u] If statement without else must have matching params and results, had %" PRId64 ".", ins.line,
+                    frame.sig);
       vstack.PushOpds(vstack.EndTypes(frame));
       break;
     }
@@ -912,7 +914,8 @@ namespace innative {
                       vstack.ctrls.Size(), ins.line);
         else if(!vstack.LabelTypes(vstack.ctrls[br_depth]).SigEq(def_types))
           AppendError(env, env.errors, m, ERR_INVALID_TYPE,
-                      "[%u] Branch table target has type signature %lli, but default branch has %lli", ins.line,
+                      "[%u] Branch table target has type signature %" PRId64 ", but default branch has %" PRId64,
+                      ins.line,
                       vstack.ctrls[br_depth].sig, vstack.ctrls[depth].sig);
       }
       vstack.PopOpd(ins, TE_i32);

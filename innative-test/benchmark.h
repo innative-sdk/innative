@@ -1,4 +1,4 @@
-// Copyright (c)2020 Black Sphere Studios
+// Copyright (c)2021 Fundament Software
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef IN__BENCHMARK_H
@@ -6,6 +6,7 @@
 
 #include "test.h"
 #include <chrono>
+#include <inttypes.h>
 
 class Benchmarks
 {
@@ -39,16 +40,16 @@ public:
 #ifndef IN_DEBUG
     timing.c = MeasureFunction<R, Args...>(f, std::forward<Args>(args)...); // Do it again to account for CPU caching
 #endif
-    fprintf(out, "%-*lli ", COLUMNS[1], timing.c);
+    fprintf(out, "%-*" PRId64 " ", COLUMNS[1], timing.c);
     timing.debug =
       MeasureWASM<R, Args...>(wasm, func, ENV_DEBUG | ENV_STRICT, ENV_OPTIMIZE_O0, std::forward<Args>(args)...);
-    fprintf(out, "%-*lli ", COLUMNS[2], timing.debug);
+    fprintf(out, "%-*" PRId64 " ", COLUMNS[2], timing.debug);
     timing.strict = MeasureWASM<R, Args...>(wasm, func, ENV_STRICT, ENV_OPTIMIZE_O3, std::forward<Args>(args)...);
-    fprintf(out, "%-*lli ", COLUMNS[3], timing.strict);
+    fprintf(out, "%-*" PRId64 " ", COLUMNS[3], timing.strict);
     timing.sandbox = MeasureWASM<R, Args...>(wasm, func, ENV_SANDBOX, ENV_OPTIMIZE_O3, std::forward<Args>(args)...);
-    fprintf(out, "%-*lli ", COLUMNS[4], timing.sandbox);
+    fprintf(out, "%-*" PRId64 " ", COLUMNS[4], timing.sandbox);
     timing.native = MeasureWASM<R, Args...>(wasm, func, 0, ENV_OPTIMIZE_O3, std::forward<Args>(args)...);
-    fprintf(out, "%-*lli ", COLUMNS[5], timing.native);
+    fprintf(out, "%-*" PRId64 " ", COLUMNS[5], timing.native);
     fprintf(out, "\n%-*s %-*.2f %-*.2f %-*.2f %-*.2f %-*.2f\n", COLUMNS[0], "", COLUMNS[1], double(timing.c) / timing.c,
             COLUMNS[2], double(timing.c) / timing.debug, COLUMNS[3], double(timing.c) / timing.strict, COLUMNS[4],
             double(timing.c) / timing.sandbox, COLUMNS[5], double(timing.c) / timing.native);

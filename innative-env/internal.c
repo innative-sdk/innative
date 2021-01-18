@@ -1,4 +1,4 @@
-// Copyright (c)2020 Black Sphere Studios
+// Copyright (c)2021 Fundament Software
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "internal.h"
@@ -14,57 +14,67 @@
 
 #ifdef IN_PLATFORM_WIN32
 #elif defined(IN_PLATFORM_POSIX)
+// gcc 7.x and earlier refuses to abide by naked attributes, which breaks the function when not
+// optimized. To counter this, we define the function in pure assembly.
   #ifdef IN_CPU_x86_64
+  asm(".globl _innative_syscall\n\t"
+      ".type  _innative_syscall, @function\n"
+      ".cfi_startproc\n\t"
+      "_innative_syscall:\n\t"
+      "movq %rdi, %rax\n\t"
+      "movq %rsi, %rdi\n\t"
+      "movq %rdx, %rsi\n\t"
+      "movq %rcx, %rdx\n\t"
+      "movq %r8, %r10\n\t"
+      "movq %r9, %r8\n\t"
+      "movq 8(%rsp), %r9\n\t"
+      "syscall\n\t"
+      "ret\n\t"
+      ".cfi_endproc");
+  #elif defined(IN_CPU_x86)
+  asm(".globl _innative_syscall\n\t"
+      ".type  _innative_syscall, @function\n"
+      "_innative_syscall:\n\t"
+      ".cfi_startproc\n"
+      "pushl %ebp\n\t"
+      ".cfi_adjust_cfa_offset 4\n\t"
+      ".cfi_rel_offset %ebp, 0\n\t"
+      "pushl %edi\n\t"
+      ".cfi_adjust_cfa_offset 4\n\t"
+      ".cfi_rel_offset %edi, 0\n\t"
+      "pushl %esi\n\t"
+      ".cfi_adjust_cfa_offset 4\n\t"
+      ".cfi_rel_offset %esi, 0\n\t"
+      "pushl %ebx\n\t"
+      ".cfi_adjust_cfa_offset 4\n\t"
+      ".cfi_rel_offset %ebx, 0\n\t"
+      "movl 44(%esp), %ebp\n\t"
+      "movl 40(%esp), %edi\n\t"
+      "movl 36(%esp), %esi\n\t"
+      "movl 32(%esp), %edx\n\t"
+      "movl 28(%esp), %ecx\n\t"
+      "movl 24(%esp), %ebx\n\t"
+      "movl 20(%esp), %eax\n\t"
+      "int $0x80\n\t"
+      "popl %ebx\n\t"
+      ".cfi_adjust_cfa_offset -4\n\t"
+      ".cfi_restore %ebx\n\t"
+      "popl %esi\n\t"
+      ".cfi_adjust_cfa_offset -4\n\t"
+      ".cfi_restore %esi\n\t"
+      "popl %edi\n\t"
+      ".cfi_adjust_cfa_offset -4\n\t"
+      ".cfi_restore %edi\n\t"
+      "popl %ebp\n\t"
+      ".cfi_adjust_cfa_offset -4\n\t"
+      ".cfi_restore %ebp\n\t"
+      "ret\n\t"
+      ".cfi_endproc");
+  #elif defined(IN_CPU_ARM)
 IN_COMPILER_DLLEXPORT extern IN_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2,
                                                                        size_t p3, size_t p4, size_t p5, size_t p6)
 {
-  __asm volatile("movq %rdi, %rax\n\t"
-                 "movq %rsi, %rdi\n\t"
-                 "movq %rdx, %rsi\n\t"
-                 "movq %rcx, %rdx\n\t"
-                 "movq %r8, %r10\n\t"
-                 "movq %r9, %r8\n\t"
-                 "movq 8(%rsp), %r9\n\t"
-                 "syscall\n\t"
-                 "ret");
-  #elif defined(IN_CPU_x86)
-__asm volatile(".cfi_startproc\n"
-               "pushl %ebp\n\t"
-               ".cfi_adjust_cfa_offset 4\n\t"
-               ".cfi_rel_offset %ebp, 0\n\t"
-               "pushl %edi\n\t"
-               ".cfi_adjust_cfa_offset 4\n\t"
-               ".cfi_rel_offset %edi, 0\n\t"
-               "pushl %esi\n\t"
-               ".cfi_adjust_cfa_offset 4\n\t"
-               ".cfi_rel_offset %esi, 0\n\t"
-               "pushl %ebx\n\t"
-               ".cfi_adjust_cfa_offset 4\n\t"
-               ".cfi_rel_offset %ebx, 0\n\t"
-               "movl 44(%esp), %ebp\n\t"
-               "movl 40(%esp), %edi\n\t"
-               "movl 36(%esp), %esi\n\t"
-               "movl 32(%esp), %edx\n\t"
-               "movl 28(%esp), %ecx\n\t"
-               "movl 24(%esp), %ebx\n\t"
-               "movl 20(%esp), %eax\n\t"
-               "int $0x80\n\t"
-               "popl %ebx\n\t"
-               ".cfi_adjust_cfa_offset -4\n\t"
-               ".cfi_restore %ebx\n\t"
-               "popl %esi\n\t"
-               ".cfi_adjust_cfa_offset -4\n\t"
-               ".cfi_restore %esi\n\t"
-               "popl %edi\n\t"
-               ".cfi_adjust_cfa_offset -4\n\t"
-               ".cfi_restore %edi\n\t"
-               "popl %ebp\n\t"
-               ".cfi_adjust_cfa_offset -4\n\t"
-               ".cfi_restore %ebp\n\t"
-               "ret\n\t"
-               ".cfi_endproc");
-  #elif defined(IN_CPU_ARM)
-__asm volatile("mov	ip, sp\n\t"
+  __asm volatile("mov	ip, sp\n\t"
                "push{ r4, r5, r6, r7 }\n\t"
                "cfi_adjust_cfa_offset(16)\n\t"
                "cfi_rel_offset(r4, 0)\n\t"
@@ -90,31 +100,41 @@ __asm volatile("mov	ip, sp\n\t"
     #else
                "movcc pc, lr\n\t"
     #endif
-);
+}
   #elif defined(IN_CPU_ARM64)
-__asm volatile("uxtw        x8, w0\n\t"
-               "mov        x0, x1\n\t"
-               "mov        x1, x2\n\t"
-               "mov        x2, x3\n\t"
-               "mov        x3, x4\n\t"
-               "mov        x4, x5\n\t"
-               "mov        x5, x6\n\t"
-               "mov        x6, x7\n\t"
-               "svc        0x0\n\t"
-               "cmn        x0, #4095\n\t"
-               "RET");
+IN_COMPILER_DLLEXPORT extern IN_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2,
+                                                                       size_t p3, size_t p4, size_t p5, size_t p6)
+{
+  __asm volatile("uxtw        x8, w0\n\t"
+                 "mov        x0, x1\n\t"
+                 "mov        x1, x2\n\t"
+                 "mov        x2, x3\n\t"
+                 "mov        x3, x4\n\t"
+                 "mov        x4, x5\n\t"
+                 "mov        x5, x6\n\t"
+                 "mov        x6, x7\n\t"
+                 "svc        0x0\n\t"
+                 "cmn        x0, #4095\n\t"
+                 "RET");
+}
   #elif defined(IN_CPU_POWERPC) || defined(IN_CPU_POWERPC64)
-__asm volatile("mr   r0,r3\n\t"
-               "mr   r3,r4\n\t"
-               "mr   r4,r5\n\t"
-               "mr   r5,r6\n\t"
-               "mr   r6,r7\n\t"
-               "mr   r7,r8\n\t"
-               "mr   r8,r9\n\t"
-               "sc\n\t"
-               "bnslr+\n\t");
+IN_COMPILER_DLLEXPORT extern IN_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2,
+                                                                       size_t p3, size_t p4, size_t p5, size_t p6)
+{
+  __asm volatile("mr   r0,r3\n\t"
+                 "mr   r3,r4\n\t"
+                 "mr   r4,r5\n\t"
+                 "mr   r5,r6\n\t"
+                 "mr   r6,r7\n\t"
+                 "mr   r7,r8\n\t"
+                 "mr   r8,r9\n\t"
+                 "sc\n\t"
+                 "bnslr+\n\t");
+}
   #elif defined(IN_CPU_MIPS64)
-
+IN_COMPILER_DLLEXPORT extern IN_COMPILER_NAKED void* _innative_syscall(size_t syscall_number, const void* p1, size_t p2,
+                                                                       size_t p3, size_t p4, size_t p5, size_t p6)
+{
     #if _MIPS_SIM == _ABI64 || _MIPS_SIM == _ABIN32
       #define SZREG 8
     #else
@@ -143,30 +163,30 @@ __asm volatile("mr   r0,r3\n\t"
       #define REG_L ld
     #endif
 
-__asm volatile(".mask 0x00010000, -SZREG"
-               ".fmask 0x00000000, 0"
-               "PTR_ADDIU sp, -SZREG"
-               "cfi_adjust_cfa_offset (SZREG)"
-               "REG_S s0, (sp)"
-               "cfi_rel_offset (s0, 0)"
-               "move s0, a0"
-               "move a0, a1"
-               "move a1, a2"
-               "move a2, a3"
-               "move a3, a4"
-               "move a4, a5"
-               "move a5, a6"
-               "move v0, s0"
-               "syscall"
-               "REG_L s0, (sp)"
-               "cfi_restore (s0)"
-               "PTR_ADDIU sp, SZREG"
-               "cfi_adjust_cfa_offset (-SZREG)"
-               "ret");
+  __asm volatile(".mask 0x00010000, -SZREG"
+                 ".fmask 0x00000000, 0"
+                 "PTR_ADDIU sp, -SZREG"
+                 "cfi_adjust_cfa_offset (SZREG)"
+                 "REG_S s0, (sp)"
+                 "cfi_rel_offset (s0, 0)"
+                 "move s0, a0"
+                 "move a0, a1"
+                 "move a1, a2"
+                 "move a2, a3"
+                 "move a3, a4"
+                 "move a4, a5"
+                 "move a5, a6"
+                 "move v0, s0"
+                 "syscall"
+                 "REG_L s0, (sp)"
+                 "cfi_restore (s0)"
+                 "PTR_ADDIU sp, SZREG"
+                 "cfi_adjust_cfa_offset (-SZREG)"
+                 "ret");
+}
   #else
     #error unsupported architecture!
   #endif
-}
 #endif
 
 IN_COMPILER_DLLEXPORT extern void _innative_internal_abort()
