@@ -1,4 +1,4 @@
-// Copyright (c)2020 Black Sphere Studios
+// Copyright (c)2021 Fundament Software
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "llvm.h"
@@ -232,7 +232,7 @@ Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, llvm::StringRef 
   {
     values.push_back(builder.CreateLoad(builder.CreateBitCast(
       builder.CreateInBoundsGEP(params, { builder.getInt32(offset) }), arg.getType()->getPointerTo())));
-    offset += mod->getDataLayout().getTypeSizeInBits(arg.getType()) / 8;
+    offset += uint32_t(mod->getDataLayout().getTypeSizeInBits(arg.getType()) / 8);
     // TODO: structs must be broken apart and repacked
   }
 
@@ -250,7 +250,7 @@ Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, llvm::StringRef 
                           builder.CreateBitCast(builder.CreateInBoundsGEP(results, { builder.getInt32(offset) }),
                                                 ret->getStructElementType(i)->getPointerTo()),
                           false);
-      offset += mod->getDataLayout().getTypeSizeInBits(ret->getStructElementType(i)) / 8;
+      offset += uint32_t(mod->getDataLayout().getTypeSizeInBits(ret->getStructElementType(i)) / 8);
     }
   }
   else if(!ret->isVoidTy())

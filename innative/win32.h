@@ -1,4 +1,4 @@
-// Copyright (c)2020 Black Sphere Studios
+// Copyright (c)2021 Fundament Software
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef __WIN32_H__IN__

@@ -1,4 +1,4 @@
-// Copyright (c)2020 Black Sphere Studios
+// Copyright (c)2021 Fundament Software
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "wat.h"
@@ -296,7 +296,7 @@ int WatParser::ParseFunctionType(Queue<WatToken>& tokens, WatToken token)
   return ERR_SUCCESS;
 }
 
-int WatParser::AppendImport(Module& m, const Import& i, varuint32* index)
+int WatParser::AppendImport(const Import& i, varuint32* index)
 {
   if(m.table.n_tables > 0 || m.function.n_funcdecl > 0 || m.global.n_globals > 0 || m.memory.n_memories > 0)
     return ERR_WAT_INVALID_IMPORT_ORDER; // If we're trying to insert an import after declaring a table/func/global/memory,
@@ -965,7 +965,7 @@ int WatParser::ParseInstruction(Queue<WatToken>& tokens, FunctionBody& f, Functi
   return ERR_SUCCESS;
 }
 
-int WatParser::InlineImportExport(Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out)
+int WatParser::InlineImportExport(Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out)
 {
   int err;
   while(tokens.Size() > 1 && tokens[0].id == WatTokens::OPEN && tokens[1].id == WatTokens::EXPORT)
@@ -1002,7 +1002,7 @@ int WatParser::InlineImportExport(Module& m, Queue<WatToken>& tokens, varuint32*
       return ERR_INVALID_UTF8_ENCODING;
 
     i.kind = kind;
-    if(err = AppendImport(m, i, index))
+    if(err = AppendImport(i, index))
       return err;
 
     switch(i.kind) // Fix the index
@@ -1035,12 +1035,12 @@ int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringSp
   body.column       = tokens.Peek().column;
 
   *index    = m.function.n_funcdecl + m.importsection.functions;
-  Import* i = 0;
-  if(err = InlineImportExport(m, tokens, index, WASM_KIND_FUNCTION, &i))
+  Import* imp = 0;
+  if(err = InlineImportExport(tokens, index, WASM_KIND_FUNCTION, &imp))
     return err;
 
-  if(i) // If this is an import, assemble the aux information and abort.
-    return ParseTypeUse(tokens, i->func_desc.type_index, &i->func_desc.param_debug, 0, false);
+  if(imp) // If this is an import, assemble the aux information and abort.
+    return ParseTypeUse(tokens, imp->func_desc.type_index, &imp->func_desc.param_debug, 0, false);
 
   FunctionDesc desc     = { 0 };
   varuint32 n_paraminfo = 0;
@@ -1157,7 +1157,7 @@ int WatParser::ParseTable(Queue<WatToken>& tokens, WatToken token)
   int err;
   varuint32 index = m.table.n_tables + m.importsection.tables - m.importsection.functions;
   Import* i       = 0;
-  if(err = InlineImportExport(m, tokens, &index, WASM_KIND_TABLE, &i))
+  if(err = InlineImportExport(tokens, &index, WASM_KIND_TABLE, &i))
     return err;
 
   if(i) // If this is an import, assemble the aux information and abort.
@@ -1279,7 +1279,7 @@ int WatParser::ParseGlobal(Queue<WatToken>& tokens, WatToken token)
   int err;
   varuint32 index = m.global.n_globals + m.importsection.globals - m.importsection.memories;
   Import* i       = 0;
-  if(err = InlineImportExport(m, tokens, &index, WASM_KIND_GLOBAL, &i))
+  if(err = InlineImportExport(tokens, &index, WASM_KIND_GLOBAL, &i))
     return err;
 
   if(i) // If this is an import, assemble the aux information and abort.
@@ -1301,14 +1301,14 @@ int WatParser::ParseGlobal(Queue<WatToken>& tokens, WatToken token)
   return AppendArray(env, g, m.global.globals, m.global.n_globals);
 }
 
-int WatParser::ParseMemoryDesc(MemoryDesc& m, Queue<WatToken>& tokens) { return ParseResizableLimits(m.limits, tokens); }
+int WatParser::ParseMemoryDesc(MemoryDesc& mem, Queue<WatToken>& tokens) { return ParseResizableLimits(mem.limits, tokens); }
 
 int WatParser::ParseMemory(Queue<WatToken>& tokens, WatToken token)
 {
   int err;
   varuint32 index = m.memory.n_memories + m.importsection.memories - m.importsection.tables;
   Import* i       = 0;
-  if(err = InlineImportExport(m, tokens, &index, WASM_KIND_MEMORY, &i))
+  if(err = InlineImportExport(tokens, &index, WASM_KIND_MEMORY, &i))
     return err;
 
   if(i) // If this is an import, assemble the aux information and abort.
@@ -1419,7 +1419,7 @@ int WatParser::ParseImport(Queue<WatToken>& tokens)
   EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
   varuint32 index;
-  if(err = AppendImport(m, i, &index))
+  if(err = AppendImport(i, &index))
     return err;
 
   return AddName(hash, name, index, 0);

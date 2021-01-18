@@ -1,4 +1,4 @@
-// Copyright (c)2020 Black Sphere Studios
+// Copyright (c)2021 Fundament Software
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #ifndef IN__WAT_H
@@ -58,8 +58,8 @@ namespace innative {
     int ParseElem(TableInit& e, Queue<WatToken>& tokens);
     int ParseElemList(TableInit& e, Queue<WatToken>& tokens);
     int ParseData(Queue<WatToken>& tokens);
-    int AppendImport(Module& m, const Import& i, varuint32* index);
-    int InlineImportExport(Module& m, Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out);
+    int AppendImport(const Import& i, varuint32* index);
+    int InlineImportExport(Queue<WatToken>& tokens, varuint32* index, varuint7 kind, Import** out);
     int ParseBlockType(Queue<WatToken>& tokens, varsint64& out);
     int AddName(wat::kh_indexname_t* h, WatToken t, varuint32 index, DebugInfo* info);
 

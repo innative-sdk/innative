@@ -1,4 +1,4 @@
-// Copyright (c)2020 Black Sphere Studios
+// Copyright (c)2021 Fundament Software
 // For conditions of distribution and use, see copyright notice in innative.h
 
 #include "wast.h"
@@ -908,7 +908,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
                 AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected i64 type but got %s",
                             WatLineNumber(start, t.pos), EnumToString(TYPE_ENCODING_MAP, result.back().type, typebuf, 10));
               else if(result.back().i64 != value.immediates[0]._varsint64)
-                AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %lli but got %lli",
+                AppendError(env, errors, last, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected %" PRId64 " but got %" PRId64 "",
                             WatLineNumber(start, t.pos), value.immediates[0]._varsint64, result.back().i64);
               break;
             case OP_f32_const:
