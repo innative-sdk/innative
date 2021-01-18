@@ -46,7 +46,7 @@ if(MSVC)
   target_compile_options(innative-env-d PRIVATE /D "DEBUG" /Zi /Od /Ob0 /${RUNTIME_FLAG}d /Gd /Gm- /GS-)
 else()
   target_compile_options(innative-env PRIVATE -DNDEBUG -O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16)
-  target_compile_options(innative-env-d PRIVATE -DDEBUG -g)
+  target_compile_options(innative-env-d PRIVATE -DDEBUG -O3 -g3)
 endif()
 
 target_include_directories(innative-env PUBLIC ${CMAKE_SOURCE_DIR}/include)
