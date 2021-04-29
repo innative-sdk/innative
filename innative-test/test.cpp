@@ -136,7 +136,7 @@ int main(int argc, char* argv[])
 #ifdef IN_DEBUG
       env->optimize = ENV_OPTIMIZE_O0;
 #else
-      env->optimize = ENV_OPTIMIZE_O3;
+      env->optimize = ENV_OPTIMIZE_O3 | ENV_OPTIMIZE_NO_MERGING;
 #endif
       env->features = ENV_FEATURE_ALL;
       env->loghook = &TestHarness::Log;

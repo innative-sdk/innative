@@ -8,7 +8,7 @@
 #include "innative/schema.h"
 
 namespace innative {
-  IN_ERROR OptimizeModules(const Environment* env);
+  IN_ERROR OptimizeModules(const Environment* env, llvm::TargetMachine* target);
 }
 
 #endif

@@ -9,6 +9,7 @@
 #include "link.h"
 #include "innative/export.h"
 #include "jit.h"
+#include "polly/RegisterPasses.h"
 
 #define DIVIDER ":"
 
@@ -192,12 +193,12 @@ Func* Compiler::WrapFunction(Func* fn, llvm::StringRef name, llvm::StringRef can
   std::vector<llvmVal*> values;
   for(auto& arg : wrap->args())
     values.push_back(&arg);
-  auto val = builder.CreateCall(fn, values);
-  val->setCallingConv(fn->getCallingConv());
-  val->setAttributes(fn->getAttributes());
+  auto call = builder.CreateCall(fn, values);
+  call->setCallingConv(fn->getCallingConv());
+  call->setAttributes(fn->getAttributes());
 
   if(!wrap->getReturnType()->isVoidTy())
-    builder.CreateRet(val);
+    builder.CreateRet(call);
   else
     builder.CreateRetVoid();
 
@@ -236,9 +237,10 @@ Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, llvm::StringRef 
     // TODO: structs must be broken apart and repacked
   }
 
-  auto val = builder.CreateCall(fn, values);
-  val->setCallingConv(fn->getCallingConv());
-  val->setAttributes(fn->getAttributes());
+  auto call = builder.CreateCall(fn, values);
+  call->setTailCallKind(CallInst::TCK_NoTail);
+  call->setCallingConv(fn->getCallingConv());
+  call->setAttributes(fn->getAttributes());
 
   offset   = 0;
   auto ret = fn->getReturnType();
@@ -246,7 +248,7 @@ Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, llvm::StringRef 
   {
     for(unsigned int i = 0; i < ret->getStructNumElements(); ++i)
     {
-      builder.CreateStore(builder.CreateExtractValue(val, { i }),
+      builder.CreateStore(builder.CreateExtractValue(call, { i }),
                           builder.CreateBitCast(builder.CreateInBoundsGEP(results, { builder.getInt32(offset) }),
                                                 ret->getStructElementType(i)->getPointerTo()),
                           false);
@@ -254,7 +256,7 @@ Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, llvm::StringRef 
     }
   }
   else if(!ret->isVoidTy())
-    builder.CreateStore(val, builder.CreateBitCast(results, ret->getPointerTo()), false);
+    builder.CreateStore(call, builder.CreateBitCast(results, ret->getPointerTo()), false);
 
   builder.CreateRetVoid();
   builder.SetInsertPoint(prev);
@@ -1575,6 +1577,7 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   llvm::InitializeAllTargetMCs();
   llvm::InitializeAllAsmParsers();
   llvm::InitializeAllAsmPrinters();
+  polly::initializePollyPasses(*llvm::PassRegistry::getPassRegistry());
 
   std::string llvm_err;
   auto arch = llvm::TargetRegistry::lookupTarget(triple, llvm_err);
@@ -1804,7 +1807,7 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
 #endif
 
   if(env->optimize & ENV_OPTIMIZE_OMASK)
-    OptimizeModules(env);
+    OptimizeModules(env, machine);
 
   return LinkEnvironment(env, outfile);
 }

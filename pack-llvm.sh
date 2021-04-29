@@ -13,6 +13,7 @@ mkdir -p "$TARGET/include/lld"
 mkdir -p "$TARGET/lib"
 cp $SRC/lib/libLLVM*.a $TARGET/lib -f
 cp $SRC/lib/liblld*.a $TARGET/lib -f
+cp $SRC/lib/libPolly*.a $TARGET/lib -f
 
 OLD=`pwd`
 

@@ -78,11 +78,11 @@ target_include_directories(innative PUBLIC ${CMAKE_SOURCE_DIR}/include)
 set_target_properties(innative PROPERTIES OUTPUT_NAME_DEBUG "innative-d")
 
 # Append LLD libraries because LLD doesn't have CMake info and remove libraries we don't need
-list(APPEND LLVM_AVAILABLE_LIBS "lldCOFF" "lldCommon" "lldCore" "lldDriver" "lldELF" "lldMachO" "lldMinGW" "lldReaderWriter" "lldWasm" "lldYAML")
 list(REMOVE_ITEM LLVM_AVAILABLE_LIBS "LLVM-C" "FrontendOpenMP" "Remarks")
 if(WIN32)
   list(REMOVE_ITEM LLVM_AVAILABLE_LIBS "LTO")
 endif()
+list(APPEND LLVM_AVAILABLE_LIBS "lldCOFF" "lldCommon" "lldCore" "lldDriver" "lldELF" "lldMachO" "lldMinGW" "lldReaderWriter" "lldWasm" "lldYAML" "Polly" "PollyISL" "PollyPPCG")
 
 set_target_properties(innative
     PROPERTIES
