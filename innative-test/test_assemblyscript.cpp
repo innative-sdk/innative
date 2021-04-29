@@ -28,6 +28,36 @@ jmp_buf jump_location;
 
 void TestCrashHandler(int sig) { LONGJMP(jump_location, 1); }
 
+bool isolate_call(IN_Entrypoint start, IN_Entrypoint cleanup)
+{
+  bool caught = false;
+  signal(SIGILL, TestCrashHandler);
+
+  if(SETJMP(jump_location) != 0)
+    caught = true;
+  else
+  {
+#ifdef IN_COMPILER_MSC
+    // On windows, signals can sometimes get promoted to SEH exceptions across DLL bounderies.
+    __try
+    {
+#endif
+      (*start)();
+#ifdef IN_COMPILER_MSC
+    }
+    __except(GetExceptionCode() == EXCEPTION_ILLEGAL_INSTRUCTION) // Only catch an illegal instruction
+    {
+      caught = true;
+    }
+#endif
+  }
+  if(cleanup)
+    (*cleanup)();
+
+  signal(SIGILL, SIG_DFL);
+  return caught;
+}
+
 void TestHarness::test_assemblyscript()
 {
   auto fn = [this](const char* embed, size_t sz) {
@@ -66,38 +96,14 @@ void TestHarness::test_assemblyscript()
 
     (*_exports.DestroyEnvironment)(env);
 
-    bool caught = false;
     void* assembly = LoadAssembly(dll_path);
     IN_Entrypoint start = (*_exports.LoadFunction)(assembly, 0, IN_INIT_FUNCTION);
-    IN_Entrypoint exit  = (*_exports.LoadFunction)(assembly, 0, IN_EXIT_FUNCTION);
+    IN_Entrypoint cleanup = (*_exports.LoadFunction)(assembly, 0, IN_EXIT_FUNCTION);
     TEST(start);
     if(start)
     {
-      signal(SIGILL, TestCrashHandler);
-
-      if(SETJMP(jump_location) != 0)
-        caught = true;
-      else
-      {
-#ifdef IN_COMPILER_MSC
-        // On windows, signals can sometimes get promoted to SEH exceptions across DLL bounderies.
-        __try
-        {
-#endif
-          (*start)();
-#ifdef IN_COMPILER_MSC
-        }
-        __except(GetExceptionCode() == EXCEPTION_ILLEGAL_INSTRUCTION) // Only catch an illegal instruction
-        {
-          caught = true;
-        }
-#endif
-      }
-      if(exit)
-        (*exit)();
-
+      auto caught = isolate_call(start, cleanup);
       TEST(caught);
-      signal(SIGILL, SIG_DFL);
     }
 
     if(assembly)

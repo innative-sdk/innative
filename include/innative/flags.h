@@ -122,6 +122,9 @@ enum WASM_OPTIMIZE_FLAGS
   ENV_OPTIMIZE_STRICT = ENV_OPTIMIZE_O3, // Only performs optimizations that cannot invalidate the standard
   ENV_OPTIMIZE_ALL    = ENV_OPTIMIZE_O3 |
                      ENV_OPTIMIZE_FAST_MATH, // Performs all optimizations, but will never compromise the sandbox.
+
+  // Merging functions is enabled by default, but it can produce tail calls that (rarely) break exception handling on windows
+  ENV_OPTIMIZE_NO_MERGING = (1 << 11),
 };
 
 enum WASM_FEATURE_FLAGS

@@ -116,7 +116,7 @@ namespace innative {
 
     void WastCrashHandler(int sig) { LONGJMP(jump_location, 1); }
     void InvalidateCache(void*& cache, path cachepath);
-    int IsolateInitCall(Environment& env, void*& cache, const char* out);
+    int IsolateInitCall(Environment& env, void*& cache, const path& out);
     int CompileWast(Environment& env, const path& out, void*& cache, path& cachepath);
     int SetTempName(Environment& env, Module& m);
     int ParseWastModule(Environment& env, Queue<WatToken>& tokens, kh_indexname_t* mapping, Module& m, const path& file);
@@ -185,7 +185,7 @@ void wat::InvalidateCache(void*& cache, path cachepath)
 }
 
 // longjmp and exceptions don't always play well with destructors, so we isolate this call
-int wat::IsolateInitCall(Environment& env, void*& cache, const char* out)
+int wat::IsolateInitCall(Environment& env, void*& cache, const path& out)
 {
   if(SETJMP(jump_location) != 0)
     return ERR_RUNTIME_TRAP;
@@ -240,7 +240,7 @@ int wat::CompileWast(Environment& env, const path& out, void*& cache, path& cach
   signal(SIGILL, WastCrashHandler);
   signal(SIGFPE, WastCrashHandler);
 
-  err = IsolateInitCall(env, cache, out.u8string().c_str());
+  err = IsolateInitCall(env, cache, out);
 
   signal(SIGILL, SIG_DFL);
   signal(SIGFPE, SIG_DFL);
