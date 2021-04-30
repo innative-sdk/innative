@@ -74,6 +74,7 @@ endif()
 add_library(innative ${inNative_SOURCES} ${inNative_EX_SOURCES})
 target_include_directories(innative PRIVATE ${LLVM_INCLUDE_DIRS})
 #target_include_directories(innative PRIVATE ${LLD_INCLUDE_DIRS})
+target_include_directories(innative PRIVATE "${LLVM_BUILD_MAIN_SRC_DIR}/../polly/include")
 target_include_directories(innative PUBLIC ${CMAKE_SOURCE_DIR}/include)
 set_target_properties(innative PROPERTIES OUTPUT_NAME_DEBUG "innative-d")
 
@@ -82,7 +83,7 @@ list(REMOVE_ITEM LLVM_AVAILABLE_LIBS "LLVM-C" "FrontendOpenMP" "Remarks")
 if(WIN32)
   list(REMOVE_ITEM LLVM_AVAILABLE_LIBS "LTO")
 endif()
-list(APPEND LLVM_AVAILABLE_LIBS "lldCOFF" "lldCommon" "lldCore" "lldDriver" "lldELF" "lldMachO" "lldMinGW" "lldReaderWriter" "lldWasm" "lldYAML" "Polly" "PollyISL" "PollyPPCG")
+list(APPEND LLVM_AVAILABLE_LIBS "lldCOFF" "lldCommon" "lldCore" "lldDriver" "lldELF" "lldMachO" "lldMinGW" "lldReaderWriter" "lldWasm" "lldYAML" "PollyISL" "PollyPPCG")
 
 set_target_properties(innative
     PROPERTIES
@@ -113,7 +114,12 @@ else()
 endif()
 
 # Link against LLVM libraries
-target_link_libraries(innative PRIVATE -Wl,--whole-archive ${LLVM_AVAILABLE_LIBS} -Wl,--no-whole-archive)
+if(NOT WIN32)
+  list(APPEND LLVM_AVAILABLE_LIBS "-Wl,--no-whole-archive")
+  list(INSERT LLVM_AVAILABLE_LIBS 0 "-Wl,--whole-archive")
+endif()
+
+target_link_libraries(innative PRIVATE ${LLVM_AVAILABLE_LIBS})
 target_link_directories(innative PRIVATE ${LLVM_LIBRARY_DIR})
 
 if(WIN32)
