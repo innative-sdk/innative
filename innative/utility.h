@@ -223,6 +223,8 @@ namespace innative {
     IN_COMPILER_DLLEXPORT void LoadDLLErrorFree(char* p);
     int Install(const char* arg0, bool full);
     int Uninstall();
+    IN_COMPILER_DLLEXPORT int GetArchBits(uint8_t arch);
+    IN_COMPILER_DLLEXPORT bool IsLittleEndian(uint8_t abi, uint8_t arch);
     IN_COMPILER_DLLEXPORT int AddCImport(Environment& env, const char* id);
     const char* AllocString(Environment& env, const char* s, size_t n);
     IN_FORCEINLINE const char* AllocString(Environment& env, const char* s)
@@ -377,10 +379,10 @@ namespace innative {
       return !fclose(f);
     }
 
-    template<class T> inline static IN_ERROR ReallocArray(const Environment& env, T*& a, varuint32& n)
+    template<class T, class I> inline static IN_ERROR ReallocArray(const Environment& env, T*& a, I& n)
     {
       // We only allocate power of two chunks from our greedy allocator
-      varuint32 i = NextPow2(n++);
+      I i = NextPow2(n++);
       if(n <= 2 || n == i)
       {
         T* old = a;

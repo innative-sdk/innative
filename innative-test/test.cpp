@@ -146,7 +146,7 @@ int main(int argc, char* argv[])
         fflush(stdout);
       };
 
-      int err = (*exports.AddEmbedding)(env, 0, INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
+      int err = (*exports.AddEmbedding)(env, 0, (*exports.GetDefaultEmbedding)(TestHarness::Debug), 0, 0);
       if(err >= 0)
         err = (*exports.CompileScript)(reinterpret_cast<const uint8_t*>(testenv), sizeof(testenv) - 1, env, false,
                                        temppath.c_str());

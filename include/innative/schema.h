@@ -476,6 +476,31 @@ enum IN_LOG_LEVEL
   LOG_DEBUG,   // Only useful for library developers
 };
 
+enum IN_ABI
+{
+  IN_ABI_NONE    = 0,
+  IN_ABI_Windows = 63, // Not tracked by LLD
+  IN_ABI_POSIX   = 9,  // Sys V
+  IN_ABI_Linux   = 3,
+  IN_ABI_FreeBSD = 9,
+  IN_ABI_Solaris = 6,
+  IN_ABI_ARM     = 97,
+};
+
+enum IN_ARCH
+{
+  IN_ARCH_UNKNOWN = 0,
+  IN_ARCH_x86     = 3,
+  IN_ARCH_amd64   = 62,
+  IN_ARCH_IA64    = 255, // Not tracked by LLD
+  IN_ARCH_ARM64   = 183, // AARCH64
+  IN_ARCH_ARM     = 40,
+  IN_ARCH_MIPS    = 8,
+  IN_ARCH_PPC64   = 21,
+  IN_ARCH_PPC     = 20,
+  IN_ARCH_RISCV   = 243,
+};
+
 KHASH_DECLARE(modulepair, kh_cstr_t, FunctionType);
 
 struct IN_WASM_ALLOCATOR;
@@ -483,15 +508,20 @@ struct IN_WASM_ALLOCATOR;
 // Represents a collection of webassembly modules and configuration options that will be compiled into a single binary
 typedef struct IN_WASM_ENVIRONMENT
 {
-  size_t n_modules;        // number of completely loaded modules (for multithreading)
-  size_t size;             // Size of loaded or loading modules
-  size_t capacity;         // Capacity of the modules array
-  Module* modules;         // Use AddModule() to manage this list
-  Embedding* embeddings;   // Use AddEmbedding to manage this list
-  ValidationError* errors; // A linked list of non-fatal validation errors that prevent proper execution.
-  uint64_t flags;          // WASM_ENVIRONMENT_FLAGS
-  uint64_t features;       // WASM_FEATURE_FLAGS
-  uint64_t optimize;       // WASM_OPTIMIZE_FLAGS
+  size_t n_modules;          // number of completely loaded modules (for multithreading)
+  size_t size;               // Size of loaded or loading modules
+  size_t capacity;           // Capacity of the modules array
+  Module* modules;           // Use AddModule() to manage this list
+  Embedding* embeddings;     // Use AddEmbedding to manage this list
+  ValidationError* errors;   // A linked list of non-fatal validation errors that prevent proper execution.
+  uint64_t flags;            // WASM_ENVIRONMENT_FLAGS
+  uint64_t features;         // WASM_FEATURE_FLAGS
+  uint64_t optimize;         // WASM_OPTIMIZE_FLAGS
+  uint8_t arch;              // IN_ARCH
+  uint8_t abi;               // IN_ABI
+  const char** cpu_features; // Use AddCPUFeature() to manage this list.
+  int n_features; // If this is set to -1, cpu_features will be automatically filled in with the current CPU features.
+
   unsigned int maxthreads; // Max number of threads for any multithreaded action. If 0, there is no limit.
   const char* rootpath;    // Internal buffer for storing the root directory of the EXE to help with directory searches
   const char* libpath;     // Path to look for default environment libraries
@@ -499,11 +529,13 @@ typedef struct IN_WASM_ENVIRONMENT
   const char* linker;  // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
   const char* system;  // prefix for the "system" module, which simply attempts to link the function name as a C function.
                        // Defaults to a blank string.
-  struct IN_WASM_ALLOCATOR* alloc;                                      // Stores a pointer to the internal allocator
-  int loglevel;                                                         // IN_LOG_LEVEL
+  const char* cpu_name; // Name of the CPU - if NULL, uses the host CPU name. Use "generic" when compiling portable binaries.
+
+  struct IN_WASM_ALLOCATOR* alloc;                                            // Stores a pointer to the internal allocator
+  int loglevel;                                                               // IN_LOG_LEVEL
   int (*loghook)(const struct IN_WASM_ENVIRONMENT*, const char* format, ...); // Output stream for log messages
   void (*wasthook)(const struct IN_WASM_ENVIRONMENT*, void*);                 // Optional hook for WAST debugging cases
-  const char** exports;                                                 // Use AddCustomExport() to manage this list
+  const char** exports;                                                       // Use AddCustomExport() to manage this list
   varuint32 n_exports;
   void* user;
 

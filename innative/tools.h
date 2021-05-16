@@ -19,6 +19,7 @@ namespace innative {
   enum IN_ERROR AddWhitelist(Environment* env, const char* module_name, const char* export_name);
   enum IN_ERROR AddEmbedding(Environment* env, int tag, const void* data, size_t size, const char* name_override);
   enum IN_ERROR AddCustomExport(Environment* env, const char* symbol);
+  enum IN_ERROR AddCPUFeature(Environment* env, const char* feature);
   enum IN_ERROR FinalizeEnvironment(Environment* env);
   enum IN_ERROR Validate(Environment* env);
   enum IN_ERROR Compile(Environment* env, const char* file);
@@ -70,6 +71,8 @@ namespace innative {
   IN_Entrypoint LoadTableIndexLambda(void* p, void* (*load)(void*, const char*), uint32_t module_index, uint32_t table_index, varuint32 function_index);
   INGlobal* LoadGlobalIndexLambda(void* p, void* (*load)(void*, const char*), uint32_t module_index, uint32_t global_index);
   INGlobal* LoadMemoryIndexLambda(void* p, void* (*load)(void*, const char*), uint32_t module_index, uint32_t memory_index);
+  const char* GetDefaultEmbedding(bool debug);
+  size_t GetEmbeddingPath(uint8_t abi, uint8_t arch, bool debug, const char* name, char* out, size_t outsize);
   void DumpJITState(Environment* env);
   int DefaultLog(const Environment* env, const char* f, ...);
 }

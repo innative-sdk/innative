@@ -49,7 +49,7 @@ namespace innative::atomic_details {
     default: return uint8_t(0x02'01'00'01'00'03'02 >> (GetOpType(op) * 8));
     }
   }
-  
+
   // Whether the atomic instruction is part of the range of periodic instruction values
   constexpr bool IsLSRMWOp(uint8_t op) { return op >= OP_START && op < OP_END; }
 

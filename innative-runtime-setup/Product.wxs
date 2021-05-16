@@ -10,19 +10,19 @@
   <?error Unknown value for Platform variable ?>
   <?endif ?>
 
-  <?define Version="0.1.10" ?>
+  <?define Version="0.1.11" ?>
   <Product 
     Id="74E8CCF9-5FC8-42DF-A446-544070822BA0"
     Name="inNative Runtime v$(var.Version)" 
     Language="1033" 
     Version="$(var.Version).0"
-    Manufacturer="Black Sphere Studios" 
+    Manufacturer="Fundament Software" 
     UpgradeCode="aac979e9-ba48-44c0-aea8-40fef1176d57">
     
     <Package 
       Description='inNative Runtime Installer $(var.Platform)'
       Comments="Performs a full installation of the inNative Runtime"
-      Manufacturer="Black Sphere Studios" 
+      Manufacturer="Fundament Software" 
       InstallerVersion="300"
       Compressed="yes"
       InstallScope="perMachine"
@@ -37,7 +37,9 @@
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="$(var.ProgramFilesFolder)">
         <Directory Id="INNATIVEFOLDER" Name="inNative">
-          <Directory Id="INSTALLFOLDER" Name="Runtime v$(var.Version)"/>
+          <Directory Id="INSTALLFOLDER" Name="Runtime v$(var.Version)">
+            <Directory Id="BINFOLDER" Name="bin-windows-$(var.Platform)" />
+          </Directory>
         </Directory>
       </Directory>
     </Directory>
@@ -45,13 +47,15 @@
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
     <UIRef Id="WixUI_InstallDir" />
 
-    <ComponentGroup Id="inNativeBinGroup" Directory="INSTALLFOLDER">
+    <ComponentGroup Id="inNativeBinGroup" Directory="BINFOLDER">
       <Component Id="inNativeBin" Guid="48f2f751-ecf6-4f3e-8cb3-848df261404e">
         <File Id="innative.cmd.exe" Name="innative-cmd.exe" Source="$(var.innative.TargetDir)innative-cmd.exe" KeyPath="yes" Checksum="yes"/>
         <File Id="innative.cmd.d.exe" Name="innative-cmd-d.exe" Source="$(var.innative.TargetDir)innative-cmd-d.exe" Checksum="yes"/>
         <File Id="innative.d.dll" Name="innative-d.dll" Source="$(var.innative.TargetDir)innative-d.dll"/>
         <File Id="innative.env.d.lib" Name="innative-env-d.lib" Source="$(var.innative.TargetDir)innative-env-d.lib"/>
         <File Id="innative.env.lib" Name="innative-env.lib" Source="$(var.innative.TargetDir)innative-env.lib"/>
+        <File Id="innative.assemblyscript.d.lib" Name="innative-assemblyscript-d.lib" Source="$(var.innative.TargetDir)innative-assemblyscript-d.lib"/>
+        <File Id="innative.assemblyscript.lib" Name="innative-assemblyscript.lib" Source="$(var.innative.TargetDir)innative-assemblyscript.lib"/>
         <File Id="innative.s.d.lib" Name="innative-s-d.lib" Source="$(var.innative.TargetDir)innative-s-d.lib"/>
         <File Id="innative.s.lib" Name="innative-s.lib" Source="$(var.innative.TargetDir)innative-s.lib"/>
         <File Id="innative.dll" Name="innative.dll" Source="$(var.innative.TargetDir)innative.dll"/>

@@ -191,11 +191,11 @@ limitations under the License.
   defined(IN_CPU_IA_64) // Windows, x86, x86_64 and itanium all only run in little-endian (except on HP-UX but we don't
                         // support that)
   #define IN_ENDIAN_LITTLE
-#elif defined(IN_CPU_ARM)
+#elif defined(IN_CPU_ARM) || defined(IN_CPU_ARM64)
   #ifdef IN_PLATFORM_LINUX
     #define IN_ENDIAN_LITTLE
   #endif
-#elif defined(IN_CPU_POWERPC)
+#elif defined(IN_CPU_POWERPC) || defined(IN_CPU_POWERPC64)
   #ifdef IN_PLATFORM_SOLARIS
     #define IN_ENDIAN_LITTLE
   #elif defined(IN_PLATFORM_APPLE) || defined(IN_PLATFORM_BSD) || defined(IN_PLATFORM_LINUX)

@@ -98,7 +98,7 @@ void TestHarness::test_embedding()
 #endif
   auto libstr = lib.u8string();
 
-  int err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
+  int err = (*_exports.AddEmbedding)(env, 0, (void*)(*_exports.GetDefaultEmbedding)(TestHarness::Debug), 0, 0);
   TEST(!err);
 
   // When we compiled "embedded", we got a .lib file in addition to the .dll, which we add to the environment.

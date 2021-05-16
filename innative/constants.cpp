@@ -208,7 +208,10 @@ namespace innative {
       { ERR_RUNTIME_INIT_ERROR, "ERR_RUNTIME_INIT_ERROR" },
       { ERR_RUNTIME_TRAP, "ERR_RUNTIME_TRAP" },
       { ERR_RUNTIME_ASSERT_FAILURE, "ERR_RUNTIME_ASSERT_FAILURE" },
-      { ERR_RUNTIME_JIT_ERROR, "ERR_RUNTIME_JIT_ERROR", },
+      {
+        ERR_RUNTIME_JIT_ERROR,
+        "ERR_RUNTIME_JIT_ERROR",
+      },
       { ERR_RUNTIME_INVALID_ASSEMBLY, "ERR_RUNTIME_INVALID_ASSEMBLY" },
     });
 
@@ -308,6 +311,29 @@ namespace innative {
       { ERR_INVALID_ELEMENT_SEGMENT, "invalid elem" },
       { ERR_FATAL_BAD_ELEMENT_TYPE, "malformed element type" },
       { ERR_INVALID_ELEMENT_INDEX, "unknown elem segment" },
+    });
+
+    const kh_mapenum_s* ARCH_MAP = GenMapEnum({
+      { IN_ARCH_UNKNOWN, "unknown" },
+      { IN_ARCH_x86, "i386" },
+      { IN_ARCH_amd64, "amd64" },
+      { IN_ARCH_IA64, "ia64" },
+      { IN_ARCH_ARM64, "aarch64" },
+      { IN_ARCH_ARM, "arm" },
+      { IN_ARCH_MIPS, "mips" },
+      { IN_ARCH_PPC64, "ppc64" },
+      { IN_ARCH_PPC, "ppc32" },
+      { IN_ARCH_RISCV, "riscv32" },
+    });
+
+    const kh_mapenum_s* ABI_MAP = GenMapEnum({
+      { IN_ABI_NONE, "" },
+      { IN_ABI_Windows, "windows" },
+      { IN_ABI_POSIX, "posix" },
+      { IN_ABI_Linux, "linux" },
+      { IN_ABI_FreeBSD, "freebsd" },
+      { IN_ABI_Solaris, "solaris" },
+      { IN_ABI_ARM, "arm" },
     });
 
     const char* EnumToString(const kh_mapenum_s* h, int i, char* buf, size_t n)

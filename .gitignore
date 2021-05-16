@@ -16,8 +16,7 @@
 *.pdb
 *.zip
 *.tar.gz
-/bin/
-/bin-Win32/
+/bin*/
 /innative/x64/
 /innative-env/x64/
 /innative-assemblyscript/x64/

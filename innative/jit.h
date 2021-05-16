@@ -42,7 +42,8 @@ namespace innative {
     inline llvm::Expected<std::unique_ptr<llvm::TargetMachine>> GetTargetMachine() { return jtmb.createTargetMachine(); }
     inline llvm::orc::ExecutionSession& GetSession() { return ES; }
 
-    template<typename T> llvm::Error AddGenerator(llvm::Expected<std::unique_ptr<T>> gen) {
+    template<typename T> llvm::Error AddGenerator(llvm::Expected<std::unique_ptr<T>> gen)
+    {
       if(!gen)
         return gen.takeError();
 
@@ -56,7 +57,7 @@ namespace innative {
     llvm::orc::RTDyldObjectLinkingLayer OL;
     llvm::orc::IRCompileLayer CL;
     llvm::orc::IRTransformLayer TL;
-    
+
     llvm::DataLayout DL;
     llvm::orc::MangleAndInterner Mangler;
     llvm::orc::ThreadSafeContext Ctx;

@@ -26,14 +26,15 @@ IN_ERROR innative::OutputObjectFile(Compiler& context, const path& out)
   pass.add(createTargetTransformInfoWrapperPass(context.machine->getTargetIRAnalysis()));
 
   if(context.machine->addPassesToEmitFile(pass, dest, nullptr, FileType))
-    return LogErrorString(context.env, "%s: %s can't emit an object file.", ERR_FATAL_FORMAT_ERROR, context.machine->getTargetTriple().str().c_str());
+    return LogErrorString(context.env, "%s: %s can't emit an object file.", ERR_FATAL_FORMAT_ERROR,
+                          context.machine->getTargetTriple().str().c_str());
 
   pass.run(*context.mod);
   dest.flush();
   return ERR_SUCCESS;
 }
 
-path innative::GetLinkerObjectPath(const Environment& env, Module& m, const path& outfile)
+path innative::GetLinkerObjectPath(const Environment& env, Module& m, const path& outfile, LLD_FORMAT format)
 {
   if(m.cache != nullptr && !m.cache->objfile.empty())
     return m.cache->objfile;
@@ -50,21 +51,21 @@ path innative::GetLinkerObjectPath(const Environment& env, Module& m, const path
   std::replace(file.begin(), file.end(), '.', '_');
 
   objpath /= file;
-#ifdef IN_PLATFORM_WIN32
-  objpath += ".obj";
-#else
-  objpath += ".o";
-#endif
+  if(format == LLD_FORMAT::COFF)
+    objpath += ".obj";
+  else
+    objpath += ".o";
+
   return objpath;
 }
 
-IN_ERROR innative::GenerateLinkerObjects(const Environment& env, std::vector<std::string>& cache)
+IN_ERROR innative::GenerateLinkerObjects(const Environment& env, std::vector<std::string>& cache, LLD_FORMAT format)
 {
   for(size_t i = 0; i < env.n_modules; ++i)
   {
     assert(env.modules[i].cache != 0);
     assert(env.modules[i].name.get() != nullptr);
-    path objfile = GetLinkerObjectPath(env, env.modules[i], path());
+    path objfile = GetLinkerObjectPath(env, env.modules[i], path(), format);
     cache.emplace_back(objfile.u8string());
 
     FILE* f;
@@ -78,8 +79,7 @@ IN_ERROR innative::GenerateLinkerObjects(const Environment& env, std::vector<std
         return err;
     }
 
-#ifdef IN_PLATFORM_POSIX
-    if(i == 0)
+    if(format == LLD_FORMAT::ELF && i == 0)
     { // https://stackoverflow.com/questions/9759880/automatically-executed-functions-when-loading-shared-libraries
       if(!(env.flags &
            ENV_LIBRARY)) // If this isn't a shared library, we must specify an entry point instead of an init function
@@ -90,7 +90,6 @@ IN_ERROR innative::GenerateLinkerObjects(const Environment& env, std::vector<std
         cache.emplace_back("-fini=" IN_EXIT_FUNCTION);
       }
     }
-#endif
   }
 
   return ERR_SUCCESS;
@@ -151,7 +150,7 @@ int innative::CallLinker(const Environment* env, std::vector<const char*>& linka
     llvm::raw_string_ostream sso(outbuf);
     llvm::raw_ostream& llvm_stream = (env->loglevel >= LOG_NOTICE) ? static_cast<llvm::raw_ostream&>(fdo) :
                                                                      static_cast<llvm::raw_ostream&>(sso);
-    bool result = false;
+    bool result                    = false;
     switch(format)
     {
     case LLD_FORMAT::COFF: result = lld::coff::link(linkargs, false, llvm_stream, llvm_stream); break;
@@ -173,8 +172,10 @@ int innative::CallLinker(const Environment* env, std::vector<const char*>& linka
 void innative::DeleteCache(const Environment& env, Module& m)
 {
   // Certain error conditions can result in us clearing the cache of an invalid module.
-  if(m.name.size() > 0)                          // Prevent an error from happening if the name is invalid.
-    remove(GetLinkerObjectPath(env, m, path())); // Always remove the file if it exists
+  if(m.name.size() > 0) // Prevent an error from happening if the name is invalid.
+    remove(GetLinkerObjectPath(env, m, path(),
+                               env.abi == IN_ABI_Windows ? LLD_FORMAT::COFF :
+                                                           LLD_FORMAT::ELF)); // Always remove the file if it exists
 
   if(m.cache != nullptr)
   {
@@ -240,20 +241,18 @@ std::vector<std::string> innative::GetSymbols(const char* file, size_t size, con
       &symbols, sso, sso);
     break;
   case LLD_FORMAT::ELF:
-    switch(CURRENT_ARCH_BITS | (CURRENT_LITTLE_ENDIAN << 15))
+    switch(GetArchBits(env->arch) | (IsLittleEndian(env->abi, env->arch) << 15))
     {
     case 32 | (1 << 15): kind = 1; break;
     case 32 | (0 << 15): kind = 2; break;
     case 64 | (1 << 15): kind = 3; break;
     case 64 | (0 << 15): kind = 4; break;
-    default: (*env->loghook)(env, "ERROR: unknown arch bits or endian!\n"); return symbols;
+    default: (*env->loghook)(env, "ERROR: unknown arch bits or endianness!\n"); return symbols;
     }
 
     lld::elf::iterateSymbols(
       file, size, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); },
-      &symbols,
-      std::make_tuple(kind, (uint16_t)CURRENT_ARCH, (CURRENT_ABI == ABI::FreeBSD) ? (uint8_t)CURRENT_ABI : (uint8_t)0), sso,
-      sso);
+      &symbols, std::make_tuple(kind, (uint16_t)env->arch, (env->abi == IN_ABI_FreeBSD) ? env->abi : (uint8_t)0), sso, sso);
     break;
   }
 
@@ -268,7 +267,7 @@ void innative::AppendIntrinsics(Environment& env)
   if(env.cimports)
     for(auto intrinsic : Compiler::intrinsics)
     {
-      auto mangled = ABIMangle(intrinsic.name, CURRENT_ABI, 0, 0);
+      auto mangled = ABIMangle(intrinsic.name, env.abi, env.arch, 0, 0);
       kh_put_cimport(env.cimports, ByteArray::Identifier(AllocString(env, mangled.c_str()), mangled.size()), &r);
     }
 }
@@ -301,9 +300,10 @@ int innative::GetParameterBytes(const IN_WASM_MODULE& m, const Import& imp)
   return total;
 }
 
-size_t innative::ABIMangleBuffer(const char* src, char* buffer, size_t count, ABI abi, int convention, int bytes)
+size_t innative::ABIMangleBuffer(const char* src, char* buffer, size_t count, uint8_t abi, uint8_t arch, int convention,
+                                 int bytes)
 {
-  if(abi == ABI::Win32)
+  if(abi == IN_ABI_Windows && arch == IN_ARCH_x86)
   {
     switch(convention)
     {
@@ -344,90 +344,99 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
   }
 
   {
-#ifdef IN_PLATFORM_WIN32
-    LLD_FORMAT format = LLD_FORMAT::COFF;
+    std::vector<const char*> linkargs;
+    std::vector<std::string> cache;
+    LLD_FORMAT format = LLD_FORMAT::ELF;
 
-    // /PDB:"D:\code\innative\bin\innative-d.pdb" /IMPLIB:"D:\code\innative\bin\innative-d.lib"
-    std::vector<const char*> linkargs = {
-      "/ERRORREPORT:QUEUE",
-      "/INCREMENTAL:NO",
-      "/NOLOGO",
-      "/NODEFAULTLIB",
-      /*"/MANIFESTUAC:level=asInvoker", "/MANIFEST:EMBED",*/ "/SUBSYSTEM:CONSOLE",
-      "/VERBOSE",
-      "/OPT:REF",
-      "/DYNAMICBASE",
-      "/NXCOMPAT",
-  #ifdef IN_CPU_x86_64
-      "/MACHINE:X64",
-  #elif defined(IN_CPU_x86)
-      "/MACHINE:X86",
-      "/LARGEADDRESSAWARE",
-      "/SAFESEH:NO",
-  #elif defined(IN_CPU_ARM) || defined(IN_CPU_ARM64)
-      "/MACHINE:ARM",
-  #endif
-    };
-
-    if(env->flags & ENV_LIBRARY)
+    if(env->abi == IN_ABI_Windows)
     {
-      linkargs.push_back("/DLL");
-      linkargs.push_back("/ENTRY:" IN_INIT_FUNCTION "-stub");
+      // Note: If we ever allow compiling ELF on windows, all these arguments will have to be changed for the ELF linker
+      format = LLD_FORMAT::COFF;
+
+      // /PDB:"D:\code\innative\bin\innative-d.pdb" /IMPLIB:"D:\code\innative\bin\innative-d.lib"
+      linkargs = {
+        "/ERRORREPORT:QUEUE",
+        "/INCREMENTAL:NO",
+        "/NOLOGO",
+        "/NODEFAULTLIB",
+        /*"/MANIFESTUAC:level=asInvoker", "/MANIFEST:EMBED",*/ "/SUBSYSTEM:CONSOLE",
+        "/VERBOSE",
+        "/OPT:REF",
+        "/DYNAMICBASE",
+        "/NXCOMPAT",
+      };
+
+      switch(env->arch)
+      {
+      case IN_ARCH_x86:
+        linkargs.push_back("/MACHINE:X86");
+        linkargs.push_back("/LARGEADDRESSAWARE");
+        linkargs.push_back("/SAFESEH:NO");
+        break;
+      case IN_ARCH_amd64: linkargs.push_back("/MACHINE:X64"); break;
+      case IN_ARCH_ARM:
+      case IN_ARCH_ARM64: linkargs.push_back("/MACHINE:ARM"); break;
+      }
+
+      if(env->flags & ENV_LIBRARY)
+      {
+        linkargs.push_back("/DLL");
+        linkargs.push_back("/ENTRY:" IN_INIT_FUNCTION "-stub");
+      }
+      else
+        linkargs.push_back("/ENTRY:" IN_INIT_FUNCTION);
+
+      if(env->flags & ENV_DEBUG)
+      {
+        linkargs.push_back("/DEBUG");
+        linkargs.push_back("/OPT:NOICF");
+      }
+      else
+        linkargs.push_back("/OPT:ICF");
+
+      cache = { std::string("/OUT:") + file.u8string(), "/LIBPATH:" + libpath.u8string(),
+                "/LIBPATH:" + workdir.u8string() };
+
+      if(UseNatVis)
+      {
+        auto embed = file.filename();
+        embed      = objpath / embed.replace_extension("natvis");
+        cache.emplace_back("/NATVIS:" + embed.u8string());
+        FILE* f;
+        FOPEN(f, embed.c_str(), "wb");
+        if(!f)
+          return LogErrorString(*env, "%s: Could not open file: %s", ERR_FATAL_FILE_ERROR, embed.c_str());
+
+        const char prologue[] =
+          "<?xml version=\"1.0\" encoding=\"utf-8\"?><AutoVisualizer xmlns=\"http://schemas.microsoft.com/vstudio/debugger/natvis/2010\">";
+        const char epilogue[] = "</AutoVisualizer>";
+
+        fwrite(prologue, 1, sizeof(prologue) - 1, f);
+
+        for(varuint32 i = 0; i < env->n_modules; ++i)
+          fwrite(env->modules[i].cache->natvis.data(), 1, env->modules[i].cache->natvis.size(), f);
+
+        fwrite(epilogue, 1, sizeof(epilogue) - 1, f);
+        fclose(f);
+      }
+
+      for(varuint32 i = 0; i < env->n_exports; ++i)
+        cache.push_back(std::string("/EXPORT:") + env->exports[i]);
     }
     else
-      linkargs.push_back("/ENTRY:" IN_INIT_FUNCTION);
-
-    if(env->flags & ENV_DEBUG)
     {
-      linkargs.push_back("/DEBUG");
-      linkargs.push_back("/OPT:NOICF");
-    }
-    else
-      linkargs.push_back("/OPT:ICF");
+      LLD_FORMAT format                 = LLD_FORMAT::ELF;
+      std::vector<const char*> linkargs = {};
 
-    std::vector<std::string> cache = { std::string("/OUT:") + file.u8string(), "/LIBPATH:" + libpath.u8string(),
-                                       "/LIBPATH:" + workdir.u8string() };
+      if(env->flags & ENV_LIBRARY)
+        linkargs.push_back("-shared");
+      if(!(env->flags & ENV_DEBUG))
+        linkargs.push_back("--strip-debug");
 
-    if(UseNatVis)
-    {
-      auto embed = file.filename();
-      embed      = objpath / embed.replace_extension("natvis");
-      cache.emplace_back("/NATVIS:" + embed.u8string());
-      FILE* f;
-      FOPEN(f, embed.c_str(), "wb");
-      if(!f)
-        return LogErrorString(*env, "%s: Could not open file: %s", ERR_FATAL_FILE_ERROR, embed.c_str());
-
-      const char prologue[] =
-        "<?xml version=\"1.0\" encoding=\"utf-8\"?><AutoVisualizer xmlns=\"http://schemas.microsoft.com/vstudio/debugger/natvis/2010\">";
-      const char epilogue[] = "</AutoVisualizer>";
-
-      fwrite(prologue, 1, sizeof(prologue) - 1, f);
-
-      for(varuint32 i = 0; i < env->n_modules; ++i)
-        fwrite(env->modules[i].cache->natvis.data(), 1, env->modules[i].cache->natvis.size(), f);
-
-      fwrite(epilogue, 1, sizeof(epilogue) - 1, f);
-      fclose(f);
+      std::vector<std::string> cache = { std::string("--output=") + file.u8string(), "-L" + libpath.u8string(),
+                                         "-L" + workdir.u8string() };
     }
 
-    for(varuint32 i = 0; i < env->n_exports; ++i)
-      cache.push_back(std::string("/EXPORT:") + env->exports[i]);
-
-#elif defined(IN_PLATFORM_POSIX)
-    LLD_FORMAT format                 = LLD_FORMAT::ELF;
-    std::vector<const char*> linkargs = {};
-
-    if(env->flags & ENV_LIBRARY)
-      linkargs.push_back("-shared");
-    if(!(env->flags & ENV_DEBUG))
-      linkargs.push_back("--strip-debug");
-
-    std::vector<std::string> cache = { std::string("--output=") + file.u8string(), "-L" + libpath.u8string(),
-                                       "-L" + workdir.u8string() };
-#else
-  #error unknown platform
-#endif
     std::vector<path> garbage;
 
     // Defer lambda deleting temporary files
@@ -437,15 +446,14 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
     });
 
     // Generate object code
-    IN_ERROR err = GenerateLinkerObjects(*env, cache);
+    IN_ERROR err = GenerateLinkerObjects(*env, cache, format);
     if(err < 0)
       return err;
 
     // Write all in-memory environments to cache files
     for(Embedding* cur = env->embeddings; cur != nullptr; cur = cur->next)
     {
-#ifndef IN_PLATFORM_WIN32
-      if(cur->tag == 2)
+      if(env->abi != IN_ABI_Windows && cur->tag == 2)
       {
         if(cur->size > 0) // not supported
           return LogErrorString(*env, "%s: in-memory shared libraries are not supported.", ERR_FATAL_LINK_ERROR);
@@ -468,7 +476,6 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
         cache.back().insert(0, "-l:");
       }
       else
-#endif
       {
         if(cur->size > 0) // If the size is greater than 0, this is an in-memory embedding
         {
@@ -479,7 +486,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
           } u        = { cur };
           auto embed = objpath / std::to_string(u.z);
           embed += IN_ENV_EXTENSION;
-          embed += IN_STATIC_EXTENSION;
+          embed += (env->abi == IN_ABI_Windows) ? ".lib" : ".a";
           cache.emplace_back(embed.u8string());
           FILE* f;
           FOPEN(f, embed.c_str(), "wb");

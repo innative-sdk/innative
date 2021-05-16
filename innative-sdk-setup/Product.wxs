@@ -3,26 +3,29 @@
   <?if $(var.Platform)="x86" ?>
   <?define ProgramFilesFolder="ProgramFilesFolder" ?>
   <?define Win64="no" ?>
+  <?define OtherPlatform="x64" ?>
   <?elseif $(var.Platform)="x64" ?>
   <?define ProgramFilesFolder="ProgramFiles64Folder" ?>
   <?define Win64="yes" ?>
+  <?define OtherPlatform="x86" ?>
   <?else ?>
   <?error Unknown value for Platform variable ?>
   <?endif ?>
-
-  <?define Version="0.1.10" ?>
+  <?define OtherTargetDir="$(var.SolutionDir)bin-windows-$(var.OtherPlatform)/" ?>
+  
+  <?define Version="0.1.11" ?>
   <Product 
     Id="85E25DCB-0ADE-496F-81E0-265D29C1AC3B"
     Name="inNative SDK v$(var.Version)" 
     Language="1033" 
     Version="$(var.Version).0"
-    Manufacturer="Black Sphere Studios" 
+    Manufacturer="Fundament Software" 
     UpgradeCode="3b1fd190-d2a9-4ca4-8180-88d3d2a56f88">
     
     <Package 
       Description='inNative SDK Installer $(var.Platform)'
       Comments="Performs a full installation of the inNative SDK"
-      Manufacturer="Black Sphere Studios" 
+      Manufacturer="Fundament Software" 
       InstallerVersion="300"
       Compressed="yes"
       InstallScope="perMachine"
@@ -38,7 +41,8 @@
       <Directory Id="$(var.ProgramFilesFolder)">
         <Directory Id="INNATIVEFOLDER" Name="inNative">
           <Directory Id="INSTALLFOLDER" Name="SDK v$(var.Version)">
-            <Directory Id="BINFOLDER" Name="bin" />
+            <Directory Id="BINFOLDER" Name="bin-windows-$(var.Platform)" />
+            <Directory Id="OTHERBINFOLDER" Name="bin-windows-$(var.OtherPlatform)" />
             <Directory Id="PARENTINCLUDEFOLDER" Name="include">
               <Directory Id="INCLUDEFOLDER" Name="innative" />
             </Directory>
@@ -71,6 +75,10 @@
         <File Id="innative.env.d.pdb" Name="innative-env-d.pdb" Source="$(var.innative.TargetDir)innative-env-d.pdb"/>
         <File Id="innative.env.lib" Name="innative-env.lib" Source="$(var.innative.TargetDir)innative-env.lib"/>
         <File Id="innative.env.pdb" Name="innative-env.pdb" Source="$(var.innative.TargetDir)innative-env.pdb"/>
+        <File Id="innative.assemblyscript.d.lib" Name="innative-assemblyscript-d.lib" Source="$(var.innative.TargetDir)innative-assemblyscript-d.lib"/>
+        <File Id="innative.assemblyscript.d.pdb" Name="innative-assemblyscript-d.pdb" Source="$(var.innative.TargetDir)innative-assemblyscript-d.pdb"/>
+        <File Id="innative.assemblyscript.lib" Name="innative-assemblyscript.lib" Source="$(var.innative.TargetDir)innative-assemblyscript.lib"/>
+        <File Id="innative.assemblyscript.pdb" Name="innative-assemblyscript.pdb" Source="$(var.innative.TargetDir)innative-assemblyscript.pdb"/>
         <File Id="innative.test.embedding.lib" Name="innative-test-embedding.lib" Source="$(var.innative.TargetDir)innative-test-embedding.lib"/>
         <File Id="innative.test.embedding.d.lib" Name="innative-test-embedding-d.lib" Source="$(var.innative.TargetDir)innative-test-embedding-d.lib"/>
         <File Id="innative.s.d.lib" Name="innative-s-d.lib" Source="$(var.innative.TargetDir)innative-s-d.lib"/>
@@ -87,6 +95,15 @@
         <File Id="innative.pdb" Name="innative.pdb" Source="$(var.innative.TargetDir)innative.pdb"/>
       </Component>
     </ComponentGroup>
+
+    <ComponentGroup Id="inNativeOtherBinGroup" Directory="OTHERBINFOLDER">
+      <Component Id="inNativeOtherBin" Guid="22acf157-8900-4347-acbe-2ba06909a0d6">
+        <File Id="other.innative.env.d.lib" Name="innative-env-d.lib" Source="$(var.OtherTargetDir)innative-env-d.lib"/>
+        <File Id="other.innative.env.lib" Name="innative-env.lib" Source="$(var.OtherTargetDir)innative-env.lib"/>
+        <File Id="other.innative.assemblyscript.d.lib" Name="innative-assemblyscript-d.lib" Source="$(var.OtherTargetDir)innative-assemblyscript-d.lib"/>
+        <File Id="other.innative.assemblyscript.lib" Name="innative-assemblyscript.lib" Source="$(var.OtherTargetDir)innative-assemblyscript.lib"/>
+      </Component>
+    </ComponentGroup>
     
 		<Feature Id="inNativeSDK" Title="inNative SDK" Level="1">
 			<ComponentGroupRef Id="inNativeBinGroup" />
@@ -94,6 +111,10 @@
       <ComponentGroupRef Id="inNativeScriptGroup" />
       <ComponentGroupRef Id="inNativeCoreGroup" />
 		</Feature>
+    
+    <Feature Id="inNativeSDKCross" Title="$(var.OtherPlatform) Cross-Compilation Support" Level="1">
+      <ComponentGroupRef Id="inNativeOtherBinGroup" />
+    </Feature>
     
     <CustomAction Id="Installer" Execute="deferred" Impersonate="yes" Return="check" FileKey="innative.cmd.exe" ExeCommand="-i" SuppressModularization="yes" />
     <CustomAction Id="Uninstaller" Execute="deferred" Impersonate="yes" Return="check" FileKey="innative.cmd.exe" ExeCommand="-u" SuppressModularization="yes" />

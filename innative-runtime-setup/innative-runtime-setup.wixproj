@@ -21,12 +21,12 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
     <OutputName>innative-windows-runtime-x64-d</OutputName>
-    <OutputPath>$(SolutionDir)bin\</OutputPath>
+    <OutputPath>$(SolutionDir)bin-windows-x64\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
     <OutputName>innative-windows-runtime-x64</OutputName>
-    <OutputPath>$(SolutionDir)bin\</OutputPath>
+    <OutputPath>$(SolutionDir)bin-windows-x64\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
   <ItemGroup>

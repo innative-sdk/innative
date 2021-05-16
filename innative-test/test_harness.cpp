@@ -144,7 +144,7 @@ int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), co
       return err;
 
   auto stem = file.stem().u8string();
-  int err   = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
+  int err   = (*_exports.AddEmbedding)(env, 0, (void*)(*_exports.GetDefaultEmbedding)(TestHarness::Debug), 0, 0);
   if(err >= 0)
     (*_exports.AddModule)(env, file.u8string().c_str(), 0, (!name ? stem.c_str() : name), &err);
 

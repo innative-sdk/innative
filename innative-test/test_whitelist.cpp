@@ -38,13 +38,13 @@ void TestHarness::test_whitelist()
     TESTERR(err, ERR_SUCCESS);
     (*_exports.FinalizeEnvironment)(env);
 
-    AddCImport(*env, ABIMangle("asdf", CURRENT_ABI, 0, 0).c_str());
-    AddCImport(*env, ABIMangle("asdf2", CURRENT_ABI, 0, 0).c_str());
-    AddCImport(*env, ABIMangle("a", CURRENT_ABI, 0, 0).c_str());
-    AddCImport(*env, ABIMangle("A", CURRENT_ABI, 0, 0).c_str());
-    AddCImport(*env, ABIMangle("AB", CURRENT_ABI, 0, 0).c_str());
-    AddCImport(*env, ABIMangle("yz", CURRENT_ABI, 0, 0).c_str());
-    AddCImport(*env, ABIMangle("[fake]", CURRENT_ABI, 0, 0).c_str());
+    AddCImport(*env, ABIMangle("asdf", env->abi, env->arch, 0, 0).c_str());
+    AddCImport(*env, ABIMangle("asdf2", env->abi, env->arch, 0, 0).c_str());
+    AddCImport(*env, ABIMangle("a", env->abi, env->arch, 0, 0).c_str());
+    AddCImport(*env, ABIMangle("A", env->abi, env->arch, 0, 0).c_str());
+    AddCImport(*env, ABIMangle("AB", env->abi, env->arch, 0, 0).c_str());
+    AddCImport(*env, ABIMangle("yz", env->abi, env->arch, 0, 0).c_str());
+    AddCImport(*env, ABIMangle("[fake]", env->abi, env->arch, 0, 0).c_str());
 
     err = (*_exports.Validate)(env);
     if(err != ERR_SUCCESS)

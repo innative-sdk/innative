@@ -7,26 +7,45 @@
 #include "innative/schema.h"
 
 #ifdef IN_PLATFORM_WIN32
-  #define IN_STATIC_EXTENSION  ".lib"
-  #define IN_LIBRARY_FLAG      ""
-  #define IN_LIBRARY_EXTENSION ".dll"
-  #define IN_EXE_EXTENSION     ".exe"
-  #define IN_WIN32_REGPATH     L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\innative-cmd.exe"
-#else
-  #define IN_STATIC_EXTENSION  ".a"
-  #define IN_LIBRARY_FLAG      "-l"
-  #define IN_LIBRARY_EXTENSION ".so"
-  #define IN_EXE_EXTENSION     ""
+  #define IN_WIN32_REGPATH L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\innative-cmd.exe"
 #endif
 
-#ifdef IN_DEBUG
-  #define INNATIVE_DEFAULT_ENVIRONMENT "innative-env-d" IN_STATIC_EXTENSION
+#ifdef IN_PLATFORM_WIN32
+static const uint8_t CURRENT_ABI = IN_ABI_Windows;
+#elif defined(IN_PLATFORM_BSD)
+static const uint8_t CURRENT_ABI = IN_ABI_FreeBSD;
+#elif defined(IN_PLATFORM_SOLARIS)
+static const uint8_t CURRENT_ABI = IN_ABI_Solaris;
+#elif defined(IN_PLATFORM_LINUX)
+static const uint8_t CURRENT_ABI = IN_ABI_Linux;
+#elif defined(IN_PLATFORM_POSIX)
+static const uint8_t CURRENT_ABI = IN_ABI_POSIX;
 #else
-  #define INNATIVE_DEFAULT_ENVIRONMENT "innative-env" IN_STATIC_EXTENSION
+static const uint8_t CURRENT_ABI = IN_ABI_NONE;
 #endif
 
-#define IN_INIT_FUNCTION "_innative_internal_start"
-#define IN_EXIT_FUNCTION "_innative_internal_exit"
+#ifdef IN_CPU_x86_64
+static const uint8_t CURRENT_ARCH = IN_ARCH_amd64;
+#elif defined(IN_CPU_x86)
+static const uint8_t CURRENT_ARCH = IN_ARCH_x86;
+#elif defined(IN_CPU_IA_64)
+static const uint8_t CURRENT_ARCH = IN_ARCH_IA64;
+#elif defined(IN_CPU_ARM64)
+static const uint8_t CURRENT_ARCH = IN_ARCH_ARM64;
+#elif defined(IN_CPU_ARM)
+static const uint8_t CURRENT_ARCH = IN_ARCH_ARM;
+#elif defined(IN_CPU_MIPS)
+static const uint8_t CURRENT_ARCH = IN_ARCH_MIPS;
+#elif defined(IN_CPU_POWERPC64)
+static const uint8_t CURRENT_ARCH = IN_ARCH_PPC64;
+#elif defined(IN_CPU_POWERPC)
+static const uint8_t CURRENT_ARCH = IN_ARCH_PPC;
+#else
+static const uint8_t CURRENT_ARCH = IN_ARCH_UNKNOWN;
+#endif
+
+#define IN_INIT_FUNCTION       "_innative_internal_start"
+#define IN_EXIT_FUNCTION       "_innative_internal_exit"
 #define IN_INSTRUCTION_COUNTER "_innative_instruction_counter"
 
 #ifdef __cplusplus
@@ -95,6 +114,21 @@ typedef struct IN__EXPORTS
   /// \param arg0 the first argument sent to the program. Used to determine binary location on POSIX systems.
   Environment* (*CreateEnvironment)(unsigned int modules, unsigned int maxthreads, const char* arg0);
 
+  /// Returns the filename for the default embedding on the platform this runtime was compiled on.
+  /// \param debug If true, uses the debug runtime embedding.
+  const char* (*GetDefaultEmbedding)(bool debug);
+
+  /// Used to get the expected relative path and filename for a embedding with the given name. This can be used for
+  /// cross-compilation when you need something beyond the default embedding environment, like an assemblyscript
+  /// embedding, or the WASI embedding, etc. Returns the size of the buffer needed to store the result.
+  /// \param abi The IN_ABI enum value saying what platform ABI this is compiled for.
+  /// \param arch The IN_ARCH enum value saying what CPU architecture this is compiled for.
+  /// \param debug If true, uses the debug runtime embedding. Not all embeddings have a debug version.
+  /// \param name The name of the requested embedding, without an extension. If NULL, the default embedding name is used.
+  /// \param out Should either point to a character buffer large enough to store the result, or be set to NULL.
+  /// \param outsize Should either contain the size of the out buffer, if it exists, or be set to 0.
+  size_t (*GetEmbeddingPath)(uint8_t abi, uint8_t arch, bool debug, const char* name, char* out, size_t outsize);
+
   /// Adds a module to an environment. This could happen asynchronously if multithreading is enabled, in which case
   // 'err' won't be valid until FinalizeEnvironment() is called to resolve all pending module loads.
   /// \param env The environment to modify.
@@ -137,6 +171,12 @@ typedef struct IN__EXPORTS
   /// \param symbol The null-terminated name of the symbol to export.
   enum IN_ERROR (*AddCustomExport)(Environment* env, const char* symbol);
 
+  /// Adds the given feature (which must be a feature string recognizable to LLVM) to the cpu_features list.
+  /// \param env The environment to modify.
+  /// \param feature The feature string to add. If NULL, cpu_features will be initialized to an empty list, preventing
+  ///                the environment from automatically filling in the feature list using the current CPU.
+  enum IN_ERROR (*AddCPUFeature)(Environment* env, const char* feature);
+
   /// Finalizes the environment, blocking until all modules have finished loading (in case of any asynchronous loads) and
   /// ensures all configuration data is loaded.
   /// \param env The environment to finalize
@@ -161,7 +201,8 @@ typedef struct IN__EXPORTS
   /// \param file the path of the file to load.
   void* (*LoadAssembly)(const char* file);
 
-  /// If LoadAssembly failed, returns a string containing an error message. On windows, this string must be freed with LoadAssemblyErrorFree
+  /// If LoadAssembly failed, returns a string containing an error message. On windows, this string must be freed
+  /// with LoadAssemblyErrorFree().
   char* (*LoadAssemblyError)();
   void (*LoadAssemblyErrorFree)(char* e);
 

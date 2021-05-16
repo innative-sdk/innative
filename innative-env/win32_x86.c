@@ -331,7 +331,7 @@ __declspec(naked) void _alldvrm()
 
 __declspec(naked) void _allmul()
 {
-    #define A esp + 8  // stack address of a
+    #define A esp + 8 // stack address of a
     #define B esp + 16 // stack address of b
 
   __asm {
@@ -681,7 +681,7 @@ __declspec(naked) void _aulldiv()
 
 __declspec(naked) void _aulldvrm()
 {
-    #define DVND esp + 8  // stack address of dividend (a)
+    #define DVND esp + 8 // stack address of dividend (a)
     #define DVSR esp + 16 // stack address of divisor (b)
 
   __asm
@@ -805,7 +805,7 @@ __declspec(naked) void _aulldvrm()
 
 __declspec(naked) void _aullrem()
 {
-    #define DVND esp + 8  // stack address of dividend (a)
+    #define DVND esp + 8 // stack address of dividend (a)
     #define DVSR esp + 16 // stack address of divisor (b)
 
   __asm
