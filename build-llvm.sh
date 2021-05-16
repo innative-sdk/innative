@@ -1,8 +1,9 @@
 #!/bin/sh
 git submodule update --init --recursive
 
-mkdir -p bin/llvm
-cd bin/llvm
+BIN=bin-linux-x64
+mkdir -p $BIN/llvm
+cd $BIN/llvm
 
 if [ $# -gt 0 ] && [ "$1" = "ninja" ]; then
   echo "Using Ninja"
@@ -32,9 +33,9 @@ fi
 cd ../..
 
 cd llvm-project/llvm/include/
-find ./ -type f \( -iname \*.h -o -iname \*.inc -o -iname \*.def -o -iname \*.td -o -iname \*.modulemap \) -exec cp --parents {} ../../../bin/llvm/include/ -n \;
+find ./ -type f \( -iname \*.h -o -iname \*.inc -o -iname \*.def -o -iname \*.td -o -iname \*.modulemap \) -exec cp --parents {} ../../../$BIN/llvm/include/ -n \;
 cd ../../..
 
 cd llvm-project/lld/include/
-find ./ -type f \( -iname \*.h -o -iname \*.inc -o -iname \*.def -o -iname \*.td -o -iname \*.modulemap \) -exec cp --parents {} ../../../bin/llvm/include/ -n \;
+find ./ -type f \( -iname \*.h -o -iname \*.inc -o -iname \*.def -o -iname \*.td -o -iname \*.modulemap \) -exec cp --parents {} ../../../$BIN/llvm/include/ -n \;
 cd ../../..

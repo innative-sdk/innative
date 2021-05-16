@@ -15,14 +15,17 @@ For those building from source, prebuilt binaries for inNative's LLVM fork are [
 ### Command Line Utility
 The inNative SDK comes with a command line utility with many useful features for webassembly developers.
 
-    Usage: innative-cmd [-r] [-f <FLAG>] [-l <FILE> ... ] [-shared-lib <FILE> ... ] [-o <FILE>] [-serialize [<FILE>]] [-generate-loader] [-v] [-build-sourcemap] [-w <[MODULE:]FUNCTION> ... ] [-sys <MODULE>] [-linker] [-i [lite]] [-u] [-sdk <DIR>] [-obj <DIR>] [-compile-llvm]
+    Usage: innative-cmd [-r] [-f <FLAG>] [-l <FILE> ... ] [-shared-lib <FILE> ... ] [-o <FILE>] [-serialize [<FILE>|emitdebug]] [-generate-loader] [-v] [-build-sourcemap] [-w <[MODULE:]FUNCTION> ... ] [-sys <MODULE>] [-start <[MODULE:]FUNCTION>] [-linker] [-i [lite]] [-u] [-sdk <DIR>] [-obj <DIR>] [-compile-llvm] [-abi <ABI>] [-cpu] [-cpu-feature <SUBFEATURE> ... ] [-arch <ARCH>]
       -r -run: Run the compiled result immediately and display output. Requires a start function.
-      -f -flag -flags <FLAG>: Set a supported flag to true. Flags:
+      -f -flag -flags <FLAG>: Set a supported flag to true.
+        Flags:
         strict
         sandbox
         whitelist
         multithreaded
         debug
+        debug_pdb
+        debug_dwarf
         library
         llvm
         noinit
@@ -42,25 +45,43 @@ The inNative SDK comes with a command line utility with many useful features for
       -l -lib -libs -library <FILE> ... : Links the input files against <FILE>, which must be a static library.
       -shared-lib -shared-libs -shared-library <FILE> ... : Links the input files against <FILE>, which must be an ELF shared library.
       -o -out -output <FILE>: Sets the output path for the resulting executable or library.
-      -serialize [<FILE>]: Serializes all modules to .wat files in addition to compiling them. <FILE> can specify the output if only one module is present.
+      -serialize [<FILE>|emitdebug]: Serializes all modules to .wat files in addition to compiling them. <FILE> can specify the output if only one module is present, or 'emitdebug' will emit debug information
       -generate-loader: Instead of compiling immediately, creates a loader embedded with all the modules, environments, and settings, which compiles the modules on-demand when run.
       -v -verbose: Turns on verbose logging.
       -build-sourcemap: Assumes input files are ELF object files or binaries that contain DWARF debugging information, and creates a source map from them.
       -w -whitelist <[MODULE:]FUNCTION> ... : whitelists a given C import, does name-mangling if the module is specified.
       -sys -system <MODULE>: Sets the environment/system module name. Any functions with the module name will have the module name stripped when linking with C functions
+      -start <[MODULE:]FUNCTION>: Sets or overrides the start function of a given module, in case it hasn't been properly specified. The function can't take any parameters and must return void.
       -linker: Specifies an alternative linker executable to use instead of LLD.
       -i -install [lite]: Installs this SDK to the host operating system. On Windows, also updates file associations unless 'lite' is specified.
       -u -uninstall: Uninstalls and deregisters this SDK from the host operating system.
       -sdk -library-dir <DIR>: Sets the directory that contains the SDK library and data files.
       -obj -obj-dir -object-dir -intermediate-dir <DIR>: Sets the directory for temporary object files and intermediate compilation results.
-      -compile-llvm
+      -compile-llvm: Assumes the input files are LLVM IR files and compiles them into a single webassembly module.
+      -abi -platform <ABI>: Set the target ABI platform to compile for.
+        ABIs:
+        windows
+        sys-v
+        linux
+        freebsd
+        solaris
+        arm
 
-Example usage:
+      -cpu -cpu-name: Set the target CPU name for code optimization. Set to "generic" for maximum portability (subject to CPU features requested). If this option isn't specified, the host CPU will be targeted.
+      -cpu-feature -cpu-features <SUBFEATURE> ... : List CPU subfeatures, like SSSE3 or AVX, that the compiler should assume exist. Must be a valid subfeature string that LLVM recognizes.
+      -arch -architecture <ARCH>: Set the target CPU architecture to compile for.
+        ARCHs:
+        x86
+        amd64
+        
+        
+    Example usage:
 
-    innative-cmd your-module.wasm
-    innative-cmd -r your-module.wasm
-    innative-cmd yourfile.wat -flag debug o3 -run
-    innative-cmd your-library.wasm -f library
+      innative-cmd your-module.wasm
+      innative-cmd -r your-module.wasm
+      innative-cmd yourfile.wat -flag debug o3 -run
+      innative-cmd your-library.wasm -f library
+      innative-cmd your-module.wasm -abi windows -arch x86
     
 ## Building
 If you're on linux, or you really want to build LLVM from source, use the provided `build-llvm` script (`.ps1` for windows and `.sh` for linux). You cannot build only LLD - you will have to recompile all of LLVM for it to work with inNative. If you are building LLVM on Linux, **ensure that you have `cmake` and `python` installed**, as the script cannot do this for you.
@@ -118,7 +139,7 @@ inNative is compiled as either a dynamic or static library, and can be integrate
     (*exports.AddModule)(env, "your_script.wasm", 0, "your_script", &err);
 
     // Add the default static library and any additional libraries you want to expose to the script
-    err = (*exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0);
+    err = (*exports.AddEmbedding)(env, 0, (void*)(*exports.GetDefaultEmbedding)(false), 0, nullptr);
 
     err = (*exports.FinalizeEnvironment)(env);
     

@@ -326,6 +326,32 @@ namespace innative {
       return t;
     }
 
+    int GetArchBits(uint8_t arch)
+    {
+      switch(arch)
+      {
+      case IN_ARCH_x86:
+      case IN_ARCH_ARM:
+      case IN_ARCH_PPC: return 32;
+      case IN_ARCH_MIPS:
+      case IN_ARCH_IA64:
+      case IN_ARCH_amd64:
+      case IN_ARCH_PPC64: return 64;
+      }
+      return 0;
+    }
+
+    bool IsLittleEndian(uint8_t abi, uint8_t arch)
+    {
+      switch(arch)
+      {
+      case IN_ARCH_PPC:
+      case IN_ARCH_PPC64: return abi == IN_ABI_Solaris; // Only little endian on Solaris
+      case IN_ARCH_MIPS: return false; // We just guess that MIPS is big-endian for now.
+      default: return true;
+      }
+    }
+
     void GetCPUInfo(uintcpuinfo& info, int flags)
     {
 #ifdef IN_PLATFORM_WIN32

@@ -42,6 +42,8 @@ KHASH_INIT(flags, const char*, unsigned int, 1, kh_str_hash_funcins, kh_str_hash
 
 static kh_flags_t* env_flags    = kh_init_flags();
 static kh_flags_t* env_optimize = kh_init_flags();
+static kh_flags_t* env_abi      = kh_init_flags();
+static kh_flags_t* env_arch     = kh_init_flags();
 
 const static std::initializer_list<std::pair<const char*, unsigned int>> FLAG_MAP = {
   { "strict", ENV_STRICT },
@@ -60,6 +62,20 @@ const static std::initializer_list<std::pair<const char*, unsigned int>> FLAG_MA
   { "check_indirect_call", ENV_CHECK_INDIRECT_CALL },
   { "check_int_division", ENV_CHECK_INT_DIVISION },
   { "disable_tail_call", ENV_DISABLE_TAIL_CALL },
+};
+
+const static std::initializer_list<std::pair<const char*, IN_ABI>> ABI_MAP = {
+  { "windows", IN_ABI_Windows }, { "sys-v", IN_ABI_POSIX },     { "linux", IN_ABI_Linux },
+  { "freebsd", IN_ABI_FreeBSD }, { "solaris", IN_ABI_Solaris }, { "arm", IN_ABI_ARM },
+};
+
+const static std::initializer_list<std::pair<const char*, IN_ARCH>> ARCH_MAP = {
+  { "i386", IN_ARCH_x86 },        { "i486", IN_ARCH_x86 },      { "i586", IN_ARCH_x86 },     { "i686", IN_ARCH_x86 },
+  { "x86", IN_ARCH_x86 },         { "amd64", IN_ARCH_amd64 },   { "x86-64", IN_ARCH_amd64 }, { "x86_64", IN_ARCH_amd64 },
+  { "x64", IN_ARCH_amd64 },       { "ia64", IN_ARCH_IA64 },     { "arm", IN_ARCH_ARM },      { "xscale", IN_ARCH_ARM },
+  { "arm64", IN_ARCH_ARM64 },     { "aarch64", IN_ARCH_ARM64 }, { "mips", IN_ARCH_MIPS },    { "ppc64", IN_ARCH_PPC64 },
+  { "powerpc64", IN_ARCH_PPC64 }, { "ppu", IN_ARCH_PPC64 },     { "ppc", IN_ARCH_PPC },      { "powerpc", IN_ARCH_PPC },
+  { "powerpcspe", IN_ARCH_PPC },  { "risc-v", IN_ARCH_RISCV },  { "riscv32", IN_ARCH_RISCV }
 };
 
 const static std::initializer_list<std::pair<const char*, unsigned int>> OPTIMIZE_MAP = {
@@ -159,7 +175,8 @@ template<class T> struct Opt<std::vector<T>> : Opt<T>
     while(pos < argc && argv[pos][0] != '-')
     {
       err = std::min(Opt<T>::Parse(argc, argv, pos), err);
-      ++pos;
+      if(err < ERR_SUCCESS)
+        break;
       values.push_back(Opt<T>::value);
     }
     return err;
@@ -172,7 +189,7 @@ template<> struct Opt<WASM_ENVIRONMENT_FLAGS> : OptBase
   Opt(const char* desc, const char* param = 0) : OptBase(desc, param)
   {
     help = description;
-    help += " Flags:\n    ";
+    help += "\n    Flags:\n    ";
 
     for(auto& f : FLAG_MAP)
     {
@@ -231,6 +248,99 @@ template<> struct Opt<WASM_ENVIRONMENT_FLAGS> : OptBase
   std::string help;
 };
 
+template<> struct Opt<IN_ABI> : OptBase
+{
+  Opt(const char* desc, const char* param = 0) : OptBase(desc, param)
+  {
+    help = description;
+    help += "\n    ABIs:\n    ";
+
+    for(auto& f : ABI_MAP)
+    {
+      help += f.first;
+      help += "\n    ";
+    }
+    description = help.c_str();
+  }
+
+  virtual IN_ERROR Parse(int argc, char* argv[], int& pos) override
+  {
+    if(pos >= argc || argv[pos][0] == '-')
+    {
+      std::cout << "Missing command line argument parameter for " << argv[pos - 1] << std::endl;
+      return ERR_MISSING_COMMAND_LINE_PARAMETER;
+    }
+
+    IN_ERROR err = ERR_SUCCESS;
+    if(pos < argc && argv[pos][0] != '-')
+    {
+      khint_t iter = kh_get_flags(env_abi, argv[pos]);
+
+      if(kh_exist2(env_abi, iter))
+        value = (IN_ABI)kh_value(env_abi, iter);
+      else
+      {
+        std::cout << "Unknown ABI: " << argv[pos] << std::endl;
+        err = ERR_INVALID_COMMAND_LINE;
+      }
+      ++pos;
+    }
+
+    return err;
+  }
+
+  uint8_t value;
+  std::string help;
+};
+
+template<> struct Opt<IN_ARCH> : OptBase
+{
+  Opt(const char* desc, const char* param = 0) : OptBase(desc, param)
+  {
+    // We only list architectures we actually support, and we don't list all the aliases.
+    help = description;
+    help += "\n    ARCHs:"
+            "\n    x86"
+            "\n    amd64";
+
+    /*for(auto& f : ARCH_MAP)
+    {
+      help += f.first;
+      help += "\n    ";
+    }*/
+    description = help.c_str();
+  }
+
+  virtual IN_ERROR Parse(int argc, char* argv[], int& pos) override
+  {
+    if(pos >= argc || argv[pos][0] == '-')
+    {
+      std::cout << "Missing command line argument parameter for " << argv[pos - 1] << std::endl;
+      return ERR_MISSING_COMMAND_LINE_PARAMETER;
+    }
+
+    IN_ERROR err = ERR_SUCCESS;
+    if(pos < argc && argv[pos][0] != '-')
+    {
+      khint_t iter = kh_get_flags(env_arch, argv[pos]);
+
+      if(kh_exist2(env_arch, iter))
+        value = kh_value(env_arch, iter);
+      else
+      {
+        std::cout << "Unknown architecture: " << argv[pos] << std::endl;
+        err = ERR_INVALID_COMMAND_LINE;
+      }
+      ++pos;
+    }
+
+    return err;
+  }
+
+  uint8_t value;
+  std::string help;
+};
+
 KHASH_INIT(commands, const char*, OptBase*, 1, kh_str_hash_funcins, kh_str_hash_insequal);
 
 struct CommandLine
@@ -266,10 +376,19 @@ struct CommandLine
     uninstall("Uninstalls and deregisters this SDK from the host operating system."),
     library_dir("Sets the directory that contains the SDK library and data files.", "<DIR>"),
     object_dir("Sets the directory for temporary object files and intermediate compilation results.", "<DIR>"),
-    compile_llvm("Assumes the input files are LLVM IR files and compiles them into a single webassembly module.")
+    compile_llvm("Assumes the input files are LLVM IR files and compiles them into a single webassembly module."),
+    abi("Set the target ABI platform to compile for.", "<ABI>"),
+    arch("Set the target CPU architecture to compile for.", "<ARCH>"),
+    cpu_name(
+      "Set the target CPU name for code optimization. Set to \"generic\" for maximum portability (subject to CPU features requested). If this option isn't specified, the host CPU will be targeted."),
+    cpu_features(
+      "List CPU subfeatures, like SSSE3 or AVX, that the compiler should assume exist. Must be a valid subfeature string that LLVM recognizes.",
+      "<SUBFEATURE>")
   {
     flags.value    = ENV_ENABLE_WAT;
     flags.optimize = ENV_OPTIMIZE_O3;
+    abi.value      = CURRENT_ABI;
+    arch.value     = CURRENT_ARCH;
 
     Register("r", &run);
     Register("run", &run);
@@ -310,8 +429,28 @@ struct CommandLine
     Register("object-dir", &object_dir);
     Register("intermediate-dir", &object_dir);
     Register("compile-llvm", &compile_llvm);
+    Register("abi", &abi);
+    Register("platform", &abi);
+    Register("cpu", &cpu_name);
+    Register("cpu-name", &cpu_name);
+    Register("cpu-feature", &cpu_features);
+    Register("cpu-features", &cpu_features);
+    Register("arch", &arch);
+    Register("architecture", &arch);
+    DumpLastDescription();
 
     usage += "\n\n  Example usage: innative-cmd -r your-module.wasm";
+  }
+
+  void DumpLastDescription()
+  {
+    if(last_cmd)
+    {
+      if(last_cmd->parameter)
+        usage += " " + last_cmd->Param();
+      usage += ": ";
+      usage += last_cmd->description;
+    }
   }
 
   void Register(const char* shortcut, OptBase* command)
@@ -322,14 +461,7 @@ struct CommandLine
 
     if(last_cmd != command)
     {
-      if(last_cmd)
-      {
-        if(last_cmd->parameter)
-          usage += " " + last_cmd->Param();
-        usage += ": ";
-        usage += last_cmd->description;
-      }
-
+      DumpLastDescription();
       last_cmd = command;
       shortusage += " [-";
       shortusage += shortcut;
@@ -379,9 +511,9 @@ struct CommandLine
       else if(build_sourcemap.value)
         output_file.value += ".map";
       else if(flags.value & ENV_LIBRARY)
-        output_file.value.replace_extension(IN_LIBRARY_EXTENSION);
+        output_file.value.replace_extension(abi.value == IN_ABI_Windows ? ".dll" : ".so");
       else
-        output_file.value.replace_extension(IN_EXE_EXTENSION);
+        output_file.value.replace_extension(abi.value == IN_ABI_Windows ? ".exe" : "");
     }
   }
 
@@ -403,6 +535,10 @@ struct CommandLine
   Opt<std::string> library_dir;
   Opt<std::string> object_dir;
   Opt<bool> compile_llvm;
+  Opt<IN_ABI> abi;
+  Opt<IN_ARCH> arch;
+  Opt<std::string> cpu_name;
+  Opt<std::vector<std::string>> cpu_features;
 
   std::vector<const char*> inputs;
   std::vector<const char*> wast; // WAST files will be executed in the order they are specified, after all other modules are
@@ -446,13 +582,23 @@ int main(int argc, char* argv[])
   int err;
   for(auto& f : FLAG_MAP)
   {
-    khiter_t iter             = kh_put_flags(env_flags, f.first, &err);
-    kh_value(env_flags, iter) = f.second;
+    khiter_t iter               = kh_put_flags(::env_flags, f.first, &err);
+    kh_value(::env_flags, iter) = f.second;
   }
   for(auto& f : OPTIMIZE_MAP)
   {
     khiter_t iter                  = kh_put_flags(::env_optimize, f.first, &err);
     kh_value(::env_optimize, iter) = f.second;
+  }
+  for(auto& f : ABI_MAP)
+  {
+    khiter_t iter             = kh_put_flags(::env_abi, f.first, &err);
+    kh_value(::env_abi, iter) = f.second;
+  }
+  for(auto& f : ARCH_MAP)
+  {
+    khiter_t iter              = kh_put_flags(::env_arch, f.first, &err);
+    kh_value(::env_arch, iter) = f.second;
   }
 
   CommandLine commandline;
@@ -499,6 +645,12 @@ int main(int argc, char* argv[])
     return ERR_NO_INPUT_FILES;
   }
 
+  // If we are cross-compiling, set cpu_name to "generic" if it was not already specified
+  if(commandline.arch.value != CURRENT_ARCH || commandline.abi.value != CURRENT_ABI)
+  {
+    if(commandline.cpu_name.value.empty())
+      commandline.cpu_name.value = "generic";
+  }
   commandline.ResolveOutput();
 
   // If we're compiling LLVM IR instead of webassembly, we divert to another code path
@@ -603,10 +755,13 @@ int main(int argc, char* argv[])
     };
 
   #ifdef IN_DEBUG
-    std::string exe = "innative-loader-d" IN_EXE_EXTENSION;
+    std::string exe = "innative-loader-d";
   #else
-    std::string exe = "innative-loader" IN_EXE_EXTENSION;
+    std::string exe = "innative-loader";
   #endif
+    if(commandline.abi.value == IN_ABI_Windows)
+      exe += ".exe";
+
     if(!copy_file(GetProgramPath() / exe, commandline.output_file.value, copy_options::overwrite_existing))
     {
       std::cout << "Could not find or copy loader EXE!" << std::endl;
@@ -674,6 +829,21 @@ int main(int argc, char* argv[])
     env->linker = commandline.linker.value.c_str();
   if(!commandline.system.value.empty())
     env->system = commandline.system.value.c_str();
+  env->abi  = commandline.abi.value;
+  env->arch = commandline.arch.value;
+
+  if(!commandline.cpu_name.value.empty())
+  {
+    env->cpu_name = commandline.cpu_name.value.c_str();
+
+    if(commandline.cpu_name.value == "generic")
+      (exports.AddCPUFeature(env, nullptr));
+  }
+
+  for(auto item : commandline.cpu_features.values)
+  {
+    (exports.AddCPUFeature(env, item.c_str()));
+  }
 
   for(auto item : commandline.whitelist.values)
   {
@@ -692,8 +862,19 @@ int main(int argc, char* argv[])
     }
   }
 
-  // Add all embedding environments, plus the default environment
-  commandline.libs.values.push_back(INNATIVE_DEFAULT_ENVIRONMENT);
+// Add all embedding environments, plus the default environment
+#ifdef IN_DEBUG
+  const bool is_debug = true;
+#else
+  const bool is_debug = false;
+#endif
+
+  std::string default_embed;
+  default_embed.resize((*exports.GetEmbeddingPath)(env->abi, env->arch, is_debug, nullptr, nullptr, 0));
+  default_embed.resize(
+    (*exports.GetEmbeddingPath)(env->abi, env->arch, is_debug, nullptr, default_embed.data(), default_embed.capacity()));
+
+  commandline.libs.values.push_back(default_embed.c_str());
 
   auto add_embeds = [](int tag, std::vector<std::string>& values, Environment* environment, INExports& exp) -> int {
     IN_ERROR result = ERR_SUCCESS;
@@ -702,8 +883,8 @@ int main(int argc, char* argv[])
       IN_ERROR e = (*exp.AddEmbedding)(environment, tag, embedding.c_str(), 0, 0);
       if(e < 0)
       {
-        printerr(exp, environment, tag ? "Error loading shared library " : "Error loading embedding ",
-                 embedding.c_str(), e);
+        printerr(exp, environment, tag ? "Error loading shared library " : "Error loading embedding ", embedding.c_str(),
+                 e);
         result = e;
       }
     }

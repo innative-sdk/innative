@@ -44,16 +44,21 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
       return nullptr;
     }
 
-    env->capacity   = modules;
-    env->flags      = ENV_SANDBOX;
-    env->optimize   = ENV_OPTIMIZE_O3;
-    env->features   = ENV_FEATURE_ALL;
-    env->maxthreads = maxthreads;
-    env->linker     = 0;
-    env->loghook    = &DefaultLog;
-    env->loglevel   = LOG_WARNING;
-    env->rootpath   = AllocString(*env, GetProgramPath(arg0).parent_path().u8string());
-    env->libpath    = env->rootpath;
+    env->capacity     = modules;
+    env->flags        = ENV_SANDBOX;
+    env->optimize     = ENV_OPTIMIZE_O3;
+    env->features     = ENV_FEATURE_ALL;
+    env->abi          = CURRENT_ABI;
+    env->arch         = CURRENT_ARCH;
+    env->cpu_name     = nullptr; // Default to using the host CPU
+    env->cpu_features = nullptr;
+    env->n_features   = -1; // Default to inferring CPU features based on the current CPU
+    env->maxthreads   = maxthreads;
+    env->linker       = 0;
+    env->loghook      = &DefaultLog;
+    env->loglevel     = LOG_WARNING;
+    env->rootpath     = AllocString(*env, GetProgramPath(arg0).parent_path().u8string());
+    env->libpath      = env->rootpath;
     if(!env->libpath) // Out of memory
     {
       free(env);
@@ -89,7 +94,7 @@ void innative::DestroyEnvironment(Environment* env)
     kh_destroy_exports(env->modules[i].exports);
     assert(!env->modules[i].cache);
   }
-  
+
   if(env->jit)
     delete env->jit;
   delete env->alloc;
@@ -260,6 +265,29 @@ IN_ERROR innative::AddCustomExport(Environment* env, const char* symbol)
   return ERR_SUCCESS;
 }
 
+IN_ERROR innative::AddCPUFeature(Environment* env, const char* feature)
+{
+  if(!env)
+    return ERR_FATAL_NULL_POINTER;
+
+  if(env->n_features < 0)
+    env->n_features = 0;
+
+  if(feature)
+  {
+    IN_ERROR err = ReallocArray(*env, env->cpu_features, env->n_features);
+    if(err < 0)
+      return err;
+
+    env->cpu_features[env->n_features - 1] = AllocString(*env, feature);
+    if(!env->cpu_features[env->n_features - 1])
+      return ERR_FATAL_OUT_OF_MEMORY;
+  }
+
+  return ERR_SUCCESS;
+}
+
+
 IN_ERROR innative::FinalizeEnvironment(Environment* env)
 {
   if(env->cimports)
@@ -268,11 +296,10 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
     {
       std::vector<std::string> symbols;
 
-#ifdef IN_PLATFORM_WIN32
-      LLD_FORMAT format = LLD_FORMAT::COFF;
-#else
       LLD_FORMAT format = LLD_FORMAT::ELF;
-#endif
+
+      if(env->abi == IN_ABI_Windows)
+        format = LLD_FORMAT::COFF;
 
       if(embed->size)
         symbols = GetSymbols(reinterpret_cast<const char*>(embed->data), (size_t)embed->size, env, format);
@@ -297,15 +324,17 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
         f = testpath(f, src, out);
         f = testpath(f, rootpath / src, out);
 
-#ifdef IN_PLATFORM_POSIX
-        if(CURRENT_ARCH_BITS == 64)
-          f = testpath(f, rootpath.parent_path() / "lib64" / src, out);
-        f = testpath(f, rootpath.parent_path() / "lib" / src, out);
+        if(env->abi != IN_ABI_Windows)
+        {
+          if(GetArchBits(env->arch) == 64)
+            f = testpath(f, rootpath.parent_path() / "lib64" / src, out);
+          f = testpath(f, rootpath.parent_path() / "lib" / src, out);
 
-        if(CURRENT_ARCH_BITS == 64)
-          f = testpath(f, path("/usr/lib64/") / src, out);
-        f = testpath(f, path("/usr/lib/") / src, out);
-#endif
+          if(GetArchBits(env->arch) == 64)
+            f = testpath(f, path("/usr/lib64/") / src, out);
+          f = testpath(f, path("/usr/lib/") / src, out);
+          f = testpath(f, path("/usr/innative/lib/placeholder/") / src, out);
+        }
         if(!f)
           return LogErrorString(*env, "%s: Error loading file: %s", ERR_FATAL_FILE_ERROR, src.u8string().c_str());
         fclose(f);
@@ -902,6 +931,7 @@ int innative::RemoveModuleReturn(Environment* env, FunctionType* func, varuint32
     return ERR_FATAL_NULL_POINTER;
   return DeleteModuleType(env, func->returns, func->n_returns, index);
 }
+
 int innative::ReplaceTableFuncPtr(void* assembly, uint32_t module_index, uint32_t table_index, const char* function,
                                   IN_Entrypoint replace)
 {
@@ -924,4 +954,54 @@ int innative::ReplaceTableFuncPtr(void* assembly, uint32_t module_index, uint32_
     }
 
   return ERR_FUNCTION_BODY_MISMATCH;
+}
+
+const char* innative::GetDefaultEmbedding(bool debug)
+{
+  switch(CURRENT_ABI | (debug << 15))
+  {
+  case IN_ABI_Windows: return "innative-env.lib";
+  case IN_ABI_Windows | (1 << 15): return "innative-env-d.lib";
+  }
+  if(debug)
+    return "innative-env-d.a";
+  return "innative-env.a";
+}
+
+size_t innative::GetEmbeddingPath(uint8_t abi, uint8_t arch, bool debug, const char* name, char* out, size_t outsize)
+{
+  if(!name && abi == CURRENT_ABI && arch == CURRENT_ARCH)
+    return snprintf(out, outsize, "%s", GetDefaultEmbedding(debug));
+
+  if(!name)
+    name = "innative-env";
+
+  const char* strabi  = "unknown";
+  const char* strarch = "unknown";
+  const char* ext     = (abi == IN_ABI_Windows) ? ".lib" : ".a";
+  const char* bin     = "../bin-";
+
+  switch(abi)
+  {
+  case IN_ABI_Windows: strabi = "windows"; break;
+  case IN_ABI_Linux: strabi = "linux"; break;
+  case IN_ABI_FreeBSD: strabi = "freebsd"; break;
+  case IN_ABI_Solaris: strabi = "solaris"; break;
+  case IN_ABI_ARM: strabi = "arm"; break;
+  }
+
+  switch(arch)
+  {
+  case IN_ARCH_x86: strarch = "x86"; break;
+  case IN_ARCH_amd64: strarch = "x64"; break;
+  case IN_ARCH_IA64: strarch = "ia64"; break;
+  case IN_ARCH_ARM64: strarch = "aarch64"; break;
+  case IN_ARCH_ARM: strarch = "arm"; break;
+  case IN_ARCH_MIPS: strarch = "mips"; break;
+  case IN_ARCH_PPC64: strarch = "ppc64"; break;
+  case IN_ARCH_PPC: strarch = "ppc"; break;
+  case IN_ARCH_RISCV: strarch = "riscv"; break;
+  }
+
+  return snprintf(out, outsize, "%s%s-%s/%s%s", bin, strabi, strarch, name, ext);
 }

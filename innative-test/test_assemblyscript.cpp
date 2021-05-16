@@ -80,7 +80,7 @@ void TestHarness::test_assemblyscript()
 
     err = (*_exports.AddEmbedding)(env, 0, embed, sz, 0);
     TESTERR(err, ERR_SUCCESS);
-    err = (*_exports.AddEmbedding)(env, 0, (void*)INNATIVE_DEFAULT_ENVIRONMENT, 0, 0);
+    err = (*_exports.AddEmbedding)(env, 0, (void*)(*_exports.GetDefaultEmbedding)(TestHarness::Debug), 0, 0);
     TESTERR(err, ERR_SUCCESS);
 
     (*_exports.AddModule)(env, wasm_path, 0, "astest", &err);

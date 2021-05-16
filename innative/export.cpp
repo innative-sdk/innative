@@ -11,10 +11,13 @@ using namespace innative;
 void innative_runtime(INExports* exports)
 {
   exports->CreateEnvironment       = &CreateEnvironment;
+  exports->GetDefaultEmbedding     = &GetDefaultEmbedding;
+  exports->GetEmbeddingPath        = &GetEmbeddingPath;
   exports->AddModule               = &AddModule;
   exports->AddModuleObject         = &AddModuleObject;
   exports->AddWhitelist            = &AddWhitelist;
   exports->AddEmbedding            = &AddEmbedding;
+  exports->AddCPUFeature           = &AddCPUFeature;
   exports->AddCustomExport         = &AddCustomExport;
   exports->FinalizeEnvironment     = &FinalizeEnvironment;
   exports->Validate                = &Validate;

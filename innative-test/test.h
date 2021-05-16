@@ -13,6 +13,14 @@
 #include <functional>
 #include "../innative/filesys.h"
 
+#ifdef IN_PLATFORM_WIN32
+  #define IN_STATIC_EXTENSION  ".lib"
+  #define IN_LIBRARY_EXTENSION ".dll"
+#else
+  #define IN_STATIC_EXTENSION  ".a"
+  #define IN_LIBRARY_EXTENSION ".so"
+#endif
+
 class TestHarness
 {
 public:
@@ -58,7 +66,13 @@ public:
   void* LoadAssembly(const path& file);
   static int Log(const Environment* env, const char* f, ...);
 
-protected:
+#ifdef IN_DEBUG
+  static const bool Debug = true;
+#else
+  static const bool Debug = false;
+#endif
+
+  protected:
   inline void DoTest(bool test, const char* text, const char* file, int line)
   {
     ++_testdata.second;

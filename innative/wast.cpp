@@ -41,7 +41,7 @@ namespace innative {
   } // namespace internal
 
   namespace wat {
-    path GenUniquePath(const path& src, int& counter);
+    path GenUniquePath(Environment& env, const path& src, int& counter);
     kh_stringmap_t* GenWastStringMap(std::initializer_list<std::pair<const char*, const char*>> map);
 
     static kh_stringmap_t* assertmap = GenWastStringMap({
@@ -115,7 +115,7 @@ namespace innative {
     jmp_buf jump_location;
 
     void WastCrashHandler(int sig) { LONGJMP(jump_location, 1); }
-    void InvalidateCache(void*& cache, path cachepath);
+    void InvalidateCache(Environment& env, void*& cache, path cachepath);
     int IsolateInitCall(Environment& env, void*& cache, const path& out);
     int CompileWast(Environment& env, const path& out, void*& cache, path& cachepath);
     int SetTempName(Environment& env, Module& m);
@@ -135,11 +135,11 @@ namespace innative {
   } // namespace wat
 } // namespace innative
 
-path wat::GenUniquePath(const path& src, int& counter)
+path wat::GenUniquePath(Environment& env, const path& src, int& counter)
 {
   auto cur = src;
   cur += std::to_string(counter++);
-  cur += IN_LIBRARY_EXTENSION;
+  cur += (env.abi == IN_ABI_Windows) ? ".dll" : ".so";
   return cur;
 }
 
@@ -163,7 +163,7 @@ size_t wat::GetWastMapping(kh_indexname_t* mapping, const WatToken& t)
   return kh_exist2(mapping, iter) ? kh_val(mapping, iter) : (size_t)~0;
 }
 
-void wat::InvalidateCache(void*& cache, path cachepath)
+void wat::InvalidateCache(Environment& env, void*& cache, path cachepath)
 {
   if(cache)
   {
@@ -176,7 +176,7 @@ void wat::InvalidateCache(void*& cache, path cachepath)
 
     FreeDLL(cache);
     remove(cachepath);
-    cachepath.replace_extension(IN_STATIC_EXTENSION);
+    cachepath.replace_extension((env.abi == IN_ABI_Windows) ? ".lib" : ".a");
     remove(cachepath);
     cachepath.replace_extension(".pdb");
     remove(cachepath);
@@ -226,7 +226,7 @@ int wat::IsolateInitCall(Environment& env, void*& cache, const path& out)
 
 int wat::CompileWast(Environment& env, const path& out, void*& cache, path& cachepath)
 {
-  InvalidateCache(cache, cachepath);
+  InvalidateCache(env, cache, cachepath);
   env.flags |= ENV_GENERALIZE_FUNCTIONS;
 
   int err;
@@ -468,7 +468,7 @@ int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname
   int cache_err = 0;
   if(!cache) // If cache is null we need to recompile the current environment, but we can't bail on error messages yet
              // or we'll corrupt the parse
-    cache_err = CompileWast(env, GenUniquePath(file, counter), cache, cachepath);
+    cache_err = CompileWast(env, GenUniquePath(env, file, counter), cache, cachepath);
 
   switch(tokens.Pop().id)
   {
@@ -754,7 +754,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     {
     case WatTokens::MODULE:
     {
-      InvalidateCache(cache, cachepath);
+      InvalidateCache(env, cache, cachepath);
 
       env.modules = trealloc<Module>(env.modules, ++env.n_modules);
       if(!env.modules)
@@ -771,7 +771,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     }
     case WatTokens::REGISTER:
     {
-      InvalidateCache(cache, cachepath);
+      InvalidateCache(env, cache, cachepath);
       tokens.Pop();
 
       ByteArray name;
@@ -813,7 +813,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       if(env.optimize != 0)
       {
         env.optimize = 0; // If we need to catch stack overflows, we must disable optimizations
-        InvalidateCache(cache, cachepath);
+        InvalidateCache(env, cache, cachepath);
         DeleteContext(env, false);
       }
     case WatTokens::ASSERT_TRAP:
@@ -832,7 +832,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
           return err;
         EXPECTED(env, tokens, WatTokens::CLOSE, ERR_WAT_EXPECTED_CLOSE);
 
-        err = CompileWast(env, GenUniquePath(targetpath, counter), cache, cachepath);
+        err = CompileWast(env, GenUniquePath(env, targetpath, counter), cache, cachepath);
         --env.n_modules; // Remove the module from the environment to avoid poisoning other compilations
         if(err != ERR_RUNTIME_TRAP)
           AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected trap, but call succeeded",
@@ -1092,12 +1092,12 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
   // If cache is null we must ensure we've at least tried to compile the test even if there's nothing to run.
   if(always_compile && !cache)
   {
-    if(err = CompileWast(env, GenUniquePath(targetpath, counter), cache, cachepath))
+    if(err = CompileWast(env, GenUniquePath(env, targetpath, counter), cache, cachepath))
       return err;
     assert(cache);
   }
 
-  InvalidateCache(cache, cachepath);
+  InvalidateCache(env, cache, cachepath);
   env.errors = errors;
   if(env.errors)
     internal::ReverseErrorList(env.errors);

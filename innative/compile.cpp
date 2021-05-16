@@ -327,7 +327,7 @@ IN_ERROR Compiler::PopType(varsint7 ty, llvmVal*& v, bool peek)
   }
   else if(!CheckType(ty, values.Peek()->getType()))
     _logtype("%s: Tried to pop %s but found ", ERR_INVALID_TYPE, values.Peek()->getType(),
-                 EnumToString(TYPE_ENCODING_MAP, ty, logbuf, sizeof(logbuf)));
+             EnumToString(TYPE_ENCODING_MAP, ty, logbuf, sizeof(logbuf)));
   else if(peek)
     v = values.Peek();
   else
@@ -376,7 +376,7 @@ IN_ERROR Compiler::PopSig(varsint64 sig, llvm::SmallVector<llvmVal*, 2>& v, bool
       v.push_back(llvm::Constant::getNullValue(GetLLVMType(sigs[n_sig - i - 1])));
     else if(!CheckType(sigs[n_sig - i - 1], values[i]->getType()))
       return _logtype("%s: %s cannot match with ", ERR_INVALID_TYPE, values[i]->getType(),
-                          EnumToString(TYPE_ENCODING_MAP, sigs[n_sig - i - 1], logbuf, sizeof(logbuf)));
+                      EnumToString(TYPE_ENCODING_MAP, sigs[n_sig - i - 1], logbuf, sizeof(logbuf)));
     else
       v.push_back(values[i]);
   }
@@ -797,7 +797,6 @@ void Compiler::ExportFunction(FunctionSet& fn,
 {
   if(!fn.exported)
   {
-    ABI abi   = CURRENT_ABI;
     auto base = fn.imported ? fn.imported : fn.internal;
 
     debugger->SetSPLocation(builder, base->getSubprogram());
@@ -855,22 +854,20 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
   init =
     TopLevelFunction(ctx, builder, CanonicalName(StringSpan::From(m.name), StringSpan::From(IN_INIT_POSTFIX)).c_str(), mod);
 
-#ifdef IN_PLATFORM_WIN32
   // Insert the flag initialization into module 0 on win32
-  if(m_idx == 0)
+  if(env.abi == IN_ABI_Windows && m_idx == 0)
   {
     builder.CreateCall(Func::Create(FuncTy::get(builder.getVoidTy(), { builder.getInt32Ty() }, false),
                                     Func::ExternalLinkage, "_innative_internal_env_init_isa_flags", *mod),
                        { builder.getInt32(machine->getTargetFeatureString().contains("+sse2") ? 1 : 0) });
   }
-#endif
 
   // Declare C runtime function prototypes that we assume exist on the system
   fn_memgrow = Func::Create(FuncTy::get(builder.getInt8PtrTy(0),
-                                     { builder.getInt8PtrTy(0), builder.getInt64Ty(), builder.getInt64Ty(),
-                                       builder.getInt64Ty()->getPointerTo() },
-                                     false),
-                         Func::ExternalLinkage, "_innative_internal_env_grow_memory", mod);
+                                        { builder.getInt8PtrTy(0), builder.getInt64Ty(), builder.getInt64Ty(),
+                                          builder.getInt64Ty()->getPointerTo() },
+                                        false),
+                            Func::ExternalLinkage, "_innative_internal_env_grow_memory", mod);
   fn_memgrow->setReturnDoesNotAlias(); // This is a system memory allocation function, so the return value does not alias
 
   atomic_notify = Func::Create(FuncTy::get(builder.getInt32Ty(), { builder.getInt8PtrTy(0), builder.getInt32Ty() }, false),
@@ -888,26 +885,26 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
   atomic_wait64->setCallingConv(llvm::CallingConv::C);
 
   fn_memcpy = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
-                                    { builder.getInt8PtrTy(0), builder.getInt8PtrTy(0), builder.getInt64Ty() }, false),
-                        Func::ExternalLinkage, "_innative_internal_env_memcpy", mod);
+                                       { builder.getInt8PtrTy(0), builder.getInt8PtrTy(0), builder.getInt64Ty() }, false),
+                           Func::ExternalLinkage, "_innative_internal_env_memcpy", mod);
 
   fn_memmove = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
-                                     { builder.getInt8PtrTy(), builder.getInt8PtrTy(),
-                                       builder.getIntNTy(machine->getPointerSizeInBits(0)) },
-                                     false),
-                         Func::ExternalLinkage, "_innative_internal_env_memmove", mod);
+                                        { builder.getInt8PtrTy(), builder.getInt8PtrTy(),
+                                          builder.getIntNTy(machine->getPointerSizeInBits(0)) },
+                                        false),
+                            Func::ExternalLinkage, "_innative_internal_env_memmove", mod);
 
   fn_memset = Func::Create(FuncTy::get(builder.getInt8PtrTy(),
-                                    { builder.getInt8PtrTy(), builder.getInt32Ty(),
-                                      builder.getIntNTy(machine->getPointerSizeInBits(0)) },
-                                    false),
-                        Func::ExternalLinkage, "_innative_internal_env_memset", mod);
+                                       { builder.getInt8PtrTy(), builder.getInt32Ty(),
+                                         builder.getIntNTy(machine->getPointerSizeInBits(0)) },
+                                       false),
+                           Func::ExternalLinkage, "_innative_internal_env_memset", mod);
 
   fn_memcmp = Func::Create(FuncTy::get(builder.getInt32Ty(),
-                                    { builder.getInt8PtrTy(), builder.getInt32Ty(),
-                                      builder.getIntNTy(machine->getPointerSizeInBits(0)) },
-                                    false),
-                        Func::ExternalLinkage, "_innative_internal_env_memcmp", mod);
+                                       { builder.getInt8PtrTy(), builder.getInt32Ty(),
+                                         builder.getIntNTy(machine->getPointerSizeInBits(0)) },
+                                       false),
+                           Func::ExternalLinkage, "_innative_internal_env_memcmp", mod);
 
   Func* fn_memfree =
     Func::Create(FuncTy::get(builder.getVoidTy(), { builder.getInt8PtrTy(0), builder.getInt64Ty() }, false),
@@ -957,9 +954,9 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
         functions.back().imported->setLinkage(Func::ExternalLinkage);
         functions.back().imported->setCallingConv(GetCallingConvention(imp));
 
-        auto& debugname = imp.func_desc.debug.name;
-        std::string canonical  = !(debugname.get()) ? functions.back().imported->getName().str() + DIVIDER "internal" :
-                                              debugname.str() + ("_" + std::to_string(i));
+        auto& debugname       = imp.func_desc.debug.name;
+        std::string canonical = !(debugname.get()) ? functions.back().imported->getName().str() + DIVIDER "internal" :
+                                                     debugname.str() + ("_" + std::to_string(i));
         auto name = !(debugname.get()) ? std::string(imp.export_name.str()) + DIVIDER "internal" : debugname.str();
         WrapFunction(functions.back().imported, name, canonical, Func::ExternalLinkage, InternalConvention);
       }
@@ -1060,8 +1057,8 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
                                                   "_" + std::to_string(functions.size()) + DIVIDER + m.name.str());
 
     debugger->FuncDecl(functions.back().internal, m.code.funcbody[i].column, decl.debug.line);
-    std::string name      = functions.back().internal->getName().str() + DIVIDER "external";
-    auto wrapperfn = &Compiler::PassFunction;
+    std::string name = functions.back().internal->getName().str() + DIVIDER "external";
+    auto wrapperfn   = &Compiler::PassFunction;
     ExportFunction(functions.back(), wrapperfn, name, name);
   }
 
@@ -1102,11 +1099,11 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
 
     CallInst* call =
       builder.CreateCall(fn_memgrow, { llvm::ConstantPointerNull::get(builder.getInt8PtrTy(0)),
-                                    builder.getInt64(m.table.tables[i].resizable.minimum * bytewidth),
-                                    builder.getInt64((m.table.tables[i].resizable.flags & WASM_LIMIT_HAS_MAXIMUM) ?
-                                                       (m.table.tables[i].resizable.maximum * bytewidth) :
-                                                       0),
-                                    GetPairPtr(tables.back(), 1) });
+                                       builder.getInt64(m.table.tables[i].resizable.minimum * bytewidth),
+                                       builder.getInt64((m.table.tables[i].resizable.flags & WASM_LIMIT_HAS_MAXIMUM) ?
+                                                          (m.table.tables[i].resizable.maximum * bytewidth) :
+                                                          0),
+                                       GetPairPtr(tables.back(), 1) });
 
     call->setCallingConv(fn_memgrow->getCallingConv());
 
@@ -1498,19 +1495,43 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
   if(isJIT) // The JIT on windows will just fail if we don't define this symbol here. It seems to have magic properties.
     new llvm::GlobalVariable(*mainctx.mod, builder.getInt8Ty(), true, Func::WeakAnyLinkage, builder.getInt8(0),
                              "__ImageBase");
-
-  // Create __chkstk function to satisfy the rtlibcalls
-  auto chkstk_ms =
-    Func::Create(FuncTy::get(builder.getVoidTy(), {}, false), Func::ExternalLinkage, "__chkstk_ms", mainctx.mod);
-  chkstk_ms->addFnAttr(llvm::Attribute::Naked);
-
-  Func* chkstk = Func::Create(chkstk_ms->getFunctionType(), Func::WeakAnyLinkage, "__chkstk", mainctx.mod);
-  builder.SetInsertPoint(BB::Create(*env->context, "entry", chkstk));
-  mainctx.debugger->FunctionDebugInfo(chkstk, "chkstk", true, true, nullptr, mainctx.debugger->GetSourceFile(0), 0, 0);
-  mainctx.debugger->SetSPLocation(builder, chkstk->getSubprogram());
-  builder.CreateCall(chkstk_ms, {});
-  builder.CreateRetVoid();
 #endif
+
+  if(env->abi == IN_ABI_Windows)
+  {
+    // Create __chkstk function to satisfy the rtlibcalls
+    auto chkstk_ms =
+      Func::Create(FuncTy::get(builder.getVoidTy(), {}, false), Func::ExternalLinkage, "__chkstk_ms", mainctx.mod);
+    chkstk_ms->addFnAttr(llvm::Attribute::Naked);
+
+    Func* chkstk = Func::Create(chkstk_ms->getFunctionType(), Func::WeakAnyLinkage, "__chkstk", mainctx.mod);
+    builder.SetInsertPoint(BB::Create(*env->context, "entry", chkstk));
+    mainctx.debugger->FunctionDebugInfo(chkstk, "chkstk", true, true, nullptr, mainctx.debugger->GetSourceFile(0), 0, 0);
+    mainctx.debugger->SetSPLocation(builder, chkstk->getSubprogram());
+    builder.CreateCall(chkstk_ms, {});
+    builder.CreateRetVoid();
+
+    if(env->arch == IN_ARCH_x86)
+    {
+      auto ftol_ms =
+        Func::Create(FuncTy::get(builder.getVoidTy(), {}, false), Func::ExternalLinkage, "_innative_internal_env_ftol", mainctx.mod);
+      ftol_ms->addFnAttr(llvm::Attribute::Naked);
+
+      Func* ftol = Func::Create(ftol_ms->getFunctionType(), Func::WeakAnyLinkage, "_ftol", mainctx.mod);
+      builder.SetInsertPoint(BB::Create(*env->context, "entry", ftol));
+      mainctx.debugger->FunctionDebugInfo(ftol, "ftol", true, true, nullptr, mainctx.debugger->GetSourceFile(0), 0, 0);
+      mainctx.debugger->SetSPLocation(builder, ftol->getSubprogram());
+      builder.CreateCall(ftol_ms, {});
+      builder.CreateRetVoid();
+
+      Func* ftol2 = Func::Create(ftol_ms->getFunctionType(), Func::WeakAnyLinkage, "_ftol2", mainctx.mod);
+      builder.SetInsertPoint(BB::Create(*env->context, "entry", ftol2));
+      mainctx.debugger->FunctionDebugInfo(ftol2, "ftol2", true, true, nullptr, mainctx.debugger->GetSourceFile(0), 0, 0);
+      mainctx.debugger->SetSPLocation(builder, ftol2->getSubprogram());
+      builder.CreateCall(ftol_ms, {});
+      builder.CreateRetVoid();
+    }
+  }
 
   // Create memcpy function to satisfy the rtlibcalls
   Func* fn_memcpy = Func::Create(mainctx.fn_memcpy->getFunctionType(), Func::WeakAnyLinkage, "memcpy", mainctx.mod);
@@ -1569,8 +1590,6 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   bool has_start = false;
   IN_ERROR err   = ERR_SUCCESS;
 
-  std::string triple = llvm::sys::getProcessTriple();
-
   // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
   llvm::InitializeAllTargetInfos();
   llvm::InitializeAllTargets();
@@ -1579,13 +1598,16 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   llvm::InitializeAllAsmPrinters();
   polly::initializePollyPasses(*llvm::PassRegistry::getPassRegistry());
 
-  std::string llvm_err;
-  auto arch = llvm::TargetRegistry::lookupTarget(triple, llvm_err);
+  llvm::Triple triple(EnumToString(ARCH_MAP, env->arch, 0, 0), "pc", EnumToString(ABI_MAP, env->abi, 0, 0));
 
-  if(!arch)
+  std::string llvm_err;
+  auto target = llvm::TargetRegistry::lookupTarget(triple.str(), llvm_err);
+
+  if(!target)
   {
     llvm::errs() << llvm_err;
-    return LogErrorString(*env, "%s: %s does not exist - %s", ERR_FATAL_UNKNOWN_TARGET, triple.c_str(), llvm_err.c_str());
+    return LogErrorString(*env, "%s: %s does not exist - %s", ERR_FATAL_UNKNOWN_TARGET, triple.str().c_str(),
+                          llvm_err.c_str());
   }
 
   for(varuint32 i = 0; i < env->n_modules; ++i)
@@ -1603,21 +1625,31 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   // Detect current CPU feature set and create machine target for LLVM
   llvm::TargetOptions opt;
   auto RM = llvm::Optional<llvm::Reloc::Model>();
-#ifdef IN_PLATFORM_POSIX
-  if(env->flags & ENV_LIBRARY)
+  if(env->abi != IN_ABI_Windows && (env->flags & ENV_LIBRARY) != 0)
     RM = llvm::Optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
-#endif
+
   llvm::SubtargetFeatures subtarget_features;
-  llvm::StringMap<bool> feature_map;
-  if(llvm::sys::getHostCPUFeatures(feature_map))
+  if(env->n_features < 0)
   {
-    for(auto& feature : feature_map)
+    llvm::StringMap<bool> feature_map;
+    if(llvm::sys::getHostCPUFeatures(feature_map))
     {
-      subtarget_features.AddFeature(feature.first(), feature.second);
+      for(auto& feature : feature_map)
+      {
+        subtarget_features.AddFeature(feature.first(), feature.second);
+      }
     }
   }
-  auto machine =
-    arch->createTargetMachine(triple, llvm::sys::getHostCPUName(), subtarget_features.getString(), opt, RM, llvm::None);
+  else
+  {
+    for(int i = 0; i < env->n_features; ++i)
+    {
+      subtarget_features.AddFeature(env->cpu_features[i], true);
+    }
+  }
+
+  auto machine = target->createTargetMachine(triple.str(), (!env->cpu_name ? llvm::sys::getHostCPUName() : env->cpu_name),
+                                             subtarget_features.getString(), opt, RM, llvm::None);
 
   if(!env->n_modules)
     return ERR_FATAL_NO_MODULES;
@@ -1652,9 +1684,9 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
     {
       if(env->modules[i].cache)
         DeleteCache(*env, env->modules[i]);
-      env->modules[i].cache =
-        new Compiler(*env,    env->modules[i], *env->context,        0,
-                      builder, machine,         kh_init_importhash(), GetLinkerObjectPath(*env, env->modules[i], file));
+      env->modules[i].cache = new Compiler(
+        *env, env->modules[i], *env->context, 0, builder, machine, kh_init_importhash(),
+        GetLinkerObjectPath(*env, env->modules[i], file, env->abi == IN_ABI_Windows ? LLD_FORMAT::COFF : LLD_FORMAT::ELF));
       if(!env->modules[i].cache->objfile.empty())
         remove(env->modules[i].cache->objfile);
 
@@ -1760,51 +1792,52 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
 
   mainctx.mod->getFunctionList().push_back(main);
 
-#ifdef IN_PLATFORM_WIN32
-  // The windows linker requires this to be defined. It's not actually used, just... defined.
-  new llvm::GlobalVariable(*mainctx.mod, builder.getInt32Ty(), false, llvm::GlobalValue::ExternalLinkage,
-                           builder.getInt32(
-                             0), // This value doesn't matter, it just needs to be something so LLVM exports the symbol.
-                           "_fltused");
-
-  if(env->flags & ENV_LIBRARY)
+  if(env->abi == IN_ABI_Windows)
   {
-    Func* mainstub =
-      Func::Create(FuncTy::get(builder.getInt32Ty(),
-                               { builder.getInt8PtrTy(), mainctx.builder.getInt32Ty(), builder.getInt8PtrTy() }, false),
-                   Func::ExternalLinkage, IN_INIT_FUNCTION "-stub");
-    mainstub->setCallingConv(llvm::CallingConv::X86_StdCall);
-    BB* entryblock = BB::Create(*env->context, "entry", mainstub);
-    builder.SetInsertPoint(entryblock);
-    mainctx.debugger->FuncDecl(mainstub, 0, mainctx.m.start_line);
-    mainctx.debugger->SetSPLocation(builder, mainstub->getSubprogram());
+    // The windows linker requires this to be defined. It's not actually used, just... defined.
+    new llvm::GlobalVariable(*mainctx.mod, builder.getInt32Ty(), false, llvm::GlobalValue::ExternalLinkage,
+                             builder.getInt32(
+                               0), // This value doesn't matter, it just needs to be something so LLVM exports the symbol.
+                             "_fltused");
 
-    if(!(env->flags & ENV_NO_INIT)) // Only actually initialize things on DLL load if we actually want to, otherwise
-                                    // create a stub function
+    if(env->flags & ENV_LIBRARY)
     {
-      BB* endblock  = BB::Create(*env->context, "end", mainstub);
-      BB* initblock = BB::Create(*env->context, "init", mainstub);
-      BB* exitblock = BB::Create(*env->context, "exit", mainstub);
+      Func* mainstub =
+        Func::Create(FuncTy::get(builder.getInt32Ty(),
+                                 { builder.getInt8PtrTy(), mainctx.builder.getInt32Ty(), builder.getInt8PtrTy() }, false),
+                     Func::ExternalLinkage, IN_INIT_FUNCTION "-stub");
+      mainstub->setCallingConv(llvm::CallingConv::X86_StdCall);
+      BB* entryblock = BB::Create(*env->context, "entry", mainstub);
+      builder.SetInsertPoint(entryblock);
+      mainctx.debugger->FuncDecl(mainstub, 0, mainctx.m.start_line);
+      mainctx.debugger->SetSPLocation(builder, mainstub->getSubprogram());
 
-      llvm::SwitchInst* s = builder.CreateSwitch(mainstub->arg_begin() + 1, endblock, 2);
-      s->addCase(mainctx.builder.getInt32(1), initblock); // DLL_PROCESS_ATTACH
-      s->addCase(mainctx.builder.getInt32(0), exitblock); // DLL_PROCESS_DETACH
+      if(!(env->flags & ENV_NO_INIT)) // Only actually initialize things on DLL load if we actually want to, otherwise
+                                      // create a stub function
+      {
+        BB* endblock  = BB::Create(*env->context, "end", mainstub);
+        BB* initblock = BB::Create(*env->context, "init", mainstub);
+        BB* exitblock = BB::Create(*env->context, "exit", mainstub);
 
-      builder.SetInsertPoint(initblock);
-      builder.CreateCall(main, {})->setCallingConv(main->getCallingConv());
-      builder.CreateBr(endblock);
+        llvm::SwitchInst* s = builder.CreateSwitch(mainstub->arg_begin() + 1, endblock, 2);
+        s->addCase(mainctx.builder.getInt32(1), initblock); // DLL_PROCESS_ATTACH
+        s->addCase(mainctx.builder.getInt32(0), exitblock); // DLL_PROCESS_DETACH
 
-      builder.SetInsertPoint(exitblock);
-      builder.CreateCall(cleanup, {})->setCallingConv(cleanup->getCallingConv());
-      builder.CreateBr(endblock);
+        builder.SetInsertPoint(initblock);
+        builder.CreateCall(main, {})->setCallingConv(main->getCallingConv());
+        builder.CreateBr(endblock);
 
-      builder.SetInsertPoint(endblock);
+        builder.SetInsertPoint(exitblock);
+        builder.CreateCall(cleanup, {})->setCallingConv(cleanup->getCallingConv());
+        builder.CreateBr(endblock);
+
+        builder.SetInsertPoint(endblock);
+      }
+
+      builder.CreateRet(builder.getInt32(1)); // Always return 1, since an error will trap instead.
+      mainctx.mod->getFunctionList().push_back(mainstub);
     }
-
-    builder.CreateRet(builder.getInt32(1)); // Always return 1, since an error will trap instead.
-    mainctx.mod->getFunctionList().push_back(mainstub);
   }
-#endif
 
   if(env->optimize & ENV_OPTIMIZE_OMASK)
     OptimizeModules(env, machine);

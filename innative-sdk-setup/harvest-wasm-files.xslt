@@ -11,7 +11,7 @@
 
     <xsl:key
         name="Whitelist"
-        match="wix:Component[ substring( wix:File/@Source, string-length( wix:File/@Source ) - 3 ) = '.wat' ]|wix:Component[ substring( wix:File/@Source, string-length( wix:File/@Source ) - 4 ) = '.wast' ]|wix:Component[ substring( wix:File/@Source, string-length( wix:File/@Source ) - 4 ) = '.wasm' ]"
+        match="wix:Component[ substring( wix:File/@Source, string-length( wix:File/@Source ) - 3 ) = '.wat' ]|wix:Component[ substring( wix:File/@Source, string-length( wix:File/@Source ) - 4 ) = '.wast' ]|wix:Component[ substring( wix:File/@Source, string-length( wix:File/@Source ) - 4 ) = '.wasm' ]|wix:Component[ substring( wix:File/@Source, string-length( wix:File/@Source ) - 3 ) = '.map' ]"
         use="@Id"
     /> 
     

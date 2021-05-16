@@ -69,6 +69,9 @@
     <MASM Include="memset.x86.asm">
       <Filter>Source Files</Filter>
     </MASM>
+    <MASM Include="ftol.x86.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
   </ItemGroup>
   <ItemGroup>
     <None Include="vcruntime.x86.inc">
