@@ -425,15 +425,14 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
     }
     else
     {
-      LLD_FORMAT format                 = LLD_FORMAT::ELF;
-      std::vector<const char*> linkargs = {};
+      format                 = LLD_FORMAT::ELF;
 
       if(env->flags & ENV_LIBRARY)
         linkargs.push_back("-shared");
       if(!(env->flags & ENV_DEBUG))
         linkargs.push_back("--strip-debug");
 
-      std::vector<std::string> cache = { std::string("--output=") + file.u8string(), "-L" + libpath.u8string(),
+      cache = { std::string("--output=") + file.u8string(), "-L" + libpath.u8string(),
                                          "-L" + workdir.u8string() };
     }
 
