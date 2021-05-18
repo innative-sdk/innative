@@ -5,12 +5,6 @@ else()
 project(innative-env LANGUAGES C VERSION ${PROJECT_VERSION})
 endif()
 
-if(USE32bit)
-  set(BIN_DIR "bin-Win32")
-else()
-  set(BIN_DIR "bin")
-endif()
-
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 list(APPEND env_SOURCES
