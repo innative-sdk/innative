@@ -18,8 +18,8 @@ limitations under the License.
 #define IN__INNATIVE_H
 
 #define INNATIVE_VERSION_MAJOR    0
-#define INNATIVE_VERSION_MINOR    1
-#define INNATIVE_VERSION_REVISION 11
+#define INNATIVE_VERSION_MINOR    2
+#define INNATIVE_VERSION_REVISION 0
 #define INNATIVE_VERSION_BUILD                                                                   \
   ((((__TIME__[0] - '0') * 36000) + ((__TIME__[1] - '0') * 3600) + ((__TIME__[3] - '0') * 600) + \
     ((__TIME__[4] - '0') * 60) + ((__TIME__[6] - '0') * 10) + (__TIME__[7] - '0')) &             \
