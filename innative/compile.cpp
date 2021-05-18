@@ -1333,6 +1333,10 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
     auto metadata = llvm::ConstantStruct::getAnon(values);
     auto v = new llvm::GlobalVariable(*mod, metadata->getType(), true, llvm::GlobalValue::LinkageTypes::ExternalLinkage,
                                       metadata, CanonicalName(StringSpan(), StringSpan::From(IN_METADATA_PREFIX), m_idx));
+    if(!m_idx)
+      llvm::GlobalAlias::create(llvm::GlobalValue::ExternalLinkage, "_innative_internal_zero_module__", v)
+        ->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
+
     v->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
   }
 

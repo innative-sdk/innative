@@ -13,7 +13,7 @@
   <?endif ?>
   <?define OtherTargetDir="$(var.SolutionDir)bin-windows-$(var.OtherPlatform)/" ?>
   
-  <?define Version="0.1.11" ?>
+  <?define Version="0.2.0" ?>
   <Product 
     Id="85E25DCB-0ADE-496F-81E0-265D29C1AC3B"
     Name="inNative SDK v$(var.Version)" 

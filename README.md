@@ -88,10 +88,8 @@ If you're on linux, or you really want to build LLVM from source, use the provid
 
 If you aren't building LLVM, but you'd like to run the test suite, you will need to get the webassembly spec submodule by running `git submodule update --init spec`. This will only check out the `spec` submodule, which allows you to skip checking out the entire `llvm-project` monorepo. If you get errors when running the tests, be sure to double check that you have acquired `spec` and `spec/document/core/util/katex`.
 
-inNative does not yet have a working CMake configuration, so build instructions are still provided on a per-platform basis.
-
 ### Windows
-inNative currently requires C++17 to build, and only supports Visual Studio 2019. After installing the LLVM/LLD binaries or building it from source, open `innative.sln` in Visual Studio and build the project, or run `msbuild innative.sln`.
+inNative currently requires C++17 to build, and only supports Visual Studio 2019. After installing the LLVM/LLD binaries or building it from source, open `innative.sln` in Visual Studio and build the project, or run `msbuild innative.sln`. Attempting to use cmake to generate these project files won't work because of many windows-specific requirements that CMake doesn't know about.
 
 ### Linux
 Since inNative requires C++17 to build, the minimum supported compiler is gcc-7 or clang-5. Once you've installed the LLVM/LLD binaries or built it from source, run `cmake` to create makefiles or a Ninja configuration that you can then use to build the project. It is suggested to create a new folder called `build` and then run `cmake ..` to isolate the generated project files. The existing makefiles are **deprecated** and will be removed in a future release.
