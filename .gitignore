@@ -16,6 +16,7 @@
 *.pdb
 *.zip
 *.tar.gz
+/.vscode/
 /bin*/
 /innative/x64/
 /innative-env/x64/

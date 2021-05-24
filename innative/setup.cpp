@@ -1,8 +1,10 @@
 // Copyright (c)2021 Fundament Software
 // For conditions of distribution and use, see copyright notice in innative.h
 
-#include "utility.h"
+#include "tools.h"
+#include "constants.h"
 #include "innative/export.h"
+#include "utility.h"
 #include <assert.h>
 #include <stdexcept>
 #include <stdarg.h>
@@ -23,6 +25,11 @@
 #else
   #error unknown platform
 #endif
+
+#define GETEMBED(NAME, TARGET, ISDEBUG)                                                 \
+  auto len_##NAME = GetEmbeddingPath(CURRENT_ABI, CURRENT_ARCH, ISDEBUG, TARGET, 0, 0); \
+  char* NAME      = (char*)alloca(len_##NAME);                                          \
+  GetEmbeddingPath(CURRENT_ABI, CURRENT_ARCH, ISDEBUG, TARGET, NAME, len_##NAME);
 
 namespace innative {
   namespace utility {
@@ -217,8 +224,11 @@ namespace innative {
         closedir(pdir);
       }
 
-      std::string link(folder);
-      link += file;
+      std::string origin(folder);
+      if(origin.back() != '/')
+        origin += '/';
+
+      auto link = origin + file;
       std::string src(file);
 
       if(major >= 0)
@@ -248,8 +258,7 @@ namespace innative {
         return !unlink(link.c_str()); // No version exists here, so just delete it
 
       unlink(link.c_str());
-      auto origin = std::string(folder) + file + "." + std::to_string(major) + "." + std::to_string(minor) + "." +
-                    std::to_string(revision);
+      origin = origin + file + "." + std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(revision);
       return !symlink(origin.c_str(), link.c_str());
     }
 
@@ -258,22 +267,25 @@ namespace innative {
     int UpdateSymlinks(const char* file, const char* folder)
     {
       if(!GenSymlink(file, folder, INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR))
-        return -19;
+        return -16;
 
       if(!GenSymlink(file, folder, INNATIVE_VERSION_MAJOR, -1))
-        return -20;
+        return -32;
 
       return GenSymlink(file, folder, -1, -1) ? 0 : -21;
     }
 
     int InstallFile(const char* arg0, const char* file, const char* folder)
     {
-      path src     = GetProgramPath(arg0).parent_path() / file;
-      auto target  = (path(folder) / src) += POSIX_VERSION_STR;
+      path src    = GetProgramPath(arg0).parent_path() / file;
+      auto target = path(folder) / file;
+      target += POSIX_VERSION_STR;
+      std::error_code ec;
+      create_directories(folder, ec); // create_directories will "fail" if the folder already exists.
       bool success = copy_file(src, target, copy_options::overwrite_existing);
 
       // Calculate new master symlinks
-      return success ? UpdateSymlinks(file, folder) : -16;
+      return success ? UpdateSymlinks(file, folder) : -17;
     }
 #endif
 
@@ -343,14 +355,20 @@ namespace innative {
           return -3;
 
 #elif defined(IN_PLATFORM_POSIX)
+      GETEMBED(erelease, "innative-env", false);
+      GETEMBED(edebug, "innative-env-d", true);
+      path vrelease(IN_LINUX_CROSSDIR);
+      vrelease = (vrelease / erelease).parent_path();
+      path vdebug(IN_LINUX_CROSSDIR);
+      vdebug  = (vdebug / edebug).parent_path();
       int err = 0;
-      if((err = InstallFile(arg0, "libinnative.so", "/usr/lib/")) < 0)
+      if((err = InstallFile(arg0, "libinnative.so", "/usr/lib/")) != 0)
         return err - 256;
-      if((err = InstallFile(arg0, "innative-env.a", "/usr/lib/")) < 0)
+      if((err = InstallFile(arg0, GetDefaultEmbedding(false), vrelease.c_str())) != 0)
         return err - 512;
-      if((err = InstallFile(arg0, "innative-env-d.a", "/usr/lib/")) < 0)
+      if((err = InstallFile(arg0, GetDefaultEmbedding(true), vdebug.c_str())) != 0)
         return err - 768;
-      if((err = InstallFile(arg0, "innative-cmd", "/usr/bin/")) < 0)
+      if((err = InstallFile(arg0, "innative-cmd", "/usr/bin/")) != 0)
         return err - 1024;
       chmod("/usr/bin/innative-cmd" POSIX_VERSION_STR,
             0777); // Make the actual file executable (we don't need to fix the symlinks)
@@ -409,26 +427,30 @@ namespace innative {
 
       return r ? 0 : -1;
 #elif defined(IN_PLATFORM_POSIX)
+      GETEMBED(erelease, "innative-env", false);
+      GETEMBED(edebug, "innative-env-d", true);
+      std::string vrelease(erelease);
+      vrelease = IN_LINUX_CROSSDIR + ("/" + vrelease) + POSIX_VERSION_STR;
+      std::string vdebug(edebug);
+      vdebug = IN_LINUX_CROSSDIR + ("/" + vdebug) + POSIX_VERSION_STR;
+      printf("VRELEASE: %s\n", vrelease.c_str());
+      printf("VDEBUG: %s\n", vdebug.c_str());
+      int err = 0;
       if(unlink("/usr/lib/libinnative.so" POSIX_VERSION_STR) != 0)
-        return -1;
-      if(unlink("/usr/lib/innative-env.a" POSIX_VERSION_STR) != 0)
-        return -2;
-      if(unlink("/usr/lib/innative-env-d.a" POSIX_VERSION_STR) != 0)
-        return -3;
+        err |= -1;
+      if(unlink(vrelease.c_str()) != 0)
+        err |= -2;
+      if(unlink(vdebug.c_str()) != 0)
+        err |= -4;
       if(unlink("/usr/bin/innative-cmd" POSIX_VERSION_STR) != 0)
-        return -4;
+        err |= -8;
 
       // Calculate new symlinks
-      int err = 0;
-      if((err = UpdateSymlinks("libinnative.so", "/usr/lib/")) < 0)
-        return err - 256;
-      if((err = UpdateSymlinks("innative-env.a", "/usr/lib/")) < 0)
-        return err - 512;
-      if((err = UpdateSymlinks("innative-env-d.a", "/usr/lib/")) < 0)
-        return err - 768;
-      if((err = UpdateSymlinks("innative-cmd", "/usr/bin/")) < 0)
-        return err - 1024;
-      return 0;
+      err |= UpdateSymlinks("libinnative.so", "/usr/lib/") << 4;
+      err |= UpdateSymlinks(erelease, IN_LINUX_CROSSDIR) << 8;
+      err |= UpdateSymlinks(edebug, IN_LINUX_CROSSDIR) << 12;
+      err |= UpdateSymlinks("innative-cmd", "/usr/bin/") << 16;
+      return err;
 #endif
     }
   }

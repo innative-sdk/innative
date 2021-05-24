@@ -324,17 +324,17 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
         f = testpath(f, src, out);
         f = testpath(f, rootpath / src, out);
 
-        if(env->abi != IN_ABI_Windows)
-        {
-          if(GetArchBits(env->arch) == 64)
-            f = testpath(f, rootpath.parent_path() / "lib64" / src, out);
-          f = testpath(f, rootpath.parent_path() / "lib" / src, out);
+#ifndef IN_PLATFORM_WIN32
+        if(GetArchBits(env->arch) == 64)
+          f = testpath(f, rootpath.parent_path() / "lib64" / src, out);
+        f = testpath(f, rootpath.parent_path() / "lib" / src, out);
 
-          if(GetArchBits(env->arch) == 64)
-            f = testpath(f, path("/usr/lib64/") / src, out);
-          f = testpath(f, path("/usr/lib/") / src, out);
-          f = testpath(f, path("/usr/innative/lib/placeholder/") / src, out);
-        }
+        if(GetArchBits(env->arch) == 64)
+          f = testpath(f, path("/usr/lib64/") / src, out);
+        f = testpath(f, path("/usr/lib/") / src, out);
+        f = testpath(f, path(IN_LINUX_CROSSDIR) / src, out);
+#endif
+
         if(!f)
           return LogErrorString(*env, "%s: Error loading file: %s", ERR_FATAL_FILE_ERROR, src.u8string().c_str());
         fclose(f);
@@ -974,12 +974,16 @@ size_t innative::GetEmbeddingPath(uint8_t abi, uint8_t arch, bool debug, const c
     return snprintf(out, outsize, "%s", GetDefaultEmbedding(debug));
 
   if(!name)
-    name = "innative-env";
+    name = debug ? "innative-env-d" : "innative-env";
 
   const char* strabi  = "unknown";
   const char* strarch = "unknown";
   const char* ext     = (abi == IN_ABI_Windows) ? ".lib" : ".a";
+#ifdef IN_PLATFORM_WIN32
   const char* bin     = "../bin-";
+#else
+  const char* bin     = "bin-";
+#endif
 
   switch(abi)
   {
@@ -1003,5 +1007,5 @@ size_t innative::GetEmbeddingPath(uint8_t abi, uint8_t arch, bool debug, const c
   case IN_ARCH_RISCV: strarch = "riscv"; break;
   }
 
-  return snprintf(out, outsize, "%s%s-%s/%s%s", bin, strabi, strarch, name, ext);
+  return snprintf(out, outsize, "%s%s-%s/%s%s", bin, strabi, strarch, name, ext)+1;
 }

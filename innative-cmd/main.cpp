@@ -603,7 +603,7 @@ int main(int argc, char* argv[])
 
   CommandLine commandline;
   err = commandline.Parse(argc - 1, argv + 1); // skip 0th parameter
-  if(err < 0)
+  if(err != 0)
   {
     std::cout << commandline.shortusage << commandline.usage << std::endl;
     return err;
@@ -616,7 +616,7 @@ int main(int argc, char* argv[])
   {
     std::cout << "Uninstalling inNative Runtime..." << std::endl;
     err = innative_uninstall();
-    if(err < 0)
+    if(err != 0)
     {
       std::cout << "Failed to uninstall runtime! [" << err << "]" << std::endl;
       return err;
