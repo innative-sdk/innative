@@ -93,7 +93,7 @@ llvm::DISubprogram* DebugSourceMap::GetDebugFunction(size_t index, const char* l
       SPRINTF(fallback, 64, "function_%zu", index);
       name = fallback;
     }
-      
+
     if(!linkage)
       linkage = name;
 
@@ -390,8 +390,7 @@ llvm::DIType* DebugSourceMap::GetDebugType(size_t index, llvm::DIType* parent)
                                                   type.bit_size, type.byte_align << 3, type.bit_offset,
                                                   llvm::DINode::FlagZero, nullptr, llvm::DINodeArray());
       else
-        types[index] = _dbuilder->createStructType(GetDebugScope(type.parent, file), name, file,
-                                                               type.original_line,
+        types[index] = _dbuilder->createStructType(GetDebugScope(type.parent, file), name, file, type.original_line,
                                                    type.bit_size, type.byte_align << 3, llvm::DINode::FlagZero, nullptr,
                                                    llvm::DINodeArray());
       break;

@@ -68,7 +68,7 @@ void TestHarness::test_embedding()
   embed          = (const char*)embedfile.get();
   TEST(CompileWASM("../scripts/embedded.wat", &TestHarness::do_embedding, "env", lambda) == ERR_SUCCESS);
 
-//#ifdef IN_PLATFORM_WIN32
+  //#ifdef IN_PLATFORM_WIN32
   // Here, we demonstrate loading a webassembly module that depends on another webassembly module.
   // First, we compile the module we depend on, which is "embedded". Because our libaries aren't
   // webassembly aware, we pass in "" as the name, forcing them to use C linkage on exported functions.
@@ -87,10 +87,10 @@ void TestHarness::test_embedding()
   env->loglevel = _loglevel;
   env->system   = "env"; // Make sure we set this to env
 
-  #ifdef IN_DEBUG
+#ifdef IN_DEBUG
   env->flags |= ENV_DEBUG;
   env->optimize = ENV_OPTIMIZE_O0;
-  #endif
+#endif
 
   path lib = _out;
 #ifdef IN_PLATFORM_WIN32

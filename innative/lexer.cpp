@@ -149,13 +149,13 @@ namespace innative {
       // At the moment this should only be lowercase
       if(!strncmp(":canonical", s, std::min((size_t)(end - s), (size_t)10)))
       {
-        //if(target)
+        // if(target)
         //  target->assign("canonical");
         return s + 10;
       }
       if(!strncmp(":arithmetic", s, std::min((size_t)(end - s), (size_t)11)))
       {
-        //if(target)
+        // if(target)
         //  target->assign("arithmetic");
         return s + 11;
       }

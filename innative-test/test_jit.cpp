@@ -58,8 +58,7 @@ void TestHarness::test_jit()
     int err;
 
     // Add our default environment just like normal, but we have to explicitly tag it so the JIT knows how to load it.
-    err = (*_exports.AddEmbedding)(env, IN_TAG_STATIC, (void*)(*_exports.GetDefaultEmbedding)(TestHarness::Debug),
-                                   0, 0);
+    err = (*_exports.AddEmbedding)(env, IN_TAG_STATIC, (void*)(*_exports.GetDefaultEmbedding)(TestHarness::Debug), 0, 0);
     TESTERR(err, ERR_SUCCESS);
 
   #ifdef IN_PLATFORM_WIN32
@@ -127,8 +126,8 @@ void TestHarness::test_jit()
     env->system   = "env"; // Make sure we set this to env
 
     auto lib = _out.generic_u8string();
-    int err  = (*_exports.AddEmbedding)(env, IN_TAG_STATIC,
-                                       (void*)(*_exports.GetDefaultEmbedding)(TestHarness::Debug), 0, 0);
+    int err =
+      (*_exports.AddEmbedding)(env, IN_TAG_STATIC, (void*)(*_exports.GetDefaultEmbedding)(TestHarness::Debug), 0, 0);
 
     if(err >= 0)
       err = (*_exports.AddEmbedding)(env, IN_TAG_DYNAMIC, lib.c_str(), 0, 0);
@@ -175,8 +174,8 @@ void TestHarness::test_jit()
     env->optimize = ENV_OPTIMIZE_O0;
   #endif
 
-    int err = (*_exports.AddEmbedding)(env, IN_TAG_STATIC,
-                                       (void*)(*_exports.GetDefaultEmbedding)(TestHarness::Debug), 0, 0);
+    int err =
+      (*_exports.AddEmbedding)(env, IN_TAG_STATIC, (void*)(*_exports.GetDefaultEmbedding)(TestHarness::Debug), 0, 0);
     TESTERR(err, ERR_SUCCESS);
 
   #ifdef IN_PLATFORM_WIN32

@@ -47,10 +47,10 @@ Debugger::Debugger(Compiler* compiler, llvm::Module& m, const char* name, const 
 
   char version[36];
   SPRINTF(version, 36, "inNative Runtime v%i.%i.%i.%i", INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR,
-            INNATIVE_VERSION_REVISION, INNATIVE_VERSION_BUILD);
+          INNATIVE_VERSION_REVISION, INNATIVE_VERSION_BUILD);
 
-  dcu = _dbuilder->createCompileUnit(llvm::dwarf::DW_LANG_C89, dunit, version,
-                                     _compiler->env.optimize != 0, GenFlagString(_compiler->env), WASM_MAGIC_VERSION, name);
+  dcu = _dbuilder->createCompileUnit(llvm::dwarf::DW_LANG_C89, dunit, version, _compiler->env.optimize != 0,
+                                     GenFlagString(_compiler->env), WASM_MAGIC_VERSION, name);
 
   diF32  = _dbuilder->createBasicType("f32", 32, llvm::dwarf::DW_ATE_float);
   diF64  = _dbuilder->createBasicType("f64", 64, llvm::dwarf::DW_ATE_float);
@@ -137,8 +137,9 @@ llvm::DISubroutineType* Debugger::CreateFunctionDebugType(llvm::FunctionType* fn
                                                                               llvm::dwarf::DW_CC_nocall);
 }
 
-void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool definition, bool artificial, llvm::DIScope* scope,
-                                 llvm::DIFile* file, unsigned int line, unsigned int col, llvm::DISubroutineType* subtype)
+void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool definition, bool artificial,
+                                 llvm::DIScope* scope, llvm::DIFile* file, unsigned int line, unsigned int col,
+                                 llvm::DISubroutineType* subtype)
 {
   if(!_dbuilder)
     return;
@@ -172,7 +173,7 @@ void Debugger::FunctionDebugInfo(llvm::Function* fn, llvm::StringRef name, bool 
     scope = file;
   if(!subtype)
     subtype = CreateFunctionDebugType(fn->getFunctionType(), fn->getCallingConv());
-  
+
   fn->setSubprogram(_dbuilder->createFunction(scope, name, fn->getName(), file, line, subtype, line, diflags, spflags));
 }
 void Debugger::PushBlock(llvm::DILocalScope* scope, const llvm::DebugLoc& loc) { _curscope = scope; }

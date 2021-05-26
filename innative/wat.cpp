@@ -60,9 +60,9 @@ void WatParser::WriteUTF32(uint32_t ch, ByteArray& str, varuint32& index)
 {
   static const uint32_t UNICODE_REPLACEMENT_CHAR = 0x0000FFFD;
   static const uint32_t UNICODE_MAX_LEGAL_UTF32  = 0x0010FFFF;
-  static const uint8_t firstByteMark[7]      = { 0x00, 0x00, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC };
-  static const uint32_t byteMask             = 0xBF;
-  static const uint32_t byteMark             = 0x80;
+  static const uint8_t firstByteMark[7]          = { 0x00, 0x00, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC };
+  static const uint32_t byteMask                 = 0xBF;
+  static const uint32_t byteMark                 = 0x80;
 
   int bytesToWrite;
   if(ch < 0x80)
@@ -1034,7 +1034,7 @@ int WatParser::ParseFunction(Queue<WatToken>& tokens, varuint32* index, StringSp
   body.line         = tokens.Peek().line;
   body.column       = tokens.Peek().column;
 
-  *index    = m.function.n_funcdecl + m.importsection.functions;
+  *index      = m.function.n_funcdecl + m.importsection.functions;
   Import* imp = 0;
   if(err = InlineImportExport(tokens, index, WASM_KIND_FUNCTION, &imp))
     return err;
@@ -1301,7 +1301,10 @@ int WatParser::ParseGlobal(Queue<WatToken>& tokens, WatToken token)
   return AppendArray(env, g, m.global.globals, m.global.n_globals);
 }
 
-int WatParser::ParseMemoryDesc(MemoryDesc& mem, Queue<WatToken>& tokens) { return ParseResizableLimits(mem.limits, tokens); }
+int WatParser::ParseMemoryDesc(MemoryDesc& mem, Queue<WatToken>& tokens)
+{
+  return ParseResizableLimits(mem.limits, tokens);
+}
 
 int WatParser::ParseMemory(Queue<WatToken>& tokens, WatToken token)
 {
@@ -1751,7 +1754,7 @@ int WatParser::ParseModule(Environment& env, Module& m, const char* file, Queue<
     auto& f = mod.code.funcbody[s.deferred[0].func - mod.importsection.functions];
     if(s.deferred[0].index >= f.n_body)
       return ERR_INVALID_FUNCTION_BODY;
-    f.body[s.deferred[0].index].immediates[imm]._varuint32 = e; 
+    f.body[s.deferred[0].index].immediates[imm]._varuint32 = e;
     return ERR_SUCCESS;
   };
 

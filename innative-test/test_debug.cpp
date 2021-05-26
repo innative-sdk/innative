@@ -38,7 +38,7 @@ int TestHarness::do_debug_2(void* assembly)
   return ERR_SUCCESS;
 }
 
-  void TestHarness::test_debug()
+void TestHarness::test_debug()
 {
   int flags   = 0;
   auto lambda = [&](Environment* env) -> int {

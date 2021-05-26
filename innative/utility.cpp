@@ -347,7 +347,7 @@ namespace innative {
       {
       case IN_ARCH_PPC:
       case IN_ARCH_PPC64: return abi == IN_ABI_Solaris; // Only little endian on Solaris
-      case IN_ARCH_MIPS: return false; // We just guess that MIPS is big-endian for now.
+      case IN_ARCH_MIPS: return false;                  // We just guess that MIPS is big-endian for now.
       default: return true;
       }
     }
