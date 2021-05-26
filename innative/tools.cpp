@@ -332,7 +332,7 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
           f = testpath(f, path("/usr/lib64/") / src, out);
         f = testpath(f, path("/usr/lib/") / src, out);
         f = testpath(f, path(IN_LINUX_CROSSDIR) / src, out);
-        f = testpath(f, path("/../") / src, out);
+        f = testpath(f, path("../") / src, out);
 #endif
 
         if(!f)

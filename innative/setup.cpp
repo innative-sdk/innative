@@ -433,8 +433,6 @@ namespace innative {
       vrelease = IN_LINUX_CROSSDIR + ("/" + vrelease) + POSIX_VERSION_STR;
       std::string vdebug(edebug);
       vdebug = IN_LINUX_CROSSDIR + ("/" + vdebug) + POSIX_VERSION_STR;
-      printf("VRELEASE: %s\n", vrelease.c_str());
-      printf("VDEBUG: %s\n", vdebug.c_str());
       int err = 0;
       if(unlink("/usr/lib/libinnative.so" POSIX_VERSION_STR) != 0)
         err |= -1;
