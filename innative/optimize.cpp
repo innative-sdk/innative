@@ -42,7 +42,7 @@ IN_ERROR innative::OptimizeModules(const Environment* env, llvm::TargetMachine* 
   builder.VerifyOutput     = true;
   builder.PrepareForLTO    = false; // TODO: Maybe introduce LTO optimizations at some point?
   builder.LibraryInfo      = new llvm::TargetLibraryInfoImpl(target->getTargetTriple());
-  
+
   switch(env->optimize & ENV_OPTIMIZE_OMASK)
   {
   case ENV_OPTIMIZE_O1: builder.OptLevel = 1; break;
@@ -52,18 +52,18 @@ IN_ERROR innative::OptimizeModules(const Environment* env, llvm::TargetMachine* 
   default: assert(false);
   }
 
-  // LLVM points out that this would be useful even at O0, but damages debug info. 
+  // LLVM points out that this would be useful even at O0, but damages debug info.
   if(!(env->optimize & ENV_OPTIMIZE_NO_MERGING))
     builder.MergeFunctions = builder.OptLevel > 0;
-  builder.Inliner        = llvm::createFunctionInliningPass(builder.OptLevel, builder.SizeLevel, false);
-  
+  builder.Inliner = llvm::createFunctionInliningPass(builder.OptLevel, builder.SizeLevel, false);
+
   target->adjustPassManager(builder);
 
   if(builder.OptLevel > 1)
   {
     // Allow all vectorization helpers at O2 and O3
-    builder.SLPVectorize = true;
-    builder.LoopVectorize = true;
+    builder.SLPVectorize     = true;
+    builder.LoopVectorize    = true;
     builder.LoopsInterleaved = true;
     builder.RerollLoops      = true;
   }
@@ -71,7 +71,7 @@ IN_ERROR innative::OptimizeModules(const Environment* env, llvm::TargetMachine* 
   llvm::legacy::PassManager mpm;
   mpm.add(llvm::createTargetTransformInfoWrapperPass(target->getTargetIRAnalysis()));
   builder.populateModulePassManager(mpm);
-  //mpm.add(llvm::createVerifierPass()); // This may create false positives
+  // mpm.add(llvm::createVerifierPass()); // This may create false positives
 
   // Optimize all modules
   for(size_t i = 0; i < env->n_modules; ++i)

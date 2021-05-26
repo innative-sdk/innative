@@ -1517,8 +1517,8 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
 
     if(env->arch == IN_ARCH_x86)
     {
-      auto ftol_ms =
-        Func::Create(FuncTy::get(builder.getVoidTy(), {}, false), Func::ExternalLinkage, "_innative_internal_env_ftol", mainctx.mod);
+      auto ftol_ms = Func::Create(FuncTy::get(builder.getVoidTy(), {}, false), Func::ExternalLinkage,
+                                  "_innative_internal_env_ftol", mainctx.mod);
       ftol_ms->addFnAttr(llvm::Attribute::Naked);
 
       Func* ftol = Func::Create(ftol_ms->getFunctionType(), Func::WeakAnyLinkage, "_ftol", mainctx.mod);

@@ -96,8 +96,8 @@ void TestHarness::test_assemblyscript()
 
     (*_exports.DestroyEnvironment)(env);
 
-    void* assembly = LoadAssembly(dll_path);
-    IN_Entrypoint start = (*_exports.LoadFunction)(assembly, 0, IN_INIT_FUNCTION);
+    void* assembly        = LoadAssembly(dll_path);
+    IN_Entrypoint start   = (*_exports.LoadFunction)(assembly, 0, IN_INIT_FUNCTION);
     IN_Entrypoint cleanup = (*_exports.LoadFunction)(assembly, 0, IN_EXIT_FUNCTION);
     TEST(start);
     if(start)
@@ -114,7 +114,7 @@ void TestHarness::test_assemblyscript()
 
   fn(TEST_EMBEDDING, 0);
 
-  size_t embedsz   = 0;
+  size_t embedsz = 0;
   auto embedfile = utility::LoadFile(TEST_EMBEDDING, embedsz);
 
   fn((const char*)embedfile.get(), embedsz);

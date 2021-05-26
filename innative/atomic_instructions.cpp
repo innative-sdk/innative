@@ -66,8 +66,7 @@ template<typename F> IN_ERROR Compiler::CompileAtomicMemInstruction(Instruction&
   return inner(align, ptr);
 }
 
-template<typename F>
-IN_ERROR Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCODING arg2Ty, F&& inner)
+template<typename F> IN_ERROR Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCODING arg2Ty, F&& inner)
 {
   IN_ERROR err;
   unsigned align;
@@ -82,8 +81,8 @@ IN_ERROR Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCOD
 }
 
 template<typename F>
-IN_ERROR Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCODING arg2Ty,
-                                                         WASM_TYPE_ENCODING arg3Ty, F&& inner)
+IN_ERROR Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCODING arg2Ty, WASM_TYPE_ENCODING arg3Ty,
+                                               F&& inner)
 {
   IN_ERROR err;
   unsigned align;
@@ -102,14 +101,14 @@ IN_ERROR Compiler::CompileAtomicMemInstruction(Instruction& ins, WASM_TYPE_ENCOD
 IN_ERROR Compiler::CompileAtomicNotify(Instruction& ins, const char* name)
 {
   return CompileAtomicMemInstruction(ins, TE_i32, [&](unsigned, llvmVal* ptr, llvmVal* count) {
-    ptr = builder.CreatePointerCast(ptr, builder.getInt8PtrTy());
+    ptr       = builder.CreatePointerCast(ptr, builder.getInt8PtrTy());
     auto call = builder.CreateCall(atomic_notify, { ptr, count });
     return PushReturn(call);
   });
 }
 
 IN_ERROR Compiler::CompileAtomicWait(Instruction& ins, WASM_TYPE_ENCODING varTy, llvm::Function* wait_func,
-                                               const char* name)
+                                     const char* name)
 {
   // TODO: Trap if the memory isn't shared? Double-check this because
   // that sounds like the spec is confused. We should know whether the
@@ -168,7 +167,7 @@ IN_ERROR Compiler::CompileAtomicStore(Instruction& ins, WASM_TYPE_ENCODING varTy
 }
 
 IN_ERROR Compiler::CompileAtomicRMW(Instruction& ins, WASM_TYPE_ENCODING varTy, llvm::AtomicRMWInst::BinOp Op,
-                                              const char* name)
+                                    const char* name)
 {
   return CompileAtomicMemInstruction(ins, varTy, [&](unsigned align, llvmVal* ptr, llvmVal* newValue) {
     auto varsize = unsigned(4 * -varTy); // TE_i32(-1) => 4; TE_i64(-2) => 8;
@@ -216,7 +215,7 @@ IN_ERROR Compiler::CompileAtomicCmpXchg(Instruction& ins, WASM_TYPE_ENCODING var
 IN_ERROR Compiler::CompileAtomicInstruction(Instruction& ins)
 {
   using RmwOp = llvm::AtomicRMWInst::BinOp;
-  auto op = ins.opcode[1];
+  auto op     = ins.opcode[1];
 
   switch(op)
   {

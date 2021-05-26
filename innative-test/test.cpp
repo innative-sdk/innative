@@ -139,7 +139,7 @@ int main(int argc, char* argv[])
       env->optimize = ENV_OPTIMIZE_O3 | ENV_OPTIMIZE_NO_MERGING;
 #endif
       env->features = ENV_FEATURE_ALL;
-      env->loghook = &TestHarness::Log;
+      env->loghook  = &TestHarness::Log;
       env->loglevel = log;
       env->wasthook = [](const Environment*, void*) {
         fputc('.', stdout);

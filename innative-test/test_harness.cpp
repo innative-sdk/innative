@@ -19,7 +19,8 @@ TestHarness::~TestHarness()
   Clean();
 }
 
-void TestHarness::Clean() {
+void TestHarness::Clean()
+{
   for(auto f : _garbage)
     remove(f);
 }

@@ -107,7 +107,7 @@ namespace innative {
           r.f64  = v;
         }
         else // This has to rely on the template parameter or it goes boom on GCC/clang
-          static_assert(std::is_same_v<T, void>, "invalid type"); 
+          static_assert(std::is_same_v<T, void>, "invalid type");
         return r;
       }
     };
@@ -531,8 +531,8 @@ int wat::ParseWastAction(Environment& env, Queue<WatToken>& tokens, kh_indexname
     if(cache_err != 0)
       return cache_err;
     assert(cache);
-    void* f = reinterpret_cast<void*>(
-      LoadDLLFunction(cache, (utility::CanonicalName(StringSpan::From(m->name), StringSpan::From(func)) + IN_GENERIC_POSTFIX).c_str()));
+    void* f = reinterpret_cast<void*>(LoadDLLFunction(
+      cache, (utility::CanonicalName(StringSpan::From(m->name), StringSpan::From(func)) + IN_GENERIC_POSTFIX).c_str()));
     if(!f)
       return ERR_INVALID_FUNCTION_INDEX;
 
@@ -991,7 +991,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
     case WatTokens::ASSERT_MALFORMED:
     {
       env.loglevel = LOG_NONE; // Suppress output because we're expecting it
-      WatToken t = tokens.Pop();
+      WatToken t   = tokens.Pop();
       EXPECTED(env, tokens, WatTokens::OPEN, ERR_WAT_EXPECTED_OPEN);
       Module m;
       int code = ParseWastModule(env, tokens, mapping, m, file);
@@ -1006,7 +1006,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       if(STRICMP(assertcode.c_str(), MapAssertionString(error.str())))
         AppendError(env, errors, 0, ERR_RUNTIME_ASSERT_FAILURE, "[%zu] Expected '%s' error, but got '%s' instead",
                     WatLineNumber(start, t.pos), error.str(), assertcode.c_str());
-      env.errors = 0;
+      env.errors   = 0;
       env.loglevel = lastlog;
       break;
     }
@@ -1037,7 +1037,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       if(!env.errors) // Only do additional validation if we didn't find validation errors during the parsing process that
                       // must trump our normal validation
         ValidateModule(env, m);
-      code = ERR_SUCCESS;
+      code         = ERR_SUCCESS;
       env.loglevel = lastlog;
 
       while(env.errors)

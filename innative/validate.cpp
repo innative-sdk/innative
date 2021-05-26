@@ -914,8 +914,7 @@ namespace innative {
                       vstack.ctrls.Size(), ins.line);
         else if(!vstack.LabelTypes(vstack.ctrls[br_depth]).SigEq(def_types))
           AppendError(env, env.errors, m, ERR_INVALID_TYPE,
-                      "[%u] Branch table target has type signature %" PRId64 ", but default branch has %" PRId64,
-                      ins.line,
+                      "[%u] Branch table target has type signature %" PRId64 ", but default branch has %" PRId64, ins.line,
                       vstack.ctrls[br_depth].sig, vstack.ctrls[depth].sig);
       }
       vstack.PopOpd(ins, TE_i32);
