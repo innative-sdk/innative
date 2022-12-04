@@ -9,10 +9,13 @@
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
 #include "llvm/ExecutionEngine/Orc/Core.h"
 #include "llvm/ExecutionEngine/Orc/ExecutionUtils.h"
+#include "llvm/ExecutionEngine/Orc/ExecutorProcessControl.h"
 #include "llvm/ExecutionEngine/Orc/IRCompileLayer.h"
 #include "llvm/ExecutionEngine/Orc/IRTransformLayer.h"
+#include "llvm/ExecutionEngine/Orc/ObjectTransformLayer.h"
 #include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
+#include "llvm/ExecutionEngine/Orc/IndirectionUtils.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "innative/schema.h"
 
@@ -20,27 +23,19 @@ namespace innative {
   class JITContext
   {
   public:
-    JITContext(llvm::orc::JITTargetMachineBuilder JTMB, llvm::DataLayout DL, std::unique_ptr<llvm::LLVMContext> ctx,
-               Environment* env);
+    JITContext(std::unique_ptr<llvm::orc::ExecutionSession> es, llvm::orc::JITDylib& dylib,
+               llvm::orc::JITTargetMachineBuilder JTMB, std::unique_ptr<llvm::TargetMachine> tm, llvm::DataLayout dl,
+               std::unique_ptr<llvm::LLVMContext> ctx, Environment* env);
+    ~JITContext();
 
     inline llvm::LLVMContext& GetContext() { return *Ctx.getContext(); }
 
-    inline llvm::Error CompileModule(std::unique_ptr<llvm::Module> m)
-    {
-      return CL.add(MainJD, llvm::orc::ThreadSafeModule(std::move(m), Ctx));
-    }
-
+    llvm::Error CompileModule(std::unique_ptr<llvm::Module> m);
     llvm::Error CompileEmbedding(const Embedding* embed);
+    llvm::Expected<llvm::JITEvaluatedSymbol> Lookup(llvm::StringRef Name);
 
-    inline llvm::Expected<llvm::JITEvaluatedSymbol> Lookup(llvm::StringRef Name)
-    {
-      auto str = Name.str();
-      return ES.lookup(llvm::orc::JITDylibSearchOrder({ { &MainJD, llvm::orc::JITDylibLookupFlags::MatchAllSymbols } }),
-                       Mangler(str));
-    }
-
-    inline llvm::Expected<std::unique_ptr<llvm::TargetMachine>> GetTargetMachine() { return jtmb.createTargetMachine(); }
-    inline llvm::orc::ExecutionSession& GetSession() { return ES; }
+    inline llvm::TargetMachine& GetTargetMachine() { return *TM; }
+    inline llvm::orc::ExecutionSession& GetSession() { return *ES; }
 
     template<typename T> llvm::Error AddGenerator(llvm::Expected<std::unique_ptr<T>> gen)
     {
@@ -51,17 +46,22 @@ namespace innative {
       return llvm::Error::success();
     }
 
+    static llvm::Expected<std::unique_ptr<JITContext>> Create(std::unique_ptr<llvm::LLVMContext> ctx, Environment* env);
+
   protected:
     llvm::orc::JITTargetMachineBuilder jtmb;
-    llvm::orc::ExecutionSession ES;
-    llvm::orc::RTDyldObjectLinkingLayer OL;
+    llvm::orc::ThreadSafeContext Ctx;
+    std::unique_ptr<llvm::orc::ExecutionSession> ES;
+    llvm::orc::RTDyldObjectLinkingLayer OLL;
+    llvm::DataLayout DL;
+    llvm::orc::ObjectTransformLayer OTL; 
+    std::unique_ptr<llvm::TargetMachine> TM;
     llvm::orc::IRCompileLayer CL;
     llvm::orc::IRTransformLayer TL;
-
-    llvm::DataLayout DL;
     llvm::orc::MangleAndInterner Mangler;
-    llvm::orc::ThreadSafeContext Ctx;
+
     llvm::orc::JITDylib& MainJD;
+    llvm::orc::SymbolLinkagePromoter promote;
     std::function<bool(const llvm::orc::SymbolStringPtr& s)> Whitelist;
   };
 }

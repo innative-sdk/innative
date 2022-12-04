@@ -14,9 +14,6 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
   // Construct the LLVM environment and current working directories
   llvm::LLVMContext llvm_compiler;
 
-  bool has_start = false;
-  IN_ERROR err   = ERR_SUCCESS;
-
   // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
   llvm::InitializeAllTargetInfos();
   llvm::InitializeAllTargets();
@@ -64,7 +61,7 @@ int innative_compile_llvm(const char** files, size_t n, int flags, const char* o
   std::error_code EC;
   std::string objfile(out);
   objfile += ".o";
-  llvm::raw_fd_ostream dest(objfile, EC, llvm::sys::fs::F_None);
+  llvm::raw_fd_ostream dest(objfile, EC, llvm::sys::fs::OF_None);
 
   if(EC)
   {

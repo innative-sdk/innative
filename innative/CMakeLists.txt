@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.13.4)
+cmake_minimum_required(VERSION 3.15)
 if(WIN32)
 project(innative LANGUAGES CXX ASM_MASM VERSION ${PROJECT_VERSION})
 else()
@@ -7,33 +7,16 @@ endif()
 
 include(CheckSymbolExists)
 include(CMakePushCheckState)
-
-set(CMAKE_PREFIX_PATH "../${BIN_DIR}/llvm;${CMAKE_PREFIX_PATH}")
   
-find_package(LLVM REQUIRED CONFIG)
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+find_package(LLVM REQUIRED CONFIG HINTS ${LLVM_HINTS})
+find_package(Clang REQUIRED)
+
+list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
+include(HandleLLVMOptions)
 
 add_definitions(${LLVM_DEFINITIONS})
 set(inNative_EX_SOURCES "")
 
-# For if we are building directly off the LLVM source
-# get_target_property(LLVM_INCLUDE_DIRS LLVMSupport INCLUDE_DIRECTORIES)
-# macro(get_llvm_version_component input component)
-#   string(REGEX MATCH "${component} ([0-9]+)" match ${input})
-#   if (NOT match)
-#     message(FATAL_ERROR "Cannot find LLVM version component '${component}'")
-#   endif()
-#   set (${component} ${CMAKE_MATCH_1})
-# endmacro()
-# 
-# file(READ ${PATH_TO_LLVM}/CMakeLists.txt LLVM_CMAKELISTS)
-# get_llvm_version_component("${LLVM_CMAKELISTS}" LLVM_VERSION_MAJOR)
-# get_llvm_version_component("${LLVM_CMAKELISTS}" LLVM_VERSION_MINOR)
-# get_llvm_version_component("${LLVM_CMAKELISTS}" LLVM_VERSION_PATCH)
-# set (LLVM_VERSION ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH})
-
-# list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 if(WIN32)
   list(APPEND inNative_EX_SOURCES "x86_64.asm" "innative.rc")
 else()
@@ -57,46 +40,21 @@ file(GLOB_RECURSE inNative_SOURCES "./*.cpp")
 
 if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /${RUNTIME_FLAG}d")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Oi /Ot /GL /${RUNTIME_FLAG}")
-  set(CMAKE_CXX_FLAGS_MINSIZEREL ${CMAKE_CXX_FLAGS_RELEASE})
-  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO ${CMAKE_CXX_FLAGS_RELEASE})
 else()
   string(REPLACE "-fexceptions" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti ${CPP_WARNINGS} -Wno-reorder")
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -DDEBUG")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16 -DNDEBUG")
-  set(CMAKE_CXX_FLAGS_MINSIZEREL ${CMAKE_CXX_FLAGS_RELEASE})
-  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO ${CMAKE_CXX_FLAGS_RELEASE})
 endif()
 
 # add library and include directories
 add_library(innative ${inNative_SOURCES} ${inNative_EX_SOURCES})
 target_include_directories(innative PRIVATE ${LLVM_INCLUDE_DIRS})
-#target_include_directories(innative PRIVATE ${LLD_INCLUDE_DIRS})
-target_include_directories(innative PRIVATE "${LLVM_BUILD_MAIN_SRC_DIR}/../polly/include")
 target_include_directories(innative PUBLIC ${CMAKE_SOURCE_DIR}/include)
-set_target_properties(innative PROPERTIES OUTPUT_NAME_DEBUG "innative-d")
 
 # Append LLD libraries because LLD doesn't have CMake info and remove libraries we don't need
-list(REMOVE_ITEM LLVM_AVAILABLE_LIBS "LLVM-C" "FrontendOpenMP" "Remarks")
-if(WIN32)
-  list(REMOVE_ITEM LLVM_AVAILABLE_LIBS "LTO")
-endif()
-list(APPEND LLVM_AVAILABLE_LIBS "lldCOFF" "lldCommon" "lldCore" "lldDriver" "lldELF" "lldMachO" "lldMinGW" "lldReaderWriter" "lldWasm" "lldYAML" "PollyISL" "PollyPPCG")
+llvm_map_components_to_libnames(llvm_libs orcjit passes option objcarcopts coverage support coroutines frontendopenmp native RISCV AArch64 WebAssembly X86 debuginfocodeview debuginfodwarf debuginfogsym debuginfomsf debuginfopdb LTO WindowsManifest LibDriver)
+list(APPEND llvm_libs "lldCOFF$<$<CONFIG:Debug>:d>" "lldCommon$<$<CONFIG:Debug>:d>" "lldCore$<$<CONFIG:Debug>:d>" "lldDriver$<$<CONFIG:Debug>:d>" "lldELF$<$<CONFIG:Debug>:d>" "lldMachO$<$<CONFIG:Debug>:d>" "lldMinGW$<$<CONFIG:Debug>:d>" "lldReaderWriter$<$<CONFIG:Debug>:d>" "lldWasm$<$<CONFIG:Debug>:d>" "lldYAML$<$<CONFIG:Debug>:d>")
 
-set_target_properties(innative
-    PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-)
+standard_target_flags(innative)
+retarget_output(innative)
     
 # Configure precompiled headers
 if(MSVC)
@@ -115,27 +73,25 @@ endif()
 
 # Link against LLVM libraries
 if(NOT WIN32)
-  list(APPEND LLVM_AVAILABLE_LIBS "-Wl,--no-whole-archive")
-  list(INSERT LLVM_AVAILABLE_LIBS 0 "-Wl,--whole-archive")
+  list(APPEND llvm_libs "-Wl,--no-whole-archive")
+  list(INSERT llvm_libs 0 "-Wl,--whole-archive")
 endif()
 
-target_link_libraries(innative PRIVATE ${LLVM_AVAILABLE_LIBS})
+set_target_properties(innative PROPERTIES COMPILE_PDB_NAME "$(TargetName)") 
+target_link_libraries(innative PRIVATE ${llvm_libs})
 target_link_directories(innative PRIVATE ${LLVM_LIBRARY_DIR})
 
 if(WIN32)
   # Cmake does not support linking with a static library
   if(NOT BUILD_SHARED_LIBS)
-    set_target_properties(innative PROPERTIES COMPILE_PDB_NAME "$(TargetName)") 
     set_target_properties(innative PROPERTIES OUTPUT_NAME "innative-s")
-    set_target_properties(innative PROPERTIES OUTPUT_NAME_DEBUG "innative-s-d")
     
     foreach(X IN LISTS LLVM_AVAILABLE_LIBS)
       SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} \"${LLVM_LIBRARY_DIR}/${X}.lib\"")
     endforeach()
   endif()
-  
   set_source_files_properties("innative.rc" PROPERTIES LANGUAGE RC)
   set_source_files_properties("x86_64.asm" PROPERTIES LANGUAGE ASM_MASM)
 else()
-  target_link_libraries(innative PUBLIC ${LIB_RT} ${ZLIB} ${Threads} ${CMAKE_DL_LIBS})
+  target_link_libraries(innative PUBLIC ${LIB_RT} ZLIB::ZLIB ${Threads} ${CMAKE_DL_LIBS})
 endif()

@@ -12,6 +12,9 @@
 #include "polly/RegisterPasses.h"
 
 #define DIVIDER ":"
+#ifdef IN_COMPILER_MSC
+  #pragma warning(disable : 4062)
+#endif
 
 using Func    = llvm::Function;
 using FuncTy  = llvm::FunctionType;
@@ -231,8 +234,10 @@ Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, llvm::StringRef 
   uint32_t offset = 0;
   for(auto& arg : fn->args())
   {
-    values.push_back(builder.CreateLoad(builder.CreateBitCast(
-      builder.CreateInBoundsGEP(params, { builder.getInt32(offset) }), arg.getType()->getPointerTo())));
+    values.push_back(builder.CreateLoad(
+      arg.getType(), builder.CreateBitCast(builder.CreateInBoundsGEP(params->getType()->getPointerElementType(), params,
+                                                                     { builder.getInt32(offset) }),
+                                           arg.getType()->getPointerTo())));
     offset += uint32_t(mod->getDataLayout().getTypeSizeInBits(arg.getType()) / 8);
     // TODO: structs must be broken apart and repacked
   }
@@ -249,7 +254,8 @@ Func* Compiler::GenericFunction(Func* fn, llvm::StringRef name, llvm::StringRef 
     for(unsigned int i = 0; i < ret->getStructNumElements(); ++i)
     {
       builder.CreateStore(builder.CreateExtractValue(call, { i }),
-                          builder.CreateBitCast(builder.CreateInBoundsGEP(results, { builder.getInt32(offset) }),
+                          builder.CreateBitCast(builder.CreateInBoundsGEP(results->getType()->getPointerElementType(),
+                                                                          results, { builder.getInt32(offset) }),
                                                 ret->getStructElementType(i)->getPointerTo()),
                           false);
       offset += uint32_t(mod->getDataLayout().getTypeSizeInBits(ret->getStructElementType(i)) / 8);
@@ -320,7 +326,7 @@ IN_ERROR Compiler::PopType(varsint7 ty, llvmVal*& v, bool peek)
   }
   else if(ty == TE_cref && values.Peek()->getType()->isIntegerTy())
   { // If this is true, we need to do an int -> cref conversion
-    v = builder.CreatePtrToInt(builder.CreateLoad(GetPairPtr(memories[0], 0)), builder.getInt64Ty());
+    v = builder.CreatePtrToInt(LoadPairPtr(memories[0], 0), builder.getInt64Ty());
     v = builder.CreateAdd(builder.CreateZExt(peek ? values.Peek() : values.Pop(), builder.getInt64Ty()), v, "", true, true);
     v = builder.CreateIntToPtr(v, GetLLVMType(TE_cref));
     return ERR_SUCCESS;
@@ -403,12 +409,25 @@ llvm::StructType* Compiler::GetPairType(llvmTy* ty) { return llvm::StructType::c
 
 llvmVal* Compiler::GetPairPtr(llvm::GlobalVariable* v, int index)
 {
-  return builder.CreateInBoundsGEP(v, { builder.getInt32(0), builder.getInt32(index) });
+  return builder.CreateInBoundsGEP(v->getValueType(), v, { builder.getInt32(0), builder.getInt32(index) });
 }
+
+llvm::LoadInst* Compiler::LoadPairPtr(llvm::GlobalVariable* v, int index)
+{
+  auto ptr = GetPairPtr(v, index);
+  return builder.CreateLoad(ptr->getType()->getPointerElementType(), ptr);
+}
+
 llvm::Constant* Compiler::GetPairNull(llvm::StructType* ty)
 {
   return llvm::ConstantStruct::get(ty, llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ty->getElementType(0))),
                                    builder.getInt64(0));
+}
+
+llvmVal* Compiler::LoadInBoundsGEP(llvmVal* p, llvm::ArrayRef<llvmVal*> i, const llvm::Twine& Name)
+{
+  auto ptr = builder.CreateInBoundsGEP(p->getType()->getPointerElementType(), p, i, Name);
+  return builder.CreateLoad(ptr->getType()->getPointerElementType(), ptr);
 }
 
 llvmVal* Compiler::MaskShiftBits(llvmVal* value)
@@ -487,7 +506,7 @@ IN_ERROR Compiler::PushStructReturn(llvmVal* arg, varsint64 sig)
 
     if(sigs[i] == TE_cref && val->getType()->isIntegerTy())
     { // If this is true, we need to do an int -> cref conversion
-      auto v = builder.CreatePtrToInt(builder.CreateLoad(GetPairPtr(memories[0], 0)), builder.getInt64Ty());
+      auto v = builder.CreatePtrToInt(LoadPairPtr(memories[0], 0), builder.getInt64Ty());
       v      = builder.CreateAdd(builder.CreateZExt(val, builder.getInt64Ty()), v, "", true, true);
       val    = builder.CreateIntToPtr(v, GetLLVMType(TE_cref));
     }
@@ -649,8 +668,8 @@ llvmVal* Compiler::GetMemPointerRegion(llvmVal* base, llvm::PointerType* pointer
     src = static_cast<llvmVal*>(GetPairPtr(memories[memory], 0));
   llvm::IntegerType* ty = machine->getPointerSizeInBits(0) == 32 ? builder.getInt32Ty() : builder.getInt64Ty();
 
-  // If our native integer size is larger than the webassembly memory pointer size, then overflow is not possible and we
-  // can bypass the check.
+  // TODO: If our native integer size is larger than the webassembly memory pointer size, then overflow is not possible and
+  // we can bypass the check.
   bool bypass = ty->getBitWidth() > base->getType()->getIntegerBitWidth() && false;
   base        = builder.CreateZExtOrTrunc(base, ty);
 
@@ -663,7 +682,10 @@ llvmVal* Compiler::GetMemPointerRegion(llvmVal* base, llvm::PointerType* pointer
   else
     loc = builder.CreateAdd(base, CInt::get(ty, offset, false), "", true, true);
 
-  return builder.CreatePointerCast(builder.CreateInBoundsGEP(builder.CreateLoad(src), loc), pointer_type);
+  return builder.CreatePointerCast(
+    builder.CreateInBoundsGEP(src->getType()->getPointerElementType()->getPointerElementType(),
+                              builder.CreateLoad(src->getType()->getPointerElementType(), src), loc),
+    pointer_type);
 }
 
 IN_ERROR Compiler::InsertTruncTrap(double max, double min, llvm::Type* ty)
@@ -744,7 +766,7 @@ llvm::Value* Compiler::GetLocal(varuint32 index)
   auto size = llvm::cast<llvm::ConstantInt>((*i)->getArraySize())->getZExtValue();
   if(index >= size)
     return nullptr;
-  return builder.CreateInBoundsGEP(*i, { builder.getInt32(index) });
+  return builder.CreateInBoundsGEP((*i)->getType()->getPointerElementType(), *i, { builder.getInt32(index) });
 }
 
 llvm::GlobalVariable* Compiler::CreateGlobal(llvmTy* ty, bool isconst, bool external, llvm::StringRef name,
@@ -781,7 +803,6 @@ const Compiler::Intrinsic* Compiler::GetIntrinsic(Import& imp)
 
 Func* Compiler::TopLevelFunction(llvm::LLVMContext& context, llvm::IRBuilder<>& builder, const char* name, llvm::Module* m)
 {
-  auto test = builder.getVoidTy();
   Func* fn  = Func::Create(FuncTy::get(builder.getVoidTy(), false), Func::ExternalLinkage, name, m);
 
   BB* initblock = BB::Create(context, "entry", fn);
@@ -1216,7 +1237,7 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
     DataInit& d = m.data.data[i]; // First we declare a constant array that stores the data in the EXE
     auto data = llvm::ConstantDataArray::get(ctx, llvm::makeArrayRef<uint8_t>(d.data.get(), d.data.get() + d.data.size()));
     auto val  = new llvm::GlobalVariable(*mod, data->getType(), true, llvm::GlobalValue::LinkageTypes::PrivateLinkage, data,
-                                        CanonicalName(StringSpan{ 0, 0 }, StringSpan::From("data"), i));
+                                         CanonicalName(StringSpan{ 0, 0 }, StringSpan::From("data"), i));
     auto lenvar = new llvm::GlobalVariable(*mod, builder.getInt64Ty(), false,
                                            llvm::GlobalValue::LinkageTypes::PrivateLinkage, builder.getInt64(d.data.size()),
                                            CanonicalName(StringSpan{ 0, 0 }, StringSpan::From("data_len"), i));
@@ -1254,17 +1275,14 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
 
   // Don't accidentally delete imported linear memories
   for(size_t i = m.importsection.memories - m.importsection.tables; i < memories.size(); ++i)
-    builder
-      .CreateCall(fn_memfree,
-                  { builder.CreateLoad(GetPairPtr(memories[i], 0)), builder.CreateLoad(GetPairPtr(memories[i], 1)) })
+    builder.CreateCall(fn_memfree, { LoadPairPtr(memories[i], 0), LoadPairPtr(memories[i], 1) })
       ->setCallingConv(fn_memfree->getCallingConv());
 
   // Don't accidentally delete imported tables
   for(size_t i = m.importsection.tables - m.importsection.functions; i < tables.size(); ++i)
     builder
-      .CreateCall(fn_memfree,
-                  { builder.CreatePointerCast(builder.CreateLoad(GetPairPtr(tables[i], 0)), builder.getInt8PtrTy(0)),
-                    builder.CreateLoad(GetPairPtr(tables[i], 1)) })
+      .CreateCall(fn_memfree, { builder.CreatePointerCast(LoadPairPtr(tables[i], 0), builder.getInt8PtrTy(0)),
+                                LoadPairPtr(tables[i], 1) })
       ->setCallingConv(fn_memfree->getCallingConv());
 
   // Terminate cleanup function
@@ -1353,9 +1371,9 @@ void Compiler::PostOrderTraversal(llvm::Function* f)
 
   for(auto& i : llvm::instructions(f))
   {
-    if(auto cs = llvm::CallSite(&i))
+    if(auto* cs = llvm::dyn_cast<llvm::CallBase>(&i))
     {
-      if(auto called = cs.getCalledFunction())
+      if(auto called = cs->getCalledFunction())
       {
         PostOrderTraversal(called);
         if(auto md = called->getMetadata(IN_MEMORY_GROW_METADATA))
@@ -1403,15 +1421,15 @@ void Compiler::AddMemLocalCaching()
       assert(f != nullptr);
       for(auto& i : llvm::instructions(f))
       {
-        if(auto cs = llvm::CallSite(&i))
+        if(auto* cs = llvm::dyn_cast<llvm::CallBase>(&i))
         {
-          if(auto called = cs.getCalledFunction())
+          if(auto called = cs->getCalledFunction())
           {
             if(called->getMetadata(IN_MEMORY_GROW_METADATA) != nullptr)
             {
               // Setting the insert point doesn't actually gaurantee the instructions come after the call
               builder.SetInsertPoint(&i);
-              auto load = builder.CreateLoad(GetPairPtr(memories[0], 0));
+              auto load = LoadPairPtr(memories[0], 0);
               load->moveAfter(&i); // So we manually move them after the call instruction just to be sure.
               builder.CreateStore(load, fn.memlocal, false)->moveAfter(load);
             }
@@ -1497,7 +1515,7 @@ void AddRTLibCalls(Environment* env, llvm::IRBuilder<>& builder, Compiler& mainc
 {
 #ifdef IN_PLATFORM_WIN32
   if(isJIT) // The JIT on windows will just fail if we don't define this symbol here. It seems to have magic properties.
-    new llvm::GlobalVariable(*mainctx.mod, builder.getInt8Ty(), true, Func::WeakAnyLinkage, builder.getInt8(0),
+    new llvm::GlobalVariable(*mainctx.mod, builder.getInt8Ty(), true, Func::ExternalLinkage, builder.getInt8(0),
                              "__ImageBase");
 #endif
 
@@ -1859,6 +1877,8 @@ void* innative::LoadJITFunction(void* env, const char* s)
 
 IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
 {
+  //::llvm::DebugFlag = true;
+
   // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
   llvm::InitializeAllTargetInfos();
   llvm::InitializeAllTargets();
@@ -1872,17 +1892,11 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
     if(!env->context)
       env->context = new llvm::LLVMContext();
 
-    auto JTMB = llvm::orc::JITTargetMachineBuilder::detectHost();
-
-    if(!JTMB)
-      return LogErrorLLVM(*env, "%s: ", ERR_JIT_TARGET_MACHINE_FAILURE, JTMB.takeError());
-
-    auto DL = JTMB->getDefaultDataLayoutForTarget();
-    if(!DL)
-      return LogErrorLLVM(*env, "%s: ", ERR_JIT_DATA_LAYOUT_ERROR, DL.takeError());
-
     // If the context already exists, we take ownership of it
-    env->jit = new JITContext(std::move(*JTMB), std::move(*DL), std::unique_ptr<llvm::LLVMContext>(env->context), env);
+    auto lljit = JITContext::Create(std::unique_ptr<llvm::LLVMContext>(env->context), env);
+    if(!lljit)
+      return LogErrorLLVM(*env, "%s: ", ERR_JIT_INIT_FAILURE, lljit.takeError());
+    env->jit = lljit.get().release();
     // env->context = nullptr;
 
     if(expose_process)
@@ -1894,9 +1908,7 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
         return LogErrorString(*env, "%s: Failed to link %s (%i) to JIT", ERR_JIT_LINK_FAILURE, embed->name, embed->tag);
   }
 
-  auto machine = env->jit->GetTargetMachine();
-  if(!machine)
-    return LogErrorLLVM(*env, "%s: ", ERR_JIT_TARGET_MACHINE_FAILURE, machine.takeError());
+  llvm::TargetMachine& machine = env->jit->GetTargetMachine();
 
   llvm::IRBuilder<> builder(*env->context);
   IN_ERROR err = ERR_SUCCESS;
@@ -1906,11 +1918,11 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
 
   switch(env->optimize & ENV_OPTIMIZE_OMASK)
   {
-  case ENV_OPTIMIZE_O0: machine->get()->setOptLevel(llvm::CodeGenOpt::None); break;
-  case ENV_OPTIMIZE_O1: machine->get()->setOptLevel(llvm::CodeGenOpt::Less); break;
+  case ENV_OPTIMIZE_O0: machine.setOptLevel(llvm::CodeGenOpt::None); break;
+  case ENV_OPTIMIZE_O1: machine.setOptLevel(llvm::CodeGenOpt::Less); break;
   case ENV_OPTIMIZE_Os:
-  case ENV_OPTIMIZE_O2: machine->get()->setOptLevel(llvm::CodeGenOpt::Default); break;
-  case ENV_OPTIMIZE_O3: machine->get()->setOptLevel(llvm::CodeGenOpt::Aggressive); break;
+  case ENV_OPTIMIZE_O2: machine.setOptLevel(llvm::CodeGenOpt::Default); break;
+  case ENV_OPTIMIZE_O3: machine.setOptLevel(llvm::CodeGenOpt::Aggressive); break;
   default: assert(false);
   }
 
@@ -1943,8 +1955,8 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
     {
       if(env->modules[i].cache)
         DeleteCache(*env, env->modules[i]);
-      env->modules[i].cache = new Compiler(*env, env->modules[i], env->jit->GetContext(), 0, builder, machine.get().get(),
-                                           kh_init_importhash(), path());
+      env->modules[i].cache =
+        new Compiler(*env, env->modules[i], env->jit->GetContext(), 0, builder, &machine, kh_init_importhash(), path());
 
       if((err = env->modules[i].cache->CompileModule(i)) < 0)
         return err;

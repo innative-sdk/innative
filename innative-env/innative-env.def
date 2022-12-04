@@ -1,0 +1,6 @@
+EXPORTS
+   _innative_internal_env_memset
+   __chkstk_ms
+   _innative_internal_env_memmove
+   _innative_internal_env_memcpy
+   _innative_internal_env_memcmp

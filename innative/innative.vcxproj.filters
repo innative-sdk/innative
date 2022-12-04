@@ -105,6 +105,9 @@
     <ClCompile Include="jit.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="dump_symbols.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\innative\innative.h">
@@ -210,6 +213,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="jit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dump_symbols.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

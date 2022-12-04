@@ -10,7 +10,7 @@ The primary source of documentation for inNative is the [GitHub Wiki](https://gi
 ## Installing
 Precompiled binaries for Windows are provided in [releases](https://github.com/innative-sdk/innative/releases) for those who do not want to build from source. The SDK is portable and can be unzipped to any directory, but can also be installed and registered on the target system. The provided installers will register the SDK with the system, which enables dynamic loaders to find the runtime, and register it as a `.wasm`, `.wat` and `.wast` file extension handler on windows. Even if you did not use an installer, you can always install a portable version by running `innative-cmd.exe -i` on windows or `./innative-cmd -i` on linux. Read the wiki articles for [the SDK](https://github.com/innative-sdk/innative/wiki/Install-the-SDK) and [the Redistributable](https://github.com/innative-sdk/innative/wiki/Install-the-Redistributable-Package) for more information.
 
-For those building from source, prebuilt binaries for inNative's LLVM fork are [provided here](https://github.com/innative-sdk/llvm-project/releases). Once installed, your folder structure should look like `bin/llvm/bin`, `bin/llvm/lib`, and `bin/llvm/include`. However, these prebuilt binaries may not work for some Linux distros, which will require you to rebuild from source using inNative's custom fork of LLVM.
+For those building from source on Windows, we use a [vcpkg fork](https://github.com/Fundament-Software/vcpkg) pinned to LLVM 13 to handle dependencies. On Linux, you can either use the provided nix flake, or install LLVM using your package manager - this may require python depending on how you configure LLVM. Regardless of how dependencies are resolved, Linux users should use cmake to build the project (the nix flake will do this for you).
 
 ### Command Line Utility
 The inNative SDK comes with a command line utility with many useful features for webassembly developers.
@@ -84,12 +84,12 @@ The inNative SDK comes with a command line utility with many useful features for
       innative-cmd your-module.wasm -abi windows -arch x86
     
 ## Building
-If you're on linux, or you really want to build LLVM from source, use the provided `build-llvm` script (`.ps1` for windows and `.sh` for linux). You cannot build only LLD - you will have to recompile all of LLVM for it to work with inNative. If you are building LLVM on Linux, **ensure that you have `cmake` and `python` installed**, as the script cannot do this for you.
+If you are building LLVM on Linux, **ensure that you have `cmake` and `python` installed**, as the script cannot do this for you.
 
-If you aren't building LLVM, but you'd like to run the test suite, you will need to get the webassembly spec submodule by running `git submodule update --init spec`. This will only check out the `spec` submodule, which allows you to skip checking out the entire `llvm-project` monorepo. If you get errors when running the tests, be sure to double check that you have acquired `spec` and `spec/document/core/util/katex`.
+If you'd like to run the test suite, make sure you include the webassembly spec submodule by running `git clone --recurse-submodules`. If you get errors when running the tests, be sure to double check that you have acquired `spec` and `spec/document/core/util/katex`.
 
 ### Windows
-inNative currently requires C++17 to build, and only supports Visual Studio 2019. After installing the LLVM/LLD binaries or building it from source, open `innative.sln` in Visual Studio and build the project, or run `msbuild innative.sln`. Attempting to use cmake to generate these project files won't work because of many windows-specific requirements that CMake doesn't know about.
+inNative currently requires C++17 to build, and only supports Visual Studio 2022. After installing the LLVM/LLD binaries or building it from source, open `innative.sln` in Visual Studio and build the project, or run `msbuild innative.sln`. You can use cmake to build a solution file, but it doesn't work well in debug mode and can only make DLL versions.
 
 ### Linux
 Since inNative requires C++17 to build, the minimum supported compiler is gcc-7 or clang-5. Once you've installed the LLVM/LLD binaries or built it from source, run `cmake` to create makefiles or a Ninja configuration that you can then use to build the project. It is suggested to create a new folder called `build` and then run `cmake ..` to isolate the generated project files. The existing makefiles are **deprecated** and will be removed in a future release.

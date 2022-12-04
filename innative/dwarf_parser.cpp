@@ -405,7 +405,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, DWARFDie die)
       funcptr += '(';
 
       size_t count = 0;
-      for(auto& child : die.children())
+      for([[maybe_unused]] auto& _ : die.children())
         count++;
 
       ptype->types = innative::utility::tmalloc<size_t>(*env, count);
@@ -446,7 +446,7 @@ size_t DWARFParser::GetSourceMapType(llvm::DWARFUnit& unit, DWARFDie die)
       ResolveDWARFBitSize(die, ptype);
 
       size_t count = 0;
-      for(auto& child : die.children())
+      for([[maybe_unused]] auto& _ : die.children())
         count++;
 
       ptype->types = innative::utility::tmalloc<size_t>(*env, count);
@@ -543,7 +543,7 @@ void DWARFParser::ParseDWARFVariable(IN_SOURCE_VARIABLE& v, DWARFContext& DICtx,
     if(Optional<llvm::ArrayRef<uint8_t>> block = location->getAsBlock())
     {
       llvm::DataExtractor data(llvm::toStringRef(*block), DICtx.isLittleEndian(), 0);
-      llvm::DWARFExpression expr(data, CU->getVersion(), CU->getAddressByteSize());
+      llvm::DWARFExpression expr(data, CU->getAddressByteSize(), llvm::dwarf::DWARF64);
       fn_parse_expr(env, expr, v);
     }
     else if(Optional<uint64_t> Offset = location->getAsSectionOffset())
@@ -556,7 +556,7 @@ void DWARFParser::ParseDWARFVariable(IN_SOURCE_VARIABLE& v, DWARFContext& DICtx,
           {
             llvm::DataExtractor data(StringRef(reinterpret_cast<const char*>(entry.Loc.data()), entry.Loc.size()),
                                      DICtx.isLittleEndian(), 0);
-            llvm::DWARFExpression expr(data, CU->getVersion(), CU->getAddressByteSize());
+            llvm::DWARFExpression expr(data, CU->getAddressByteSize(), llvm::dwarf::DWARF64);
             fn_parse_expr(env, expr, v);
           }
           return true;
