@@ -7,6 +7,8 @@
 #include "compile.h"
 #include "innative/export.h"
 #include "jit.h"
+#include "dump_symbols.h"
+#include "lld/Common/ErrorHandler.h"
 
 using namespace innative;
 using namespace utility;
@@ -14,7 +16,7 @@ using namespace utility;
 IN_ERROR innative::OutputObjectFile(Compiler& context, const path& out)
 {
   std::error_code EC;
-  llvm::raw_fd_ostream dest(out.u8string(), EC, llvm::sys::fs::F_None);
+  llvm::raw_fd_ostream dest(out.u8string(), EC, llvm::sys::fs::OF_None);
 
   if(EC)
     return LogErrorString(context.env, "%s: Could not open file: %s", ERR_FATAL_FILE_ERROR, EC.message().c_str());
@@ -144,19 +146,19 @@ int innative::CallLinker(const Environment* env, std::vector<const char*>& linka
       (*env->loghook)(env, "\n");
     }
 
-    linkargs.insert(linkargs.begin(), "lld");
     std::string outbuf;
     llvm::raw_fd_ostream fdo(1, false, true);
     llvm::raw_string_ostream sso(outbuf);
     llvm::raw_ostream& llvm_stream = (env->loglevel >= LOG_NOTICE) ? static_cast<llvm::raw_ostream&>(fdo) :
                                                                      static_cast<llvm::raw_ostream&>(sso);
-    bool result                    = false;
+    bool result = false;
     switch(format)
     {
     case LLD_FORMAT::COFF: result = lld::coff::link(linkargs, false, llvm_stream, llvm_stream); break;
     case LLD_FORMAT::ELF: result = lld::elf::link(linkargs, false, llvm_stream, llvm_stream); break;
     }
 
+    lld::errorHandler().reset();
     if(!result)
     {
       llvm_stream.flush(); // In certain error cases, the stream will not have been flushed properly
@@ -231,30 +233,17 @@ std::vector<std::string> innative::GetSymbols(const char* file, size_t size, con
   std::string outbuf;
   llvm::raw_string_ostream sso(outbuf);
 
-  uint8_t kind = 0;
   std::vector<std::string> symbols;
-  switch(format)
+  auto result = dumpSymbolNamesFromFile(file, size);
+  if(!result)
   {
-  case LLD_FORMAT::COFF:
-    lld::coff::iterateSymbols(
-      file, size, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); },
-      &symbols, sso, sso);
-    break;
-  case LLD_FORMAT::ELF:
-    switch(GetArchBits(env->arch) | (IsLittleEndian(env->abi, env->arch) << 15))
-    {
-    case 32 | (1 << 15): kind = 1; break;
-    case 32 | (0 << 15): kind = 2; break;
-    case 64 | (1 << 15): kind = 3; break;
-    case 64 | (0 << 15): kind = 4; break;
-    default: (*env->loghook)(env, "ERROR: unknown arch bits or endianness!\n"); return symbols;
-    }
-
-    lld::elf::iterateSymbols(
-      file, size, [](void* state, const char* s) { reinterpret_cast<std::vector<std::string>*>(state)->push_back(s); },
-      &symbols, std::make_tuple(kind, (uint16_t)env->arch, (env->abi == IN_ABI_FreeBSD) ? env->abi : (uint8_t)0), sso, sso);
-    break;
+    handleAllErrors(std::move(result.takeError()),
+                    [&](const llvm::ErrorInfoBase& EI) { (*env->loghook)(env, EI.message().c_str()); });
+    return symbols;
   }
+
+  for(auto& i : result.get())
+    symbols.push_back(std::move(i.Name));
 
   if(!symbols.size())
     (*env->loghook)(env, outbuf.c_str());
@@ -333,7 +322,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
     {
       std::error_code EC;
       auto path = ((file.parent_path() / env->modules[i].cache->mod->getName().str()) += ".llvm").u8string();
-      llvm::raw_fd_ostream dest(path, EC, llvm::sys::fs::F_None);
+      llvm::raw_fd_ostream dest(path, EC, llvm::sys::fs::OF_None);
       env->modules[i].cache->mod->print(dest, nullptr);
     }
 

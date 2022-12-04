@@ -9,39 +9,32 @@ list(APPEND stub_SOURCES
 
 if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-  set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /${RUNTIME_FLAG}d")
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /Oi /Ot /GL /${RUNTIME_FLAG}")
-  set(CMAKE_C_FLAGS_MINSIZEREL ${CMAKE_C_FLAGS_RELEASE})
-  set(CMAKE_C_FLAGS_RELWITHDEBINFO ${CMAKE_C_FLAGS_RELEASE})
 else()
   string(REPLACE "-fexceptions" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-exceptions -fno-stack-protector ${CPP_WARNINGS}")
-  set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -DDEBUG")
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16 -DNDEBUG")
-  set(CMAKE_C_FLAGS_MINSIZEREL ${CMAKE_C_FLAGS_RELEASE})
-  set(CMAKE_C_FLAGS_RELWITHDEBINFO ${CMAKE_C_FLAGS_RELEASE})
 endif()
 
 # add library and include directories
 add_library(innative-stub STATIC ${stub_SOURCES})
+set_property(TARGET innative-stub PROPERTY C_STANDARD 17)
+set_property(TARGET innative-stub PROPERTY VERBOSE_MAKEFILE TRUE)
+
+if(MSVC)
+  target_compile_options(innative-stub PRIVATE /Zc:preprocessor $<$<CONFIG:Release>:/Oi /Ot /GL> ${CPP_WARNINGS})
+else()
+  target_compile_options(innative-stub PRIVATE -fno-exceptions -fno-stack-protector $<IF:$<CONFIG:Debug>,-g,-O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16> ${CPP_WARNINGS})
+  target_compile_definitions(innative-stub PUBLIC $<IF:$<CONFIG:Debug>,DEBUG,NDEBUG>)
+endif()
 
 target_include_directories(innative-stub PUBLIC ${CMAKE_SOURCE_DIR}/include)
+retarget_output(innative-stub)
 
-set_target_properties(innative-stub
-    PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    PREFIX ""
-)
+set_target_properties(innative-stub PROPERTIES COMPILE_PDB_NAME "$(TargetName)")
 
 if(WIN32)
   # Cmake does not support linking with a static library
-  set_target_properties(innative-stub PROPERTIES COMPILE_PDB_NAME "$(TargetName)")
+  if(NOT BUILD_SHARED_LIBS)
+    set_target_properties(innative-stub PROPERTIES OUTPUT_NAME "innative-stub-s")
+  endif()
+else()
+  target_link_libraries(innative-stub ${CMAKE_DL_LIBS})
 endif()

@@ -11,49 +11,40 @@ else()
 endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
+add_compile_definitions(TESTING_WASM)
 
 if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /${RUNTIME_FLAG}d /D \"TESTING_WASM\"")
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /${RUNTIME_FLAG}d /D \"TESTING_WASM\"")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Oi /Ot /GL /${RUNTIME_FLAG} /D \"TESTING_WASM\"")
-  set(CMAKE_CXX_FLAGS_MINSIZEREL ${CMAKE_CXX_FLAGS_RELEASE})
-  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO ${CMAKE_CXX_FLAGS_RELEASE})
 else()
   string(REPLACE "-fexceptions" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DTESTING_WASM ${CPP_WARNINGS}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -pthread -DTESTING_WASM -DLIBICONV_PLUG ${CPP_WARNINGS} -Wno-reorder")
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -DDEBUG")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16 -DNDEBUG")
-  set(CMAKE_CXX_FLAGS_MINSIZEREL ${CMAKE_CXX_FLAGS_RELEASE})
-  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO ${CMAKE_CXX_FLAGS_RELEASE})
 endif()
 
 # add library and include directories
 add_executable(innative-test ${test_SOURCES} ${CMAKE_SOURCE_DIR}/scripts/wasm_malloc.c)
 target_include_directories(innative-test PUBLIC ${CMAKE_SOURCE_DIR}/include)
-set_target_properties(innative-test PROPERTIES OUTPUT_NAME_DEBUG "innative-test-d")
-target_link_libraries(innative-test innative innative-env stdc++fs)
 
-set_target_properties(innative-test
-    PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-)
+set_property(TARGET innative-test PROPERTY C_STANDARD 17)
+set_property(TARGET innative-test PROPERTY CXX_STANDARD 17)
+set_property(TARGET innative-test PROPERTY CXX_EXTENSIONS OFF)
+set_property(TARGET innative-test PROPERTY CXX_STANDARD_REQUIRED ON)
+set_property(TARGET innative-test PROPERTY VERBOSE_MAKEFILE TRUE)
+
+if(MSVC)
+  target_link_libraries(innative-test innative innative-env)
+  target_compile_options(innative-test PRIVATE /Zc:preprocessor $<$<CONFIG:Release>:/Oi /Ot /GL> ${CPP_WARNINGS})
+else()
+  target_link_libraries(innative-test innative innative-env stdc++fs)
+  target_compile_options(innative-test PRIVATE -fno-exceptions -Wno-reorder -pthread -DLIBICONV_PLUG $<IF:$<CONFIG:Debug>,-g,-O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16> ${CPP_WARNINGS})
+  target_compile_definitions(innative-test PUBLIC $<IF:$<CONFIG:Debug>,DEBUG,NDEBUG>)
+endif()
+
+retarget_output(innative-test)
 
 if(WIN32)
   # Cmake does not support linking with a static library
   if(NOT BUILD_SHARED_LIBS)
     set_target_properties(innative-test PROPERTIES COMPILE_PDB_NAME "$(TargetName)") 
     set_target_properties(innative-test PROPERTIES OUTPUT_NAME "innative-test-s")
-    set_target_properties(innative-test PROPERTIES OUTPUT_NAME_DEBUG "innative-test-s-d")
   endif()
   
   set_source_files_properties("innative-test.rc" PROPERTIES LANGUAGE RC)

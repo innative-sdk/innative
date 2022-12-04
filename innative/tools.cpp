@@ -15,6 +15,10 @@
 #include <sstream>
 #include <stdarg.h>
 
+#ifdef IN_COMPILER_MSC
+  #pragma warning(disable : 4062)
+#endif
+
 using namespace innative;
 using namespace utility;
 
@@ -336,7 +340,7 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
 #endif
 
         if(!f)
-          return LogErrorString(*env, "%s: Error loading file: %s", ERR_FATAL_FILE_ERROR, src.u8string().c_str());
+          return LogErrorString(*env, "%s: Error loading file: %s", ERR_FATAL_FILE_ERROR, embed->name, src.u8string().c_str());
         fclose(f);
 
         std::string buf = out.u8string();

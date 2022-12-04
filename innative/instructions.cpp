@@ -239,7 +239,7 @@ IN_ERROR Compiler::CompileReturn(varsint64 sig)
   else if(val.size() == 1)
     builder.CreateRet(val[0]);
   else
-    builder.CreateAggregateRet(val.data(), val.size());
+    builder.CreateAggregateRet(val.data(), static_cast<unsigned int>(val.size()));
 
   return ERR_SUCCESS;
 }
@@ -282,10 +282,9 @@ IN_ERROR Compiler::CompileEndBlock()
         {
           auto a = builder.CreateAlloca(v->getType());
           builder.CreateStore(v, a);
-          v = builder.CreateLoad(a);
+          v = builder.CreateLoad(a->getType()->getPointerElementType(), a);
         }
 
-        auto view = control.Peek().ifstack[0];
         if(err = PushResult(&control.Peek().results, control.Peek().ifstack, builder.GetInsertBlock(), env)) // Push result
           return err;
       }
@@ -443,7 +442,7 @@ IN_ERROR Compiler::CompileCall(varuint32 index)
   return ERR_SUCCESS;
 }
 
-llvmVal* Compiler::GetMemSize(llvm::GlobalVariable* target) { return builder.CreateLoad(GetPairPtr(target, 1)); }
+llvmVal* Compiler::GetMemSize(llvm::GlobalVariable* target) { return LoadPairPtr(target, 1); }
 
 // Gets the first type index that matches the given type, used as a stable type hash
 varuint32 Compiler::GetFirstType(varuint32 type)
@@ -497,9 +496,8 @@ IN_ERROR Compiler::CompileIndirectCall(varuint32 index)
 
   // Deference global variable to get the actual array of function pointers, index into them, then dereference that array
   // index to get the actual function pointer
-  llvmVal* funcptr = builder.CreateLoad(builder.CreateInBoundsGEP(builder.CreateLoad(GetPairPtr(tables[0], 0)),
-                                                                  { callee, builder.getInt32(0) }),
-                                        "indirect_call_load_func_ptr");
+  llvmVal* funcptr =
+    LoadInBoundsGEP(LoadPairPtr(tables[0], 0), { callee, builder.getInt32(0) }, "indirect_call_load_func_ptr");
 
   if(env.flags & ENV_CHECK_INDIRECT_CALL) // In strict mode, trap if function pointer is NULL
     InsertConditionalTrap(
@@ -513,15 +511,14 @@ IN_ERROR Compiler::CompileIndirectCall(varuint32 index)
   if(env.flags &
      ENV_CHECK_INDIRECT_CALL) // In strict mode, trap if the expected type does not match the actual type of the function
   {
-    auto sig = builder.CreateLoad(
-      builder.CreateInBoundsGEP(builder.CreateLoad(GetPairPtr(tables[0], 0)), { callee, builder.getInt32(1) }));
+    auto sig = LoadInBoundsGEP(LoadPairPtr(tables[0], 0), { callee, builder.getInt32(1) });
     InsertConditionalTrap(builder.CreateICmpNE(sig, builder.getInt32(index), "indirect_call_sig_check"));
   }
 
   // CreateCall will then do the final dereference of the function pointer to make the indirect call
-  CallInst* call = builder.CreateCall(funcptr, llvm::makeArrayRef(ArgsV, ftype.n_params));
+  CallInst* call = builder.CreateCall(ty, funcptr, llvm::makeArrayRef(ArgsV, ftype.n_params));
   if(memories.size() > 0)
-    builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[0], 0)), memlocal, false);
+    builder.CreateStore(LoadPairPtr(memories[0], 0), memlocal, false);
 
   builder.GetInsertBlock()->getParent()->setMetadata(IN_MEMORY_GROW_METADATA, llvm::MDNode::get(ctx, {}));
 
@@ -565,8 +562,9 @@ IN_ERROR Compiler::CompileLoad(varuint32 memory, varuint32 offset, varuint32 mem
     return err;
 
   // TODO: In strict mode, we may have to disregard the alignment hint
-  llvmVal* result =
-    builder.CreateAlignedLoad(GetMemPointer(base, ty->getPointerTo(0), memory, offset), (1 << memflags), false, name);
+  auto memptr     = GetMemPointer(base, ty->getPointerTo(0), memory, offset);
+  llvmVal* result = builder.CreateAlignedLoad(memptr->getType()->getPointerElementType(), memptr,
+                                              llvm::Align(1ULL << memflags), false, name);
 
   if(ext != nullptr)
     result = SIGNED ? builder.CreateSExt(result, ext) : builder.CreateZExt(result, ext);
@@ -593,7 +591,8 @@ IN_ERROR Compiler::CompileStore(varuint32 memory, varuint32 offset, varuint32 me
 
   // TODO: In strict mode, we may have to disregard the alignment hint
   llvmVal* ptr = GetMemPointer(base, PtrType->getPointerTo(0), memory, offset);
-  builder.CreateAlignedStore(!ext ? value : builder.CreateIntCast(value, ext, false), ptr, (1 << memflags), false);
+  builder.CreateAlignedStore(!ext ? value : builder.CreateIntCast(value, ext, false), ptr, llvm::Align(1ULL << memflags),
+                             false);
 
   return ERR_SUCCESS;
 }
@@ -620,7 +619,7 @@ IN_ERROR Compiler::CompileMemGrow(varuint32 memory, const char* name)
   auto max =
     llvm::cast<llvm::ConstantAsMetadata>(memories[memory]->getMetadata(IN_MEMORY_MAX_METADATA)->getOperand(0))->getValue();
   CallInst* call = builder.CreateCall(fn_memgrow,
-                                      { builder.CreateLoad(GetPairPtr(memories[memory], 0)),
+                                      { LoadPairPtr(memories[memory], 0),
                                         builder.CreateShl(builder.CreateZExt(delta, builder.getInt64Ty()), 16), max,
                                         GetPairPtr(memories[memory], 1) },
                                       name);
@@ -633,9 +632,10 @@ IN_ERROR Compiler::CompileMemGrow(varuint32 memory, const char* name)
 
   builder.CreateCondBr(success, successblock, contblock);
   builder.SetInsertPoint(successblock); // Only set new memory if call succeeded
-  builder.CreateAlignedStore(call, GetPairPtr(memories[memory], 0), builder.getInt64Ty()->getPrimitiveSizeInBits() / 8,
-                             false);
-  builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[memory], 0)), memlocal, false);
+  builder.CreateAlignedStore(call, GetPairPtr(memories[memory], 0),
+                             llvm::Align(builder.getInt64Ty()->getPrimitiveSizeInBits() / 8), false);
+
+  builder.CreateStore(LoadPairPtr(memories[memory], 0), memlocal, false);
   builder.CreateBr(contblock);
 
   builder.SetInsertPoint(contblock);
@@ -673,7 +673,7 @@ IN_ERROR Compiler::CompileMemInit(varuint32 dst_mem, varuint32 src_seg)
 
   // Check data access
   llvmVal* src_loc;
-  llvmVal* data_size = builder.CreateLoad(builder.CreateInBoundsGEP(data.runtime_len, { builder.getInt32(0) }));
+  llvmVal* data_size = LoadInBoundsGEP(data.runtime_len, { builder.getInt32(0) });
   InsertBoundsCheck(GetLLVMType(TE_i32), data_size, { src_offset }, mem_size, src_loc);
 
   auto dst = GetMemPointerRegion(dst_base, builder.getInt8PtrTy(), mem_size, dst_mem, 0);
@@ -769,16 +769,16 @@ IN_ERROR Compiler::CompileTableInit(varuint32 dst_tbl, varuint32 src_elem)
     return err;
 
   llvmVal* dst_size = builder.CreateUDiv(GetMemSize(tables[dst_tbl]), builder.getInt64(elem_size));
-  llvmVal* src_size = builder.CreateLoad(builder.CreateInBoundsGEP(elem.runtime_len, { builder.getInt32(0) }));
+  llvmVal* src_size = LoadInBoundsGEP(elem.runtime_len, { builder.getInt32(0) });
 
   llvmVal *dst_loc, *src_loc;
   InsertBoundsCheck(count->getType(), dst_size, { dst_base }, count, dst_loc);
   InsertBoundsCheck(count->getType(), src_size, { src_offset }, count, src_loc);
 
-  llvmVal* dst_ptr = builder.CreateLoad(GetPairPtr(tables[dst_tbl], 0));
+  llvmVal* dst_ptr = LoadPairPtr(tables[dst_tbl], 0);
   llvmVal* src_ptr = builder.CreateInBoundsGEP(elem.elem->getType(), elem.global, { builder.getInt32(0), src_loc });
 
-  dst_ptr = builder.CreateInBoundsGEP(dst_ptr, dst_loc);
+  dst_ptr = builder.CreateInBoundsGEP(dst_ptr->getType()->getPointerElementType(), dst_ptr, dst_loc);
 
   llvmVal* byteCount = builder.CreateMul(builder.CreateZExtOrTrunc(count, sizet), CInt::get(sizet, elem_size));
 
@@ -819,11 +819,11 @@ IN_ERROR Compiler::CompileTableCopy(varuint32 dst_tbl, varuint32 src_tbl)
   InsertBoundsCheck(count->getType(), dst_size, { dst_base }, count, dst_loc);
   InsertBoundsCheck(count->getType(), src_size, { src_base }, count, src_loc);
 
-  llvmVal* dst_ptr = builder.CreateLoad(GetPairPtr(tables[dst_tbl], 0));
-  llvmVal* src_ptr = builder.CreateLoad(GetPairPtr(tables[src_tbl], 0));
+  llvmVal* dst_ptr = LoadPairPtr(tables[dst_tbl], 0);
+  llvmVal* src_ptr = LoadPairPtr(tables[src_tbl], 0);
 
-  dst_ptr = builder.CreateInBoundsGEP(dst_ptr, dst_loc);
-  src_ptr = builder.CreateInBoundsGEP(src_ptr, src_loc);
+  dst_ptr = builder.CreateInBoundsGEP(dst_ptr->getType()->getPointerElementType(), dst_ptr, dst_loc);
+  src_ptr = builder.CreateInBoundsGEP(src_ptr->getType()->getPointerElementType(), src_ptr, src_loc);
 
   llvmVal* byteCount = builder.CreateMul(builder.CreateZExtOrTrunc(count, sizet), CInt::get(sizet, elem_size));
 
@@ -835,7 +835,7 @@ IN_ERROR Compiler::CompileTableCopy(varuint32 dst_tbl, varuint32 src_tbl)
 IN_ERROR innative::Compiler::CompileDataDrop(varuint32 segment)
 {
   auto var    = data_globals[segment].runtime_len;
-  auto valptr = builder.CreateInBoundsGEP(var, { builder.getInt32(0) });
+  auto valptr = builder.CreateInBoundsGEP(var->getType()->getPointerElementType(), var, { builder.getInt32(0) });
   builder.CreateStore(builder.getInt64(0), valptr);
   return ERR_SUCCESS;
 }
@@ -843,7 +843,7 @@ IN_ERROR innative::Compiler::CompileDataDrop(varuint32 segment)
 IN_ERROR innative::Compiler::CompileElemDrop(varuint32 segment)
 {
   auto var    = elem_globals[segment].runtime_len;
-  auto valptr = builder.CreateInBoundsGEP(var, { builder.getInt32(0) });
+  auto valptr = builder.CreateInBoundsGEP(var->getType()->getPointerElementType(), var, { builder.getInt32(0) });
   builder.CreateStore(builder.getInt64(0), valptr);
   return ERR_SUCCESS;
 }
@@ -996,7 +996,7 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     if(!local)
       return LogErrorString(env, "%s: No local exists with index %u", ERR_INVALID_LOCAL_INDEX,
                             ins.immediates[0]._varuint32);
-    PushReturn(builder.CreateLoad(local));
+    PushReturn(builder.CreateLoad(local->getType()->getPointerElementType(), local));
     return ERR_SUCCESS;
   }
   case OP_local_set:
@@ -1033,7 +1033,8 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     if(ins.immediates[0]._varuint32 >= globals.size())
       return LogErrorString(env, "%s: global index %u exceeds number of globals %zu", ERR_INVALID_GLOBAL_INDEX,
                             ins.immediates[0]._varuint32, globals.size());
-    PushReturn(builder.CreateLoad(globals[ins.immediates[0]._varuint32]));
+    PushReturn(builder.CreateLoad(globals[ins.immediates[0]._varuint32]->getType()->getPointerElementType(),
+                                  globals[ins.immediates[0]._varuint32]));
     return ERR_SUCCESS;
 
     // Memory-related operators
@@ -1249,23 +1250,37 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return CompileDiv<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(false, &llvm::IRBuilder<>::CreateURem,
                                                                   OP::NAMES[ins.opcode]);
   case OP_i32_and:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd,
-                                                                       OP::NAMES[ins.opcode]);
+  {
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&)>(
+        &llvm::IRBuilder<>::CreateAnd),
+      OP::NAMES[ins.opcode]);
+  }
   case OP_i32_or:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateOr, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&)>(
+        &llvm::IRBuilder<>::CreateOr),
+      OP::NAMES[ins.opcode]);
   case OP_i32_xor:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor,
-                                                                       OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&)>(
+        &llvm::IRBuilder<>::CreateXor),
+      OP::NAMES[ins.opcode]);
   case OP_i32_shl:
-    return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateShl,
-                                                                                        OP::NAMES[ins.opcode], false,
-                                                                                        false);
+    return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool, bool>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&, bool, bool)>(
+        &llvm::IRBuilder<>::CreateShl),
+      OP::NAMES[ins.opcode], false, false);
   case OP_i32_shr_s:
-    return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(&llvm::IRBuilder<>::CreateAShr,
-                                                                                  OP::NAMES[ins.opcode], false);
+    return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&, bool)>(
+        &llvm::IRBuilder<>::CreateAShr),
+      OP::NAMES[ins.opcode], false);
   case OP_i32_shr_u:
-    return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(&llvm::IRBuilder<>::CreateLShr,
-                                                                                  OP::NAMES[ins.opcode], false);
+    return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&, bool)>(
+        &llvm::IRBuilder<>::CreateLShr),
+      OP::NAMES[ins.opcode], false);
   case OP_i32_rotl: return CompileRotationOp<TE_i32, true>(OP::NAMES[ins.opcode]);
   case OP_i32_rotr: return CompileRotationOp<TE_i32, false>(OP::NAMES[ins.opcode]);
   case OP_i64_clz:
@@ -1293,23 +1308,35 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return CompileDiv<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(false, &llvm::IRBuilder<>::CreateURem,
                                                                   OP::NAMES[ins.opcode]);
   case OP_i64_and:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateAnd,
-                                                                       OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&)>(
+        &llvm::IRBuilder<>::CreateAnd),
+      OP::NAMES[ins.opcode]);
   case OP_i64_or:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateOr, OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&)>(
+        &llvm::IRBuilder<>::CreateOr),
+      OP::NAMES[ins.opcode]);
   case OP_i64_xor:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilder<>::CreateXor,
-                                                                       OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&)>(
+        &llvm::IRBuilder<>::CreateXor),
+      OP::NAMES[ins.opcode]);
   case OP_i64_shl:
-    return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateShl,
-                                                                                        OP::NAMES[ins.opcode], false,
-                                                                                        false);
+    return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool, bool>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&, bool, bool)>(
+        &llvm::IRBuilder<>::CreateShl),
+      OP::NAMES[ins.opcode], false, false);
   case OP_i64_shr_s:
-    return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(&llvm::IRBuilder<>::CreateAShr,
-                                                                                  OP::NAMES[ins.opcode], false);
+    return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&, bool)>(
+        &llvm::IRBuilder<>::CreateAShr),
+      OP::NAMES[ins.opcode], false);
   case OP_i64_shr_u:
-    return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(&llvm::IRBuilder<>::CreateLShr,
-                                                                                  OP::NAMES[ins.opcode], false);
+    return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&, bool)>(
+        &llvm::IRBuilder<>::CreateLShr),
+      OP::NAMES[ins.opcode], false);
   case OP_i64_rotl: return CompileRotationOp<TE_i64, true>(OP::NAMES[ins.opcode]);
   case OP_i64_rotr: return CompileRotationOp<TE_i64, false>(OP::NAMES[ins.opcode]);
   case OP_f32_abs: return CompileUnaryIntrinsic<TE_f32, TE_f32>(llvm::Intrinsic::fabs, OP::NAMES[ins.opcode]);
@@ -1369,21 +1396,24 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
 
     // Conversions
   case OP_i32_wrap_i64:
-    return CompileUnaryOp<TE_i64, TE_i32, llvmTy*, bool, const llvm::Twine&>(&llvm::IRBuilder<>::CreateIntCast,
-                                                                             builder.getInt32Ty(), true,
-                                                                             OP::NAMES[ins.opcode]);
+    return CompileUnaryOp<TE_i64, TE_i32, llvmTy*, bool, const llvm::Twine&>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvmTy*, bool, const llvm::Twine&)>(
+        &llvm::IRBuilder<>::CreateIntCast),
+      builder.getInt32Ty(), true, OP::NAMES[ins.opcode]);
   case OP_i32_trunc_f32_s: return CompileFPToInt(FPToIntOp::F32ToI32, false, OP::NAMES[ins.opcode]);
   case OP_i32_trunc_f32_u: return CompileFPToInt(FPToIntOp::F32ToU32, false, OP::NAMES[ins.opcode]);
   case OP_i32_trunc_f64_s: return CompileFPToInt(FPToIntOp::F64ToI32, false, OP::NAMES[ins.opcode]);
   case OP_i32_trunc_f64_u: return CompileFPToInt(FPToIntOp::F64ToU32, false, OP::NAMES[ins.opcode]);
   case OP_i64_extend_i32_s:
-    return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const llvm::Twine&>(&llvm::IRBuilder<>::CreateIntCast,
-                                                                             builder.getInt64Ty(), true,
-                                                                             OP::NAMES[ins.opcode]);
+    return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const llvm::Twine&>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvmTy*, bool, const llvm::Twine&)>(
+        &llvm::IRBuilder<>::CreateIntCast),
+      builder.getInt64Ty(), true, OP::NAMES[ins.opcode]);
   case OP_i64_extend_i32_u:
-    return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const llvm::Twine&>(&llvm::IRBuilder<>::CreateIntCast,
-                                                                             builder.getInt64Ty(), false,
-                                                                             OP::NAMES[ins.opcode]);
+    return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const llvm::Twine&>(
+      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvmTy*, bool, const llvm::Twine&)>(
+        &llvm::IRBuilder<>::CreateIntCast),
+      builder.getInt64Ty(), false, OP::NAMES[ins.opcode]);
   case OP_i64_trunc_f32_s: return CompileFPToInt(FPToIntOp::F32ToI64, false, OP::NAMES[ins.opcode]);
   case OP_i64_trunc_f32_u: return CompileFPToInt(FPToIntOp::F32ToU64, false, OP::NAMES[ins.opcode]);
   case OP_i64_trunc_f64_s: return CompileFPToInt(FPToIntOp::F64ToI64, false, OP::NAMES[ins.opcode]);
@@ -1542,16 +1572,17 @@ IN_ERROR Compiler::CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst
     offset += body.locals[i].count;
   }
 
-  unsigned int stacksize = 0;
+  size_t stacksize = 0;
   for(auto local : locals)
-    stacksize += (local->getType()->getElementType()->getPrimitiveSizeInBits() / 8);
+    stacksize += (local->getType()->getElementType()->getPrimitiveSizeInBits().getFixedSize() / 8);
 
   if(memories.size() > 0)
   {
     memref = memlocal =
       builder.CreateAlloca(memories[0]->getType()->getElementType()->getContainedType(0), nullptr, "IN_!memlocal");
-    builder.CreateStore(builder.CreateLoad(GetPairPtr(memories[0], 0)), memlocal, false);
-    stacksize += (memref->getAllocationSizeInBits(mod->getDataLayout()).getValueOr(0) / 8);
+    builder.CreateStore(LoadPairPtr(memories[0], 0), memlocal, false);
+    stacksize +=
+      (memref->getAllocationSizeInBits(mod->getDataLayout()).getValueOr(llvm::TypeSize(0, false)).getFixedSize() / 8);
   }
 
   debugger->PostFuncBody(fn, body);
@@ -1565,7 +1596,7 @@ IN_ERROR Compiler::CompileFunctionBody(Func* fn, size_t indice, llvm::AllocaInst
   {
     // We have to insert the counter increment before the instruction in case it's a jump or return instruction
     if(instruction_counter)
-      builder.CreateAtomicRMW(llvm::AtomicRMWInst::BinOp::Add, instruction_counter, builder.getInt64(1),
+      builder.CreateAtomicRMW(llvm::AtomicRMWInst::BinOp::Add, instruction_counter, builder.getInt64(1), llvm::MaybeAlign(),
                               llvm::AtomicOrdering::Monotonic);
     debugger->DebugIns(fn, body.body[i]);
     IN_ERROR err = CompileInstruction(body.body[i]);

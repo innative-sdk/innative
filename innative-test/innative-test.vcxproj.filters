@@ -126,5 +126,6 @@
     <None Include="..\scripts\test-win64-cref.wat">
       <Filter>scripts</Filter>
     </None>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

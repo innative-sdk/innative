@@ -111,7 +111,7 @@ void TestHarness::test_atomic_waitnotify()
     TEST(list1->len == 1);
 
     // Test timeout when no notification comes
-    auto val = _innative_internal_env_wait_entry_wait(list1, entry, 1'000'000 /* 1ms */);
+    auto val = _innative_internal_env_wait_entry_wait(list1, entry, 1'000'000 ); // 1 ms
     TEST(val == 2);
     TEST(entry->signaled == 0);
 
@@ -119,7 +119,7 @@ void TestHarness::test_atomic_waitnotify()
     barrier.wait(1);
 
     // Wait for the signal
-    val = _innative_internal_env_wait_entry_wait(list1, entry, -1 /* no timeout */);
+    val = _innative_internal_env_wait_entry_wait(list1, entry, -1); // no timeout
     TEST(val == 0);
     TEST(entry->signaled == 1);
     // The entry should be neither on the list or free

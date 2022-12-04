@@ -210,10 +210,6 @@ void DebugSourceMap::UpdateLocation(Instruction& i)
       if(!subprograms[s.source_index])
       {
         auto original = _curscope->getSubprogram();
-        auto f1       = _curscope->getFile();
-        auto f2       = original->getFile();
-        auto f3       = files[s.source_index];
-        auto f4       = dunit;
 
         subprograms[s.source_index] =
           _dbuilder->createFunction(original->getScope(), original->getName(), original->getLinkageName(),

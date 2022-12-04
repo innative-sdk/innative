@@ -155,6 +155,7 @@ namespace innative {
     llvm::StructType* GetTableType(varsint7 element_type);
     llvm::StructType* GetPairType(llvmTy* ty);
     llvm::Value* GetPairPtr(llvm::GlobalVariable* v, int index);
+    llvm::LoadInst* LoadPairPtr(llvm::GlobalVariable* v, int index);
     llvm::Constant* GetPairNull(llvm::StructType* ty);
     IN_ERROR InsertConditionalTrap(llvmVal* cond);
     IN_ERROR InsertBoundsCheck(llvm::Type* inputTy, llvmVal* end, std::initializer_list<llvmVal*> offsets,
@@ -183,6 +184,8 @@ namespace innative {
     llvmVal* GetMemPointer(llvmVal* base, llvm::PointerType* pointer_type, varuint32 memory, varuint32 offset);
     llvmVal* GetMemPointerRegion(llvmVal* base, llvm::PointerType* pointer_type, llvmVal* byteLength, varuint32 memory,
                                  varuint32 offset);
+    llvmVal* LoadInBoundsGEP(llvmVal* Ptr, llvm::ArrayRef<llvmVal*> IdxList, const llvm::Twine& Name = "");
+
     IN_ERROR InsertTruncTrap(double max, double min, llvm::Type* ty);
     llvm::Value* GetLocal(varuint32 index);
     llvm::GlobalVariable* CreateGlobal(llvmTy* ty, bool isconst, bool external, llvm::StringRef name,

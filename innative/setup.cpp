@@ -34,7 +34,7 @@
 namespace innative {
   namespace utility {
 #ifdef IN_PLATFORM_WIN32
-  #define MAKEWSTRING2(x) L#x
+  #define MAKEWSTRING2(x) L""#x
   #define MAKEWSTRING(x)  MAKEWSTRING2(x)
   #define IN_VERSION_PATH               \
     MAKEWSTRING(INNATIVE_VERSION_MAJOR) \
