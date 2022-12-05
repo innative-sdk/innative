@@ -26,7 +26,7 @@ Func* Compiler::CompileFunction(FunctionType& signature, const llvm::Twine& name
 
 // Given a pointer to the appropriate builder function, pops two binary arguments off the stack and pushes the result
 template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR, typename... Args>
-IN_ERROR Compiler::CompileBinaryOp(llvmVal* (llvm::IRBuilder<>::*op)(llvmVal*, llvmVal*, Args...), Args... args)
+IN_ERROR Compiler::CompileBinaryOp(llvmVal* (llvm::IRBuilderBase::*op)(llvmVal*, llvmVal*, Args...), Args... args)
 {
   IN_ERROR err;
 
@@ -58,7 +58,7 @@ IN_ERROR Compiler::CompileBinaryIntrinsic(llvm::Intrinsic::ID id, const llvm::Tw
 
 // Given a function pointer to the appropriate builder function, pops one unary argument off the stack and pushes the result
 template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING TyR, typename... Args>
-IN_ERROR Compiler::CompileUnaryOp(llvmVal* (llvm::IRBuilder<>::*op)(llvmVal*, Args...), Args... args)
+IN_ERROR Compiler::CompileUnaryOp(llvmVal* (llvm::IRBuilderBase::*op)(llvmVal*, Args...), Args... args)
 {
   IN_ERROR err;
 
@@ -142,7 +142,7 @@ template<WASM_TYPE_ENCODING TYPE, bool LEFT> IN_ERROR Compiler::CompileRotationO
 
 // BinaryOp for shift functions which has to apply a shift mask to one operand
 template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR, typename... Args>
-IN_ERROR Compiler::CompileBinaryShiftOp(llvmVal* (llvm::IRBuilder<>::*op)(llvmVal*, llvmVal*, Args...), Args... args)
+IN_ERROR Compiler::CompileBinaryShiftOp(llvmVal* (llvm::IRBuilderBase::*op)(llvmVal*, llvmVal*, Args...), Args... args)
 {
   IN_ERROR err;
 
@@ -875,7 +875,7 @@ IN_ERROR Compiler::CompileSRem(const llvm::Twine& name)
 // Given a function pointer to the appropriate builder function, pops two binary arguments off the stack and pushes the
 // result
 template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR, typename... Args>
-IN_ERROR Compiler::CompileDiv(bool overflow, llvmVal* (llvm::IRBuilder<>::*op)(llvmVal*, llvmVal*, Args...), Args... args)
+IN_ERROR Compiler::CompileDiv(bool overflow, llvmVal* (llvm::IRBuilderBase::*op)(llvmVal*, llvmVal*, Args...), Args... args)
 {
   IN_ERROR err;
 
@@ -1127,101 +1127,101 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
   // Comparison operators
   case OP_i32_eqz: values.Push(builder.getInt32(0)); // Fallthrough to OP_i32_eq
   case OP_i32_eq:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpEQ,
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpEQ,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i32_ne:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpNE,
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpNE,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i32_lt_s:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpSLT,
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpSLT,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i32_lt_u:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpULT,
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpULT,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i32_gt_s:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpSGT,
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpSGT,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i32_gt_u:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpUGT,
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpUGT,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i32_le_s:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpSLE,
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpSLE,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i32_le_u:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpULE,
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpULE,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i32_ge_s:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpSGE,
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpSGE,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i32_ge_u:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpUGE,
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpUGE,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i64_eqz: values.Push(builder.getInt64(0)); // Fallthrough to OP_i64_eq
   case OP_i64_eq:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpEQ,
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpEQ,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i64_ne:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpNE,
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpNE,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i64_lt_s:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpSLT,
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpSLT,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i64_lt_u:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpULT,
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpULT,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i64_gt_s:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpSGT,
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpSGT,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i64_gt_u:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpUGT,
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpUGT,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i64_le_s:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpSLE,
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpSLE,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i64_le_u:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpULE,
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpULE,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i64_ge_s:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpSGE,
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpSGE,
                                                                        OP::NAMES[ins.opcode]);
   case OP_i64_ge_u:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilder<>::CreateICmpUGE,
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpUGE,
                                                                        OP::NAMES[ins.opcode]);
   case OP_f32_eq:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFCmpOEQ,
+    return CompileBinaryOp<TE_f32, TE_f32, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFCmpOEQ,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f32_ne:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFCmpUNE,
+    return CompileBinaryOp<TE_f32, TE_f32, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFCmpUNE,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f32_lt:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFCmpOLT,
+    return CompileBinaryOp<TE_f32, TE_f32, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFCmpOLT,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f32_gt:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFCmpOGT,
+    return CompileBinaryOp<TE_f32, TE_f32, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFCmpOGT,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f32_le:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFCmpOLE,
+    return CompileBinaryOp<TE_f32, TE_f32, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFCmpOLE,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f32_ge:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFCmpOGE,
+    return CompileBinaryOp<TE_f32, TE_f32, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFCmpOGE,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f64_eq:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFCmpOEQ,
+    return CompileBinaryOp<TE_f64, TE_f64, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFCmpOEQ,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f64_ne:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFCmpUNE,
+    return CompileBinaryOp<TE_f64, TE_f64, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFCmpUNE,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f64_lt:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFCmpOLT,
+    return CompileBinaryOp<TE_f64, TE_f64, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFCmpOLT,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f64_gt:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFCmpOGT,
+    return CompileBinaryOp<TE_f64, TE_f64, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFCmpOGT,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f64_le:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFCmpOLE,
+    return CompileBinaryOp<TE_f64, TE_f64, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFCmpOLE,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f64_ge:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFCmpOGE,
+    return CompileBinaryOp<TE_f64, TE_f64, TE_i32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFCmpOGE,
                                                                                       OP::NAMES[ins.opcode], nullptr);
 
     // Numeric operators
@@ -1231,56 +1231,45 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return CompileUnaryIntrinsic<TE_i32, TE_i32>(llvm::Intrinsic::cttz, OP::NAMES[ins.opcode], builder.getInt1(false));
   case OP_i32_popcnt: return CompileUnaryIntrinsic<TE_i32, TE_i32>(llvm::Intrinsic::ctpop, OP::NAMES[ins.opcode]);
   case OP_i32_add:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateAdd,
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool, bool>(&llvm::IRBuilderBase::CreateAdd,
                                                                                    OP::NAMES[ins.opcode], false, false);
   case OP_i32_sub:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateSub,
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool, bool>(&llvm::IRBuilderBase::CreateSub,
                                                                                    OP::NAMES[ins.opcode], false, false);
   case OP_i32_mul:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateMul,
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool, bool>(&llvm::IRBuilderBase::CreateMul,
                                                                                    OP::NAMES[ins.opcode], false, false);
   case OP_i32_div_s:
-    return CompileDiv<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(true, &llvm::IRBuilder<>::CreateSDiv,
+    return CompileDiv<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(true, &llvm::IRBuilderBase::CreateSDiv,
                                                                         OP::NAMES[ins.opcode], false);
   case OP_i32_div_u:
-    return CompileDiv<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(false, &llvm::IRBuilder<>::CreateUDiv,
+    return CompileDiv<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(false, &llvm::IRBuilderBase::CreateUDiv,
                                                                         OP::NAMES[ins.opcode], false);
   case OP_i32_rem_s: return CompileSRem<TE_i32, TE_i32, TE_i32>(OP::NAMES[ins.opcode]);
   case OP_i32_rem_u:
-    return CompileDiv<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(false, &llvm::IRBuilder<>::CreateURem,
+    return CompileDiv<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(false, &llvm::IRBuilderBase::CreateURem,
                                                                   OP::NAMES[ins.opcode]);
   case OP_i32_and:
   {
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&)>(
-        &llvm::IRBuilder<>::CreateAnd),
-      OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateAnd,
+                                                                       OP::NAMES[ins.opcode]);
   }
   case OP_i32_or:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&)>(
-        &llvm::IRBuilder<>::CreateOr),
-      OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateOr,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i32_xor:
-    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&)>(
-        &llvm::IRBuilder<>::CreateXor),
-      OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateXor,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i32_shl:
-    return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool, bool>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&, bool, bool)>(
-        &llvm::IRBuilder<>::CreateShl),
-      OP::NAMES[ins.opcode], false, false);
+    return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool, bool>(&llvm::IRBuilderBase::CreateShl,
+                                                                                        OP::NAMES[ins.opcode], false,
+                                                                                        false);
   case OP_i32_shr_s:
-    return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&, bool)>(
-        &llvm::IRBuilder<>::CreateAShr),
-      OP::NAMES[ins.opcode], false);
+    return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(&llvm::IRBuilderBase::CreateAShr,
+                                                                                  OP::NAMES[ins.opcode], false);
   case OP_i32_shr_u:
-    return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&, bool)>(
-        &llvm::IRBuilder<>::CreateLShr),
-      OP::NAMES[ins.opcode], false);
+    return CompileBinaryShiftOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&, bool>(&llvm::IRBuilderBase::CreateLShr,
+                                                                                  OP::NAMES[ins.opcode], false);
   case OP_i32_rotl: return CompileRotationOp<TE_i32, true>(OP::NAMES[ins.opcode]);
   case OP_i32_rotr: return CompileRotationOp<TE_i32, false>(OP::NAMES[ins.opcode]);
   case OP_i64_clz:
@@ -1289,80 +1278,69 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return CompileUnaryIntrinsic<TE_i64, TE_i64>(llvm::Intrinsic::cttz, OP::NAMES[ins.opcode], builder.getInt1(false));
   case OP_i64_popcnt: return CompileUnaryIntrinsic<TE_i64, TE_i64>(llvm::Intrinsic::ctpop, OP::NAMES[ins.opcode]);
   case OP_i64_add:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateAdd,
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool, bool>(&llvm::IRBuilderBase::CreateAdd,
                                                                                    OP::NAMES[ins.opcode], false, false);
   case OP_i64_sub:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateSub,
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool, bool>(&llvm::IRBuilderBase::CreateSub,
                                                                                    OP::NAMES[ins.opcode], false, false);
   case OP_i64_mul:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool, bool>(&llvm::IRBuilder<>::CreateMul,
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool, bool>(&llvm::IRBuilderBase::CreateMul,
                                                                                    OP::NAMES[ins.opcode], false, false);
   case OP_i64_div_s:
-    return CompileDiv<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(true, &llvm::IRBuilder<>::CreateSDiv,
+    return CompileDiv<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(true, &llvm::IRBuilderBase::CreateSDiv,
                                                                         OP::NAMES[ins.opcode], false);
   case OP_i64_div_u:
-    return CompileDiv<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(false, &llvm::IRBuilder<>::CreateUDiv,
+    return CompileDiv<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(false, &llvm::IRBuilderBase::CreateUDiv,
                                                                         OP::NAMES[ins.opcode], false);
   case OP_i64_rem_s: return CompileSRem<TE_i64, TE_i64, TE_i64>(OP::NAMES[ins.opcode]);
   case OP_i64_rem_u:
-    return CompileDiv<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(false, &llvm::IRBuilder<>::CreateURem,
+    return CompileDiv<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(false, &llvm::IRBuilderBase::CreateURem,
                                                                   OP::NAMES[ins.opcode]);
   case OP_i64_and:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&)>(
-        &llvm::IRBuilder<>::CreateAnd),
-      OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilderBase::CreateAnd,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i64_or:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&)>(
-        &llvm::IRBuilder<>::CreateOr),
-      OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilderBase::CreateOr,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i64_xor:
-    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&)>(
-        &llvm::IRBuilder<>::CreateXor),
-      OP::NAMES[ins.opcode]);
+    return CompileBinaryOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&>(&llvm::IRBuilderBase::CreateXor,
+                                                                       OP::NAMES[ins.opcode]);
   case OP_i64_shl:
-    return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool, bool>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&, bool, bool)>(
-        &llvm::IRBuilder<>::CreateShl),
-      OP::NAMES[ins.opcode], false, false);
+    return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool, bool>(&llvm::IRBuilderBase::CreateShl,
+                                                                                        OP::NAMES[ins.opcode], false,
+                                                                                        false);
   case OP_i64_shr_s:
-    return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&, bool)>(
-        &llvm::IRBuilder<>::CreateAShr),
-      OP::NAMES[ins.opcode], false);
+    return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(&llvm::IRBuilderBase::CreateAShr,
+                                                                                  OP::NAMES[ins.opcode], false);
   case OP_i64_shr_u:
-    return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvm::Value*, const llvm::Twine&, bool)>(
-        &llvm::IRBuilder<>::CreateLShr),
-      OP::NAMES[ins.opcode], false);
+    return CompileBinaryShiftOp<TE_i64, TE_i64, TE_i64, const llvm::Twine&, bool>(&llvm::IRBuilderBase::CreateLShr,
+                                                                                  OP::NAMES[ins.opcode], false);
   case OP_i64_rotl: return CompileRotationOp<TE_i64, true>(OP::NAMES[ins.opcode]);
   case OP_i64_rotr: return CompileRotationOp<TE_i64, false>(OP::NAMES[ins.opcode]);
   case OP_f32_abs: return CompileUnaryIntrinsic<TE_f32, TE_f32>(llvm::Intrinsic::fabs, OP::NAMES[ins.opcode]);
   case OP_f32_neg:
-    return CompileUnaryOp<TE_f32, TE_f32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFNeg,
+    return CompileUnaryOp<TE_f32, TE_f32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFNeg,
                                                                              OP::NAMES[ins.opcode], nullptr);
   case OP_f32_ceil: return CompileUnaryIntrinsic<TE_f32, TE_f32>(llvm::Intrinsic::ceil, OP::NAMES[ins.opcode]);
   case OP_f32_floor: return CompileUnaryIntrinsic<TE_f32, TE_f32>(llvm::Intrinsic::floor, OP::NAMES[ins.opcode]);
   case OP_f32_trunc:
     return CompileUnaryIntrinsic<TE_f32, TE_f32>(llvm::Intrinsic::trunc, OP::NAMES[ins.opcode]);
-    return CompileUnaryOp<TE_f32, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateFPTrunc,
+    return CompileUnaryOp<TE_f32, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateFPTrunc,
                                                                        builder.getFloatTy(), OP::NAMES[ins.opcode]);
   case OP_f32_nearest: // We must round floats using IEEE 754-2008 roundToIntegralTowardZero, which rint gaurantees
     return CompileUnaryIntrinsic<TE_f32, TE_f32>(llvm::Intrinsic::nearbyint, OP::NAMES[ins.opcode]);
   case OP_f32_sqrt: return CompileUnaryIntrinsic<TE_f32, TE_f32>(llvm::Intrinsic::sqrt, OP::NAMES[ins.opcode]);
   case OP_f32_add:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFAdd,
+    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFAdd,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f32_sub:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFSub,
+    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFSub,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f32_mul:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFMul,
+    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFMul,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f32_div:
-    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFDiv,
+    return CompileBinaryOp<TE_f32, TE_f32, TE_f32, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFDiv,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f32_min: return CompileFloatCmp<TE_f32, TE_f32, TE_f32>(llvm::Intrinsic::minnum, OP::NAMES[ins.opcode]);
   case OP_f32_max: return CompileFloatCmp<TE_f32, TE_f32, TE_f32>(llvm::Intrinsic::maxnum, OP::NAMES[ins.opcode]);
@@ -1370,7 +1348,7 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
     return CompileBinaryIntrinsic<TE_f32, TE_f32, TE_f32>(llvm::Intrinsic::copysign, OP::NAMES[ins.opcode]);
   case OP_f64_abs: return CompileUnaryIntrinsic<TE_f64, TE_f64>(llvm::Intrinsic::fabs, OP::NAMES[ins.opcode]);
   case OP_f64_neg:
-    return CompileUnaryOp<TE_f64, TE_f64, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFNeg,
+    return CompileUnaryOp<TE_f64, TE_f64, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFNeg,
                                                                              OP::NAMES[ins.opcode], nullptr);
   case OP_f64_ceil: return CompileUnaryIntrinsic<TE_f64, TE_f64>(llvm::Intrinsic::ceil, OP::NAMES[ins.opcode]);
   case OP_f64_floor: return CompileUnaryIntrinsic<TE_f64, TE_f64>(llvm::Intrinsic::floor, OP::NAMES[ins.opcode]);
@@ -1378,16 +1356,16 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
   case OP_f64_nearest: return CompileUnaryIntrinsic<TE_f64, TE_f64>(llvm::Intrinsic::nearbyint, OP::NAMES[ins.opcode]);
   case OP_f64_sqrt: return CompileUnaryIntrinsic<TE_f64, TE_f64>(llvm::Intrinsic::sqrt, OP::NAMES[ins.opcode]);
   case OP_f64_add:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFAdd,
+    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFAdd,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f64_sub:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFSub,
+    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFSub,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f64_mul:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFMul,
+    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFMul,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f64_div:
-    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilder<>::CreateFDiv,
+    return CompileBinaryOp<TE_f64, TE_f64, TE_f64, const llvm::Twine&, llvm::MDNode*>(&llvm::IRBuilderBase::CreateFDiv,
                                                                                       OP::NAMES[ins.opcode], nullptr);
   case OP_f64_min: return CompileFloatCmp<TE_f64, TE_f64, TE_f64>(llvm::Intrinsic::minnum, OP::NAMES[ins.opcode]);
   case OP_f64_max: return CompileFloatCmp<TE_f64, TE_f64, TE_f64>(llvm::Intrinsic::maxnum, OP::NAMES[ins.opcode]);
@@ -1396,71 +1374,68 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
 
     // Conversions
   case OP_i32_wrap_i64:
-    return CompileUnaryOp<TE_i64, TE_i32, llvmTy*, bool, const llvm::Twine&>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvmTy*, bool, const llvm::Twine&)>(
-        &llvm::IRBuilder<>::CreateIntCast),
-      builder.getInt32Ty(), true, OP::NAMES[ins.opcode]);
+    return CompileUnaryOp<TE_i64, TE_i32, llvmTy*, bool, const llvm::Twine&>(&llvm::IRBuilderBase::CreateIntCast,
+                                                                             builder.getInt32Ty(), true,
+                                                                             OP::NAMES[ins.opcode]);
   case OP_i32_trunc_f32_s: return CompileFPToInt(FPToIntOp::F32ToI32, false, OP::NAMES[ins.opcode]);
   case OP_i32_trunc_f32_u: return CompileFPToInt(FPToIntOp::F32ToU32, false, OP::NAMES[ins.opcode]);
   case OP_i32_trunc_f64_s: return CompileFPToInt(FPToIntOp::F64ToI32, false, OP::NAMES[ins.opcode]);
   case OP_i32_trunc_f64_u: return CompileFPToInt(FPToIntOp::F64ToU32, false, OP::NAMES[ins.opcode]);
   case OP_i64_extend_i32_s:
-    return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const llvm::Twine&>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvmTy*, bool, const llvm::Twine&)>(
-        &llvm::IRBuilder<>::CreateIntCast),
-      builder.getInt64Ty(), true, OP::NAMES[ins.opcode]);
+    return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const llvm::Twine&>(&llvm::IRBuilderBase::CreateIntCast,
+                                                                             builder.getInt64Ty(), true,
+                                                                             OP::NAMES[ins.opcode]);
   case OP_i64_extend_i32_u:
-    return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const llvm::Twine&>(
-      static_cast<llvm::Value* (llvm::IRBuilder<>::*)(llvm::Value*, llvmTy*, bool, const llvm::Twine&)>(
-        &llvm::IRBuilder<>::CreateIntCast),
-      builder.getInt64Ty(), false, OP::NAMES[ins.opcode]);
+    return CompileUnaryOp<TE_i32, TE_i64, llvmTy*, bool, const llvm::Twine&>(&llvm::IRBuilderBase::CreateIntCast,
+                                                                             builder.getInt64Ty(), false,
+                                                                             OP::NAMES[ins.opcode]);
   case OP_i64_trunc_f32_s: return CompileFPToInt(FPToIntOp::F32ToI64, false, OP::NAMES[ins.opcode]);
   case OP_i64_trunc_f32_u: return CompileFPToInt(FPToIntOp::F32ToU64, false, OP::NAMES[ins.opcode]);
   case OP_i64_trunc_f64_s: return CompileFPToInt(FPToIntOp::F64ToI64, false, OP::NAMES[ins.opcode]);
   case OP_i64_trunc_f64_u: return CompileFPToInt(FPToIntOp::F64ToU64, false, OP::NAMES[ins.opcode]);
   case OP_f32_convert_i32_s:
-    return CompileUnaryOp<TE_i32, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateSIToFP,
+    return CompileUnaryOp<TE_i32, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateSIToFP,
                                                                        builder.getFloatTy(), OP::NAMES[ins.opcode]);
   case OP_f32_convert_i32_u:
-    return CompileUnaryOp<TE_i32, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateUIToFP,
+    return CompileUnaryOp<TE_i32, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateUIToFP,
                                                                        builder.getFloatTy(), OP::NAMES[ins.opcode]);
   case OP_f32_convert_i64_s:
-    return CompileUnaryOp<TE_i64, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateSIToFP,
+    return CompileUnaryOp<TE_i64, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateSIToFP,
                                                                        builder.getFloatTy(), OP::NAMES[ins.opcode]);
   case OP_f32_convert_i64_u:
-    return CompileUnaryOp<TE_i64, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateUIToFP,
+    return CompileUnaryOp<TE_i64, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateUIToFP,
                                                                        builder.getFloatTy(), OP::NAMES[ins.opcode]);
   case OP_f32_demote_f64:
-    return CompileUnaryOp<TE_f64, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateFPTrunc,
+    return CompileUnaryOp<TE_f64, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateFPTrunc,
                                                                        builder.getFloatTy(), OP::NAMES[ins.opcode]);
   case OP_f64_convert_i32_s:
-    return CompileUnaryOp<TE_i32, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateSIToFP,
+    return CompileUnaryOp<TE_i32, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateSIToFP,
                                                                        builder.getDoubleTy(), OP::NAMES[ins.opcode]);
   case OP_f64_convert_i32_u:
-    return CompileUnaryOp<TE_i32, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateUIToFP,
+    return CompileUnaryOp<TE_i32, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateUIToFP,
                                                                        builder.getDoubleTy(), OP::NAMES[ins.opcode]);
   case OP_f64_convert_i64_s:
-    return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateSIToFP,
+    return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateSIToFP,
                                                                        builder.getDoubleTy(), OP::NAMES[ins.opcode]);
   case OP_f64_convert_i64_u:
-    return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateUIToFP,
+    return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateUIToFP,
                                                                        builder.getDoubleTy(), OP::NAMES[ins.opcode]);
   case OP_f64_promote_f32:
-    return CompileUnaryOp<TE_f32, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateFPExt,
+    return CompileUnaryOp<TE_f32, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateFPExt,
                                                                        builder.getDoubleTy(), OP::NAMES[ins.opcode]);
 
     // Reinterpretations
   case OP_i32_reinterpret_f32:
-    return CompileUnaryOp<TE_f32, TE_i32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateBitCast,
+    return CompileUnaryOp<TE_f32, TE_i32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateBitCast,
                                                                        builder.getInt32Ty(), OP::NAMES[ins.opcode]);
   case OP_i64_reinterpret_f64:
-    return CompileUnaryOp<TE_f64, TE_i64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateBitCast,
+    return CompileUnaryOp<TE_f64, TE_i64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateBitCast,
                                                                        builder.getInt64Ty(), OP::NAMES[ins.opcode]);
   case OP_f32_reinterpret_i32:
-    return CompileUnaryOp<TE_i32, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateBitCast,
+    return CompileUnaryOp<TE_i32, TE_f32, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateBitCast,
                                                                        builder.getFloatTy(), OP::NAMES[ins.opcode]);
   case OP_f64_reinterpret_i64:
-    return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilder<>::CreateBitCast,
+    return CompileUnaryOp<TE_i64, TE_f64, llvmTy*, const llvm::Twine&>(&llvm::IRBuilderBase::CreateBitCast,
                                                                        builder.getDoubleTy(), OP::NAMES[ins.opcode]);
 
   case OP_i32_extend8_s: return CompileSignExtendOp(TE_i32, 8, OP::NAMES[ins.opcode]);

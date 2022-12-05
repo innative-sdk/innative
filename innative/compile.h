@@ -397,13 +397,13 @@ namespace innative {
 
   private:
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR, typename... Args>
-    IN_ERROR CompileBinaryOp(llvmVal* (llvm::IRBuilder<>::*op)(llvmVal*, llvmVal*, Args...), Args... args);
+    IN_ERROR CompileBinaryOp(llvmVal* (llvm::IRBuilderBase::*op)(llvmVal*, llvmVal*, Args...), Args... args);
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR>
     IN_ERROR CompileBinaryIntrinsic(llvm::Intrinsic::ID id, const llvm::Twine& name);
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR, typename... Args>
-    IN_ERROR CompileBinaryShiftOp(llvmVal* (llvm::IRBuilder<>::*op)(llvmVal*, llvmVal*, Args...), Args... args);
+    IN_ERROR CompileBinaryShiftOp(llvmVal* (llvm::IRBuilderBase::*op)(llvmVal*, llvmVal*, Args...), Args... args);
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING TyR, typename... Args>
-    IN_ERROR CompileUnaryOp(llvmVal* (llvm::IRBuilder<>::*op)(llvmVal*, Args...), Args... args);
+    IN_ERROR CompileUnaryOp(llvmVal* (llvm::IRBuilderBase::*op)(llvmVal*, Args...), Args... args);
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING TyR, typename... Args>
     IN_ERROR CompileUnaryIntrinsic(llvm::Intrinsic::ID id, const llvm::Twine& name, Args... args);
     template<WASM_TYPE_ENCODING TYPE, bool LEFT> IN_ERROR CompileRotationOp(const char* name);
@@ -414,7 +414,7 @@ namespace innative {
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR>
     IN_ERROR CompileSRem(const llvm::Twine& name);
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR, typename... Args>
-    IN_ERROR CompileDiv(bool overflow, llvmVal* (llvm::IRBuilder<>::*op)(llvmVal*, llvmVal*, Args...), Args... args);
+    IN_ERROR CompileDiv(bool overflow, llvmVal* (llvm::IRBuilderBase::*op)(llvmVal*, llvmVal*, Args...), Args... args);
     template<WASM_TYPE_ENCODING Ty1, WASM_TYPE_ENCODING Ty2, WASM_TYPE_ENCODING TyR>
     IN_ERROR CompileFloatCmp(llvm::Intrinsic::ID id, const llvm::Twine& name);
 
