@@ -640,7 +640,7 @@ IN_ERROR innative::ParseNameSectionParam(Stream& s, size_t num, Module& m, Funct
                                          DebugInfo* (*fn)(Stream&, Module&, FunctionDesc&, varuint32, const Environment&),
                                          const Environment& env)
 {
-  IN_ERROR err;
+  IN_ERROR err = ERR_SUCCESS;
   varuint32 n_params = m.type.functypes[desc.type_index].n_params;
   desc.param_debug   = tmalloc<DebugInfo>(env, n_params);
   memset(desc.param_debug, 0, sizeof(DebugInfo) * n_params);
@@ -855,8 +855,6 @@ IN_ERROR innative::ParseModule(Stream& s, const char* file, const Environment& e
       return LogErrorString(env, "%s [%s]: Ran out of memory at %s() [%s:%i]", ERR_FATAL_OUT_OF_MEMORY, m.name.str(),
                             __func__, __FILE__, __LINE__);
   }
-
-  varuint32 funcbody = 0;
 
   while(err >= 0 && !s.End())
   {
@@ -1096,7 +1094,7 @@ IN_ERROR innative::ParseMiscOpsInstruction(utility::Stream& s, Instruction& ins,
 
   case OP_memory_init:
     if(!m || !(m->knownsections & (1 << WASM_SECTION_DATA_COUNT)))
-      return LogErrorString(env, "%s: %s", ERR_MISSING_DATA_COUNT_SECTION, m->name.str());
+      return LogErrorString(env, "%s: %s", ERR_MISSING_DATA_COUNT_SECTION, !m ? "[null]" : m->name.str());
   case OP_memory_copy:
   case OP_table_init:
   case OP_table_copy:
@@ -1107,7 +1105,7 @@ IN_ERROR innative::ParseMiscOpsInstruction(utility::Stream& s, Instruction& ins,
 
   case OP_data_drop:
     if(!m || !(m->knownsections & (1 << WASM_SECTION_DATA_COUNT)))
-      return LogErrorString(env, "%s: %s", ERR_MISSING_DATA_COUNT_SECTION, m->name.str());
+      return LogErrorString(env, "%s: %s", ERR_MISSING_DATA_COUNT_SECTION, !m ? "[null]" : m->name.str());
   case OP_memory_fill:
   case OP_elem_drop: ins.immediates[0]._varuint32 = s.ReadVarUInt32(err); break;
 

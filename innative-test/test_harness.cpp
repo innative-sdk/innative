@@ -150,7 +150,7 @@ int TestHarness::CompileWASM(const path& file, int (TestHarness::*fn)(void*), co
     (*_exports.AddModule)(env, file.u8string().c_str(), 0, (!name ? stem.c_str() : name), &err);
 
   if(err >= 0)
-    (*_exports.FinalizeEnvironment)(env);
+    err = (*_exports.FinalizeEnvironment)(env);
 
   path base = _folder / (!out ? file.stem() : out);
   _out      = base;

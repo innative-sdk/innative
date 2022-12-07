@@ -285,7 +285,6 @@ IN_ERROR sourcemap::ParseMapping(const Environment& env, SourceMap* map, const c
   size_t last_original_line    = 1;
   size_t last_original_column  = 0;
   size_t last_name_index       = 0;
-  SourceMapSegment* last_valid = 0;
 
   while(*data != '"') // we can drop the cur < end check because we know it has to be a valid string
   {

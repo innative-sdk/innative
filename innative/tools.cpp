@@ -171,8 +171,10 @@ size_t innative::ReserveModule(Environment* env, int* err)
 
 void innative::AddModule(Environment* env, const void* data, size_t size, const char* name, int* err)
 {
-  *err = ERR_SUCCESS;
-  if(!env || !err)
+  if(!err)
+    return;
+
+  if(!env)
   {
     *err = ERR_FATAL_NULL_POINTER;
     return;
@@ -592,6 +594,9 @@ const char* innative::GetErrorString(int error_code) { return EnumToString(ERR_E
 
 int innative::CompileScript(const uint8_t* data, size_t sz, Environment* env, bool always_compile, const char* output)
 {
+  if(!env)
+    return ERR_FATAL_NULL_POINTER;
+
   int err = ERR_SUCCESS;
   char buf[40];
   snprintf(buf, 40, "memory%p", data);
@@ -752,10 +757,10 @@ int innative::InsertModuleSection(Environment* env, Module* m, enum WASM_MODULE_
   case WASM_MODULE_TYPE:
     m->knownsections |= (1 << WASM_SECTION_TYPE);
     return InsertModuleType<FunctionType>(env, m->type.functypes, m->type.n_functypes, index, { 0 });
-  case WASM_MODULE_IMPORT_FUNCTION: ++m->importsection.functions;
-  case WASM_MODULE_IMPORT_TABLE: ++m->importsection.tables;
-  case WASM_MODULE_IMPORT_MEMORY: ++m->importsection.memories;
-  case WASM_MODULE_IMPORT_GLOBAL:
+  case WASM_MODULE_IMPORT_FUNCTION: ++m->importsection.functions; 
+  case WASM_MODULE_IMPORT_TABLE: ++m->importsection.tables; // fallthrough 
+  case WASM_MODULE_IMPORT_MEMORY: ++m->importsection.memories; // fallthrough
+  case WASM_MODULE_IMPORT_GLOBAL:  // fallthrough
     m->knownsections |= (1 << WASM_SECTION_IMPORT);
     return InsertModuleType(env, m->importsection.imports, m->importsection.n_import, index, Import{});
   case WASM_MODULE_FUNCTION:
@@ -820,9 +825,9 @@ int innative::DeleteModuleSection(Environment* env, Module* m, enum WASM_MODULE_
   switch(field)
   {
   case WASM_MODULE_TYPE: return DeleteModuleType<FunctionType>(env, m->type.functypes, m->type.n_functypes, index);
-  case WASM_MODULE_IMPORT_FUNCTION: --m->importsection.functions;
-  case WASM_MODULE_IMPORT_TABLE: --m->importsection.tables;
-  case WASM_MODULE_IMPORT_MEMORY: --m->importsection.memories;
+  case WASM_MODULE_IMPORT_FUNCTION: --m->importsection.functions;  // fallthrough
+  case WASM_MODULE_IMPORT_TABLE: --m->importsection.tables; // fallthrough
+  case WASM_MODULE_IMPORT_MEMORY: --m->importsection.memories; // fallthrough
   case WASM_MODULE_IMPORT_GLOBAL: return DeleteModuleType(env, m->importsection.imports, m->importsection.n_import, index);
   case WASM_MODULE_FUNCTION:
     return DeleteModuleType<FunctionDesc>(env, m->function.funcdecl, m->function.n_funcdecl, index);

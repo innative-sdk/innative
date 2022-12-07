@@ -526,7 +526,8 @@ Expected<std::vector<NMSymbol>> dumpSymbolNamesFromFile(const char* path, size_t
         }
         if(SymbolicFile* O = dyn_cast<SymbolicFile>(&*ChildOrErr.get()))
         {
-          dumpSymbolNamesFromObject(SymbolList, *O, false, path);
+          if(auto E = dumpSymbolNamesFromObject(SymbolList, *O, false, path))
+            return std::move(E);
         }
       }
       if(Err)
@@ -542,7 +543,8 @@ Expected<std::vector<NMSymbol>> dumpSymbolNamesFromFile(const char* path, size_t
       StringRef ArchName  = I.getArchFlagName();
       if(auto ObjOrErr = I.getAsObjectFile())
       {
-        dumpSymbolNamesFromObject(SymbolList, *ObjOrErr.get(), false, {}, ArchName);
+        if(auto E = dumpSymbolNamesFromObject(SymbolList, *ObjOrErr.get(), false, {}, ArchName))
+          return std::move(E);
       }
       else if(Error E = isNotObjectErrorInvalidFileType(ObjOrErr.takeError()))
       {
@@ -555,7 +557,8 @@ Expected<std::vector<NMSymbol>> dumpSymbolNamesFromFile(const char* path, size_t
 
   if(SymbolicFile* O = dyn_cast<SymbolicFile>(&Bin))
   {
-    dumpSymbolNamesFromObject(SymbolList, *O, true);
+    if(auto E =dumpSymbolNamesFromObject(SymbolList, *O, true))
+      return std::move(E);
   }
 
   return SymbolList;

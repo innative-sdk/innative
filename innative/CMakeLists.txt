@@ -10,6 +10,11 @@ include(CMakePushCheckState)
   
 find_package(LLVM REQUIRED CONFIG HINTS ${LLVM_HINTS})
 find_package(Clang REQUIRED)
+find_package(LLD REQUIRED)
+
+if(USE_MIMALLOC)
+  find_package(mimalloc CONFIG REQUIRED)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 include(HandleLLVMOptions)
@@ -51,7 +56,7 @@ target_include_directories(innative PUBLIC ${CMAKE_SOURCE_DIR}/include)
 
 # Append LLD libraries because LLD doesn't have CMake info and remove libraries we don't need
 llvm_map_components_to_libnames(llvm_libs orcjit passes option objcarcopts coverage support coroutines frontendopenmp native RISCV AArch64 WebAssembly X86 debuginfocodeview debuginfodwarf debuginfogsym debuginfomsf debuginfopdb LTO WindowsManifest LibDriver)
-list(APPEND llvm_libs "lldCOFF$<$<CONFIG:Debug>:d>" "lldCommon$<$<CONFIG:Debug>:d>" "lldCore$<$<CONFIG:Debug>:d>" "lldDriver$<$<CONFIG:Debug>:d>" "lldELF$<$<CONFIG:Debug>:d>" "lldMachO$<$<CONFIG:Debug>:d>" "lldMinGW$<$<CONFIG:Debug>:d>" "lldReaderWriter$<$<CONFIG:Debug>:d>" "lldWasm$<$<CONFIG:Debug>:d>" "lldYAML$<$<CONFIG:Debug>:d>")
+list(APPEND llvm_libs lldCOFF lldCommon lldCore lldDriver lldELF lldMachO lldMinGW lldReaderWriter lldWasm lldYAML)
 
 standard_target_flags(innative)
 retarget_output(innative)
@@ -80,6 +85,10 @@ endif()
 set_target_properties(innative PROPERTIES COMPILE_PDB_NAME "$(TargetName)") 
 target_link_libraries(innative PRIVATE ${llvm_libs})
 target_link_directories(innative PRIVATE ${LLVM_LIBRARY_DIR})
+
+if(USE_MIMALLOC)
+  target_link_libraries(innative PRIVATE mimalloc-static)
+endif()
 
 if(WIN32)
   # Cmake does not support linking with a static library

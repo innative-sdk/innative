@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 project(innative_sdk VERSION 0.2.0)
 option(BUILD_SHARED_LIBS "enable shared library" ON)
+option(USE_MIMALLOC "Replace the default allocator with mimalloc" OFF)
 
 if(MSVC)
   # This ensures that we default to static but let vcpkg configure things the way it wants
