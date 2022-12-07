@@ -194,7 +194,7 @@ int wat::IsolateInitCall(Environment& env, void*& cache, const path& out)
   if(!cache)
   {
     auto estring = LoadDLLError();
-    (*env.loghook)(&env, "Error loading %s: %s\n", out, estring);
+    (*env.loghook)(&env, "Error loading %s: %s\n", out.c_str(), estring);
     LoadDLLErrorFree(estring);
     return ERR_RUNTIME_INIT_ERROR;
   }

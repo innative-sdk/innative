@@ -1613,11 +1613,34 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   IN_ERROR err   = ERR_SUCCESS;
 
   // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
-  llvm::InitializeAllTargetInfos();
-  llvm::InitializeAllTargets();
-  llvm::InitializeAllTargetMCs();
-  llvm::InitializeAllAsmParsers();
-  llvm::InitializeAllAsmPrinters();
+  LLVMInitializeNativeTarget();
+  LLVMInitializeNativeAsmPrinter();
+  LLVMInitializeNativeAsmParser();
+  LLVMInitializeNativeDisassembler();
+  LLVMInitializeWebAssemblyTargetInfo();
+  LLVMInitializeWebAssemblyTarget();
+  LLVMInitializeWebAssemblyTargetMC();
+  LLVMInitializeWebAssemblyAsmPrinter();
+  LLVMInitializeWebAssemblyAsmParser();
+  LLVMInitializeWebAssemblyDisassembler();
+  LLVMInitializeAArch64Target();
+  LLVMInitializeAArch64TargetMC();
+  LLVMInitializeAArch64TargetInfo();
+  LLVMInitializeAArch64AsmPrinter();
+  LLVMInitializeAArch64AsmParser();
+  LLVMInitializeAArch64Disassembler();
+  LLVMInitializeRISCVTarget();
+  LLVMInitializeRISCVTargetMC();
+  LLVMInitializeRISCVTargetInfo();
+  LLVMInitializeRISCVAsmPrinter();
+  LLVMInitializeRISCVAsmParser();
+  LLVMInitializeRISCVDisassembler();
+  LLVMInitializeX86Target();
+  LLVMInitializeX86TargetMC();
+  LLVMInitializeX86TargetInfo();
+  LLVMInitializeX86AsmPrinter();
+  LLVMInitializeX86AsmParser();
+  LLVMInitializeX86Disassembler();
   polly::initializePollyPasses(*llvm::PassRegistry::getPassRegistry());
 
   llvm::Triple triple(EnumToString(ARCH_MAP, env->arch, 0, 0), "pc", EnumToString(ABI_MAP, env->abi, 0, 0));
@@ -1879,12 +1902,36 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
 {
   //::llvm::DebugFlag = true;
 
-  // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
-  llvm::InitializeAllTargetInfos();
-  llvm::InitializeAllTargets();
-  llvm::InitializeAllTargetMCs();
-  llvm::InitializeAllAsmParsers();
-  llvm::InitializeAllAsmPrinters();
+  // Set up our target architecture, necessary up here so our code generation knows how big a pointer is 
+  LLVMInitializeNativeTarget();
+  LLVMInitializeNativeAsmPrinter();
+  LLVMInitializeNativeAsmParser();
+  LLVMInitializeNativeDisassembler();
+  LLVMInitializeWebAssemblyTargetInfo();
+  LLVMInitializeWebAssemblyTarget();
+  LLVMInitializeWebAssemblyTargetMC();
+  LLVMInitializeWebAssemblyAsmPrinter();
+  LLVMInitializeWebAssemblyAsmParser();
+  LLVMInitializeWebAssemblyDisassembler();
+  LLVMInitializeAArch64Target();
+  LLVMInitializeAArch64TargetMC();
+  LLVMInitializeAArch64TargetInfo();
+  LLVMInitializeAArch64AsmPrinter();
+  LLVMInitializeAArch64AsmParser();
+  LLVMInitializeAArch64Disassembler();
+  LLVMInitializeRISCVTarget();
+  LLVMInitializeRISCVTargetMC();
+  LLVMInitializeRISCVTargetInfo();
+  LLVMInitializeRISCVAsmPrinter();
+  LLVMInitializeRISCVAsmParser();
+  LLVMInitializeRISCVDisassembler();
+  LLVMInitializeX86Target();
+  LLVMInitializeX86TargetMC();
+  LLVMInitializeX86TargetInfo();
+  LLVMInitializeX86AsmPrinter();
+  LLVMInitializeX86AsmParser();
+  LLVMInitializeX86Disassembler();
+  polly::initializePollyPasses(*llvm::PassRegistry::getPassRegistry());
 
   // Build the JIT and LLVM contexts
   if(!env->jit)
