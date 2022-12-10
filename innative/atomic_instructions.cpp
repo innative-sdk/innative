@@ -137,7 +137,7 @@ IN_ERROR Compiler::CompileAtomicLoad(Instruction& ins, WASM_TYPE_ENCODING varTy,
     auto varsize = unsigned(4 * -varTy); // TE_i32(-1) => 4; TE_i64(-2) => 8;
     auto varty   = builder.getIntNTy(varsize * 8);
     
-    auto load = builder.CreateAlignedLoad(ptr->getType()->getPointerElementType(), ptr, llvm::Align::Align(align), name);
+    auto load = builder.CreateAlignedLoad(ptr->getType()->getPointerElementType(), ptr, llvm::Align(align), name);
     load->setAtomic(SeqCst);
 
     llvmVal* result = load;
@@ -159,7 +159,7 @@ IN_ERROR Compiler::CompileAtomicStore(Instruction& ins, WASM_TYPE_ENCODING varTy
     if(varsize > align)
       value = builder.CreateTrunc(value, memty);
 
-    auto store = builder.CreateAlignedStore(value, ptr, llvm::Align::Align(align));
+    auto store = builder.CreateAlignedStore(value, ptr, llvm::Align(align));
     store->setAtomic(SeqCst);
 
     return ERR_SUCCESS;
@@ -177,7 +177,7 @@ IN_ERROR Compiler::CompileAtomicRMW(Instruction& ins, WASM_TYPE_ENCODING varTy, 
     if(varsize > align)
       newValue = builder.CreateTrunc(newValue, memty);
 
-    auto rmw = builder.CreateAtomicRMW(Op, ptr, newValue, llvm::Align::Align(align), SeqCst);
+    auto rmw = builder.CreateAtomicRMW(Op, ptr, newValue, llvm::Align(align), SeqCst);
     rmw->setName(name);
 
     llvmVal* oldValue = rmw;
@@ -201,7 +201,7 @@ IN_ERROR Compiler::CompileAtomicCmpXchg(Instruction& ins, WASM_TYPE_ENCODING var
       newVal = builder.CreateTrunc(newVal, memty);
     }
 
-    auto cmpxchg = builder.CreateAtomicCmpXchg(ptr, cmp, newVal, llvm::Align::Align(align), SeqCst, SeqCst);
+    auto cmpxchg = builder.CreateAtomicCmpXchg(ptr, cmp, newVal, llvm::Align(align), SeqCst, SeqCst);
     cmpxchg->setName(name);
 
     llvmVal* loaded = builder.CreateExtractValue(cmpxchg, 0);

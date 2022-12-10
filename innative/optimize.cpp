@@ -26,7 +26,6 @@
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
-#include "polly/RegisterPasses.h"
 #pragma warning(pop)
 
 using namespace innative;

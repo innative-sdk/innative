@@ -55,11 +55,10 @@ target_include_directories(innative PRIVATE ${LLVM_INCLUDE_DIRS})
 target_include_directories(innative PUBLIC ${CMAKE_SOURCE_DIR}/include)
 
 # Append LLD libraries because LLD doesn't have CMake info and remove libraries we don't need
-llvm_map_components_to_libnames(llvm_libs orcjit passes option objcarcopts coverage support coroutines frontendopenmp native RISCV AArch64 WebAssembly X86 debuginfocodeview debuginfodwarf debuginfogsym debuginfomsf debuginfopdb LTO WindowsManifest LibDriver)
+llvm_map_components_to_libnames(llvm_libs orcjit passes option objcarcopts coverage support coroutines frontendopenmp RISCV AArch64 WebAssembly X86 debuginfocodeview debuginfodwarf debuginfogsym debuginfomsf debuginfopdb LTO WindowsManifest LibDriver)
 list(APPEND llvm_libs lldCOFF lldCommon lldCore lldDriver lldELF lldMachO lldMinGW lldReaderWriter lldWasm lldYAML)
 
 standard_target_flags(innative)
-retarget_output(innative)
     
 # Configure precompiled headers
 if(MSVC)
@@ -102,5 +101,5 @@ if(WIN32)
   set_source_files_properties("innative.rc" PROPERTIES LANGUAGE RC)
   set_source_files_properties("x86_64.asm" PROPERTIES LANGUAGE ASM_MASM)
 else()
-  target_link_libraries(innative PUBLIC ${LIB_RT} ZLIB::ZLIB ${Threads} ${CMAKE_DL_LIBS})
+  target_link_libraries(innative PUBLIC ${LIB_RT} ZLIB::ZLIB ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 endif()

@@ -1401,21 +1401,21 @@ int WatParser::ParseImport(Queue<WatToken>& tokens)
     if(err = ParseGlobalDesc(i.global_desc, tokens))
       return err;
     hash = globalhash;
-    i.global_desc.debug.name.from((uint8_t*)name.pos, name.len, env);
+    i.global_desc.debug.name.from(reinterpret_cast<const uint8_t*>(name.pos), name.len, env);
     break;
   case WatTokens::TABLE:
     i.kind = WASM_KIND_TABLE;
     if(err = ParseTableDesc(i.table_desc, tokens))
       return err;
     hash = tablehash;
-    i.table_desc.debug.name.from((uint8_t*)name.pos, name.len, env);
+    i.table_desc.debug.name.from(reinterpret_cast<const uint8_t*>(name.pos), name.len, env);
     break;
   case WatTokens::MEMORY:
     i.kind = WASM_KIND_MEMORY;
     if(err = ParseMemoryDesc(i.mem_desc, tokens))
       return err;
     hash = memoryhash;
-    i.mem_desc.debug.name.from((uint8_t*)name.pos, name.len, env);
+    i.mem_desc.debug.name.from(reinterpret_cast<const uint8_t*>(name.pos), name.len, env);
     break;
   default: return ERR_WAT_EXPECTED_KIND;
   }

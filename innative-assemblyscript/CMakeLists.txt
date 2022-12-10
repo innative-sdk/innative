@@ -8,8 +8,6 @@ file(GLOB_RECURSE assemblyscript_SOURCES "./*.c")
 if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
   string(REPLACE "/RTC1" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
-else()
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPP_WARNINGS} -fno-stack-protector")
 endif()
 
 # add library and include directories
@@ -25,59 +23,21 @@ set_property(TARGET innative-assemblyscript-d PROPERTY VERBOSE_MAKEFILE TRUE)
 set(CMAKE_BUILD_TYPE "")
 
 if(MSVC)
-  target_compile_options(innative-assemblyscript PRIVATE /D "NDEBUG" /${RUNTIME_FLAG} /WX- /GS-)
-  target_compile_options(innative-assemblyscript-d PRIVATE /D "DEBUG" /Zi /Od /Ob0 /${RUNTIME_FLAG}d /Gd /Gm- /GS-)
+  target_compile_options(innative-assemblyscript PRIVATE /${RUNTIME_FLAG} /WX- /GS-)
+  target_compile_options(innative-assemblyscript-d PRIVATE /Zi /Od /Ob0 /${RUNTIME_FLAG}d /Gd /Gm- /GS-)
 else()
-  target_compile_options(innative-assemblyscript PRIVATE -DNDEBUG -O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16)
-  target_compile_options(innative-assemblyscript-d PRIVATE -DDEBUG -g)
+  target_compile_options(innative-assemblyscript PRIVATE -O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16 -fno-stack-protector ${C_WARNINGS})
+  target_compile_options(innative-assemblyscript-d PRIVATE -g -fno-stack-protector ${C_WARNINGS})
 endif()
 
+target_compile_definitions(innative-assemblyscript PUBLIC NDEBUG)
+target_compile_definitions(innative-assemblyscript-d PUBLIC DEBUG)
 target_include_directories(innative-assemblyscript PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(innative-assemblyscript-d PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(innative-assemblyscript PUBLIC ${CMAKE_SOURCE_DIR}/innative-env)
 target_include_directories(innative-assemblyscript-d PUBLIC ${CMAKE_SOURCE_DIR}/innative-env)
-
-set_target_properties(innative-assemblyscript
-    PROPERTIES
-        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    PREFIX ""
-)
-
-set_target_properties(innative-assemblyscript-d
-    PROPERTIES
-        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-    PREFIX ""
-)
+set_target_properties(innative-assemblyscript PROPERTIES DEBUG_POSTFIX "")
+set_target_properties(innative-assemblyscript-d PROPERTIES DEBUG_POSTFIX "")
 
 if(WIN32)
   # Cmake does not support linking with a static library

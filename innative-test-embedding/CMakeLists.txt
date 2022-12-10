@@ -8,13 +8,16 @@ file(GLOB_RECURSE testembed_SOURCES "./*.c")
 if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
   string(REPLACE "/RTC1" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
-else()
-  string(REPLACE "-fexceptions" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 endif()
 
 # add library and include directories
 add_library(innative-test-embedding STATIC ${testembed_SOURCES})
 add_library(innative-test-embedding-d STATIC ${testembed_SOURCES})
+
+set_property(TARGET innative-test-embedding PROPERTY C_STANDARD 17)
+set_property(TARGET innative-test-embedding-d PROPERTY C_STANDARD 17)
+set_property(TARGET innative-test-embedding PROPERTY VERBOSE_MAKEFILE TRUE)
+set_property(TARGET innative-test-embedding-d PROPERTY VERBOSE_MAKEFILE TRUE)
 
 # Directly set target compilation settings to bypass Release/Debug modes
 set(CMAKE_BUILD_TYPE "")
@@ -23,17 +26,16 @@ if(MSVC)
   target_compile_options(innative-test-embedding PRIVATE /WX- /GS-)
   target_compile_options(innative-test-embedding-d PRIVATE /Zi /Od /Ob0 /Gd /Gm- /GS-)
 else()
-  target_compile_options(innative-test-embedding PRIVATE -fno-stack-protector -O3)
-  target_compile_options(innative-test-embedding-d PRIVATE -fno-stack-protector -g)
+  target_compile_options(innative-test-embedding PRIVATE -fno-stack-protector -O3 ${C_WARNINGS})
+  target_compile_options(innative-test-embedding-d PRIVATE -fno-stack-protector -g ${C_WARNINGS})
 endif()
 
 target_compile_definitions(innative-test-embedding PUBLIC NDEBUG)
 target_compile_definitions(innative-test-embedding-d PUBLIC DEBUG)
 target_include_directories(innative-test-embedding PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(innative-test-embedding-d PUBLIC ${CMAKE_SOURCE_DIR}/include)
-
-retarget_output(innative-test-embedding)
-retarget_output(innative-test-embedding-d)
+set_target_properties(innative-test-embedding PROPERTIES DEBUG_POSTFIX "")
+set_target_properties(innative-test-embedding-d PROPERTIES DEBUG_POSTFIX "")
 
 if(WIN32)
   # Cmake does not support linking with a static library

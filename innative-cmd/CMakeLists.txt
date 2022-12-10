@@ -42,7 +42,6 @@ else()
 endif()
 
 standard_target_flags(innative-cmd)
-retarget_output(innative-cmd)
 
 if(WIN32)
   # Cmake does not support linking with a static library
@@ -53,5 +52,5 @@ if(WIN32)
   
   set_source_files_properties("innative-cmd.rc" PROPERTIES LANGUAGE RC)
 else()
-  target_link_libraries(innative-cmd ${LIB_RT} ${ZLIB} ${Threads} ${CMAKE_DL_LIBS})
+  target_link_libraries(innative-cmd ${LIB_RT} ${ZLIB} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 endif()

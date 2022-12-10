@@ -20,10 +20,7 @@ limitations under the License.
 #define INNATIVE_VERSION_MAJOR    0
 #define INNATIVE_VERSION_MINOR    2
 #define INNATIVE_VERSION_REVISION 0
-#define INNATIVE_VERSION_BUILD                                                                   \
-  ((((__TIME__[0] - '0') * 36000) + ((__TIME__[1] - '0') * 3600) + ((__TIME__[3] - '0') * 600) + \
-    ((__TIME__[4] - '0') * 60) + ((__TIME__[6] - '0') * 10) + (__TIME__[7] - '0')) &             \
-   0xFFFF)
+#define INNATIVE_VERSION_BUILD 0
 
 #define INNATIVE_WASM_MAGIC_COOKIE   0x6d736100
 #define INNATIVE_WASM_MAGIC_VERSION  0x01
