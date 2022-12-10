@@ -19,14 +19,13 @@ set_property(TARGET innative-stub PROPERTY C_STANDARD 17)
 set_property(TARGET innative-stub PROPERTY VERBOSE_MAKEFILE TRUE)
 
 if(MSVC)
-  target_compile_options(innative-stub PRIVATE /Zc:preprocessor $<$<CONFIG:Release>:/Oi /Ot /GL> ${CPP_WARNINGS})
+  target_compile_options(innative-stub PRIVATE /Zc:preprocessor $<$<CONFIG:Release>:/Oi /Ot /GL> ${C_WARNINGS})
 else()
-  target_compile_options(innative-stub PRIVATE -fno-exceptions -fno-stack-protector $<IF:$<CONFIG:Debug>,-g,-O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16> ${CPP_WARNINGS})
+  target_compile_options(innative-stub PRIVATE -fno-exceptions -fno-stack-protector $<IF:$<CONFIG:Debug>,-g,-O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16> ${C_WARNINGS})
   target_compile_definitions(innative-stub PUBLIC $<IF:$<CONFIG:Debug>,DEBUG,NDEBUG>)
 endif()
 
 target_include_directories(innative-stub PUBLIC ${CMAKE_SOURCE_DIR}/include)
-retarget_output(innative-stub)
 
 set_target_properties(innative-stub PROPERTIES COMPILE_PDB_NAME "$(TargetName)")
 

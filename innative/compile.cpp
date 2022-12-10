@@ -9,7 +9,7 @@
 #include "link.h"
 #include "innative/export.h"
 #include "jit.h"
-#include "polly/RegisterPasses.h"
+//#include "polly/RegisterPasses.h"
 
 #define DIVIDER ":"
 #ifdef IN_COMPILER_MSC
@@ -1613,10 +1613,10 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   IN_ERROR err   = ERR_SUCCESS;
 
   // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
-  LLVMInitializeNativeTarget();
-  LLVMInitializeNativeAsmPrinter();
-  LLVMInitializeNativeAsmParser();
-  LLVMInitializeNativeDisassembler();
+  // LLVMInitializeNativeTarget();
+  // LLVMInitializeNativeAsmPrinter();
+  // LLVMInitializeNativeAsmParser();
+  // LLVMInitializeNativeDisassembler();
   LLVMInitializeWebAssemblyTargetInfo();
   LLVMInitializeWebAssemblyTarget();
   LLVMInitializeWebAssemblyTargetMC();
@@ -1641,7 +1641,7 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   LLVMInitializeX86AsmPrinter();
   LLVMInitializeX86AsmParser();
   LLVMInitializeX86Disassembler();
-  polly::initializePollyPasses(*llvm::PassRegistry::getPassRegistry());
+  //polly::initializePollyPasses(*llvm::PassRegistry::getPassRegistry());
 
   llvm::Triple triple(EnumToString(ARCH_MAP, env->arch, 0, 0), "pc", EnumToString(ABI_MAP, env->abi, 0, 0));
 
@@ -1903,10 +1903,10 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
   //::llvm::DebugFlag = true;
 
   // Set up our target architecture, necessary up here so our code generation knows how big a pointer is 
-  LLVMInitializeNativeTarget();
-  LLVMInitializeNativeAsmPrinter();
-  LLVMInitializeNativeAsmParser();
-  LLVMInitializeNativeDisassembler();
+  // LLVMInitializeNativeTarget();
+  // LLVMInitializeNativeAsmPrinter();
+  // LLVMInitializeNativeAsmParser();
+  // LLVMInitializeNativeDisassembler();
   LLVMInitializeWebAssemblyTargetInfo();
   LLVMInitializeWebAssemblyTarget();
   LLVMInitializeWebAssemblyTargetMC();
@@ -1931,7 +1931,7 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
   LLVMInitializeX86AsmPrinter();
   LLVMInitializeX86AsmParser();
   LLVMInitializeX86Disassembler();
-  polly::initializePollyPasses(*llvm::PassRegistry::getPassRegistry());
+  //polly::initializePollyPasses(*llvm::PassRegistry::getPassRegistry());
 
   // Build the JIT and LLVM contexts
   if(!env->jit)

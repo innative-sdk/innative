@@ -871,7 +871,7 @@ int innative::ParseWast(Environment& env, const uint8_t* data, size_t sz, const 
       Instruction value = {};
       WatParser state(env, *last);
       bool specialNan = false;
-      bool nanCanonical;
+      bool nanCanonical = false;
 
       switch(t.id)
       {

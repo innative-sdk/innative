@@ -2,12 +2,14 @@ cmake_minimum_required(VERSION 3.15)
 project(innative_sdk VERSION 0.2.0)
 option(BUILD_SHARED_LIBS "enable shared library" ON)
 option(USE_MIMALLOC "Replace the default allocator with mimalloc" OFF)
+option(USE_DEFAULT_FOLDERS "Don't override the cmake output folders with a unified /bin/ folder. Also disables debug postfix." OFF)
 
 if(MSVC)
   # This ensures that we default to static but let vcpkg configure things the way it wants
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>$<$<STREQUAL:${VCPKG_CRT_LINKAGE},dynamic>:DLL>" CACHE STRING "")
 else()
-  set(CPP_WARNINGS -Wall -Wno-attributes -Wno-unknown-pragmas -Wno-missing-braces -Wno-unused-function -Wno-comment -Wno-char-subscripts -Wno-sign-compare -Wno-unused-variable -Wno-switch -Wno-parentheses)
+  set(CPP_WARNINGS -Wall -Wno-attributes -Wno-unknown-pragmas -Wno-implicit-fallthrough -Wno-missing-braces -Wno-unused-function -Wno-comment -Wno-char-subscripts -Wno-sign-compare -Wno-unused-variable -Wno-switch -Wno-parentheses -Wno-reorder)
+  set(C_WARNINGS -Wall -Wno-attributes -Wno-unknown-pragmas -Wno-implicit-fallthrough -Wno-unused-variable -Wno-switch -Wno-parentheses)
 endif()
 
 if (MSVC)
@@ -86,32 +88,26 @@ endif()
 
 set(BIN_DIR "bin-${BIN_DIR}-${TARGET_ARCH}")
 
-function(retarget_output target)
-  if(NOT USE_DEFAULT_FOLDERS)
-    set_target_properties(${target} PROPERTIES DEBUG_POSTFIX "-d")
-    set_target_properties(${target}
-        PROPERTIES
-        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/${BIN_DIR}"
-        PREFIX ""
-    )
-  endif()
-endfunction()
-
+if(NOT USE_DEFAULT_FOLDERS)
+  set(CMAKE_VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/${BIN_DIR}")
+  set(CMAKE_DEBUG_POSTFIX "-d")
+  set(CMAKE_PREFIX "")
+endif()
 
 function(standard_target_flags target)
   set_property(TARGET ${target} PROPERTY C_STANDARD 17)
@@ -123,7 +119,7 @@ function(standard_target_flags target)
   if(MSVC)
     target_compile_options(${target} PRIVATE /Zc:preprocessor $<$<CONFIG:Release>:/Oi /Ot /GL> ${CPP_WARNINGS})
   else()
-    target_compile_options(${target} PRIVATE -fno-exceptions -fno-rtti -Wno-reorder $<IF:$<CONFIG:Debug>,-g,-O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16> ${CPP_WARNINGS})
+    target_compile_options(${target} PRIVATE -fno-exceptions -fno-rtti $<IF:$<CONFIG:Debug>,-g,-O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16> ${CPP_WARNINGS})
     target_compile_definitions(${target} PUBLIC $<IF:$<CONFIG:Debug>,DEBUG,NDEBUG>)
   endif()
 endfunction()
@@ -137,3 +133,20 @@ add_subdirectory(innative-stub)
 add_subdirectory(innative-assemblyscript)
 add_subdirectory(innative-test-embedding)
 add_subdirectory(innative-test)
+
+
+set(INSTALL_BIN_DIR "${CMAKE_INSTALL_PREFIX}/bin" CACHE PATH "Installation directory for executables")
+set(INSTALL_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib" CACHE PATH "Installation directory for libraries")
+set(INSTALL_INC_DIR "${CMAKE_INSTALL_PREFIX}/include" CACHE PATH "Installation directory for headers")
+set(INSTALL_SCRIPTS_DIR "${CMAKE_INSTALL_PREFIX}/scripts" CACHE PATH "Installation directory for scripts")
+set(INSTALL_SPEC_DIR "${CMAKE_INSTALL_PREFIX}/spec" CACHE PATH "Copy destination for specification")
+
+install(TARGETS innative innative-env innative-cmd innative-stub innative-assemblyscript innative-test-embedding innative-test
+        RUNTIME DESTINATION ${INSTALL_BIN_DIR}
+        ARCHIVE DESTINATION ${INSTALL_LIB_DIR}
+        LIBRARY DESTINATION ${INSTALL_LIB_DIR}  )
+
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/scripts" DESTINATION ${INSTALL_SCRIPTS_DIR})
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/spec" DESTINATION ${INSTALL_SPEC_DIR})
+
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/include/innative" DESTINATION "${INSTALL_INC_DIR}")

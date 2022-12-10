@@ -34,11 +34,10 @@ if(MSVC)
   target_compile_options(innative-test PRIVATE /Zc:preprocessor $<$<CONFIG:Release>:/Oi /Ot /GL> ${CPP_WARNINGS})
 else()
   target_link_libraries(innative-test innative innative-env stdc++fs)
-  target_compile_options(innative-test PRIVATE -fno-exceptions -Wno-reorder -pthread -DLIBICONV_PLUG $<IF:$<CONFIG:Debug>,-g,-O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16> ${CPP_WARNINGS})
+  #target_compile_options(${target} PRIVATE -fno-exceptions -fno-rtti $<IF:$<CONFIG:Debug>,-g,-O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16> ${CPP_WARNINGS})
+  target_compile_options(innative-test PRIVATE -fno-exceptions -fno-rtti -pthread -DLIBICONV_PLUG $<IF:$<CONFIG:Debug>,-g,-O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16> ${CPP_WARNINGS})
   target_compile_definitions(innative-test PUBLIC $<IF:$<CONFIG:Debug>,DEBUG,NDEBUG>)
 endif()
-
-retarget_output(innative-test)
 
 if(WIN32)
   # Cmake does not support linking with a static library
@@ -49,5 +48,5 @@ if(WIN32)
   
   set_source_files_properties("innative-test.rc" PROPERTIES LANGUAGE RC)
 else()
-  target_link_libraries(innative-test ${LIB_RT} ${Threads})
+  target_link_libraries(innative-test ${CMAKE_THREAD_LIBS_INIT} ${LIB_RT})
 endif()
