@@ -298,10 +298,10 @@ llvm::DIScope* DebugSourceMap::GetDebugScope(size_t index, llvm::DIFile* root)
     auto& type       = sourcemap->x_innative_types[index];
     const char* name = type.name_index < sourcemap->n_names ? sourcemap->names[type.name_index] : 0;
 
-    char namebuf[24] = { 0 };
+    char namebuf[64] = { 0 };
     if(!name)
     {
-      SPRINTF(namebuf, 24, "anonymous_scope%zu", index);
+      SPRINTF(namebuf, 64, "anonymous_scope%zu", index);
       name = namebuf;
     }
 

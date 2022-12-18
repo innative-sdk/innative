@@ -36,6 +36,8 @@ target_include_directories(innative-assemblyscript PUBLIC ${CMAKE_SOURCE_DIR}/in
 target_include_directories(innative-assemblyscript-d PUBLIC ${CMAKE_SOURCE_DIR}/innative-env)
 set_target_properties(innative-assemblyscript PROPERTIES DEBUG_POSTFIX "" POSITION_INDEPENDENT_CODE ON)
 set_target_properties(innative-assemblyscript-d PROPERTIES DEBUG_POSTFIX "" POSITION_INDEPENDENT_CODE ON)
+retarget_lib(innative-assemblyscript TRUE)
+retarget_lib(innative-assemblyscript-d TRUE)
 
 if(WIN32)
   # Cmake does not support linking with a static library

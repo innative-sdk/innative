@@ -978,7 +978,7 @@ const char* innative::GetDefaultEmbedding(bool debug)
 #ifdef IN_PLATFORM_WIN32
   if(CURRENT_ABI == IN_ABI_Windows)
     return debug ? "innative-env-d.lib" : "innative-env.lib";
-  return debug ? "innative-env-d.a" : "innative-env.a";
+  return debug ? "libinnative-env-d.a" : "libinnative-env.a";
 #else
   static std::string RELEASE = GetEmbedding(false);
   static std::string DEBUG   = GetEmbedding(true);
@@ -1000,11 +1000,6 @@ size_t innative::GetEmbeddingPath(uint8_t abi, uint8_t arch, bool debug, const c
   const char* strabi  = "unknown";
   const char* strarch = "unknown";
   const char* ext     = (abi == IN_ABI_Windows) ? ".lib" : ".a";
-#ifdef IN_PLATFORM_WIN32
-  const char* bin = "../bin-";
-#else
-  const char* bin = "bin-";
-#endif
 
   switch(abi)
   {
@@ -1028,5 +1023,9 @@ size_t innative::GetEmbeddingPath(uint8_t abi, uint8_t arch, bool debug, const c
   case IN_ARCH_RISCV: strarch = "riscv"; break;
   }
 
-  return snprintf(out, outsize, "%s%s-%s/%s%s", bin, strabi, strarch, name, ext) + 1;
+#ifdef IN_PLATFORM_WIN32
+  return snprintf(out, outsize, "../bin/%s-%s/%s%s", strabi, strarch, name, ext) + 1;
+#else
+  return snprintf(out, outsize, "../lib/%s-%s/lib%s%s", strabi, strarch, name, ext) + 1;
+#endif
 }

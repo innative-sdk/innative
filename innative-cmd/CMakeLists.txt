@@ -40,6 +40,7 @@ else()
   target_link_libraries(innative-cmd innative stdc++fs)
 endif()
 
+retarget_bin(innative-cmd)
 standard_target_flags(innative-cmd)
 
 if(WIN32)
