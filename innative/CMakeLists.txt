@@ -82,6 +82,7 @@ endif()
 set_target_properties(innative PROPERTIES COMPILE_PDB_NAME "$(TargetName)" POSITION_INDEPENDENT_CODE ON) 
 target_link_libraries(innative PRIVATE ${llvm_libs})
 target_link_directories(innative PRIVATE ${LLVM_LIBRARY_DIR})
+retarget_lib(innative FALSE)
 
 if(USE_MIMALLOC)
   target_link_libraries(innative PRIVATE mimalloc-static)

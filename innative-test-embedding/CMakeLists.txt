@@ -39,6 +39,8 @@ set_target_properties(innative-test-embedding-d PROPERTIES
   C_STANDARD 17 
   VERBOSE_MAKEFILE TRUE
 )
+retarget_lib(innative-test-embedding TRUE)
+retarget_lib(innative-test-embedding-d TRUE)
 
 if(WIN32)
   # Cmake does not support linking with a static library

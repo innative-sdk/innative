@@ -491,6 +491,8 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
     for(auto& v : cache) // We can only do this after we're finished adding everything to cache
       linkargs.push_back(v.c_str());
 
+    linkargs.insert(linkargs.begin(), ".");
+
     if(CallLinker(env, linkargs, format) != 0)
       return ERR_FATAL_LINK_ERROR;
   }

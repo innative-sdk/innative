@@ -26,6 +26,7 @@ endif()
 target_include_directories(innative-stub PUBLIC ${CMAKE_SOURCE_DIR}/include)
 
 set_target_properties(innative-stub PROPERTIES COMPILE_PDB_NAME "$(TargetName)" POSITION_INDEPENDENT_CODE ON)
+retarget_lib(innative-stub FALSE)
 
 if(WIN32)
   # Cmake does not support linking with a static library

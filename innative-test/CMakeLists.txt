@@ -29,6 +29,7 @@ set_target_properties(innative-test PROPERTIES
   CXX_STANDARD_REQUIRED ON
   VERBOSE_MAKEFILE TRUE
 )
+retarget_bin(innative-test)
 
 if(MSVC)
   target_link_libraries(innative-test innative innative-env)
