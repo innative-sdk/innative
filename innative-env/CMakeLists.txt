@@ -6,8 +6,6 @@ else()
   find_package(Threads REQUIRED)
 endif()
 
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
 list(APPEND env_SOURCES
     atomics.c
     internal.c
@@ -51,8 +49,8 @@ target_compile_definitions(innative-env PUBLIC NDEBUG)
 target_compile_definitions(innative-env-d PUBLIC DEBUG)
 target_include_directories(innative-env PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(innative-env-d PUBLIC ${CMAKE_SOURCE_DIR}/include)
-set_target_properties(innative-env PROPERTIES DEBUG_POSTFIX "")
-set_target_properties(innative-env-d PROPERTIES DEBUG_POSTFIX "")
+set_target_properties(innative-env PROPERTIES DEBUG_POSTFIX "" POSITION_INDEPENDENT_CODE ON)
+set_target_properties(innative-env-d PROPERTIES DEBUG_POSTFIX "" POSITION_INDEPENDENT_CODE ON)
 
 if(WIN32)
   # Cmake does not support linking with a static library

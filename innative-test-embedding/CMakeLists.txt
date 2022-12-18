@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.13.4)
 project(innative-test-embedding LANGUAGES C VERSION ${PROJECT_VERSION})
 
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
 file(GLOB_RECURSE testembed_SOURCES "./*.c")
 
 if(MSVC)
@@ -13,11 +11,6 @@ endif()
 # add library and include directories
 add_library(innative-test-embedding STATIC ${testembed_SOURCES})
 add_library(innative-test-embedding-d STATIC ${testembed_SOURCES})
-
-set_property(TARGET innative-test-embedding PROPERTY C_STANDARD 17)
-set_property(TARGET innative-test-embedding-d PROPERTY C_STANDARD 17)
-set_property(TARGET innative-test-embedding PROPERTY VERBOSE_MAKEFILE TRUE)
-set_property(TARGET innative-test-embedding-d PROPERTY VERBOSE_MAKEFILE TRUE)
 
 # Directly set target compilation settings to bypass Release/Debug modes
 set(CMAKE_BUILD_TYPE "")
@@ -34,8 +27,18 @@ target_compile_definitions(innative-test-embedding PUBLIC NDEBUG)
 target_compile_definitions(innative-test-embedding-d PUBLIC DEBUG)
 target_include_directories(innative-test-embedding PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(innative-test-embedding-d PUBLIC ${CMAKE_SOURCE_DIR}/include)
-set_target_properties(innative-test-embedding PROPERTIES DEBUG_POSTFIX "")
-set_target_properties(innative-test-embedding-d PROPERTIES DEBUG_POSTFIX "")
+set_target_properties(innative-test-embedding PROPERTIES 
+  DEBUG_POSTFIX "" 
+  POSITION_INDEPENDENT_CODE ON
+  C_STANDARD 17
+  VERBOSE_MAKEFILE TRUE
+)
+set_target_properties(innative-test-embedding-d PROPERTIES 
+  DEBUG_POSTFIX ""
+  POSITION_INDEPENDENT_CODE ON 
+  C_STANDARD 17 
+  VERBOSE_MAKEFILE TRUE
+)
 
 if(WIN32)
   # Cmake does not support linking with a static library

@@ -39,8 +39,6 @@ else()
   find_library(LIB_RT rt REQUIRED)
 endif()
 
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
 file(GLOB_RECURSE inNative_SOURCES "./*.cpp")
 
 if(MSVC)
@@ -81,7 +79,7 @@ if(NOT WIN32)
   list(INSERT llvm_libs 0 "-Wl,--whole-archive")
 endif()
 
-set_target_properties(innative PROPERTIES COMPILE_PDB_NAME "$(TargetName)") 
+set_target_properties(innative PROPERTIES COMPILE_PDB_NAME "$(TargetName)" POSITION_INDEPENDENT_CODE ON) 
 target_link_libraries(innative PRIVATE ${llvm_libs})
 target_link_directories(innative PRIVATE ${LLVM_LIBRARY_DIR})
 

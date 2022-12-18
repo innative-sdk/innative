@@ -10,7 +10,6 @@ else()
   find_library(LIB_RT rt REQUIRED)
 endif()
 
-set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
 add_compile_definitions(TESTING_WASM)
 
 if(MSVC)
@@ -22,12 +21,14 @@ endif()
 # add library and include directories
 add_executable(innative-test ${test_SOURCES} ${CMAKE_SOURCE_DIR}/scripts/wasm_malloc.c)
 target_include_directories(innative-test PUBLIC ${CMAKE_SOURCE_DIR}/include)
-
-set_property(TARGET innative-test PROPERTY C_STANDARD 17)
-set_property(TARGET innative-test PROPERTY CXX_STANDARD 17)
-set_property(TARGET innative-test PROPERTY CXX_EXTENSIONS OFF)
-set_property(TARGET innative-test PROPERTY CXX_STANDARD_REQUIRED ON)
-set_property(TARGET innative-test PROPERTY VERBOSE_MAKEFILE TRUE)
+set_target_properties(innative-test PROPERTIES 
+  POSITION_INDEPENDENT_CODE OFF
+  C_STANDARD 17
+  CXX_STANDARD 17
+  CXX_EXTENSIONS OFF
+  CXX_STANDARD_REQUIRED ON
+  VERBOSE_MAKEFILE TRUE
+)
 
 if(MSVC)
   target_link_libraries(innative-test innative innative-env)
