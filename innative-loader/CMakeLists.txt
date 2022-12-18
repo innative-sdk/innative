@@ -9,8 +9,6 @@ else()
   find_library(LIB_RT rt REQUIRED)
 endif()
 
-set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
-
 if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
 else()
@@ -26,7 +24,7 @@ else()
 target_link_libraries(innative-loader innative)
 endif()
 
-set_target_properties(innative-loader PROPERTIES COMPILE_PDB_NAME "$(TargetName)") 
+set_target_properties(innative-loader PROPERTIES COMPILE_PDB_NAME "$(TargetName)" POSITION_INDEPENDENT_CODE OFF) 
 retarget_output(innative-loader)
 standard_target_flags(innative-loader)
 

@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.13.4)
 project(innative-stub LANGUAGES C VERSION ${PROJECT_VERSION})
 
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
 list(APPEND stub_SOURCES
     stub.c
 )
@@ -27,7 +25,7 @@ endif()
 
 target_include_directories(innative-stub PUBLIC ${CMAKE_SOURCE_DIR}/include)
 
-set_target_properties(innative-stub PROPERTIES COMPILE_PDB_NAME "$(TargetName)")
+set_target_properties(innative-stub PROPERTIES COMPILE_PDB_NAME "$(TargetName)" POSITION_INDEPENDENT_CODE ON)
 
 if(WIN32)
   # Cmake does not support linking with a static library

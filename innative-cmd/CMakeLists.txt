@@ -23,8 +23,6 @@ else()
   find_library(LIB_RT rt REQUIRED)
 endif()
 
-set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
-
 if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 else()
@@ -34,6 +32,7 @@ endif()
 # add library and include directories
 add_executable(innative-cmd ${cmd_SOURCES})
 target_include_directories(innative-cmd PUBLIC ${CMAKE_SOURCE_DIR}/include)
+set_target_properties(innative-cmd PROPERTIES POSITION_INDEPENDENT_CODE OFF)
 
 if(MSVC)
   target_link_libraries(innative-cmd innative)
