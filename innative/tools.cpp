@@ -325,24 +325,28 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
         path out;
         FILE* f = 0;
 
+        char platform[64] = { 0 };
+        snprintf(platform, 63, "%s-%s", EnumToString(ABI_MAP, env->abi, 0, 0), EnumToString(ARCH_MAP, env->arch, 0, 0));
+
         f = testpath(f, envpath / src, out);
+        f = testpath(f, envpath / platform / src, out);
         f = testpath(f, src, out);
         f = testpath(f, rootpath / src, out);
 
 #ifndef IN_PLATFORM_WIN32
         if(GetArchBits(env->arch) == 64)
-          f = testpath(f, rootpath.parent_path() / "lib64" / src, out);
-        f = testpath(f, rootpath.parent_path() / "lib" / src, out);
+          f = testpath(f, rootpath.parent_path() / "lib64" / platform / src, out);
+        f = testpath(f, rootpath.parent_path() / "lib" / platform / src, out);
 
         if(GetArchBits(env->arch) == 64)
-          f = testpath(f, path("/usr/lib64/") / src, out);
-        f = testpath(f, path("/usr/lib/") / src, out);
-        f = testpath(f, path(IN_LINUX_CROSSDIR) / src, out);
-        f = testpath(f, path("../") / src, out);
+          f = testpath(f, path("/usr/lib64/") / platform / src, out);
+        f = testpath(f, path("/usr/lib/") / platform / src, out);
+        f = testpath(f, path("../") / "lib" / platform / src, out);
 #endif
 
         if(!f)
-          return LogErrorString(*env, "%s: Error loading file: %s", ERR_FATAL_FILE_ERROR, embed->name, src.u8string().c_str());
+          return LogErrorString(*env, "%s: Error loading file: %s", ERR_FATAL_FILE_ERROR, embed->name,
+                                src.u8string().c_str());
         fclose(f);
 
         std::string buf = out.u8string();
@@ -757,10 +761,10 @@ int innative::InsertModuleSection(Environment* env, Module* m, enum WASM_MODULE_
   case WASM_MODULE_TYPE:
     m->knownsections |= (1 << WASM_SECTION_TYPE);
     return InsertModuleType<FunctionType>(env, m->type.functypes, m->type.n_functypes, index, { 0 });
-  case WASM_MODULE_IMPORT_FUNCTION: ++m->importsection.functions; 
-  case WASM_MODULE_IMPORT_TABLE: ++m->importsection.tables; // fallthrough 
+  case WASM_MODULE_IMPORT_FUNCTION: ++m->importsection.functions;
+  case WASM_MODULE_IMPORT_TABLE: ++m->importsection.tables;    // fallthrough
   case WASM_MODULE_IMPORT_MEMORY: ++m->importsection.memories; // fallthrough
-  case WASM_MODULE_IMPORT_GLOBAL:  // fallthrough
+  case WASM_MODULE_IMPORT_GLOBAL:                              // fallthrough
     m->knownsections |= (1 << WASM_SECTION_IMPORT);
     return InsertModuleType(env, m->importsection.imports, m->importsection.n_import, index, Import{});
   case WASM_MODULE_FUNCTION:
@@ -825,9 +829,9 @@ int innative::DeleteModuleSection(Environment* env, Module* m, enum WASM_MODULE_
   switch(field)
   {
   case WASM_MODULE_TYPE: return DeleteModuleType<FunctionType>(env, m->type.functypes, m->type.n_functypes, index);
-  case WASM_MODULE_IMPORT_FUNCTION: --m->importsection.functions;  // fallthrough
-  case WASM_MODULE_IMPORT_TABLE: --m->importsection.tables; // fallthrough
-  case WASM_MODULE_IMPORT_MEMORY: --m->importsection.memories; // fallthrough
+  case WASM_MODULE_IMPORT_FUNCTION: --m->importsection.functions; // fallthrough
+  case WASM_MODULE_IMPORT_TABLE: --m->importsection.tables;       // fallthrough
+  case WASM_MODULE_IMPORT_MEMORY: --m->importsection.memories;    // fallthrough
   case WASM_MODULE_IMPORT_GLOBAL: return DeleteModuleType(env, m->importsection.imports, m->importsection.n_import, index);
   case WASM_MODULE_FUNCTION:
     return DeleteModuleType<FunctionDesc>(env, m->function.funcdecl, m->function.n_funcdecl, index);
@@ -975,57 +979,27 @@ inline std::string GetEmbedding(bool debug)
 
 const char* innative::GetDefaultEmbedding(bool debug)
 {
-#ifdef IN_PLATFORM_WIN32
-  if(CURRENT_ABI == IN_ABI_Windows)
-    return debug ? "innative-env-d.lib" : "innative-env.lib";
-  return debug ? "libinnative-env-d.a" : "libinnative-env.a";
-#else
   static std::string RELEASE = GetEmbedding(false);
   static std::string DEBUG   = GetEmbedding(true);
 
   return debug ? DEBUG.c_str() : RELEASE.c_str();
-#endif
 }
 
 size_t innative::GetEmbeddingPath(uint8_t abi, uint8_t arch, bool debug, const char* name, char* out, size_t outsize)
 {
-#ifdef IN_PLATFORM_WIN32
-  if(!name && abi == CURRENT_ABI && arch == CURRENT_ARCH)
-    return snprintf(out, outsize, "%s", GetDefaultEmbedding(debug));
-#endif
-
   if(!name)
     name = debug ? "innative-env-d" : "innative-env";
 
-  const char* strabi  = "unknown";
-  const char* strarch = "unknown";
-  const char* ext     = (abi == IN_ABI_Windows) ? ".lib" : ".a";
-
-  switch(abi)
-  {
-  case IN_ABI_Windows: strabi = "windows"; break;
-  case IN_ABI_Linux: strabi = "linux"; break;
-  case IN_ABI_FreeBSD: strabi = "freebsd"; break;
-  case IN_ABI_Solaris: strabi = "solaris"; break;
-  case IN_ABI_ARM: strabi = "arm"; break;
-  }
-
-  switch(arch)
-  {
-  case IN_ARCH_x86: strarch = "x86"; break;
-  case IN_ARCH_amd64: strarch = "x64"; break;
-  case IN_ARCH_IA64: strarch = "ia64"; break;
-  case IN_ARCH_ARM64: strarch = "aarch64"; break;
-  case IN_ARCH_ARM: strarch = "arm"; break;
-  case IN_ARCH_MIPS: strarch = "mips"; break;
-  case IN_ARCH_PPC64: strarch = "ppc64"; break;
-  case IN_ARCH_PPC: strarch = "ppc"; break;
-  case IN_ARCH_RISCV: strarch = "riscv"; break;
-  }
+  const char* ext    = (abi == IN_ABI_Windows) ? ".lib" : ".a";
+  const char* prefix = (abi == IN_ABI_Windows) ? "" : "lib";
 
 #ifdef IN_PLATFORM_WIN32
-  return snprintf(out, outsize, "../bin/%s-%s/%s%s", strabi, strarch, name, ext) + 1;
+  return snprintf(out, outsize, "../bin/%s-%s/%s%s%s", EnumToString(ABI_MAP, abi, 0, 0), EnumToString(ARCH_MAP, arch, 0, 0),
+                  prefix, name, ext) +
+         1;
 #else
-  return snprintf(out, outsize, "../lib/%s-%s/lib%s%s", strabi, strarch, name, ext) + 1;
+  return snprintf(out, outsize, "../lib/%s-%s/%s%s%s", EnumToString(ABI_MAP, abi, 0, 0), EnumToString(ARCH_MAP, arch, 0, 0),
+                  prefix, name, ext) +
+         1;
 #endif
 }

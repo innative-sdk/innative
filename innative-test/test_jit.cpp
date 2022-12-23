@@ -28,9 +28,9 @@ using namespace innative;
 extern void JIT_DUMP(Environment* env);
 
 #ifdef IN_DEBUG
-  #define TEST_EMBEDDING "innative-test-embedding-d" IN_STATIC_EXTENSION
+  #define TEST_EMBEDDING "innative-test-embedding-d"
 #else
-  #define TEST_EMBEDDING "innative-test-embedding" IN_STATIC_EXTENSION
+  #define TEST_EMBEDDING "innative-test-embedding"
 #endif
 
 void TestHarness::test_jit()
@@ -103,7 +103,7 @@ void TestHarness::test_jit()
              int err = (*_exports.AddWhitelist)(env, "env", "my_factorial");
              TEST(!err);
 
-             err = (*_exports.AddEmbedding)(env, 0, TEST_EMBEDDING, 0, 0);
+             err = (*_exports.AddEmbedding)(env, 0, TEST_EMBEDDING IN_STATIC_EXTENSION, 0, 0);
              TEST(!err);
 
              return err;

@@ -1,0 +1,34 @@
+{
+  "name": "innative",
+  "version": "0.2.0",
+  "port-version": 1,
+  "description": "inNative WebAssembly Runtime",
+  "homepage": "https://github.com/innative-sdk",
+  "license": "Apache-2.0",
+  "dependencies": [
+    {
+      "name": "llvm",
+      "default-features": false,
+      "features": [
+        "enable-zlib",
+        "target-x86",
+        "target-aarch64",
+        "target-riscv",
+        "target-webassembly",
+        "polly",
+        "disable-assertions",
+        "disable-clang-static-analyzer",
+        "enable-bindings",
+        "enable-terminfo",
+        "tools",
+        "lld"
+      ],
+      "version>=": "13.0.0"
+    },
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    }
+  ],
+  "builtin-baseline": "bd0d552533451bb5da29a5fc6742c0a05ce8ecca"
+}

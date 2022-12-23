@@ -13,15 +13,15 @@
 #ifdef IN_PLATFORM_WIN32
 static const uint8_t CURRENT_ABI = IN_ABI_Windows;
 #elif defined(IN_PLATFORM_BSD)
-static const uint8_t CURRENT_ABI = IN_ABI_FreeBSD;
+static const uint8_t CURRENT_ABI  = IN_ABI_FreeBSD;
 #elif defined(IN_PLATFORM_SOLARIS)
-static const uint8_t CURRENT_ABI = IN_ABI_Solaris;
+static const uint8_t CURRENT_ABI  = IN_ABI_Solaris;
 #elif defined(IN_PLATFORM_LINUX)
-static const uint8_t CURRENT_ABI = IN_ABI_Linux;
+static const uint8_t CURRENT_ABI  = IN_ABI_Linux;
 #elif defined(IN_PLATFORM_POSIX)
-static const uint8_t CURRENT_ABI = IN_ABI_POSIX;
+static const uint8_t CURRENT_ABI  = IN_ABI_POSIX;
 #else
-static const uint8_t CURRENT_ABI = IN_ABI_NONE;
+static const uint8_t CURRENT_ABI  = IN_ABI_NONE;
 #endif
 
 #ifdef IN_CPU_x86_64
@@ -435,6 +435,7 @@ IN_COMPILER_DLLEXPORT extern void innative_runtime(INExports* exports);
 /// \param arg0 the first argument sent to the program. Used to determine binary location on POSIX systems.
 IN_COMPILER_DLLEXPORT extern void innative_set_work_dir_to_bin(const char* arg0);
 
+#ifdef IN_PLATFORM_WIN32
 /// Installs this runtime, usually only called by innative-cmd, which makes assumptions about file locations.
 /// \param arg0 the first argument sent to the program. Used to determine binary location on POSIX systems.
 /// \param full On windows, performs a "full" installation, which associates the runtime with .wat/.wast/.wasm files.
@@ -442,6 +443,7 @@ IN_COMPILER_DLLEXPORT extern int innative_install(const char* arg0, bool full);
 
 /// Uninstalls whatever runtime version this is from the operating system.
 IN_COMPILER_DLLEXPORT extern int innative_uninstall();
+#endif
 
 /// Performs a reverse compilation of LLVM IR into WebAssembly using the built-in LLVM version in this runtime.
 /// \param files An array of UTF8 file paths to compile.

@@ -43,3 +43,4 @@
 /build/
 /result
 /lib/
+/vcpkg_installed/

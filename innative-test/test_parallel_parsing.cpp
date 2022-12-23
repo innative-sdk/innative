@@ -27,7 +27,7 @@ void TestHarness::test_parallel_parsing()
 
   const int NUM = 50;
   {
-    std::unique_ptr<std::string[]> modules(new std::string[NUM]);
+    std::string modules[NUM];
 
     for(int i = 0; i < NUM; ++i)
     {
@@ -41,13 +41,13 @@ void TestHarness::test_parallel_parsing()
     env->features    = ENV_FEATURE_ALL;
     env->loglevel    = LOG_FATAL;
 
-    std::unique_ptr<int[]> err(new int[NUM]);
+    int err[NUM] = { 0 };
+    for(int i = 0; i < NUM; ++i)
     {
-      for(int i = 0; i < NUM; ++i)
-        (*_exports.AddModule)(env, modules[i].data(), modules[i].size(), "parallel", &err[i]);
-
-      (*_exports.FinalizeEnvironment)(env);
+      (*_exports.AddModule)(env, modules[i].data(), modules[i].size(), "parallel", &err[i]); 
     }
+
+    TEST((*_exports.FinalizeEnvironment)(env) == 0);
 
     for(int i = 0; i < NUM; ++i)
       TEST(!err[i]);

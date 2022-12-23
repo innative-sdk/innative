@@ -11,22 +11,22 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <OutputName>innative-windows-runtime-x86-d</OutputName>
-    <OutputPath>$(SolutionDir)bin-Win32\</OutputPath>
+    <OutputPath>$(SolutionDir)bin\windows-i386\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
     <OutputName>innative-windows-runtime-x86</OutputName>
-    <OutputPath>$(SolutionDir)bin-Win32\</OutputPath>
+    <OutputPath>$(SolutionDir)bin\windows-i386\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
     <OutputName>innative-windows-runtime-x64-d</OutputName>
-    <OutputPath>$(SolutionDir)bin-windows-x64\</OutputPath>
+    <OutputPath>$(SolutionDir)bin\windows-amd64\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
     <OutputName>innative-windows-runtime-x64</OutputName>
-    <OutputPath>$(SolutionDir)bin-windows-x64\</OutputPath>
+    <OutputPath>$(SolutionDir)bin\windows-amd64\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
   <ItemGroup>

@@ -8,9 +8,9 @@ An AOT (ahead-of-time) compiler for WebAssembly that creates **C compatible bina
 The primary source of documentation for inNative is the [GitHub Wiki](https://github.com/innative-sdk/innative/wiki), which lists all the externally accessible functions and how to use them. This wiki *should* be kept up to date, but always double-check the source code comments if something seems amiss. Feel free to [file an issue](https://github.com/innative-sdk/innative/issues/new) if there is misleading or missing documentation.
 
 ## Installing
-Precompiled binaries for Windows are provided in [releases](https://github.com/innative-sdk/innative/releases) for those who do not want to build from source. The SDK is portable and can be unzipped to any directory, but can also be installed and registered on the target system. The provided installers will register the SDK with the system, which enables dynamic loaders to find the runtime, and register it as a `.wasm`, `.wat` and `.wast` file extension handler on windows. Even if you did not use an installer, you can always install a portable version by running `innative-cmd.exe -i` on windows or `./innative-cmd -i` on linux. Read the wiki articles for [the SDK](https://github.com/innative-sdk/innative/wiki/Install-the-SDK) and [the Redistributable](https://github.com/innative-sdk/innative/wiki/Install-the-Redistributable-Package) for more information.
+Precompiled binaries for Windows are provided in [releases](https://github.com/innative-sdk/innative/releases) for those who do not want to build from source. The provided installers will register the runtime with the system, which enables dynamic loaders to find the runtime, and register it as a `.wasm`, `.wat` and `.wast` file extension handler on windows. Even if you did not use an installer, you can always install a portable version by running `innative-cmd.exe -i` on windows. Read the wiki articles for [the Redistributable](https://github.com/innative-sdk/innative/wiki/Install-the-Redistributable-Package) for more information.
 
-For those building from source on Windows, we use a [vcpkg fork](https://github.com/Fundament-Software/vcpkg) pinned to LLVM 13 to handle dependencies. On Linux, you can either use the provided nix flake, or install LLVM using your package manager - this may require python depending on how you configure LLVM. Regardless of how dependencies are resolved, Linux users should use cmake to build the project (the nix flake will do this for you).
+For Linux, you should use cmake to install the binaries after they have been compiled. See below for instructions on building from source.
 
 ### Command Line Utility
 The inNative SDK comes with a command line utility with many useful features for webassembly developers.
@@ -53,8 +53,8 @@ The inNative SDK comes with a command line utility with many useful features for
       -sys -system <MODULE>: Sets the environment/system module name. Any functions with the module name will have the module name stripped when linking with C functions
       -start <[MODULE:]FUNCTION>: Sets or overrides the start function of a given module, in case it hasn't been properly specified. The function can't take any parameters and must return void.
       -linker: Specifies an alternative linker executable to use instead of LLD.
-      -i -install [lite]: Installs this SDK to the host operating system. On Windows, also updates file associations unless 'lite' is specified.
-      -u -uninstall: Uninstalls and deregisters this SDK from the host operating system.
+      -i -install [lite]: (WINDOWS ONLY) Installs this SDK to the host operating system and updates file associations unless 'lite' is specified.
+      -u -uninstall: (WINDOWS ONLY) Uninstalls and deregisters this SDK from the host operating system.
       -sdk -library-dir <DIR>: Sets the directory that contains the SDK library and data files.
       -obj -obj-dir -object-dir -intermediate-dir <DIR>: Sets the directory for temporary object files and intermediate compilation results.
       -compile-llvm: Assumes the input files are LLVM IR files and compiles them into a single webassembly module.
@@ -84,31 +84,15 @@ The inNative SDK comes with a command line utility with many useful features for
       innative-cmd your-module.wasm -abi windows -arch x86
     
 ## Building
-If you are building LLVM on Linux, **ensure that you have `cmake` and `python` installed**, as the script cannot do this for you.
-
 If you'd like to run the test suite, make sure you include the webassembly spec submodule by running `git clone --recurse-submodules`. If you get errors when running the tests, be sure to double check that you have acquired `spec` and `spec/document/core/util/katex`.
 
 ### Windows
-inNative currently requires C++17 to build, and only supports Visual Studio 2022. After installing the LLVM/LLD binaries or building it from source, open `innative.sln` in Visual Studio and build the project, or run `msbuild innative.sln`. You can use cmake to build a solution file, but it doesn't work well in debug mode and can only make DLL versions.
+For those building from source on Windows, we use a [vcpkg fork](https://github.com/Fundament-Software/vcpkg) pinned to LLVM 13 to handle dependencies. You can either enable `vcpkg` integration on windows via `vcpkg integrate install` and opening `innative.sln`, or you can use cmake to build the project, with `cmake [SOURCE ROOT] -DCMAKE_TOOLCHAIN_FILE=[VCPKG LOCATION]\scripts\buildsystems\vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static`. Both of these options should active the `vcpkg.json` manifest mode, or you can install the dependencies manually, if you want.
+
 
 ### Linux
-Since inNative requires C++17 to build, the minimum supported compiler is gcc-7 or clang-5. Once you've installed the LLVM/LLD binaries or built it from source, run `cmake` to create makefiles or a Ninja configuration that you can then use to build the project. It is suggested to create a new folder called `build` and then run `cmake ..` to isolate the generated project files. The existing makefiles are **deprecated** and will be removed in a future release.
+Since inNative requires C++17 to build, the minimum supported compiler is gcc-7 or clang-5. Either use the provided nix flake to build via nix, or install LLVM 13 and Python from your package manager. Then run `cmake` to create makefiles or a Ninja configuration that you can then use to build the project. It is suggested to create a new folder called `build` and then run `cmake ..` to isolate the generated project files.
 
-Any Linux system configured with [flatpak](https://flatpak.org/setup/) can build a standalone SDK bundle and install it to their system for development inside containers:
-
-    cd flatpak
-    ./build-flatpak-bundle.sh
-    flatpak --user --assumeyes install org.freedesktop.Sdk.Extension.innative.flatpak
-    flatpak run --command=sh --devel $APP
-    . /usr/lib/sdk/innative/enable.sh
-    innative-cmd
-
-### Build benchmarks
-The benchmarks are already compiled to webassembly, but if you want to recompile them yourself, you can run `make benchmarks` from the root directory, assuming you have a webassembly-enabled compiler available. If you are on windows, it is recommended you simply use WSL to build the benchmarks.
-
-### Build Docker Image
-A `Dockerfile` is included in the source that uses a two-stage build process to create an alpine docker image. When assembling a docker image, it is recommended you make a *shallow clone* of the repository (without any submodules) and then run `docker build .` from the root directory, without building anything. Docker will copy the repository and clone the submodules itself, before building both LLVM and inNative, which can take quite some time. Once compiled, inNative will be copied into a fresh alpine image and installed so it is usable from the command line, while the LLVM compilation result will be discarded.
-    
 ## Targeting inNative
 To build a shared library that does not rely on WASI, you can use `wasm_malloc.c` and clang:
 
