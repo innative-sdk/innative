@@ -9,9 +9,9 @@
 using namespace innative;
 
 #ifdef IN_DEBUG
-  #define TEST_EMBEDDING "innative-assemblyscript-d" IN_STATIC_EXTENSION
+  #define TEST_EMBEDDING "innative-assemblyscript-d"
 #else
-  #define TEST_EMBEDDING "innative-assemblyscript" IN_STATIC_EXTENSION
+  #define TEST_EMBEDDING "innative-assemblyscript"
 #endif
 
 #ifdef IN_PLATFORM_POSIX
@@ -112,10 +112,14 @@ void TestHarness::test_assemblyscript()
     remove(dll_path);
   };
 
-  fn(TEST_EMBEDDING, 0);
+  fn(TEST_EMBEDDING IN_STATIC_EXTENSION, 0);
 
+  std::string embedpath;
+  embedpath.resize((*_exports.GetEmbeddingPath)(CURRENT_ABI, CURRENT_ARCH, false, TEST_EMBEDDING, nullptr, 0));
+  embedpath.resize(
+    (*_exports.GetEmbeddingPath)(CURRENT_ABI, CURRENT_ARCH, false, TEST_EMBEDDING, embedpath.data(), embedpath.capacity()));
   size_t embedsz = 0;
-  auto embedfile = utility::LoadFile(TEST_EMBEDDING, embedsz);
+  auto embedfile = utility::LoadFile(embedpath, embedsz);
 
   fn((const char*)embedfile.get(), embedsz);
 }

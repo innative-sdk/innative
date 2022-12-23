@@ -221,8 +221,6 @@ namespace innative {
     void FreeDLL(void* dll);
     IN_COMPILER_DLLEXPORT char* LoadDLLError();
     IN_COMPILER_DLLEXPORT void LoadDLLErrorFree(char* p);
-    int Install(const char* arg0, bool full);
-    int Uninstall();
     IN_COMPILER_DLLEXPORT int GetArchBits(uint8_t arch);
     IN_COMPILER_DLLEXPORT bool IsLittleEndian(uint8_t abi, uint8_t arch);
     IN_COMPILER_DLLEXPORT int AddCImport(Environment& env, const char* id);
@@ -235,6 +233,11 @@ namespace innative {
     {
       return AllocString(env, s.data(), s.size());
     }
+
+  #ifdef IN_PLATFORM_WIN32
+    int Install(const char* arg0, bool full);
+    int Uninstall(); 
+  #endif
 
     // Creates a C-compatible mangled name with an optional index
     inline std::string CanonicalName(StringSpan prefix, StringSpan name, int index = -1)

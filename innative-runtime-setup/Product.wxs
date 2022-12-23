@@ -3,9 +3,11 @@
   <?if $(var.Platform)="x86" ?>
   <?define ProgramFilesFolder="ProgramFilesFolder" ?>
   <?define Win64="no" ?>
+  <?define BinPostFix="i386" ?>
   <?elseif $(var.Platform)="x64" ?>
   <?define ProgramFilesFolder="ProgramFiles64Folder" ?>
   <?define Win64="yes" ?>
+  <?define BinPostFix="amd64" ?>
   <?else ?>
   <?error Unknown value for Platform variable ?>
   <?endif ?>
@@ -38,7 +40,9 @@
       <Directory Id="$(var.ProgramFilesFolder)">
         <Directory Id="INNATIVEFOLDER" Name="inNative">
           <Directory Id="INSTALLFOLDER" Name="Runtime v$(var.Version)">
-            <Directory Id="BINFOLDER" Name="bin-windows-$(var.Platform)" />
+            <Directory Id="BINFOLDER" Name="bin" >
+              <Directory Id="LIBFOLDER" Name="windows-$(var.BinPostFix)" />
+            </Directory>
           </Directory>
         </Directory>
       </Directory>
@@ -52,18 +56,24 @@
         <File Id="innative.cmd.exe" Name="innative-cmd.exe" Source="$(var.innative.TargetDir)innative-cmd.exe" KeyPath="yes" Checksum="yes"/>
         <File Id="innative.cmd.d.exe" Name="innative-cmd-d.exe" Source="$(var.innative.TargetDir)innative-cmd-d.exe" Checksum="yes"/>
         <File Id="innative.d.dll" Name="innative-d.dll" Source="$(var.innative.TargetDir)innative-d.dll"/>
-        <File Id="innative.env.d.lib" Name="innative-env-d.lib" Source="$(var.innative.TargetDir)innative-env-d.lib"/>
-        <File Id="innative.env.lib" Name="innative-env.lib" Source="$(var.innative.TargetDir)innative-env.lib"/>
-        <File Id="innative.assemblyscript.d.lib" Name="innative-assemblyscript-d.lib" Source="$(var.innative.TargetDir)innative-assemblyscript-d.lib"/>
-        <File Id="innative.assemblyscript.lib" Name="innative-assemblyscript.lib" Source="$(var.innative.TargetDir)innative-assemblyscript.lib"/>
+        <File Id="innative.dll" Name="innative.dll" Source="$(var.innative.TargetDir)innative.dll"/>
         <File Id="innative.s.d.lib" Name="innative-s-d.lib" Source="$(var.innative.TargetDir)innative-s-d.lib"/>
         <File Id="innative.s.lib" Name="innative-s.lib" Source="$(var.innative.TargetDir)innative-s.lib"/>
-        <File Id="innative.dll" Name="innative.dll" Source="$(var.innative.TargetDir)innative.dll"/>
+      </Component>
+    </ComponentGroup>
+    
+    <ComponentGroup Id="inNativeLibGroup" Directory="LIBFOLDER">
+      <Component Id="inNativeLib" Guid="4a200d70-a6a5-4e1f-9447-8d7a7c58ff9e">
+        <File Id="innative.env.d.lib" Name="innative-env-d.lib" Source="$(var.innative.TargetDir)windows-$(var.BinPostFix)/innative-env-d.lib"/>
+        <File Id="innative.env.lib" Name="innative-env.lib" Source="$(var.innative.TargetDir)windows-$(var.BinPostFix)/innative-env.lib"/>
+        <File Id="innative.assemblyscript.d.lib" Name="innative-assemblyscript-d.lib" Source="$(var.innative.TargetDir)windows-$(var.BinPostFix)/innative-assemblyscript-d.lib"/>
+        <File Id="innative.assemblyscript.lib" Name="innative-assemblyscript.lib" Source="$(var.innative.TargetDir)windows-$(var.BinPostFix)/innative-assemblyscript.lib"/>
       </Component>
     </ComponentGroup>
 
     <Feature Id="inNativeRuntime" Title="inNative Runtime" Level="1">
       <ComponentGroupRef Id="inNativeBinGroup" />
+      <ComponentGroupRef Id="inNativeLibGroup" />
     </Feature>
     
     <CustomAction Id="Installer" Execute="deferred" Impersonate="yes" Return="check" FileKey="innative.cmd.exe" ExeCommand="-i" SuppressModularization="yes" />

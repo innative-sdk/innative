@@ -357,8 +357,6 @@ struct CommandLine
     serialize(
       "Serializes all modules to .wat files in addition to compiling them. <FILE> can specify the output if only one module is present, or 'emitdebug' will emit debug information",
       "<FILE>|emitdebug"),
-    generate_loader(
-      "Instead of compiling immediately, creates a loader embedded with all the modules, environments, and settings, which compiles the modules on-demand when run."),
     verbose("Turns on verbose logging."),
     build_sourcemap(
       "Assumes input files are ELF object files or binaries that contain DWARF debugging information, and creates a source map from them."),
@@ -370,6 +368,8 @@ struct CommandLine
       "Sets or overrides the start function of a given module, in case it hasn't been properly specified. The function can't take any parameters and must return void.",
       "<[MODULE:]FUNCTION>"),
     linker("Specifies an alternative linker executable to use instead of LLD."),
+    generate_loader(
+      "Instead of compiling immediately, creates a loader embedded with all the modules, environments, and settings, which compiles the modules on-demand when run."),
     install(
       "Installs this SDK to the host operating system. On Windows, also updates file associations unless 'lite' is specified.",
       "lite"),
@@ -406,9 +406,6 @@ struct CommandLine
     Register("out", &output_file);
     Register("output", &output_file);
     Register("serialize", &serialize);
-#ifdef IN_PLATFORM_WIN32
-    Register("generate-loader", &generate_loader);
-#endif
     Register("v", &verbose);
     Register("verbose", &verbose);
     Register("build-sourcemap", &build_sourcemap);
@@ -418,10 +415,13 @@ struct CommandLine
     Register("system", &system);
     Register("start", &start);
     Register("linker", &linker);
+#ifdef IN_PLATFORM_WIN32
+    Register("generate-loader", &generate_loader);
     Register("i", &install);
     Register("install", &install);
     Register("u", &uninstall);
     Register("uninstall", &uninstall);
+#endif
     Register("sdk", &library_dir);
     Register("library-dir", &library_dir);
     Register("obj", &object_dir);
@@ -612,6 +612,7 @@ int main(int argc, char* argv[])
   if(commandline.run.value)
     commandline.flags.value |= ENV_LIBRARY | ENV_NO_INIT;
 
+#ifdef IN_PLATFORM_WIN32
   if(commandline.uninstall.value)
   {
     std::cout << "Uninstalling inNative Runtime..." << std::endl;
@@ -637,6 +638,7 @@ int main(int argc, char* argv[])
 
   if(commandline.install.set || commandline.uninstall.value)
     return err;
+#endif
 
   if(!commandline.inputs.size() && !commandline.wast.size())
   {

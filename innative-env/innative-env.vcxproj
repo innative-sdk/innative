@@ -35,8 +35,6 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <VcpkgTriplet Condition="'$(Platform)'=='Win32'">x86-windows-static</VcpkgTriplet>
-    <VcpkgTriplet Condition="'$(Platform)'=='x64'">x64-windows-static</VcpkgTriplet>
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{54E92032-38A6-4069-8189-2B27995700E0}</ProjectGuid>
     <RootNamespace>innativeenv</RootNamespace>
@@ -91,19 +89,19 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
     <TargetName>$(ProjectName)-d</TargetName>
-    <OutDir>$(SolutionDir)bin-windows-x86\</OutDir>
+    <OutDir>$(SolutionDir)bin\windows-i386\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
-    <OutDir>$(SolutionDir)bin-windows-x86\</OutDir>
+    <OutDir>$(SolutionDir)bin\windows-i386\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <TargetName>$(ProjectName)-d</TargetName>
-    <OutDir>$(SolutionDir)bin-windows-x64\</OutDir>
+    <OutDir>$(SolutionDir)bin\windows-amd64\</OutDir>
     <ExecutablePath>$(VC_ExecutablePath_x64_x64);$(WindowsSdk_71A_ExecutablePath);$(WindowsSDK_ExecutablePath);$(VS_ExecutablePath);$(MSBuild_ExecutablePath);$(FxCopDir);$(PATH);</ExecutablePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(SolutionDir)bin-windows-x64\</OutDir>
+    <OutDir>$(SolutionDir)bin\windows-amd64\</OutDir>
     <ExecutablePath>$(VC_ExecutablePath_x64_x64);$(WindowsSdk_71A_ExecutablePath);$(WindowsSDK_ExecutablePath);$(VS_ExecutablePath);$(MSBuild_ExecutablePath);$(FxCopDir);$(PATH);</ExecutablePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

@@ -13,28 +13,15 @@
 #ifdef IN_PLATFORM_WIN32
   #include "../innative/win32.h"
   #include <intrin.h>
-#elif defined(IN_PLATFORM_POSIX)
-  #include <unistd.h>
-  #include <cpuid.h>
-  #include <limits.h>
-  #include <dlfcn.h>
-  #include <sys/mman.h>
-  #include <dirent.h>
-  #include <fstream>
-  #include <sys/stat.h>
-#else
-  #error unknown platform
-#endif
 
-#define GETEMBED(NAME, TARGET, ISDEBUG)                                                 \
-  auto len_##NAME = GetEmbeddingPath(CURRENT_ABI, CURRENT_ARCH, ISDEBUG, TARGET, 0, 0); \
-  char* NAME      = (char*)alloca(len_##NAME);                                          \
-  GetEmbeddingPath(CURRENT_ABI, CURRENT_ARCH, ISDEBUG, TARGET, NAME, len_##NAME);
+  #define GETEMBED(NAME, TARGET, ISDEBUG)                                                 \
+    auto len_##NAME = GetEmbeddingPath(CURRENT_ABI, CURRENT_ARCH, ISDEBUG, TARGET, 0, 0); \
+    char* NAME      = (char*)alloca(len_##NAME);                                          \
+    GetEmbeddingPath(CURRENT_ABI, CURRENT_ARCH, ISDEBUG, TARGET, NAME, len_##NAME);
 
 namespace innative {
   namespace utility {
-#ifdef IN_PLATFORM_WIN32
-  #define MAKEWSTRING2(x) L""#x
+  #define MAKEWSTRING2(x) L"" #x
   #define MAKEWSTRING(x)  MAKEWSTRING2(x)
   #define IN_VERSION_PATH               \
     MAKEWSTRING(INNATIVE_VERSION_MAJOR) \
@@ -178,117 +165,6 @@ namespace innative {
       return status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND;
     };
 
-#elif defined(IN_PLATFORM_POSIX)
-  #define MAKESTRING2(x) #x
-  #define MAKESTRING(x)  MAKESTRING2(x)
-  #define POSIX_VERSION_STR \
-    "." MAKESTRING(INNATIVE_VERSION_MAJOR) "." MAKESTRING(INNATIVE_VERSION_MINOR) "." MAKESTRING(INNATIVE_VERSION_REVISION)
-    int FindLatestVersion(const std::string& prefix, const std::vector<std::string>& files)
-    {
-      int v = -1;
-
-      for(auto f : files)
-      {
-        if(f.size() > prefix.size() && !strncasecmp(f.c_str(), prefix.c_str(), prefix.size()))
-        {
-          auto s = f.substr(prefix.size() + 1);
-
-          if(s.find_first_of('.') == std::string::npos)
-          {
-            char* end;
-            v = std::max<int>(v, strtol(s.c_str(), &end, 10));
-          }
-        }
-      }
-
-      return v;
-    }
-
-    bool GenSymlink(const char* file, const char* folder, int major, int minor)
-    {
-      std::vector<std::string> files;
-
-      {
-        size_t len = strlen(file);
-        DIR* pdir;
-        if((pdir = opendir(folder)) == nullptr)
-          return -18;
-
-        struct dirent* d;
-        while((d = readdir(pdir)) != NULL)
-        {
-          if(strlen(d->d_name) >= len && !strncasecmp(d->d_name, file, len))
-            files.emplace_back(d->d_name);
-        }
-
-        closedir(pdir);
-      }
-
-      std::string origin(folder);
-      if(origin.back() != '/')
-        origin += '/';
-
-      auto link = origin + file;
-      std::string src(file);
-
-      if(major >= 0)
-      {
-        link += '.';
-        link += std::to_string(major);
-      }
-      else
-        major = FindLatestVersion(src, files);
-
-      src += '.';
-      src += std::to_string(major);
-
-      if(minor >= 0)
-      {
-        link += '.';
-        link += std::to_string(minor);
-      }
-      else
-        minor = FindLatestVersion(src, files);
-
-      src += '.';
-      src += std::to_string(minor);
-      int revision = FindLatestVersion(src, files);
-
-      if(revision < 0 || minor < 0 || major < 0)
-        return !unlink(link.c_str()); // No version exists here, so just delete it
-
-      unlink(link.c_str());
-      origin = origin + file + "." + std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(revision);
-      return !symlink(origin.c_str(), link.c_str());
-    }
-
-    // Finds the latest version for each level: revision, minor, major. Then sets the /usr/bin symlink to the executable
-    // corresponding to the latest version
-    int UpdateSymlinks(const char* file, const char* folder)
-    {
-      if(!GenSymlink(file, folder, INNATIVE_VERSION_MAJOR, INNATIVE_VERSION_MINOR))
-        return -16;
-
-      if(!GenSymlink(file, folder, INNATIVE_VERSION_MAJOR, -1))
-        return -32;
-
-      return GenSymlink(file, folder, -1, -1) ? 0 : -21;
-    }
-
-    int InstallFile(const char* arg0, const char* file, const char* folder)
-    {
-      path src    = GetProgramPath(arg0).parent_path() / file;
-      auto target = path(folder) / file;
-      target += POSIX_VERSION_STR;
-      std::error_code ec;
-      create_directories(folder, ec); // create_directories will "fail" if the folder already exists.
-      bool success = copy_file(src, target, copy_options::overwrite_existing);
-
-      // Calculate new master symlinks
-      return success ? UpdateSymlinks(file, folder) : -17;
-    }
-#endif
-
     uint64_t GetLatestVersion()
     {
       uint16_t major    = 0;
@@ -296,7 +172,6 @@ namespace innative {
       uint16_t revision = 0;
       uint16_t build    = 0;
 
-#ifdef IN_PLATFORM_WIN32
       if(!Win32EnumKey(HKEY_CURRENT_USER, IN_WIN32_REGPATH, [&major](const wchar_t* s) {
            wchar_t* end;
            major = std::max((uint16_t)wcstol(s, &end, 10), major);
@@ -325,16 +200,13 @@ namespace innative {
                          .c_str(),
                        0, KEY_READ, &hKey) != ERROR_SUCCESS)
         return 0;
-      RegCloseKey(hKey);
-#elif defined(IN_PLATFORM_POSIX)
 
-#endif
+      RegCloseKey(hKey);
       return INNATIVE_VERSION(major, minor, revision, build);
     }
 
     int Install(const char* arg0, bool full)
     {
-#ifdef IN_PLATFORM_WIN32
       // Open our base registry entry and install this specific version info (overwrite any existing info)
       std::wstring path;
       path.resize(MAX_PATH);
@@ -353,32 +225,11 @@ namespace innative {
       if(GetLatestVersion() <= cur) // Only if we are the latest version do we perform a full install
         if(!Win32Install(cur, full))
           return -3;
-
-#elif defined(IN_PLATFORM_POSIX)
-      GETEMBED(erelease, "innative-env", false);
-      GETEMBED(edebug, "innative-env-d", true);
-      path vrelease(IN_LINUX_CROSSDIR);
-      vrelease = (vrelease / erelease).parent_path();
-      path vdebug(IN_LINUX_CROSSDIR);
-      vdebug  = (vdebug / edebug).parent_path();
-      int err = 0;
-      if((err = InstallFile(arg0, "libinnative.so", "/usr/lib/")) != 0)
-        return err - 256;
-      if((err = InstallFile(arg0, GetDefaultEmbedding(false), vrelease.c_str())) != 0)
-        return err - 512;
-      if((err = InstallFile(arg0, GetDefaultEmbedding(true), vdebug.c_str())) != 0)
-        return err - 768;
-      if((err = InstallFile(arg0, "innative-cmd", "/usr/bin/")) != 0)
-        return err - 1024;
-      chmod("/usr/bin/innative-cmd" POSIX_VERSION_STR,
-            0777); // Make the actual file executable (we don't need to fix the symlinks)
-#endif
       return 0;
     }
 
     int Uninstall()
     {
-#ifdef IN_PLATFORM_WIN32
       // Remove this version from the registry by deleting all version levels. Only the levels that have no more subkeys
       // will actually be deleted.
       uint64_t oldversion = GetLatestVersion();
@@ -426,30 +277,8 @@ namespace innative {
           return -9;
 
       return r ? 0 : -1;
-#elif defined(IN_PLATFORM_POSIX)
-      GETEMBED(erelease, "innative-env", false);
-      GETEMBED(edebug, "innative-env-d", true);
-      std::string vrelease(erelease);
-      vrelease = IN_LINUX_CROSSDIR + ("/" + vrelease) + POSIX_VERSION_STR;
-      std::string vdebug(edebug);
-      vdebug = IN_LINUX_CROSSDIR + ("/" + vdebug) + POSIX_VERSION_STR;
-      int err = 0;
-      if(unlink("/usr/lib/libinnative.so" POSIX_VERSION_STR) != 0)
-        err |= -1;
-      if(unlink(vrelease.c_str()) != 0)
-        err |= -2;
-      if(unlink(vdebug.c_str()) != 0)
-        err |= -4;
-      if(unlink("/usr/bin/innative-cmd" POSIX_VERSION_STR) != 0)
-        err |= -8;
-
-      // Calculate new symlinks
-      err |= UpdateSymlinks("libinnative.so", "/usr/lib/") << 4;
-      err |= UpdateSymlinks(erelease, IN_LINUX_CROSSDIR) << 8;
-      err |= UpdateSymlinks(edebug, IN_LINUX_CROSSDIR) << 12;
-      err |= UpdateSymlinks("innative-cmd", "/usr/bin/") << 16;
-      return err;
-#endif
     }
   }
 }
+
+#endif

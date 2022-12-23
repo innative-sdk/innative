@@ -7,9 +7,9 @@
 using namespace innative;
 
 #ifdef IN_DEBUG
-  #define TEST_EMBEDDING "innative-test-embedding-d" IN_STATIC_EXTENSION
+  #define TEST_EMBEDDING "innative-test-embedding-d"
 #else
-  #define TEST_EMBEDDING "innative-test-embedding" IN_STATIC_EXTENSION
+  #define TEST_EMBEDDING "innative-test-embedding"
 #endif
 
 int TestHarness::do_embedding(void* assembly)
@@ -42,7 +42,7 @@ int TestHarness::do_embedding2(void* assembly)
 
 void TestHarness::test_embedding()
 {
-  const char* embed = TEST_EMBEDDING;
+  const char* embed = TEST_EMBEDDING IN_STATIC_EXTENSION;
   size_t embedsz    = 0;
   const char* sys   = "env";
   auto lambda       = [&](Environment* env) -> int {
@@ -64,7 +64,12 @@ void TestHarness::test_embedding()
   sys = 0;
   TEST(CompileWASM("../scripts/embedded.wat", &TestHarness::do_embedding, "env", lambda) == ERR_SUCCESS);
 
-  auto embedfile = utility::LoadFile(TEST_EMBEDDING, embedsz);
+  std::string embedpath;
+  embedpath.resize((*_exports.GetEmbeddingPath)(CURRENT_ABI, CURRENT_ARCH, false, TEST_EMBEDDING, nullptr, 0));
+  embedpath.resize(
+    (*_exports.GetEmbeddingPath)(CURRENT_ABI, CURRENT_ARCH, false, TEST_EMBEDDING, embedpath.data(), embedpath.capacity()));
+
+  auto embedfile = utility::LoadFile(embedpath, embedsz);
   embed          = (const char*)embedfile.get();
   TEST(CompileWASM("../scripts/embedded.wat", &TestHarness::do_embedding, "env", lambda) == ERR_SUCCESS);
 
