@@ -40,6 +40,18 @@
     <RootNamespace>innativeloader</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug Static'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgEnabled>true</VcpkgEnabled>
+    <vcpkgEnableManifest>true</vcpkgEnableManifest>
+    <vcpkgHostTriplet>x64-windows-static</vcpkgHostTriplet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release Static'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgEnabled>true</VcpkgEnabled>
+    <vcpkgEnableManifest>true</vcpkgEnableManifest>
+    <vcpkgHostTriplet>x64-windows-static</vcpkgHostTriplet>
+  </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
