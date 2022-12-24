@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <sstream>
 #include <stdarg.h>
+#include <string.h>
 
 #ifdef IN_COMPILER_MSC
   #pragma warning(disable : 4062)
@@ -333,7 +334,25 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
         f = testpath(f, src, out);
         f = testpath(f, rootpath / src, out);
 
+
 #ifndef IN_PLATFORM_WIN32
+        // TODO: getenv("LD_LIBRARY_PATH")
+
+        if(GetArchBits(env->arch) == 64)
+          f = testpath(f, rootpath.parent_path() / "lib64" / platform / src, out);
+        f = testpath(f, rootpath.parent_path() / "lib" / platform / src, out);
+
+        if(GetArchBits(env->arch) == 64)
+          f = testpath(f, path("/usr/lib64/") / platform / src, out);
+        f = testpath(f, path("/usr/lib/") / platform / src, out);
+        f = testpath(f, path("../") / "lib" / platform / src, out);
+        
+        src = "lib" + src.string();
+        f = testpath(f, envpath / src, out);
+        f = testpath(f, envpath / platform / src, out);
+        f = testpath(f, src, out);
+        f = testpath(f, rootpath / src, out);
+        
         if(GetArchBits(env->arch) == 64)
           f = testpath(f, rootpath.parent_path() / "lib64" / platform / src, out);
         f = testpath(f, rootpath.parent_path() / "lib" / platform / src, out);
@@ -345,7 +364,7 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
 #endif
 
         if(!f)
-          return LogErrorString(*env, "%s: Error loading file: %s", ERR_FATAL_FILE_ERROR, embed->name,
+          return LogErrorString(*env, "%s: Error loading file: %s %s", ERR_FATAL_FILE_ERROR, embed->name,
                                 src.u8string().c_str());
         fclose(f);
 

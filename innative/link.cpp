@@ -175,9 +175,12 @@ void innative::DeleteCache(const Environment& env, Module& m)
 {
   // Certain error conditions can result in us clearing the cache of an invalid module.
   if(m.name.size() > 0) // Prevent an error from happening if the name is invalid.
-    remove(GetLinkerObjectPath(env, m, path(),
-                               env.abi == IN_ABI_Windows ? LLD_FORMAT::COFF :
-                                                           LLD_FORMAT::ELF)); // Always remove the file if it exists
+  {
+    auto file = GetLinkerObjectPath(env, m, path(), env.abi == IN_ABI_Windows ? LLD_FORMAT::COFF : LLD_FORMAT::ELF);
+
+    if(exists(file)) //  Only remove the file if it exists, otherwise NixOS gives us a brain-dead error message of "read only file system"
+      remove(file);
+  }
 
   if(m.cache != nullptr)
   {
