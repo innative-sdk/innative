@@ -91,7 +91,7 @@ For those building from source on Windows, we use a [vcpkg fork](https://github.
 
 
 ### Linux
-Since inNative requires C++17 to build, the minimum supported compiler is gcc-7 or clang-5. Either use the provided nix flake to build via nix, or install LLVM 13 and Python from your package manager. Then run `cmake` to create makefiles or a Ninja configuration that you can then use to build the project. It is suggested to create a new folder called `build` and then run `cmake ..` to isolate the generated project files.
+Since inNative requires C++17 to build, the minimum supported compiler is gcc-7 or clang-5. Either use the provided nix flake to build via nix by running `nix build .?submodules=1`, or install LLVM 13 and Python from your package manager. Then run `cmake` to create makefiles or a Ninja configuration that you can then use to build the project. It is suggested to create a new folder called `build` and then run `cmake ..` to isolate the generated project files.
 
 ## Targeting inNative
 To build a shared library that does not rely on WASI, you can use `wasm_malloc.c` and clang:

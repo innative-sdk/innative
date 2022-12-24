@@ -109,6 +109,7 @@ void TestHarness::test_assemblyscript()
     if(assembly)
       (*_exports.FreeAssembly)(assembly);
 
+    printf("%s\n", dll_path.string().c_str());
     remove(dll_path);
   };
 
@@ -118,6 +119,7 @@ void TestHarness::test_assemblyscript()
   embedpath.resize((*_exports.GetEmbeddingPath)(CURRENT_ABI, CURRENT_ARCH, false, TEST_EMBEDDING, nullptr, 0));
   embedpath.resize(
     (*_exports.GetEmbeddingPath)(CURRENT_ABI, CURRENT_ARCH, false, TEST_EMBEDDING, embedpath.data(), embedpath.capacity()));
+
   size_t embedsz = 0;
   auto embedfile = utility::LoadFile(embedpath, embedsz);
 
