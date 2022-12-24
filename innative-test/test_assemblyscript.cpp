@@ -109,7 +109,6 @@ void TestHarness::test_assemblyscript()
     if(assembly)
       (*_exports.FreeAssembly)(assembly);
 
-    printf("%s\n", dll_path.string().c_str());
     remove(dll_path);
   };
 
