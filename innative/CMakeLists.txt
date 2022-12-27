@@ -9,7 +9,6 @@ include(CheckSymbolExists)
 include(CMakePushCheckState)
   
 find_package(LLVM REQUIRED CONFIG HINTS ${LLVM_HINTS})
-find_package(Clang REQUIRED)
 find_package(LLD REQUIRED)
 
 if(USE_MIMALLOC)
@@ -73,30 +72,23 @@ else()
   endif()
 endif()
 
-# Link against LLVM libraries
-if(NOT WIN32)
-  list(APPEND llvm_libs "-Wl,--no-whole-archive")
-  list(INSERT llvm_libs 0 "-Wl,--whole-archive")
-endif()
-
 set_target_properties(innative PROPERTIES COMPILE_PDB_NAME "$(TargetName)" POSITION_INDEPENDENT_CODE ON) 
-target_link_libraries(innative PRIVATE ${llvm_libs})
 target_link_directories(innative PRIVATE ${LLVM_LIBRARY_DIR})
 retarget_lib(innative FALSE)
+
+if(${BUILD_SHARED_LIBS})
+  message(STATUS "Building shared libs!")
+  target_link_libraries(innative PRIVATE ${llvm_libs})
+else()
+  message(STATUS "Building static libs!")
+  target_link_libraries(innative PUBLIC ${llvm_libs})
+endif()
 
 if(USE_MIMALLOC)
   target_link_libraries(innative PRIVATE mimalloc-static)
 endif()
 
 if(WIN32)
-  # Cmake does not support linking with a static library
-  if(NOT BUILD_SHARED_LIBS)
-    set_target_properties(innative PROPERTIES OUTPUT_NAME "innative-s")
-    
-    foreach(X IN LISTS LLVM_AVAILABLE_LIBS)
-      SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} \"${LLVM_LIBRARY_DIR}/${X}.lib\"")
-    endforeach()
-  endif()
   set_source_files_properties("innative.rc" PROPERTIES LANGUAGE RC)
   set_source_files_properties("x86_64.asm" PROPERTIES LANGUAGE ASM_MASM)
 else()

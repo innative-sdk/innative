@@ -1,0 +1,15 @@
+{
+  "default-registry": {
+    "kind": "git",
+    "repository": "https://github.com/microsoft/vcpkg",
+    "baseline": "6adca01a3fadca0cc0b80f03ec57c7c3a0be5c02"
+  },
+  "registries": [
+    {
+      "kind": "git",
+      "repository": "https://github.com/Fundament-Software/vcpkg",
+      "baseline": "4bb823e646f2fb97119f4d2804311d6456e2ad26",
+      "packages": [ "feathergui", "innative", "llvm", "mimalloc", "scopes", "spirv-tools", "uvwasi" ]
+    }
+  ]
+}
