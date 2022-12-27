@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 project(innative_sdk VERSION 0.2.0)
-option(BUILD_SHARED_LIBS "enable shared library" ON)
+option(BUILD_SHARED_LIBS "Build all libraries as shared libraries instead of static" OFF)
 option(USE_MIMALLOC "Replace the default allocator with mimalloc" OFF)
 option(USE_DEFAULT_FOLDERS "Don't override the cmake output folders with a unified /bin/ folder. Also disables debug postfix." OFF)
 

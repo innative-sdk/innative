@@ -17,7 +17,6 @@
         "target-webassembly",
         "polly",
         "disable-assertions",
-        "disable-clang-static-analyzer",
         "enable-bindings",
         "enable-terminfo",
         "tools",
@@ -30,5 +29,11 @@
       "host": true
     }
   ],
-  "builtin-baseline": "bd0d552533451bb5da29a5fc6742c0a05ce8ecca"
+  "overrides":
+  [
+    {
+      "name": "llvm",
+      "version": "13.0.0#5"
+    }
+  ]
 }
