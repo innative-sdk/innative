@@ -28,12 +28,7 @@ set_target_properties(innative-loader PROPERTIES COMPILE_PDB_NAME "$(TargetName)
 retarget_output(innative-loader)
 standard_target_flags(innative-loader)
 
-if(WIN32)
-  # Cmake does not support linking with a static library
-  if(NOT BUILD_SHARED_LIBS)
-    set_target_properties(innative-loader PROPERTIES OUTPUT_NAME "innative-loader-s")
-  endif()
-  
+if(WIN32)  
   set_source_files_properties("innative-loader.rc" PROPERTIES LANGUAGE RC)
 else()
   target_link_libraries(innative-loader ${LIB_RT} ${CMAKE_DL_LIBS})

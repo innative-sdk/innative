@@ -30,9 +30,6 @@ retarget_lib(innative-stub FALSE)
 
 if(WIN32)
   # Cmake does not support linking with a static library
-  if(NOT BUILD_SHARED_LIBS)
-    set_target_properties(innative-stub PROPERTIES OUTPUT_NAME "innative-stub-s")
-  endif()
 else()
   target_link_libraries(innative-stub ${CMAKE_DL_LIBS})
 endif()
