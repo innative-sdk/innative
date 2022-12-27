@@ -45,7 +45,6 @@ if(WIN32)
   # Cmake does not support linking with a static library
   if(NOT BUILD_SHARED_LIBS)
     set_target_properties(innative-test PROPERTIES COMPILE_PDB_NAME "$(TargetName)") 
-    set_target_properties(innative-test PROPERTIES OUTPUT_NAME "innative-test-s")
   endif()
   
   set_source_files_properties("innative-test.rc" PROPERTIES LANGUAGE RC)
