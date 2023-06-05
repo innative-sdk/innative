@@ -25,6 +25,8 @@
   #define SETJMP(x)     setjmp(x)
 #endif
 
+#pragma warning(disable : 4062)
+
 using namespace innative;
 using namespace wat;
 using namespace utility;
@@ -429,7 +431,7 @@ int wat::IsolateFunctionCall(Environment& env, FunctionType* ftype, void* f, std
   #ifdef IN_CPU_x86
       __asm mov lpPage, esp;
   #elif defined(IN_CPU_x86_64)
-      lpPage = (void*)GetRSPValue();
+      lpPage = reinterpret_cast<void*>(GetRSPValue());
   #else
     #error unsupported CPU architecture
   #endif

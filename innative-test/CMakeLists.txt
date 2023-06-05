@@ -31,11 +31,18 @@ set_target_properties(innative-test PROPERTIES
 )
 retarget_bin(innative-test)
 
+add_dependencies(innative-test innative-wasi innative-wasi-d)
+add_dependencies(innative-test innative-env innative-env-d)
+add_dependencies(innative-test innative-assemblyscript innative-assemblyscript-d)
+add_dependencies(innative-test innative-test-embedding innative-test-embedding-d)
+
+#target_link_libraries(innative-test innative $<IF:$<CONFIG:Debug>,innative-env-d,innative-env> $<IF:$<CONFIG:Debug>,innative-wasi-d,innative-wasi>)
+  target_link_libraries(innative-test innative $<IF:$<CONFIG:Debug>,innative-env-d,innative-env>)
+  
 if(MSVC)
-  target_link_libraries(innative-test innative innative-env)
   target_compile_options(innative-test PRIVATE /Zc:preprocessor $<$<CONFIG:Release>:/Oi /Ot /GL> ${CPP_WARNINGS})
 else()
-  target_link_libraries(innative-test innative innative-env stdc++fs)
+  target_link_libraries(innative-test stdc++fs)
   #target_compile_options(${target} PRIVATE -fno-exceptions -fno-rtti $<IF:$<CONFIG:Debug>,-g,-O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16> ${CPP_WARNINGS})
   target_compile_options(innative-test PRIVATE -fno-exceptions -fno-rtti -pthread -DLIBICONV_PLUG $<IF:$<CONFIG:Debug>,-g,-O3 -msse -msse2 -msse3 -mmmx -m3dnow -mcx16> ${CPP_WARNINGS})
   target_compile_definitions(innative-test PUBLIC $<IF:$<CONFIG:Debug>,DEBUG,NDEBUG>)

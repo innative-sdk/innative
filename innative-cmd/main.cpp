@@ -44,6 +44,7 @@ static kh_flags_t* env_flags    = kh_init_flags();
 static kh_flags_t* env_optimize = kh_init_flags();
 static kh_flags_t* env_abi      = kh_init_flags();
 static kh_flags_t* env_arch     = kh_init_flags();
+static kh_flags_t* env_wasi     = kh_init_flags();
 
 const static std::initializer_list<std::pair<const char*, unsigned int>> FLAG_MAP = {
   { "strict", ENV_STRICT },
@@ -82,6 +83,10 @@ const static std::initializer_list<std::pair<const char*, unsigned int>> OPTIMIZ
   { "o0", ENV_OPTIMIZE_O0 }, { "o1", ENV_OPTIMIZE_O1 }, { "o2", ENV_OPTIMIZE_O2 },
   { "o3", ENV_OPTIMIZE_O3 }, { "os", ENV_OPTIMIZE_Os }, { "fastmath", ENV_OPTIMIZE_FAST_MATH },
 };
+
+const static std::initializer_list<std::pair<const char*, IN_WASI_VERSION>> WASI_MAP = { { "none", IN_WASI_NONE },
+                                                                                         { "preview1",
+                                                                                           IN_WASI_PREVIEW_1 } };
 
 struct OptBase
 {
@@ -248,9 +253,36 @@ template<> struct Opt<WASM_ENVIRONMENT_FLAGS> : OptBase
   std::string help;
 };
 
+template<class T>
+IN_ERROR StandardEnumParse(kh_flags_t* hmap, T& value, const char* errstring, int argc, char* argv[], int& pos)
+{
+  if(pos >= argc || argv[pos][0] == '-')
+  {
+    std::cout << "Missing command line argument parameter for " << argv[pos - 1] << std::endl;
+    return ERR_MISSING_COMMAND_LINE_PARAMETER;
+  }
+
+  IN_ERROR err = ERR_SUCCESS;
+  if(pos < argc && argv[pos][0] != '-')
+  {
+    khint_t iter = kh_get_flags(hmap, argv[pos]);
+
+    if(kh_exist2(hmap, iter))
+      value = kh_value(hmap, iter);
+    else
+    {
+      std::cout << errstring << argv[pos] << std::endl;
+      err = ERR_INVALID_COMMAND_LINE;
+    }
+    ++pos;
+  }
+
+  return err;
+}
+
 template<> struct Opt<IN_ABI> : OptBase
 {
-  Opt(const char* desc, const char* param = 0) : OptBase(desc, param)
+  Opt(const char* desc, const char* param = 0) : OptBase(desc, param), value(0)
   {
     help = description;
     help += "\n    ABIs:\n    ";
@@ -265,28 +297,7 @@ template<> struct Opt<IN_ABI> : OptBase
 
   virtual IN_ERROR Parse(int argc, char* argv[], int& pos) override
   {
-    if(pos >= argc || argv[pos][0] == '-')
-    {
-      std::cout << "Missing command line argument parameter for " << argv[pos - 1] << std::endl;
-      return ERR_MISSING_COMMAND_LINE_PARAMETER;
-    }
-
-    IN_ERROR err = ERR_SUCCESS;
-    if(pos < argc && argv[pos][0] != '-')
-    {
-      khint_t iter = kh_get_flags(env_abi, argv[pos]);
-
-      if(kh_exist2(env_abi, iter))
-        value = (IN_ABI)kh_value(env_abi, iter);
-      else
-      {
-        std::cout << "Unknown ABI: " << argv[pos] << std::endl;
-        err = ERR_INVALID_COMMAND_LINE;
-      }
-      ++pos;
-    }
-
-    return err;
+    return StandardEnumParse(env_abi, value, "Unknown ABI: ", argc, argv, pos);
   }
 
   uint8_t value;
@@ -295,7 +306,7 @@ template<> struct Opt<IN_ABI> : OptBase
 
 template<> struct Opt<IN_ARCH> : OptBase
 {
-  Opt(const char* desc, const char* param = 0) : OptBase(desc, param)
+  Opt(const char* desc, const char* param = 0) : OptBase(desc, param), value(0)
   {
     // We only list architectures we actually support, and we don't list all the aliases.
     help = description;
@@ -313,28 +324,28 @@ template<> struct Opt<IN_ARCH> : OptBase
 
   virtual IN_ERROR Parse(int argc, char* argv[], int& pos) override
   {
-    if(pos >= argc || argv[pos][0] == '-')
-    {
-      std::cout << "Missing command line argument parameter for " << argv[pos - 1] << std::endl;
-      return ERR_MISSING_COMMAND_LINE_PARAMETER;
-    }
+    return StandardEnumParse(env_arch, value, "Unknown architecture: ", argc, argv, pos);
+  }
 
-    IN_ERROR err = ERR_SUCCESS;
-    if(pos < argc && argv[pos][0] != '-')
-    {
-      khint_t iter = kh_get_flags(env_arch, argv[pos]);
+  uint8_t value;
+  std::string help;
+};
 
-      if(kh_exist2(env_arch, iter))
-        value = kh_value(env_arch, iter);
-      else
-      {
-        std::cout << "Unknown architecture: " << argv[pos] << std::endl;
-        err = ERR_INVALID_COMMAND_LINE;
-      }
-      ++pos;
-    }
+template<> struct Opt<IN_WASI_VERSION> : OptBase
+{
+  Opt(const char* desc, const char* param = 0) : OptBase(desc, param), value(0)
+  {
+    help = description;
+    help += "\n    WASI Versions:"
+            "\n    none"
+            "\n    preview1";
 
-    return err;
+    description = help.c_str();
+  }
+
+  virtual IN_ERROR Parse(int argc, char* argv[], int& pos) override
+  {
+    return StandardEnumParse(env_wasi, value, "Unknown WASI version: ", argc, argv, pos);
   }
 
   uint8_t value;
@@ -383,7 +394,9 @@ struct CommandLine
       "Set the target CPU name for code optimization. Set to \"generic\" for maximum portability (subject to CPU features requested). If this option isn't specified, the host CPU will be targeted."),
     cpu_features(
       "List CPU subfeatures, like SSSE3 or AVX, that the compiler should assume exist. Must be a valid subfeature string that LLVM recognizes.",
-      "<SUBFEATURE>")
+      "<SUBFEATURE>"),
+    wasi("Specifies which WASI version to use, if any."),
+    mappings("List of function mappings in the form <FUNCTION_A=FUNCTION_B>", "<MAPPING>")
   {
     flags.value    = ENV_ENABLE_WAT;
     flags.optimize = ENV_OPTIMIZE_O3;
@@ -437,6 +450,9 @@ struct CommandLine
     Register("cpu-features", &cpu_features);
     Register("arch", &arch);
     Register("architecture", &arch);
+    Register("wasi", &wasi);
+    Register("mappings", &mappings);
+    Register("m", &mappings);
     DumpLastDescription();
 
     usage += "\n\n  Example usage: innative-cmd -r your-module.wasm";
@@ -539,6 +555,8 @@ struct CommandLine
   Opt<IN_ARCH> arch;
   Opt<std::string> cpu_name;
   Opt<std::vector<std::string>> cpu_features;
+  Opt<IN_WASI_VERSION> wasi;
+  Opt<std::vector<std::string>> mappings;
 
   std::vector<const char*> inputs;
   std::vector<const char*> wast; // WAST files will be executed in the order they are specified, after all other modules are
@@ -577,29 +595,23 @@ void dump_validation_errors(INExports& exports, Environment* env)
   }
 }
 
+template<class T> void init_mapping(const std::initializer_list<T>& map, kh_flags_t* env_mapping, int* err)
+{
+  for(auto& f : map)
+  {
+    khiter_t iter               = kh_put_flags(env_mapping, f.first, err);
+    kh_value(env_mapping, iter) = f.second;
+  }
+}
+
 int main(int argc, char* argv[])
 {
   int err;
-  for(auto& f : FLAG_MAP)
-  {
-    khiter_t iter               = kh_put_flags(::env_flags, f.first, &err);
-    kh_value(::env_flags, iter) = f.second;
-  }
-  for(auto& f : OPTIMIZE_MAP)
-  {
-    khiter_t iter                  = kh_put_flags(::env_optimize, f.first, &err);
-    kh_value(::env_optimize, iter) = f.second;
-  }
-  for(auto& f : ABI_MAP)
-  {
-    khiter_t iter             = kh_put_flags(::env_abi, f.first, &err);
-    kh_value(::env_abi, iter) = f.second;
-  }
-  for(auto& f : ARCH_MAP)
-  {
-    khiter_t iter              = kh_put_flags(::env_arch, f.first, &err);
-    kh_value(::env_arch, iter) = f.second;
-  }
+  init_mapping(FLAG_MAP, ::env_flags, &err);
+  init_mapping(OPTIMIZE_MAP, ::env_optimize, &err);
+  init_mapping(ABI_MAP, ::env_abi, &err);
+  init_mapping(ARCH_MAP, ::env_arch, &err);
+  init_mapping(WASI_MAP, ::env_wasi, &err);
 
   CommandLine commandline;
   err = commandline.Parse(argc - 1, argv + 1); // skip 0th parameter

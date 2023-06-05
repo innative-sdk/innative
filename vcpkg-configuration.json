@@ -1,15 +1,19 @@
 {
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg-configuration.schema.json",
   "default-registry": {
     "kind": "git",
     "repository": "https://github.com/microsoft/vcpkg",
-    "baseline": "6adca01a3fadca0cc0b80f03ec57c7c3a0be5c02"
+    "baseline": "dd1b57240ef5db0232e83442712574dfa6c29931"
   },
   "registries": [
     {
       "kind": "git",
       "repository": "https://github.com/Fundament-Software/vcpkg",
-      "baseline": "c68b75dbfe9f82ab7734b7b96a7a9dcb919d7e33",
-      "packages": [ "feathergui", "innative", "llvm", "mimalloc", "scopes", "spirv-tools", "uvwasi" ]
+      "baseline": "61c86bb2e5657a806e9f23397962457af42c1b7f",
+      "packages": [ "capnproto", "feathergui", "innative", "llvm", "mimalloc", "scopes", "spirv-tools", "uvwasi", "libuv" ]
     }
+  ],
+  "overlay-ports": [
+    "../vcpkg-fs/ports"
   ]
 }

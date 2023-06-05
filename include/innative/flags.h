@@ -37,7 +37,7 @@ enum WASM_ENVIRONMENT_FLAGS
   // LLVM IR that is compiled to machine code. This can be used to investigate compiler bugs or unexpected behavior.
   ENV_EMIT_LLVM = (1 << 6),
 
-  // Forces all internal functions to use the standard C ABI instead of an fast internal representation. Not compatible with
+  // Forces all internal functions to use the standard C ABI instead of a fast internal representation. Not compatible with
   // multiple return values.
   ENV_FORCE_C_EXPORTS = (1 << 7),
 

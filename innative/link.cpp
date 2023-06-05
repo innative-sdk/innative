@@ -350,7 +350,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
         "/ERRORREPORT:QUEUE",
         "/INCREMENTAL:NO",
         "/NOLOGO",
-        "/NODEFAULTLIB",
+        //"/NODEFAULTLIB",
         /*"/MANIFESTUAC:level=asInvoker", "/MANIFEST:EMBED",*/ "/SUBSYSTEM:CONSOLE",
         "/VERBOSE",
         "/OPT:REF",
@@ -411,7 +411,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
         fwrite(epilogue, 1, sizeof(epilogue) - 1, f);
         fclose(f);
       }
-
+      cache.push_back("/errorlimit:0");
       for(varuint32 i = 0; i < env->n_exports; ++i)
         cache.push_back(std::string("/EXPORT:") + env->exports[i]);
     }

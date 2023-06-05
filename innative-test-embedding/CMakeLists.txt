@@ -23,10 +23,10 @@ else()
   target_compile_options(innative-test-embedding-d PRIVATE -fno-stack-protector -g ${C_WARNINGS})
 endif()
 
-target_compile_definitions(innative-test-embedding PUBLIC NDEBUG)
-target_compile_definitions(innative-test-embedding-d PUBLIC DEBUG)
-target_include_directories(innative-test-embedding PUBLIC ${CMAKE_SOURCE_DIR}/include)
-target_include_directories(innative-test-embedding-d PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_compile_definitions(innative-test-embedding PRIVATE NDEBUG)
+target_compile_definitions(innative-test-embedding-d PRIVATE DEBUG)
+target_include_directories(innative-test-embedding PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(innative-test-embedding-d PRIVATE ${CMAKE_SOURCE_DIR}/include)
 set_target_properties(innative-test-embedding PROPERTIES 
   DEBUG_POSTFIX "" 
   POSITION_INDEPENDENT_CODE ON

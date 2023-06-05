@@ -10,6 +10,8 @@ __KHASH_IMPL(exports, , Identifier, varuint32, 1, innative::internal::__ac_X31_h
 __KHASH_IMPL(cimport, , Identifier, char, 1, innative::internal::__ac_X31_hash_bytearray, kh_int_hash_equal);
 __KHASH_IMPL(modules, , Identifier, size_t, 1, innative::internal::__ac_X31_hash_bytearray, kh_int_hash_equal);
 __KHASH_IMPL(modulepair, , kh_cstr_t, FunctionType, 1, innative::internal::__ac_X31_hash_string_pair, str_pair_hash_equal);
+__KHASH_IMPL(fmapping, , kh_cstr_t, kh_cstr_t, 1, __ac_X31_hash_string, kh_str_hash_equal);
+__KHASH_IMPL(prependmap, , kh_cstr_t, int, 1, __ac_X31_hash_string, kh_str_hash_equal);
 
 void IN_WASM_BYTE_ARRAY::from(const char* s, const Environment& env)
 {

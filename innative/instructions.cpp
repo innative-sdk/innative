@@ -1125,7 +1125,8 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
   }
 
   // Comparison operators
-  case OP_i32_eqz: values.Push(builder.getInt32(0)); // Fallthrough to OP_i32_eq
+  case OP_i32_eqz:
+    values.Push(builder.getInt32(0)); [[fallthrough]];
   case OP_i32_eq:
     return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpEQ,
                                                                        OP::NAMES[ins.opcode]);
@@ -1156,7 +1157,7 @@ IN_ERROR Compiler::CompileInstruction(Instruction& ins)
   case OP_i32_ge_u:
     return CompileBinaryOp<TE_i32, TE_i32, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpUGE,
                                                                        OP::NAMES[ins.opcode]);
-  case OP_i64_eqz: values.Push(builder.getInt64(0)); // Fallthrough to OP_i64_eq
+  case OP_i64_eqz: values.Push(builder.getInt64(0)); [[fallthrough]];
   case OP_i64_eq:
     return CompileBinaryOp<TE_i64, TE_i64, TE_i32, const llvm::Twine&>(&llvm::IRBuilderBase::CreateICmpEQ,
                                                                        OP::NAMES[ins.opcode]);

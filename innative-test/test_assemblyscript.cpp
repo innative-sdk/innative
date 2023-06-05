@@ -8,11 +8,7 @@
 
 using namespace innative;
 
-#ifdef IN_DEBUG
-  #define TEST_EMBEDDING "innative-assemblyscript-d"
-#else
-  #define TEST_EMBEDDING "innative-assemblyscript"
-#endif
+#define TEST_EMBEDDING "innative-assemblyscript"
 
 #ifdef IN_PLATFORM_POSIX
   #define LONGJMP(x, i) siglongjmp(x, i)

@@ -61,6 +61,14 @@ enum IN_EMBEDDING_TAGS
   IN_TAG_DYNAMIC  // Dynamic (shared) library
 };
 
+// This enum is used to automatically generate uvwasi mappings for a particular wasi preview version
+enum IN_WASI_VERSION
+{
+  IN_WASI_NONE,
+  IN_WASI_PREVIEW_1,
+  // IN_WASI_PREVIEW_2
+};
+
 typedef struct IN__TABLE_ENTRY
 {
   IN_Entrypoint func;
@@ -150,10 +158,20 @@ typedef struct IN__EXPORTS
   int (*AddModuleObject)(Environment* env, const Module* m);
 
   /// Adds a whitelist entry to the environment. This will only be used if the whitelist is enabled via the ENV_WHITELIST
-  /// flag. \param env The environment to modify. \param module_name The name of a module, in case the C function is
-  /// actually a name-mangled WebAssembly function. This parameter should be null for standard C functions. \param
-  /// export_name The name of the function to add to the whitelist. Must be a valid UTF8 WebAssembly function name.
+  /// flag.
+  /// \param env The environment to modify.
+  /// \param module_name The name of a module, in case the C function is actually a name-mangled WebAssembly function. This
+  /// parameter should be null for standard C functions.
+  /// \param export_name The name of the function to add to the whitelist. Must be a valid UTF8 WebAssembly function name.
   enum IN_ERROR (*AddWhitelist)(Environment* env, const char* module_name, const char* export_name);
+
+  /// Adds a function mapping to the environment. When the compiler finds source_name imported from source_module, it directly
+  /// maps this function call to a symbol matching target instead of canonicalizing it as a C function.
+  /// \param env The environment to modify.
+  /// \param source_module The name of a module that contains the function. Can be NULL if this is just a C-function.
+  /// \param source_name The name of the function that is being imported.
+  /// \param target The name of an existing C function that the function should resolve to.
+  enum IN_ERROR (*AddFuncMapping)(Environment* env, const char* source_module, const char* source_name, const char* target);
 
   /// Adds an embedding to the environment. This is usually a static or shared C library that exposes C functions that the
   /// WebAssembly modules can call.
@@ -176,6 +194,12 @@ typedef struct IN__EXPORTS
   /// \param feature The feature string to add. If NULL, cpu_features will be initialized to an empty list, preventing
   ///                the environment from automatically filling in the feature list using the current CPU.
   enum IN_ERROR (*AddCPUFeature)(Environment* env, const char* feature);
+
+  /// Shortcut function for automatically setting up a standard innative WASI embedding.
+  /// \param env The environment to modify.
+  /// \param version The WASI version to use.
+  /// \param debug Whether the debug version of the embedding should be linked to.
+  enum IN_ERROR (*SetupWASI)(Environment* env, enum IN_WASI_VERSION version, bool debug);
 
   /// Finalizes the environment, blocking until all modules have finished loading (in case of any asynchronous loads) and
   /// ensures all configuration data is loaded.

@@ -20,6 +20,8 @@ namespace innative {
   }
 }
 
+#pragma warning(disable : 4062)
+
 WatParser::WatParser(Environment& e, Module& mod) : m(mod), env(e)
 {
   typehash   = kh_init_indexname();
@@ -1366,7 +1368,7 @@ int WatParser::AddName(kh_indexname_t* h, WatToken t, varuint32 index, DebugInfo
     if(iter != kh_end(h))
       kh_val(h, iter) = index;
     if(info)
-      info->name.from((uint8_t*)t.pos, t.len, env);
+      info->name.from(reinterpret_cast<const uint8_t*>(t.pos), t.len, env);
   }
 
   return ERR_SUCCESS;

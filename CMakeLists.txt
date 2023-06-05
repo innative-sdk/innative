@@ -173,6 +173,7 @@ endfunction()
 
 add_subdirectory(innative)
 add_subdirectory(innative-env)
+add_subdirectory(innative-wasi)
 add_subdirectory(innative-cmd)
 add_subdirectory(innative-stub)
 #add_subdirectory(innative-loader)
@@ -184,16 +185,46 @@ set(INSTALL_BIN_DIR "${CMAKE_INSTALL_PREFIX}/bin" CACHE PATH "Installation direc
 set(INSTALL_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib" CACHE PATH "Installation directory for libraries")
 set(INSTALL_INC_DIR "${CMAKE_INSTALL_PREFIX}/include" CACHE PATH "Installation directory for headers")
 
-install(TARGETS innative innative-cmd innative-stub innative-test
+install(TARGETS innative 
+        EXPORT innativeTargets
         RUNTIME DESTINATION ${INSTALL_BIN_DIR}
         ARCHIVE DESTINATION ${INSTALL_LIB_DIR}
-        LIBRARY DESTINATION ${INSTALL_LIB_DIR}  )
+        LIBRARY DESTINATION ${INSTALL_LIB_DIR}  
+        INCLUDES DESTINATION ${INSTALL_INC_DIR})
+        
+install(TARGETS innative-cmd innative-stub innative-test
+        RUNTIME DESTINATION ${INSTALL_BIN_DIR}
+        ARCHIVE DESTINATION ${INSTALL_LIB_DIR}
+        LIBRARY DESTINATION ${INSTALL_LIB_DIR})
 
-        install(TARGETS innative-env innative-assemblyscript innative-test-embedding
+install(TARGETS innative-env innative-assemblyscript
+        EXPORT innativeTargetLibs
         ARCHIVE DESTINATION ${INSTALL_LIB_DIR}/${TARGET_SYS}-${TARGET_ARCH}
         LIBRARY DESTINATION ${INSTALL_LIB_DIR}/${TARGET_SYS}-${TARGET_ARCH}  )
 
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/scripts" DESTINATION ${CMAKE_INSTALL_PREFIX})
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/spec" DESTINATION ${CMAKE_INSTALL_PREFIX})
-
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/include/innative" DESTINATION "${INSTALL_INC_DIR}")
+
+install(EXPORT innativeTargets
+        FILE innativeTargets.cmake
+        NAMESPACE innative::
+        DESTINATION share/innative
+)
+
+install(EXPORT innativeTargetLibs
+        FILE innativeTargetLibs.cmake
+        NAMESPACE innative::
+        DESTINATION share/innative
+)
+
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/innativeConfig.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/innativeConfig.cmake"
+  INSTALL_DESTINATION "share/innative"
+)
+install(
+  FILES "${CMAKE_CURRENT_BINARY_DIR}/innativeConfig.cmake"
+  DESTINATION "share/innative"
+)

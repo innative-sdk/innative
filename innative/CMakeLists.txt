@@ -49,7 +49,10 @@ endif()
 # add library and include directories
 add_library(innative ${inNative_SOURCES} ${inNative_EX_SOURCES})
 target_include_directories(innative PRIVATE ${LLVM_INCLUDE_DIRS})
-target_include_directories(innative PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(innative PUBLIC  
+      $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>  
+      $<INSTALL_INTERFACE:include>
+  )
 
 # Append LLD libraries because LLD doesn't have CMake info and remove libraries we don't need
 llvm_map_components_to_libnames(llvm_libs orcjit passes option objcarcopts coverage support coroutines frontendopenmp RISCV AArch64 WebAssembly X86 debuginfocodeview debuginfodwarf debuginfogsym debuginfomsf debuginfopdb LTO WindowsManifest LibDriver)

@@ -502,8 +502,16 @@ enum IN_ARCH
 };
 
 KHASH_DECLARE(modulepair, kh_cstr_t, FunctionType);
+KHASH_DECLARE(fmapping, kh_cstr_t, kh_cstr_t);
+KHASH_DECLARE(prependmap, kh_cstr_t, int);
 
 struct IN_WASM_ALLOCATOR;
+
+struct IN_WASM_FUNCTION_PREPEND
+{
+  const char* create;
+  const char* destroy;
+};
 
 // Represents a collection of webassembly modules and configuration options that will be compiled into a single binary
 typedef struct IN_WASM_ENVIRONMENT
@@ -538,9 +546,13 @@ typedef struct IN_WASM_ENVIRONMENT
   const char** exports;                                                       // Use AddCustomExport() to manage this list
   varuint32 n_exports;
   void* user;
+  struct IN_WASM_FUNCTION_PREPEND* prepends;
+  int n_prepends;
 
   struct kh_modules_s* modulemap;
   struct kh_modulepair_s* whitelist;
+  struct kh_fmapping_s* funcmappings;
+  struct kh_prependmap_s* funcprepends;
   struct kh_cimport_s* cimports;
   LLVM_LLVM_compiler* context;
   IN_JIT_context* jit;
