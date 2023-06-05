@@ -9,7 +9,7 @@
 #include "link.h"
 #include "innative/export.h"
 #include "jit.h"
-//#include "polly/RegisterPasses.h"
+// #include "polly/RegisterPasses.h"
 
 #define DIVIDER ":"
 #ifdef IN_COMPILER_MSC
@@ -26,6 +26,7 @@ using llvm::ConstantFP;
 
 namespace innative {
   __KHASH_IMPL(importhash, , const char*, llvm::GlobalObject*, 1, kh_str_hash_func, kh_str_hash_equal);
+  __KHASH_IMPL(prependhash, , const char*, llvm::GlobalObject*, 1, kh_str_hash_func, kh_str_hash_equal);
 }
 
 using namespace innative;
@@ -50,7 +51,7 @@ Compiler::Compiler(Environment& _env, Module& _m, llvm::LLVMContext& _ctx, llvm:
   env(_env),
   m(_m),
   ctx(_ctx),
-  mod(_mod),
+  mod(!_mod ? new llvm::Module(m.name.str(), ctx) : _mod),
   builder(_builder),
   machine(_machine),
   importhash(_importhash),
@@ -196,6 +197,9 @@ Func* Compiler::WrapFunction(Func* fn, llvm::StringRef name, llvm::StringRef can
   std::vector<llvmVal*> values;
   for(auto& arg : wrap->args())
     values.push_back(&arg);
+
+  fn->getName();
+
   auto call = builder.CreateCall(fn, values);
   call->setCallingConv(fn->getCallingConv());
   call->setAttributes(fn->getAttributes());
@@ -803,7 +807,7 @@ const Compiler::Intrinsic* Compiler::GetIntrinsic(Import& imp)
 
 Func* Compiler::TopLevelFunction(llvm::LLVMContext& context, llvm::IRBuilder<>& builder, const char* name, llvm::Module* m)
 {
-  Func* fn  = Func::Create(FuncTy::get(builder.getVoidTy(), false), Func::ExternalLinkage, name, m);
+  Func* fn = Func::Create(FuncTy::get(builder.getVoidTy(), false), Func::ExternalLinkage, name, m);
 
   BB* initblock = BB::Create(context, "entry", fn);
   builder.SetInsertPoint(initblock);
@@ -855,7 +859,6 @@ int innative::GetCallingConvention(const Import& imp)
 
 IN_ERROR Compiler::CompileModule(varuint32 m_idx)
 {
-  mod = new llvm::Module(m.name.str(), ctx);
   mod->setTargetTriple(machine->getTargetTriple().getTriple());
   mod->setDataLayout(machine->createDataLayout());
   intptrty = builder.getIntPtrTy(mod->getDataLayout(), 0);
@@ -881,6 +884,21 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
     builder.CreateCall(Func::Create(FuncTy::get(builder.getVoidTy(), { builder.getInt32Ty() }, false),
                                     Func::ExternalLinkage, "_innative_internal_env_init_isa_flags", *mod),
                        { builder.getInt32(machine->getTargetFeatureString().contains("+sse2") ? 1 : 0) });
+  }
+
+  // Insert context initialization into module 0
+  for(int i = 0; i < env.n_prepends; ++i)
+  {
+    prepends.push_back(new llvm::GlobalVariable(
+      *mod, builder.getInt8PtrTy(), false, Func::ExternalLinkage, nullptr,
+      CanonicalName(StringSpan::From(0), StringSpan::From("_innative_internal_context_prepend"), i).c_str(), nullptr,
+      llvm::GlobalValue::NotThreadLocal, 0, m_idx != 0));
+    if(m_idx == 0)
+    {
+      auto value = builder.CreateCall(
+        Func::Create(FuncTy::get(builder.getInt8PtrTy(), {}, false), Func::ExternalLinkage, env.prepends[i].create, *mod));
+      builder.CreateStore(value, prepends.back());
+    }
   }
 
   // Declare C runtime function prototypes that we assume exist on the system
@@ -1273,6 +1291,16 @@ IN_ERROR Compiler::CompileModule(varuint32 m_idx)
                               debugger->GetSourceFile(0), 0, 0);
   debugger->SetSPLocation(builder, exit->getSubprogram());
 
+  if(m_idx == 0)
+  {
+    for(int i = 0; i < env.n_prepends; ++i)
+    {
+      builder.CreateCall(Func::Create(FuncTy::get(builder.getVoidTy(), { builder.getInt8PtrTy() }, false),
+                                      Func::ExternalLinkage, env.prepends[i].destroy, *mod),
+                         { builder.CreateLoad(prepends[i]->getType()->getPointerElementType(), prepends[i]) });
+    }
+  }
+
   // Don't accidentally delete imported linear memories
   for(size_t i = m.importsection.memories - m.importsection.tables; i < memories.size(); ++i)
     builder.CreateCall(fn_memfree, { LoadPairPtr(memories[i], 0), LoadPairPtr(memories[i], 1) })
@@ -1641,7 +1669,7 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
   LLVMInitializeX86AsmPrinter();
   LLVMInitializeX86AsmParser();
   LLVMInitializeX86Disassembler();
-  //polly::initializePollyPasses(*llvm::PassRegistry::getPassRegistry());
+  // polly::initializePollyPasses(*llvm::PassRegistry::getPassRegistry());
 
   llvm::Triple triple(EnumToString(ARCH_MAP, env->arch, 0, 0), "pc", EnumToString(ABI_MAP, env->abi, 0, 0));
 
@@ -1730,7 +1758,7 @@ IN_ERROR innative::CompileEnvironment(Environment* env, const char* outfile)
       if(env->modules[i].cache)
         DeleteCache(*env, env->modules[i]);
       env->modules[i].cache = new Compiler(
-        *env, env->modules[i], *env->context, 0, builder, machine, kh_init_importhash(),
+        *env, env->modules[i], *env->context, nullptr, builder, machine, kh_init_importhash(),
         GetLinkerObjectPath(*env, env->modules[i], file, env->abi == IN_ABI_Windows ? LLD_FORMAT::COFF : LLD_FORMAT::ELF));
       if(!env->modules[i].cache->objfile.empty())
         remove(env->modules[i].cache->objfile);
@@ -1902,7 +1930,7 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
 {
   //::llvm::DebugFlag = true;
 
-  // Set up our target architecture, necessary up here so our code generation knows how big a pointer is 
+  // Set up our target architecture, necessary up here so our code generation knows how big a pointer is
   // LLVMInitializeNativeTarget();
   // LLVMInitializeNativeAsmPrinter();
   // LLVMInitializeNativeAsmParser();
@@ -1931,7 +1959,7 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
   LLVMInitializeX86AsmPrinter();
   LLVMInitializeX86AsmParser();
   LLVMInitializeX86Disassembler();
-  //polly::initializePollyPasses(*llvm::PassRegistry::getPassRegistry());
+  // polly::initializePollyPasses(*llvm::PassRegistry::getPassRegistry());
 
   // Build the JIT and LLVM contexts
   if(!env->jit)
@@ -2002,8 +2030,8 @@ IN_ERROR innative::CompileEnvironmentJIT(Environment* env, bool expose_process)
     {
       if(env->modules[i].cache)
         DeleteCache(*env, env->modules[i]);
-      env->modules[i].cache =
-        new Compiler(*env, env->modules[i], env->jit->GetContext(), 0, builder, &machine, kh_init_importhash(), path());
+      env->modules[i].cache = new Compiler(*env, env->modules[i], env->jit->GetContext(), nullptr, builder, &machine,
+                                           kh_init_importhash(), path());
 
       if((err = env->modules[i].cache->CompileModule(i)) < 0)
         return err;

@@ -46,6 +46,7 @@ public:
   void test_variadic();
   void test_errors();
   void test_funcreplace();
+  void test_wasi();
   int CompileWASM(const path& file, int (TestHarness::*fn)(void*), const char* system = nullptr,
                   std::function<int(Environment*)> preprocess = std::function<int(Environment*)>(), const char* name = nullptr, const char* out = nullptr);
   void Clean();
@@ -55,6 +56,7 @@ public:
   int do_embedding(void* assembly);
   int do_embedding2(void* assembly);
   int do_variadic(void* assembly);
+  int do_wasi(void* assembly);
 
   inline std::pair<uint32_t, uint32_t> Results()
   {

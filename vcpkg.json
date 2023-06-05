@@ -27,7 +27,8 @@
     {
       "name": "vcpkg-cmake",
       "host": true
-    }
+    },
+    "uvwasi"
   ],
   "overrides":
   [

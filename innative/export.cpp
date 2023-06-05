@@ -16,9 +16,11 @@ void innative_runtime(INExports* exports)
   exports->AddModule               = &AddModule;
   exports->AddModuleObject         = &AddModuleObject;
   exports->AddWhitelist            = &AddWhitelist;
+  exports->AddFuncMapping          = &AddFuncMapping;
   exports->AddEmbedding            = &AddEmbedding;
   exports->AddCPUFeature           = &AddCPUFeature;
   exports->AddCustomExport         = &AddCustomExport;
+  exports->SetupWASI               = &SetupWASI;
   exports->FinalizeEnvironment     = &FinalizeEnvironment;
   exports->Validate                = &Validate;
   exports->Compile                 = &Compile;

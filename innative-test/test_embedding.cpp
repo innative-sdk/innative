@@ -6,11 +6,7 @@
 
 using namespace innative;
 
-#ifdef IN_DEBUG
-  #define TEST_EMBEDDING "innative-test-embedding-d"
-#else
-  #define TEST_EMBEDDING "innative-test-embedding"
-#endif
+#define TEST_EMBEDDING "innative-test-embedding"
 
 int TestHarness::do_embedding(void* assembly)
 {

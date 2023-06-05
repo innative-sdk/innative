@@ -17,9 +17,12 @@ namespace innative {
   void AddModule(Environment* env, const void* data, size_t size, const char* name, int* err);
   int AddModuleObject(Environment* env, const Module* m);
   enum IN_ERROR AddWhitelist(Environment* env, const char* module_name, const char* export_name);
+  enum IN_ERROR AddFuncMapping(Environment* env, const char* source_module, const char* source_name, const char* target);
   enum IN_ERROR AddEmbedding(Environment* env, int tag, const void* data, size_t size, const char* name_override);
   enum IN_ERROR AddCustomExport(Environment* env, const char* symbol);
   enum IN_ERROR AddCPUFeature(Environment* env, const char* feature);
+  int RegisterPrepend(Environment* env, const char* initfunc, const char* destroyfunc);
+  enum IN_ERROR AddPrepend(Environment* env, const char* c_funcname, int id);
   enum IN_ERROR FinalizeEnvironment(Environment* env);
   enum IN_ERROR Validate(Environment* env);
   enum IN_ERROR Compile(Environment* env, const char* file);
@@ -62,6 +65,7 @@ namespace innative {
   int InsertModuleReturn(Environment* env, FunctionType* func, varuint32 index, varsint7 result);
   int RemoveModuleReturn(Environment* env, FunctionType* func, varuint32 index);
   size_t ReserveModule(Environment* env, int* err);
+  enum IN_ERROR SetupWASI(Environment* env, enum IN_WASI_VERSION version, bool debug);
 
   IN_Entrypoint LoadFunctionLambda(void* p, void* (*load)(void*, const char*), const char* module_name,
                                    const char* function);

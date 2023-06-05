@@ -14,11 +14,6 @@
   #include "../innative/win32.h"
   #include <intrin.h>
 
-  #define GETEMBED(NAME, TARGET, ISDEBUG)                                                 \
-    auto len_##NAME = GetEmbeddingPath(CURRENT_ABI, CURRENT_ARCH, ISDEBUG, TARGET, 0, 0); \
-    char* NAME      = (char*)alloca(len_##NAME);                                          \
-    GetEmbeddingPath(CURRENT_ABI, CURRENT_ARCH, ISDEBUG, TARGET, NAME, len_##NAME);
-
 namespace innative {
   namespace utility {
   #define MAKEWSTRING2(x) L"" #x

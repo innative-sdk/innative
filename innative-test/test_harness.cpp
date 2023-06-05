@@ -37,6 +37,7 @@ int TestHarness::Log(const Environment* env, const char* f, ...)
 size_t TestHarness::Run(FILE* out)
 {
   std::pair<const char*, void (TestHarness::*)()> tests[] = { { "wasm_malloc.c", &TestHarness::test_malloc },
+                                                              { "wasi", &TestHarness::test_wasi },
                                                               { "assemblyscript", &TestHarness::test_assemblyscript },
                                                               { "whitelist", &TestHarness::test_whitelist },
                                                               { "debugging.cpp", &TestHarness::test_debug },

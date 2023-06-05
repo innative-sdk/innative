@@ -15,6 +15,7 @@
 
 namespace innative {
   KHASH_DECLARE(importhash, const char*, llvm::GlobalObject*);
+  KHASH_DECLARE(prependhash, const char*, llvm::GlobalObject*);
 
   namespace utility {
     template<typename... Args>
@@ -113,6 +114,7 @@ namespace innative {
     llvm::IRBuilder<>& builder;
     llvm::TargetMachine* machine;
     kh_importhash_t* importhash;
+    std::vector<llvm::GlobalVariable*> prepends;
     path objfile; // If this module has been compiled to a .obj file, stores the path so we can reliably delete it.
     std::unique_ptr<Debugger> debugger;
     Stack<llvm::Value*> values; // Tracks the current value stack

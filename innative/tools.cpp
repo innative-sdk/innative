@@ -40,6 +40,7 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
     env->modulemap = kh_init_modules();
     env->whitelist = kh_init_modulepair();
     env->cimports  = kh_init_cimport();
+    env->cimports  = kh_init_cimport();
     env->modules   = trealloc<Module>(0, modules);
     env->alloc     = new IN_WASM_ALLOCATOR();
 
@@ -69,10 +70,13 @@ Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxt
       free(env);
       return nullptr;
     }
-
-    env->objpath  = 0;
-    env->system   = "";
-    env->wasthook = 0;
+    env->funcmappings = kh_init_fmapping();
+    env->funcprepends = kh_init_prependmap();
+    env->prepends     = nullptr;
+    env->n_prepends   = 0;
+    env->objpath      = 0;
+    env->system       = "";
+    env->wasthook     = 0;
   }
   return env;
 }
@@ -106,6 +110,8 @@ void innative::DestroyEnvironment(Environment* env)
   kh_destroy_modulepair(env->whitelist);
   kh_destroy_modules(env->modulemap);
   kh_destroy_cimport(env->cimports);
+  kh_destroy_fmapping(env->funcmappings);
+  kh_destroy_prependmap(env->funcprepends);
   free(env->modules);
   free(env);
 }
@@ -238,6 +244,106 @@ IN_ERROR innative::AddWhitelist(Environment* env, const char* module_name, const
   return ERR_SUCCESS;
 }
 
+enum IN_ERROR innative::AddFuncMapping(Environment* env, const char* source_module, const char* source_name,
+                                       const char* target)
+{
+  if(!source_name)
+    return utility::LogErrorString(*env, "%s: source name can't be empty", ERR_PARSE_INVALID_NAME);
+  if(!target)
+    return utility::LogErrorString(*env, "%s: target name can't be empty", ERR_PARSE_INVALID_NAME);
+  
+  auto src  = AllocString(*env, CanonicalName(StringSpan::From(source_module), StringSpan::From(source_name)));
+
+  int r;
+  auto iter = kh_put_fmapping(env->funcmappings, src, &r);
+  if(r != 1)
+    return utility::LogErrorString(*env, "%s: source name was already present in hash table or failed to be inserted.",
+                                   ERR_FATAL_DUPLICATE_EXPORT);
+
+  kh_val(env->funcmappings, iter) = AllocString(*env, target, strlen(target));
+  return ERR_SUCCESS;
+}
+
+enum IN_ERROR innative::SetupWASI(Environment* env, enum IN_WASI_VERSION version, bool debug)
+{
+  constexpr char const* wasi_preview1[] = { "args_get",
+                                            "args_sizes_get",
+                                            "clock_res_get",
+                                            "clock_time_get",
+                                            "environ_get",
+                                            "environ_sizes_get",
+                                            "fd_advise",
+                                            "fd_allocate",
+                                            "fd_close",
+                                            "fd_datasync",
+                                            "fd_fdstat_get",
+                                            "fd_fdstat_set_flags",
+                                            "fd_fdstat_set_rights",
+                                            "fd_filestat_get",
+                                            "fd_filestat_set_size",
+                                            "fd_filestat_set_times",
+                                            "fd_pread",
+                                            "fd_prestat_get",
+                                            "fd_prestat_dir_name",
+                                            "fd_pwrite",
+                                            "fd_read",
+                                            "fd_readdir",
+                                            "fd_renumber",
+                                            "fd_seek",
+                                            "fd_sync",
+                                            "fd_tell",
+                                            "fd_write",
+                                            "path_create_directory",
+                                            "path_filestat_get",
+                                            "path_filestat_set_times",
+                                            "path_link",
+                                            "path_open",
+                                            "path_readlink",
+                                            "path_remove_directory",
+                                            "path_rename",
+                                            "path_symlink",
+                                            "path_unlink_file",
+                                            "poll_oneoff",
+                                            "proc_exit",
+                                            "proc_raise",
+                                            "random_get",
+                                            "sched_yield",
+                                            "sock_recv",
+                                            "sock_send",
+                                            "sock_shutdown" };
+
+  const std::string prefix = "uvwasi_";
+
+  switch(version)
+  {
+  case IN_WASI_PREVIEW_1:
+  {
+    int len         = GetEmbeddingPath(CURRENT_ABI, CURRENT_ARCH, debug, "innative-wasi", 0, 0);
+    char* embedpath = tmalloc<char>(*env, len + 1);
+    GetEmbeddingPath(CURRENT_ABI, CURRENT_ARCH, debug, "innative-wasi", embedpath, len);
+    AddEmbedding(env, IN_TAG_ANY, embedpath, 0, 0);
+
+    int regid =
+      RegisterPrepend(env, "__innative_internal_uvwasi_register_context", "__innative_internal_uvwasi_destroy_context");
+
+    for(auto name : wasi_preview1)
+    {
+      const std::string c_name = (prefix + name).c_str();
+      if(auto err = AddFuncMapping(env, "wasi_snapshot_preview1", name, c_name.c_str()))
+        return err;
+      if(auto err = AddWhitelist(env, nullptr, c_name.c_str()))
+        return err;
+      if(auto err = AddPrepend(env, c_name.c_str(), regid))
+        return err;
+    }
+  }
+  break;
+  default: return utility::LogErrorString(*env, "%s: unknown WASI version!", ERR_UNKNOWN_FLAG);
+  }
+
+  return ERR_SUCCESS;
+}
+
 IN_ERROR innative::AddEmbedding(Environment* env, int tag, const void* data, size_t size, const char* name_override)
 {
   if(!env)
@@ -294,6 +400,32 @@ IN_ERROR innative::AddCPUFeature(Environment* env, const char* feature)
   return ERR_SUCCESS;
 }
 
+int innative::RegisterPrepend(Environment* env, const char* initfunc, const char* destroyfunc)
+{
+  IN_ERROR err = ReallocArray(*env, env->prepends, env->n_prepends);
+  if(err < 0)
+    return -1;
+
+  env->prepends[env->n_prepends - 1] =
+    IN_WASM_FUNCTION_PREPEND{ AllocString(*env, initfunc), AllocString(*env, destroyfunc) };
+  return env->n_prepends - 1;
+}
+
+enum IN_ERROR innative::AddPrepend(Environment* env, const char* c_funcname, int id)
+{
+  if(!c_funcname)
+    return utility::LogErrorString(*env, "%s: function name can't be empty", ERR_PARSE_INVALID_NAME);
+
+  int r;
+  auto iter = kh_put_prependmap(env->funcprepends, AllocString(*env, c_funcname), &r);
+  if(r != 1)
+    return utility::LogErrorString(*env, "%s: function name was already present in hash table or failed to be inserted.",
+                                   ERR_FATAL_DUPLICATE_EXPORT);
+
+  kh_val(env->funcprepends, iter) = id;
+  return ERR_SUCCESS;
+}
+
 IN_ERROR innative::FinalizeEnvironment(Environment* env)
 {
   if(env->cimports)
@@ -334,7 +466,6 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
         f = testpath(f, src, out);
         f = testpath(f, rootpath / src, out);
 
-
 #ifndef IN_PLATFORM_WIN32
         // TODO: getenv("LD_LIBRARY_PATH")
 
@@ -346,13 +477,13 @@ IN_ERROR innative::FinalizeEnvironment(Environment* env)
           f = testpath(f, path("/usr/lib64/") / platform / src, out);
         f = testpath(f, path("/usr/lib/") / platform / src, out);
         f = testpath(f, path("../") / "lib" / platform / src, out);
-        
+
         src = "lib" + src.string();
-        f = testpath(f, envpath / src, out);
-        f = testpath(f, envpath / platform / src, out);
-        f = testpath(f, src, out);
-        f = testpath(f, rootpath / src, out);
-        
+        f   = testpath(f, envpath / src, out);
+        f   = testpath(f, envpath / platform / src, out);
+        f   = testpath(f, src, out);
+        f   = testpath(f, rootpath / src, out);
+
         if(GetArchBits(env->arch) == 64)
           f = testpath(f, rootpath.parent_path() / "lib64" / platform / src, out);
         f = testpath(f, rootpath.parent_path() / "lib" / platform / src, out);
@@ -780,10 +911,10 @@ int innative::InsertModuleSection(Environment* env, Module* m, enum WASM_MODULE_
   case WASM_MODULE_TYPE:
     m->knownsections |= (1 << WASM_SECTION_TYPE);
     return InsertModuleType<FunctionType>(env, m->type.functypes, m->type.n_functypes, index, { 0 });
-  case WASM_MODULE_IMPORT_FUNCTION: ++m->importsection.functions;
-  case WASM_MODULE_IMPORT_TABLE: ++m->importsection.tables;    // fallthrough
-  case WASM_MODULE_IMPORT_MEMORY: ++m->importsection.memories; // fallthrough
-  case WASM_MODULE_IMPORT_GLOBAL:                              // fallthrough
+  case WASM_MODULE_IMPORT_FUNCTION: ++m->importsection.functions; [[fallthrough]];
+  case WASM_MODULE_IMPORT_TABLE: ++m->importsection.tables; [[fallthrough]];
+  case WASM_MODULE_IMPORT_MEMORY: ++m->importsection.memories; [[fallthrough]];
+  case WASM_MODULE_IMPORT_GLOBAL:                           
     m->knownsections |= (1 << WASM_SECTION_IMPORT);
     return InsertModuleType(env, m->importsection.imports, m->importsection.n_import, index, Import{});
   case WASM_MODULE_FUNCTION:
@@ -848,9 +979,9 @@ int innative::DeleteModuleSection(Environment* env, Module* m, enum WASM_MODULE_
   switch(field)
   {
   case WASM_MODULE_TYPE: return DeleteModuleType<FunctionType>(env, m->type.functypes, m->type.n_functypes, index);
-  case WASM_MODULE_IMPORT_FUNCTION: --m->importsection.functions; // fallthrough
-  case WASM_MODULE_IMPORT_TABLE: --m->importsection.tables;       // fallthrough
-  case WASM_MODULE_IMPORT_MEMORY: --m->importsection.memories;    // fallthrough
+  case WASM_MODULE_IMPORT_FUNCTION: --m->importsection.functions; [[fallthrough]];
+  case WASM_MODULE_IMPORT_TABLE: --m->importsection.tables; [[fallthrough]];
+  case WASM_MODULE_IMPORT_MEMORY: --m->importsection.memories; [[fallthrough]];
   case WASM_MODULE_IMPORT_GLOBAL: return DeleteModuleType(env, m->importsection.imports, m->importsection.n_import, index);
   case WASM_MODULE_FUNCTION:
     return DeleteModuleType<FunctionDesc>(env, m->function.funcdecl, m->function.n_funcdecl, index);
@@ -1007,18 +1138,19 @@ const char* innative::GetDefaultEmbedding(bool debug)
 size_t innative::GetEmbeddingPath(uint8_t abi, uint8_t arch, bool debug, const char* name, char* out, size_t outsize)
 {
   if(!name)
-    name = debug ? "innative-env-d" : "innative-env";
+    name = "innative-env";
 
   const char* ext    = (abi == IN_ABI_Windows) ? ".lib" : ".a";
   const char* prefix = (abi == IN_ABI_Windows) ? "" : "lib";
+  const char* suffix = debug ? "-d" : "";
 
 #ifdef IN_PLATFORM_WIN32
-  return snprintf(out, outsize, "../bin/%s-%s/%s%s%s", EnumToString(ABI_MAP, abi, 0, 0), EnumToString(ARCH_MAP, arch, 0, 0),
-                  prefix, name, ext) +
+  return snprintf(out, outsize, "../bin/%s-%s/%s%s%s%s", EnumToString(ABI_MAP, abi, 0, 0),
+                  EnumToString(ARCH_MAP, arch, 0, 0), prefix, name, suffix, ext) +
          1;
 #else
   return snprintf(out, outsize, "../lib/%s-%s/%s%s%s", EnumToString(ABI_MAP, abi, 0, 0), EnumToString(ARCH_MAP, arch, 0, 0),
-                  prefix, name, ext) +
+                  prefix, name, suffix, ext) +
          1;
 #endif
 }
