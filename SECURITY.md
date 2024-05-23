@@ -1,0 +1,1 @@
+To report a security issue, please email `security@fundament.software` with a description of the issue, the steps you took to create the issue, affected versions, and any mitigations for the issue. We will try to respond within 3 working days of your email. If the vulnerability is confirmed, we request that you give us 90 days to release a fix before public disclosure.
