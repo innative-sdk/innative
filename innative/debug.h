@@ -37,7 +37,7 @@ namespace innative {
     static Debugger* Create(Compiler& context);
     static llvm::DIFile::ChecksumKind ComputeChecksum(llvm::StringRef data, llvm::SmallString<32>& Checksum);
     static llvm::DILocation* GetSPLocation(llvm::LLVMContext& context, llvm::DISubprogram* sp);
-    static std::string GenFlagString(const Environment& env);
+    static std::string GenFlagString(const IN_WASM_ENVIRONMENT& env);
     template<class T> static T Align(T x, T a)
     {
       auto y = x + a - 1;

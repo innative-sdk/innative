@@ -6,11 +6,10 @@
 
 #include "debug_sourcemap.h"
 #include "stack.h"
+#include "hash.h"
 #include <unordered_set>
 
 namespace innative {
-  KHASH_DECLARE(intmap, const char*, size_t);
-
   class DebugPDB : public DebugSourceMap
   {
   public:
@@ -28,7 +27,7 @@ namespace innative {
     void _finalize(const char* name);
 
     uint64_t _uid;
-    kh_intmap_t* _deferred;
+    Hash<const char*, size_t> _deferred;
   };
 }
 

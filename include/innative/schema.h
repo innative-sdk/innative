@@ -5,7 +5,6 @@
 #define IN__SCHEMA_H
 
 #include "innative/innative.h"
-#include "innative/khash.h"
 #include "innative/errors.h"
 #include "innative/opcodes.h"
 #include "innative/flags.h"
@@ -17,12 +16,7 @@
 #include <stdio.h>
 #include <assert.h>
 
-#define kh_exist2(h, x) ((x < kh_end(h)) && kh_exist(h, x))
-#define MUTABLE
-
 #ifdef __cplusplus
-  #undef MUTABLE
-  #define MUTABLE mutable
   #include <string>
 extern "C" {
 #endif
@@ -155,10 +149,6 @@ protected:
 
 typedef ByteArray Identifier;
 
-KHASH_DECLARE(exports, Identifier, varuint32);
-KHASH_DECLARE(cimport, Identifier, char);
-KHASH_DECLARE(modules, Identifier, size_t);
-
 // A custom debug info structure used to map webassembly debug information.
 typedef struct IN_WASM_DEBUGINFO
 {
@@ -260,8 +250,6 @@ typedef struct IN_WASM_IMPORT
   Identifier module_name;
   Identifier export_name;
   varuint7 kind;          // WASM_KIND
-  MUTABLE bool alternate; // Internal flag - if true, this import's canonical name always includes the module name
-  MUTABLE bool ignore;
   union
   {
     FunctionDesc func_desc;
@@ -336,23 +324,6 @@ typedef struct IN_WASM_CUSTOM_SECTION
   Identifier name; // The first thing in a custom section must always be a legal identifier
   const uint8_t* data;
 } CustomSection;
-
-#ifdef __cplusplus
-namespace innative {
-  struct Compiler;
-  class JITContext;
-}
-typedef innative::Compiler IN_CODE_compiler;
-typedef innative::JITContext IN_JIT_context;
-namespace llvm {
-  class LLVMContext;
-}
-typedef llvm::LLVMContext LLVM_LLVM_compiler;
-#else
-typedef void IN_CODE_compiler;
-typedef void LLVM_LLVM_compiler;
-typedef void IN_JIT_context;
-#endif
 
 // Represents a single webassembly module
 typedef struct IN_WASM_MODULE
@@ -440,10 +411,6 @@ typedef struct IN_WASM_MODULE
   size_t n_custom;
   CustomSection* custom;
   SourceMap* sourcemap;
-
-  struct kh_exports_s* exports;
-  const char* filepath;    // For debugging purposes, store path to the original file, if it exists
-  IN_CODE_compiler* cache; // If non-zero, points to a cached compilation of this module
 } Module;
 
 // Represents a single validation error node in a singly-linked list.
@@ -454,17 +421,6 @@ typedef struct IN_WASM_VALIDATION_ERROR
   ptrdiff_t m;
   struct IN_WASM_VALIDATION_ERROR* next;
 } ValidationError;
-
-// Encodes a single webassembly embedding used by the environment in the linking process.
-typedef struct IN_WASM_EMBEDDING
-{
-  const void* data;
-  uint64_t size; // If size is 0, data points to a null terminated UTF8 file path
-  int tag; // defines the type of embedding data included, determined by the runtime. 0 is always a static library file for
-           // the current platform.
-  const char* name;
-  struct IN_WASM_EMBEDDING* next;
-} Embedding;
 
 enum IN_LOG_LEVEL
 {
@@ -501,62 +457,29 @@ enum IN_ARCH
   IN_ARCH_RISCV   = 243,
 };
 
-KHASH_DECLARE(modulepair, kh_cstr_t, FunctionType);
-KHASH_DECLARE(fmapping, kh_cstr_t, kh_cstr_t);
-KHASH_DECLARE(prependmap, kh_cstr_t, int);
+struct IN_WASM_ENVIRONMENT;
 
-struct IN_WASM_ALLOCATOR;
-
-struct IN_WASM_FUNCTION_PREPEND
+typedef struct IN_WASM_ENVIRONMENT_CONFIG
 {
-  const char* create;
-  const char* destroy;
-};
-
-// Represents a collection of webassembly modules and configuration options that will be compiled into a single binary
-typedef struct IN_WASM_ENVIRONMENT
-{
-  size_t n_modules;          // number of completely loaded modules (for multithreading)
-  size_t size;               // Size of loaded or loading modules
-  size_t capacity;           // Capacity of the modules array
-  Module* modules;           // Use AddModule() to manage this list
-  Embedding* embeddings;     // Use AddEmbedding to manage this list
-  ValidationError* errors;   // A linked list of non-fatal validation errors that prevent proper execution.
-  uint64_t flags;            // WASM_ENVIRONMENT_FLAGS
-  uint64_t features;         // WASM_FEATURE_FLAGS
-  uint64_t optimize;         // WASM_OPTIMIZE_FLAGS
-  uint8_t arch;              // IN_ARCH
-  uint8_t abi;               // IN_ABI
-  const char** cpu_features; // Use AddCPUFeature() to manage this list.
-  int n_features; // If this is set to -1, cpu_features will be automatically filled in with the current CPU features.
+  uint64_t flags;    // WASM_ENVIRONMENT_FLAGS
+  uint64_t features; // WASM_FEATURE_FLAGS
+  uint64_t optimize; // WASM_OPTIMIZE_FLAGS
+  uint8_t arch;      // IN_ARCH
+  uint8_t abi;       // IN_ABI
 
   unsigned int maxthreads; // Max number of threads for any multithreaded action. If 0, there is no limit.
   const char* rootpath;    // Internal buffer for storing the root directory of the EXE to help with directory searches
   const char* libpath;     // Path to look for default environment libraries
-  const char* objpath; // Path to store intermediate results. If NULL, intermediate results are stored in the output folder
-  const char* linker;  // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
-  const char* system;  // prefix for the "system" module, which simply attempts to link the function name as a C function.
-                       // Defaults to a blank string.
+  const char* objpath;  // Path to store intermediate results. If NULL, intermediate results are stored in the output folder
+  const char* linker;   // If nonzero, attempts to execute this path as a linker instead of using the built-in LLD linker
+  const char* system;   // prefix for the "system" module, which simply attempts to link the function name as a C function.
+                        // Defaults to a blank string.
   const char* cpu_name; // Name of the CPU - if NULL, uses the host CPU name. Use "generic" when compiling portable binaries.
-
-  struct IN_WASM_ALLOCATOR* alloc;                                            // Stores a pointer to the internal allocator
-  int loglevel;                                                               // IN_LOG_LEVEL
+  int loglevel;         // IN_LOG_LEVEL
   int (*loghook)(const struct IN_WASM_ENVIRONMENT*, const char* format, ...); // Output stream for log messages
   void (*wasthook)(const struct IN_WASM_ENVIRONMENT*, void*);                 // Optional hook for WAST debugging cases
-  const char** exports;                                                       // Use AddCustomExport() to manage this list
-  varuint32 n_exports;
   void* user;
-  struct IN_WASM_FUNCTION_PREPEND* prepends;
-  int n_prepends;
-
-  struct kh_modules_s* modulemap;
-  struct kh_modulepair_s* whitelist;
-  struct kh_fmapping_s* funcmappings;
-  struct kh_prependmap_s* funcprepends;
-  struct kh_cimport_s* cimports;
-  LLVM_LLVM_compiler* context;
-  IN_JIT_context* jit;
-} Environment;
+} EnvironmentConfig;
 
 #ifdef __cplusplus
 }

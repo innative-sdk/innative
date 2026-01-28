@@ -222,6 +222,7 @@ limitations under the License.
 #ifdef IN_COMPILER_MSC
   #define FOPEN(f, path, mode)        _wfopen_s((&f), (path), (L##mode))
   #define STRICMP(a, b)               _stricmp(a, b)
+  #define WCSICMP(a, b)               _wcsicmp(a, b)
   #define STRTOK(str, delim, context) strtok_s(str, delim, context)
   #define FPRINTF(f, ...)             fprintf_s(f, __VA_ARGS__)
   #define VPRINTF(f, ...)             vprintf_s(f, __VA_ARGS__)
@@ -231,6 +232,7 @@ limitations under the License.
 #else
   #define FOPEN(f, path, mode)        f = fopen(path, mode)
   #define STRICMP(a, b)               strcasecmp(a, b)
+  #define WCSICMP(a, b)               wcscasecmp(a, b)
   #define STRTOK(str, delim, context) strtok_r(str, delim, context)
   #define FPRINTF(f, ...)             fprintf(f, __VA_ARGS__)
   #define VPRINTF(f, ...)             vprintf(f, __VA_ARGS__)

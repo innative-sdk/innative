@@ -157,7 +157,7 @@ endfunction()
 
 function(standard_target_flags target)
   set_property(TARGET ${target} PROPERTY C_STANDARD 17)
-  set_property(TARGET ${target} PROPERTY CXX_STANDARD 17)
+  set_property(TARGET ${target} PROPERTY CXX_STANDARD 20)
   set_property(TARGET ${target} PROPERTY CXX_EXTENSIONS OFF)
   set_property(TARGET ${target} PROPERTY CXX_STANDARD_REQUIRED ON)
   set_property(TARGET ${target} PROPERTY VERBOSE_MAKEFILE TRUE)

@@ -4,11 +4,9 @@
 #include "constants.h"
 #include "innative/schema.h"
 
-__KHASH_IMPL(mapenum, , int, const char*, 1, kh_int_hash_func, kh_int_hash_equal);
-
 const innative::utility::OP innative::utility::OP::NAMES;
 
-innative::utility::OP::OP() : MAP(kh_init_mapenum())
+innative::utility::OP::OP()
 {
   int r;
   for(auto& e : LIST)
@@ -17,7 +15,7 @@ innative::utility::OP::OP() : MAP(kh_init_mapenum())
     kh_val(MAP, iter) = e.second;
   }
 }
-innative::utility::OP::~OP() { kh_destroy_mapenum(MAP); }
+innative::utility::OP::~OP() { }
 
 const char* innative::utility::OP::Get(int code) const
 {
@@ -29,21 +27,7 @@ const char* innative::utility::OP::Get(int code) const
 
 namespace innative {
   namespace utility {
-    kh_mapenum_s* GenMapEnum(std::initializer_list<std::pair<int, const char*>> list)
-    {
-      auto h = kh_init_mapenum();
-      int r;
-
-      for(auto& e : list)
-      {
-        auto iter       = kh_put_mapenum(h, e.first, &r);
-        kh_val(h, iter) = e.second;
-      }
-
-      return h;
-    }
-
-    const kh_mapenum_s* ERR_ENUM_MAP = GenMapEnum({
+    const Hash<IN_ERROR, const char*> ERR_ENUM_MAP({
       { ERR_SUCCESS, "ERR_SUCCESS" },
       { ERR_PARSE_UNEXPECTED_EOF, "ERR_PARSE_UNEXPECTED_EOF" },
       { ERR_PARSE_INVALID_MAGIC_COOKIE, "ERR_PARSE_INVALID_MAGIC_COOKIE" },

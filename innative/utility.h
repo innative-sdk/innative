@@ -30,6 +30,42 @@ struct IN_WASM_ALLOCATOR
   IN_COMPILER_DLLEXPORT void* allocate(size_t n);
 };
 
+  // Allocator that uses an external policy to perform allocations
+template<typename T> class WasmAllocPolicy
+{
+public:
+  using value_type = T;
+  template<class U> struct rebind
+  {
+    typedef WasmAllocPolicy<U> other;
+  };
+
+  explicit WasmAllocPolicy(IN_WASM_ALLOCATOR& alloc) noexcept : _alloc(&alloc) {}
+  template<class U> WasmAllocPolicy(WasmAllocPolicy<U> const& other) noexcept : _alloc(other._alloc) {}
+  template<class U> WasmAllocPolicy(WasmAllocPolicy<U>&& other) noexcept : _alloc(std::move(other).move_alloc()) {}
+
+  value_type* allocate(std::size_t n) { return reinterpret_cast<value_type*>(_alloc->allocate(n * sizeof(value_type))); }
+  inline value_type* reallocate(size_t n, T* p, size_t oldsize) { return _alloc->allocate(n * sizeof(value_type))); }
+  void deallocate(value_type* p, std::size_t sz) noexcept {}
+
+  inline IN_WASM_ALLOCATOR* move_alloc() && noexcept
+  {
+    auto p = _alloc;
+    _alloc = nullptr;
+    return p;
+  }
+
+  using propagate_on_container_copy_assignment = std::true_type;
+  using propagate_on_container_move_assignment = std::true_type;
+  using propagate_on_container_swap            = std::true_type;
+  using is_always_equal                        = std::false_type;
+
+  WasmAllocPolicy select_on_container_copy_construction() const noexcept { return *this; }
+
+protected:
+  IN_WASM_ALLOCATOR* _alloc;
+};
+
 extern "C" int64_t GetRSPValue();
 
 namespace innative {
@@ -150,13 +186,9 @@ namespace innative {
       memcpy(dest, src, srcsize * sizeof(T));
 #endif
     }
+    const char* AllocString(const char* s, size_t n);
 
     template<class T> inline T* trealloc(T* p, size_t sz) { return reinterpret_cast<T*>(realloc(p, sz * sizeof(T))); }
-
-    template<class T> inline T* tmalloc(const Environment& env, size_t n)
-    {
-      return reinterpret_cast<T*>(env.alloc->allocate(n * sizeof(T)));
-    }
 
     // Checks if an integer is a power of two
     inline bool IsPowerOfTwo(varuint32 x) noexcept { return (x & (x - 1)) == 0; }
@@ -198,6 +230,24 @@ namespace innative {
       return (m.knownsections & (1 << opcode)) != 0;
     }
 
+    inline const char* AllocString(IN_WASM_ALLOCATOR& alloc, const char* s, size_t n)
+    {
+      char* t = reinterpret_cast<char*>(alloc.allocate(n + 1));
+      if(!t)
+        return nullptr;
+
+      tmemcpy<char>(t, n + 1, s, n + 1);
+      return t;
+    }
+    IN_FORCEINLINE const char* AllocString(IN_WASM_ALLOCATOR& alloc, const char* s)
+    {
+      return !s ? nullptr : AllocString(alloc, s, strlen(s));
+    }
+    IN_FORCEINLINE const char* AllocString(IN_WASM_ALLOCATOR& alloc, const std::string& s)
+    {
+      return AllocString(alloc, s.data(), s.size());
+    }
+
     using OpcodeInt = uint16_t;
     static_assert(sizeof(OpcodeInt) >= MAX_OPCODE_BYTES, "MAX_OPCODE_BYTES must fit inside an OpcodeInt");
 
@@ -207,14 +257,12 @@ namespace innative {
     TableDesc* ModuleTable(const Module& m, varuint32 index);
     MemoryDesc* ModuleMemory(const Module& m, varuint32 index);
     GlobalDesc* ModuleGlobal(const Module& m, varuint32 index);
-    std::pair<Module*, Export*> ResolveExport(const Environment& env, const Import& imp);
-    std::pair<Module*, Export*> ResolveTrueExport(const Environment& env, const Import& imp);
     Import* ResolveImport(const Module& m, const Export& imp);
     path GetProgramPath(const char* arg0);
     path GetWorkingDir();
     IN_COMPILER_DLLEXPORT bool SetWorkingDir(const path& path);
     path GetAbsolutePath(const path& path);
-    inline path GetPath(const char* utf8) { return u8path(!utf8 ? "" : utf8); }
+    inline path GetPath(const char8_t* utf8) { return !utf8 ? u8"" : utf8; }
     IN_COMPILER_DLLEXPORT void GetCPUInfo(uintcpuinfo& info, int flags);
     void* LoadDLL(const path& path);
     void* LoadDLLFunction(void* dll, const char* name);
@@ -223,16 +271,6 @@ namespace innative {
     IN_COMPILER_DLLEXPORT void LoadDLLErrorFree(char* p);
     IN_COMPILER_DLLEXPORT int GetArchBits(uint8_t arch);
     IN_COMPILER_DLLEXPORT bool IsLittleEndian(uint8_t abi, uint8_t arch);
-    IN_COMPILER_DLLEXPORT int AddCImport(Environment& env, const char* id);
-    const char* AllocString(Environment& env, const char* s, size_t n);
-    IN_FORCEINLINE const char* AllocString(Environment& env, const char* s)
-    {
-      return !s ? nullptr : AllocString(env, s, strlen(s));
-    }
-    IN_FORCEINLINE const char* AllocString(Environment& env, const std::string& s)
-    {
-      return AllocString(env, s.data(), s.size());
-    }
 
   #ifdef IN_PLATFORM_WIN32
     int Install(const char* arg0, bool full);
@@ -293,63 +331,6 @@ namespace innative {
       return !strncmp(system, module_name.str(), !module_end ? module_name.size() : (module_end - module_name.str()));
     }
 
-    // Generates the correct mangled C function name
-    inline std::string CanonImportName(const Import& imp, const char* system)
-    {
-      if(imp.ignore ||
-         (IsSystemImport(imp.module_name, system) && !imp.alternate)) // system module imports are always raw function names
-        return CanonicalName(StringSpan{ 0, 0 }, StringSpan::From(imp.export_name));
-      return CanonicalName(StringSpan::From(imp.module_name), StringSpan::From(imp.export_name));
-    }
-
-    // Generates a whitelist string for a module and export name, which includes calling convention information
-    inline size_t CanonWhitelist(const void* module_name, const void* export_name, const char* system, char* out)
-    {
-      if(!module_name ||
-         !strcmp(reinterpret_cast<const char*>(module_name), system)) // system name is normalized to an empty module name
-        module_name = "";
-      size_t module_len = strlen(reinterpret_cast<const char*>(module_name));
-      const char* call  = strchr(reinterpret_cast<const char*>(module_name), '!');
-      if(call && !strcmp(call, "!C")) // !C is the same as having no calling convention, so we remove it
-        module_len -= 2;
-
-      size_t export_len = strlen(reinterpret_cast<const char*>(export_name)) + 1;
-      if(out)
-      {
-        tmemcpy<char>(out, module_len + 1 + export_len, reinterpret_cast<const char*>(module_name), module_len);
-        out[module_len] = 0;
-        tmemcpy<char>(out + module_len + 1, export_len, reinterpret_cast<const char*>(export_name), export_len);
-      }
-      return module_len + export_len + 1;
-    }
-    IN_FORCEINLINE std::string CanonWhitelist(const void* module_name, const void* export_name, const char* system)
-    {
-      std::string s;
-      s.resize(CanonWhitelist(module_name, export_name, system, nullptr));
-      CanonWhitelist(module_name, export_name, system, const_cast<char*>(s.data()));
-      return s;
-    }
-
-    template<typename... Args> 
-    inline int LogError(const Environment& env, const char* format, Args... args)
-    {
-      if(env.loglevel < LOG_FATAL)
-        return 0;
-      int i = (*env.loghook)(&env, format, args...);
-      return i + (*env.loghook)(&env, "\n");
-    }
-
-    template<typename... Args>
-    inline IN_ERROR LogErrorString(const Environment& env, const char* format, IN_ERROR err, Args... args)
-    {
-      if(env.loglevel < LOG_FATAL)
-        return err;
-      char buf[32];
-      (*env.loghook)(&env, format, EnumToString(ERR_ENUM_MAP, (int)err, buf, sizeof(buf)), args...);
-      (*env.loghook)(&env, "\n");
-      return err;
-    }
-
     inline std::unique_ptr<uint8_t[]> LoadFile(const path& file, size_t& sz)
     {
       FILE* f = nullptr;
@@ -380,22 +361,6 @@ namespace innative {
       if(fwrite(data, 1, sz, f) != sz)
         return false;
       return !fclose(f);
-    }
-
-    template<class T, class I> inline static IN_ERROR ReallocArray(const Environment& env, T*& a, I& n)
-    {
-      // We only allocate power of two chunks from our greedy allocator
-      I i = NextPow2(n++);
-      if(n <= 2 || n == i)
-      {
-        T* old = a;
-        if(!(a = tmalloc<T>(env, n * 2)))
-          return ERR_FATAL_OUT_OF_MEMORY;
-        if(old != nullptr)
-          tmemcpy<T>(a, n * 2, old, n - 1); // Don't free old because it was from a greedy allocator.
-      }
-
-      return ERR_SUCCESS;
     }
 
     IN_FORCEINLINE varuint32 GetBlockSigResults(varsint64 sig, const Module& m)

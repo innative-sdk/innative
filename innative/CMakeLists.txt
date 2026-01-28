@@ -39,15 +39,17 @@ else()
 endif()
 
 file(GLOB_RECURSE inNative_SOURCES "./*.cpp")
+set(inNative_HEADERS "")
 
 if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  file(GLOB_RECURSE inNative_HEADERS "./*.h")
 else()
   string(REPLACE "-fexceptions" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 endif()
 
 # add library and include directories
-add_library(innative ${inNative_SOURCES} ${inNative_EX_SOURCES})
+add_library(innative ${inNative_SOURCES} ${inNative_EX_SOURCES} ${inNative_HEADERS})
 target_include_directories(innative PRIVATE ${LLVM_INCLUDE_DIRS})
 target_include_directories(innative PUBLIC  
       $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>  

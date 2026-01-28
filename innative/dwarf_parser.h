@@ -28,7 +28,7 @@ namespace innative {
   public:
     typedef bool (DWARFParser::*HandlerFn)(llvm::DWARFContext& DICtx, size_t code_section_offset);
 
-    DWARFParser(struct IN_WASM_ENVIRONMENT* env, SourceMap* map);
+    explicit DWARFParser(SourceMap* map);
     ~DWARFParser();
 
     bool error(llvm::StringRef Prefix, std::error_code EC);
@@ -60,17 +60,12 @@ namespace innative {
     {
       if(n <= size)
         return;
-      // Using tmalloc would be faster but causes unacceptable memory usage with large modules.
-      T* p = (T*)malloc(n * sizeof(T));
-      if(p && root && size)
-        innative::utility::template tmemcpy<T>(p, n, root, size);
-      if(p)
-        memset(p + size, 0, sizeof(T) * (n - size));
+
+      root = trealloc<T>(root, n);
       if(root)
-        free(root);
+        memset(root + size, 0, sizeof(T) * (n - size));
 
       size = n;
-      root = p;
     }
 
   protected:
@@ -79,7 +74,6 @@ namespace innative {
     size_t GetSourceMapParent(llvm::DWARFUnit& unit, llvm::DWARFDie die);
     bool HasIsStmt(size_t i, const llvm::DWARFDebugLine::LineTable::RowVector& rows);
 
-    Environment* env;
     SourceMap* map;
     kh_maptype_t* maptype;
     size_t n_types;
@@ -92,6 +86,7 @@ namespace innative {
     size_t file_offset;
     size_t content_offset;
     size_t mapping_offset;
+    IN_WASM_ALLOCATOR alloc;
   };
 }
 

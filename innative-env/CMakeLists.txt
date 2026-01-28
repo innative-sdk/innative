@@ -20,14 +20,17 @@ if(WIN32)
    endif()
 endif()
 
+set(env_HEADERS "")
+
 if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
   string(REPLACE "/RTC1" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+  file(GLOB_RECURSE env_HEADERS "./*.h")
 endif()
 
 # add library and include directories
-add_library(innative-env STATIC ${env_SOURCES})
-add_library(innative-env-d STATIC ${env_SOURCES})
+add_library(innative-env STATIC ${env_SOURCES} ${env_HEADERS})
+add_library(innative-env-d STATIC ${env_SOURCES} ${env_HEADERS})
 
 set_property(TARGET innative-env PROPERTY C_STANDARD 17)
 set_property(TARGET innative-env-d PROPERTY C_STANDARD 17)

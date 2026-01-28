@@ -107,7 +107,6 @@ namespace innative {
     };
     Compiler(Environment& env, Module& m, llvm::LLVMContext& ctx, llvm::Module* mod, llvm::IRBuilder<>& builder,
              llvm::TargetMachine* machine, kh_importhash_t* importhash, const path& objfile);
-    Environment& env;
     Module& m;
     llvm::LLVMContext& ctx;
     llvm::Module* mod;

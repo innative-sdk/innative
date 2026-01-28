@@ -11,15 +11,17 @@ else()
 endif()
 
 add_compile_definitions(TESTING_WASM)
+set(test_HEADERS "")
 
 if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  file(GLOB_RECURSE test_HEADERS "./*.h")
 else()
   string(REPLACE "-fexceptions" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 endif()
 
 # add library and include directories
-add_executable(innative-test ${test_SOURCES} ${CMAKE_SOURCE_DIR}/scripts/wasm_malloc.c)
+add_executable(innative-test ${test_SOURCES} ${test_HEADERS} ${CMAKE_SOURCE_DIR}/scripts/wasm_malloc.c)
 target_include_directories(innative-test PUBLIC ${CMAKE_SOURCE_DIR}/include)
 set_target_properties(innative-test PROPERTIES 
   POSITION_INDEPENDENT_CODE OFF

@@ -5,13 +5,11 @@
 #define IN__CONSTANTS_H
 
 #include "innative/innative.h"
-#include "innative/khash.h"
 #include "innative/opcodes.h"
 #include "innative/schema.h"
+#include "hash.h"
 #include <ostream>
 #include <array>
-
-KHASH_DECLARE(mapenum, int, const char*);
 
 namespace innative {
   enum class LLD_FORMAT : uint8_t
@@ -67,7 +65,6 @@ namespace innative {
       }
       inline const char* operator[](const uint8_t (&x)[MAX_OPCODE_BYTES]) const { return Get(ToInt(x)); }
 
-      kh_mapenum_s* MAP;
       static constexpr std::array<std::pair<std::array<uint8_t, 2>, const char*>, 261> LIST = {
         // Control flow operators
         std::pair<std::array<uint8_t, 2>, const char*>{ { 0x00, 0x00 }, "unreachable" },
@@ -381,15 +378,14 @@ namespace innative {
       static const OP NAMES;
     };
 
-    extern const kh_mapenum_s* ERR_ENUM_MAP;
-    extern const kh_mapenum_s* TYPE_ENCODING_MAP;
-    extern const kh_mapenum_s* WAST_ASSERTION_MAP;
-    extern const kh_mapenum_s* OPNAME_MAP;
-    extern const kh_mapenum_s* ARCH_MAP;
-    extern const kh_mapenum_s* ABI_MAP;
+    static const Hash<IN_ERROR, const char*> ERR_ENUM_MAP;
+    static const Hash<int, const char*> TYPE_ENCODING_MAP;
+    static const Hash<int, const char*> WAST_ASSERTION_MAP;
+    static const Hash<int, const char*> OPNAME_MAP;
+    static const Hash<int, const char*> ARCH_MAP;
+    static const Hash<int, const char*> ABI_MAP;
 
-    const char* EnumToString(const kh_mapenum_s* h, int i, char* buf, size_t n);
-    kh_mapenum_s* GenMapEnum(std::initializer_list<std::pair<int, const char*>> list);
+    const char* EnumToString(const Hash<int, const char*>& h, int i, char* buf, size_t n);
   }
 }
 

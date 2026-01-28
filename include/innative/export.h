@@ -113,14 +113,14 @@ typedef struct IN__MODULE_METADATA
   IN_Entrypoint* functions;
 } INModuleMetadata;
 
-// Contains pointers to the actual runtime functions
+  // Contains pointers to the actual runtime functions
 typedef struct IN__EXPORTS
 {
   /// Creates an environment with default settings, which must be destroyed using DestroyEnvironment.
   /// \param modules The number of modules that are expected to be added to the environment - can just be an estimate.
   /// \param maxthreads The maximum number of threads to use for multithreading. 0 defaults to logical cores.
   /// \param arg0 the first argument sent to the program. Used to determine binary location on POSIX systems.
-  Environment* (*CreateEnvironment)(unsigned int modules, unsigned int maxthreads, const char* arg0);
+  void* (*CreateEnvironment)(unsigned int modules, unsigned int maxthreads, const char* arg0);
 
   /// Returns the filename for the default embedding on the platform this runtime was compiled on.
   /// \param debug If true, uses the debug runtime embedding.
@@ -148,14 +148,14 @@ typedef struct IN__EXPORTS
   /// set to an empty string, a unique name is generated for the module and the functions are exported using C linkage.
   /// \param err A pointer to an integer that receives an error code should the function fail. Not valid until
   /// FinalizeEnvironment() is called.
-  void (*AddModule)(Environment* env, const void* data, size_t size, const char* name, int* err);
+  void (*AddModule)(void* env, const void* data, size_t size, const char* name, int* err);
 
   /// Adds a prebuilt module object to the environment. This happens synchronously, regardless of multithreading flags.
   /// \param env The environment to modify.
   /// \param m The module to add to the environment. This must be a valid Module object or the validation step will fail.
   /// The module will be copied into the environment - further modifications to the given module pointer won't affect the
   /// environment's internal copy.
-  int (*AddModuleObject)(Environment* env, const Module* m);
+  int (*AddModuleObject)(void* env, const Module* m);
 
   /// Adds a whitelist entry to the environment. This will only be used if the whitelist is enabled via the ENV_WHITELIST
   /// flag.
@@ -163,7 +163,7 @@ typedef struct IN__EXPORTS
   /// \param module_name The name of a module, in case the C function is actually a name-mangled WebAssembly function. This
   /// parameter should be null for standard C functions.
   /// \param export_name The name of the function to add to the whitelist. Must be a valid UTF8 WebAssembly function name.
-  enum IN_ERROR (*AddWhitelist)(Environment* env, const char* module_name, const char* export_name);
+  enum IN_ERROR (*AddWhitelist)(void* env, const char* module_name, const char* export_name);
 
   /// Adds a function mapping to the environment. When the compiler finds source_name imported from source_module, it directly
   /// maps this function call to a symbol matching target instead of canonicalizing it as a C function.
@@ -171,7 +171,8 @@ typedef struct IN__EXPORTS
   /// \param source_module The name of a module that contains the function. Can be NULL if this is just a C-function.
   /// \param source_name The name of the function that is being imported.
   /// \param target The name of an existing C function that the function should resolve to.
-  enum IN_ERROR (*AddFuncMapping)(Environment* env, const char* source_module, const char* source_name, const char* target);
+  enum IN_ERROR (*AddFuncMapping)(void* env, const char* source_module, const char* source_name,
+                                  const char* target);
 
   /// Adds an embedding to the environment. This is usually a static or shared C library that exposes C functions that the
   /// WebAssembly modules can call.
@@ -182,43 +183,44 @@ typedef struct IN__EXPORTS
   /// \param size The length of the memory that the
   /// data pointer points to. If size is 0, the data pointer is actually a null terminated UTF8 encoded file path.
   /// \param name_override Resolves all functions in this embedded library as raw C functions with the given module name.
-  enum IN_ERROR (*AddEmbedding)(Environment* env, int tag, const void* data, size_t size, const char* name_override);
+  enum IN_ERROR (*AddEmbedding)(void* env, int tag, const void* data, size_t size,
+                                const char* name_override);
 
   /// Tells the linker to export the given symbol from the resulting binary.
   /// \param env The environment to modify.
   /// \param symbol The null-terminated name of the symbol to export.
-  enum IN_ERROR (*AddCustomExport)(Environment* env, const char* symbol);
+  enum IN_ERROR (*AddCustomExport)(void* env, const char* symbol);
 
   /// Adds the given feature (which must be a feature string recognizable to LLVM) to the cpu_features list.
   /// \param env The environment to modify.
   /// \param feature The feature string to add. If NULL, cpu_features will be initialized to an empty list, preventing
   ///                the environment from automatically filling in the feature list using the current CPU.
-  enum IN_ERROR (*AddCPUFeature)(Environment* env, const char* feature);
+  enum IN_ERROR (*AddCPUFeature)(void* env, const char* feature);
 
   /// Shortcut function for automatically setting up a standard innative WASI embedding.
   /// \param env The environment to modify.
   /// \param version The WASI version to use.
   /// \param debug Whether the debug version of the embedding should be linked to.
-  enum IN_ERROR (*SetupWASI)(Environment* env, enum IN_WASI_VERSION version, bool debug);
+  enum IN_ERROR (*SetupWASI)(void* env, enum IN_WASI_VERSION version, bool debug);
 
   /// Finalizes the environment, blocking until all modules have finished loading (in case of any asynchronous loads) and
   /// ensures all configuration data is loaded.
   /// \param env The environment to finalize
-  enum IN_ERROR (*FinalizeEnvironment)(Environment* env);
+  enum IN_ERROR (*FinalizeEnvironment)(void* env);
 
   /// Validates all the modules in the environment using the current configuration.
   /// \param env The environment to verify.
-  enum IN_ERROR (*Validate)(Environment* env);
+  enum IN_ERROR (*Validate)(void* env);
 
   /// Compiles and verifies all the modules in the environment using the current configuration and any cached results into a
   /// binary file.
   /// \param env The environment to compile.
   /// \param file The path of the output file that is produced.
-  enum IN_ERROR (*Compile)(Environment* env, const char* file);
+  enum IN_ERROR (*Compile)(void* env, const char* file);
 
   /// Compiles and verifies all the modules in the environment using a JIT context linked to the environment.
   /// \param env The environment to compile.
-  enum IN_ERROR (*CompileJIT)(Environment* env, bool expose_process);
+  enum IN_ERROR (*CompileJIT)(void* env, bool expose_process);
 
   /// Loads a WebAssembly binary (usually a dynamic library) produced by Compile into memory, allowing you to load functions
   /// and other exported symbols.
@@ -236,7 +238,7 @@ typedef struct IN__EXPORTS
 
   /// Dumps the JIT state, if there is one, into the logfile buffer
   /// \param env The environment containing the JIT
-  void (*DumpJITState)(Environment* env);
+  void (*DumpJITState)(void* env);
 
   /// Gets a function from a WebAssembly binary that has been loaded into memory. This function cannot determine the type
   /// signature, you must cast it manually to the correct function type.
@@ -244,7 +246,7 @@ typedef struct IN__EXPORTS
   /// \param module_name The name of the module the function is exported from.
   /// \param function The name of the function. If null, loads the entrypoint function.
   IN_Entrypoint (*LoadFunction)(void* assembly, const char* module_name, const char* function);
-  IN_Entrypoint (*LoadFunctionJIT)(Environment* env, const char* module_name, const char* function);
+  IN_Entrypoint (*LoadFunctionJIT)(void* env, const char* module_name, const char* function);
 
   /// Gets a function pointer from a table, given the specified index. If the index is out of bounds, returns null.
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
@@ -252,7 +254,8 @@ typedef struct IN__EXPORTS
   /// \param function The name of the table the function pointer belongs to.
   /// \param index The index of the function pointer. If this is out of bounds, the function returns null.
   IN_Entrypoint (*LoadTable)(void* assembly, const char* module_name, const char* table, varuint32 function_index);
-  IN_Entrypoint (*LoadTableJIT)(Environment* env, const char* module_name, const char* table, varuint32 function_index);
+  IN_Entrypoint (*LoadTableJIT)(void* env, const char* module_name, const char* table,
+                                varuint32 function_index);
 
   /// Gets a pointer to a global from a WebAssembly binary loaded by LoadAssembly, which can potentially be modified if it
   /// is mutable (but this function cannot determine whether it was intended to be mutable).
@@ -260,13 +263,13 @@ typedef struct IN__EXPORTS
   /// \param module_name The name of the module the global is exported from.
   /// \param export_name The name of the global that has been exported.
   INGlobal* (*LoadGlobal)(void* assembly, const char* module_name, const char* export_name);
-  INGlobal* (*LoadGlobalJIT)(Environment* env, const char* module_name, const char* export_name);
+  INGlobal* (*LoadGlobalJIT)(void* env, const char* module_name, const char* export_name);
 
   /// Gets the metadata associated with the module at the given zero-based index.
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   /// \param module_index A zero-based index. If this is out-of-bounds, the function returns null.
   INModuleMetadata* (*GetModuleMetadata)(void* assembly, uint32_t module_index);
-  INModuleMetadata* (*GetModuleMetadataJIT)(Environment* env, uint32_t module_index);
+  INModuleMetadata* (*GetModuleMetadataJIT)(void* env, uint32_t module_index);
 
   /// Gets a function pointer from a table, given the specified index. This function has bounds checking.
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
@@ -274,7 +277,7 @@ typedef struct IN__EXPORTS
   /// \param table_index The index of the table the function pointer belongs to.
   /// \param function_index The index of the function pointer.
   IN_Entrypoint (*LoadTableIndex)(void* assembly, uint32_t module_index, uint32_t table_index, varuint32 function_index);
-  IN_Entrypoint (*LoadTableIndexJIT)(Environment* env, uint32_t module_index, uint32_t table_index,
+  IN_Entrypoint (*LoadTableIndexJIT)(void* env, uint32_t module_index, uint32_t table_index,
                                      varuint32 function_index);
 
   /// Gets a global value at the specified index, or returns null if the index is out of bounds.
@@ -282,14 +285,14 @@ typedef struct IN__EXPORTS
   /// \param module_index The index of the module the table is exported from.
   /// \param global_index The index of the global to retrieve.
   INGlobal* (*LoadGlobalIndex)(void* assembly, uint32_t module_index, uint32_t global_index);
-  INGlobal* (*LoadGlobalIndexJIT)(Environment* env, uint32_t module_index, uint32_t global_index);
+  INGlobal* (*LoadGlobalIndexJIT)(void* env, uint32_t module_index, uint32_t global_index);
 
   /// Gets a linear memory global at the specified index, or returns null if the index is out of bounds.
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
   /// \param module_index The index of the module the table is exported from.
   /// \param global_index The index of the linear memory to retrieve.
   INGlobal* (*LoadMemoryIndex)(void* assembly, uint32_t module_index, uint32_t memory_index);
-  INGlobal* (*LoadMemoryIndexJIT)(Environment* env, uint32_t module_index, uint32_t memory_index);
+  INGlobal* (*LoadMemoryIndexJIT)(void* env, uint32_t module_index, uint32_t memory_index);
 
   /// Searches for an exported function with the given name in a table and replaces the function pointer with another.
   /// \param assembly A pointer to a WebAssembly binary loaded by LoadAssembly.
@@ -305,7 +308,7 @@ typedef struct IN__EXPORTS
   /// \param env The environment to clear.
   /// \param m An optional module whose compilation cache will be cleared. If this is a null pointer, instead clears the
   /// entire cache of the environment.
-  void (*ClearEnvironmentCache)(Environment* env, Module* m);
+  void (*ClearEnvironmentCache)(void* env, Module* m);
 
   /// Returns the string representation of a TYPE_ENCODING enumeration, or NULL if the lookup fails. Useful for debuggers.
   /// \param type_encoding The TYPE_ENCODING value to get the string representation of.
@@ -317,7 +320,7 @@ typedef struct IN__EXPORTS
 
   /// Destroys an environment and safely deconstructs all it's caches and memory allocations.
   /// \param env The environment to destroy.
-  void (*DestroyEnvironment)(Environment* env);
+  void (*DestroyEnvironment)(void* env);
 
   /// Compiles and executes a .wast script using the given environment. This execution will modify the environment and add
   /// all modules referenced in the script according to the registration rules.
@@ -331,7 +334,7 @@ typedef struct IN__EXPORTS
   /// is set to true, all modules are compiled even if no function inside them is called.
   /// \param output Sets the output directory where compilation results should be stored. Intermediate results will still be
   /// in env->objpath
-  int (*CompileScript)(const uint8_t* data, size_t sz, Environment* env, bool always_compile, const char* output);
+  int (*CompileScript)(const uint8_t* data, size_t sz, void* env, bool always_compile, const char* output);
 
   /// Serializes the 'm'th module in the given environment into the provided output file.
   /// \param env The environment that contains the module that will be serialized.
@@ -340,7 +343,7 @@ typedef struct IN__EXPORTS
   /// the serialized result. If null, defaults to a file called '<module_name>.wat' in the current working directory
   /// \param len If 'len' is nonzero and out is not null, then this should be the length of the buffer pointed to by out
   /// \param emitdebug If true, emits any per-instruction debug information associated with the given module.
-  int (*SerializeModule)(Environment* env, size_t m, const char* out, size_t* len, bool emitdebug);
+  int (*SerializeModule)(void* env, size_t m, const char* out, size_t* len, bool emitdebug);
 
   /// Loads a source map from the given path or memory location into the module at index 'm'
   /// \param env The environment that contains the module the sourcemap will be attached to.
@@ -349,7 +352,7 @@ typedef struct IN__EXPORTS
   /// to a memory location.
   /// \param len if zero, path points to a string. Otherwise, this contains the size of the memory location holding the
   /// sourcemap.
-  int (*LoadSourceMap)(Environment* env, unsigned int m, const char* path, size_t len);
+  int (*LoadSourceMap)(void* env, unsigned int m, const char* path, size_t len);
 
   /// Serializes the given source map to JSON and saves it at path.
   /// \param map A pointer to the source map that should be serialized.
@@ -364,14 +367,14 @@ typedef struct IN__EXPORTS
   /// \param index The index, relative to the section being modified, where the new element should be inserted. This index
   /// cannot be greater than the size of the section being modified, but it can be equal to the current size of the section,
   /// which will simply append the new item to the end.
-  int (*InsertModuleSection)(Environment* env, Module* m, enum WASM_MODULE_SECTIONS section, varuint32 index);
+  int (*InsertModuleSection)(void* env, Module* m, enum WASM_MODULE_SECTIONS section, varuint32 index);
 
   /// Deletes an element from the given module section at the specified index and moves the other elements in the array.
   /// \param env The environment associated with the given module.
   /// \param m A pointer to a module associated with the given environment that the section should be removed from.
   /// \param section A enumeration value signifying what section of the module to remove an element from.
   /// \param index The index, relative to the section being modified, of the element that will be removed.
-  int (*DeleteModuleSection)(Environment* env, Module* m, enum WASM_MODULE_SECTIONS section, varuint32 index);
+  int (*DeleteModuleSection)(void* env, Module* m, enum WASM_MODULE_SECTIONS section, varuint32 index);
 
   /// Resizes a ByteArray to the size of the provided memory buffer and copies the entire memory section into it's internal
   /// buffer.
@@ -379,14 +382,14 @@ typedef struct IN__EXPORTS
   /// \param bytearray The ByteArray object whose internal buffer will recieve the data.
   /// \param data A pointer to a location in memory which will be copied to the ByteArray's internal buffer.
   /// \param size The size of the memory location to copy into the ByteArray's internal buffer.
-  int (*SetByteArray)(Environment* env, ByteArray* bytearray, const void* data, varuint32 size);
+  int (*SetByteArray)(void* env, ByteArray* bytearray, const void* data, varuint32 size);
 
   /// Copies the given null-terminated string into the internal buffer of the target identifier, preserving the
   /// null-terminator.
   /// \param env The environment associated with the given identifier.
   /// \param identifier The identifier whose buffer will be set to the given string.
   /// \param str A null-terminated string to be copied into the identifier.
-  int (*SetIdentifier)(Environment* env, Identifier* identifier, const char* str);
+  int (*SetIdentifier)(void* env, Identifier* identifier, const char* str);
 
   /// Inserts a local group definition into the given function body at the provided index and initializes it with a type,
   /// and an optional debuginfo value.
@@ -396,27 +399,27 @@ typedef struct IN__EXPORTS
   /// \param local The type that will be inserted.
   /// \param count How many locals of the given type will be in this local group.
   /// \param info An optional pointer to debug information describing the local.
-  int (*InsertModuleLocal)(Environment* env, FunctionBody* body, varuint32 index, varsint7 local, varuint32 count,
+  int (*InsertModuleLocal)(void* env, FunctionBody* body, varuint32 index, varsint7 local, varuint32 count,
                            DebugInfo* info);
 
   // Removes a local definition from the given function body at the provided index.
   /// \param env The environment associated with the given function.
   /// \param body The FunctionBody object to remove the local definition from.
   /// \param index The index of the local that will be removed.
-  int (*RemoveModuleLocal)(Environment* env, FunctionBody* body, varuint32 index);
+  int (*RemoveModuleLocal)(void* env, FunctionBody* body, varuint32 index);
 
   /// Inserts an instruction into the given function body at the provided index and initializes it with an initial value.
   /// \param env The environment associated with the given function.
   /// \param func The FunctionBody object to insert the instruction into.
   /// \param index The index where the new instruction will be inserted.
   /// \param ins The instruction that will be inserted.
-  int (*InsertModuleInstruction)(Environment* env, FunctionBody* body, varuint32 index, Instruction* ins);
+  int (*InsertModuleInstruction)(void* env, FunctionBody* body, varuint32 index, Instruction* ins);
 
   /// Removes an instruction from the given function body at the provided index.
   /// \param env The environment associated with the given function.
   /// \param func The FunctionBody object to remove the instruction from.
   /// \param index The index of the instruction that will be removed.
-  int (*RemoveModuleInstruction)(Environment* env, FunctionBody* body, varuint32 index);
+  int (*RemoveModuleInstruction)(void* env, FunctionBody* body, varuint32 index);
 
   /// Inserts a parameter into the given function type at the provided index and initializes it. If both the corresponding
   /// function body and a DebugInfo object are provided, also inserts and initializes the appropriate debug information.
@@ -425,7 +428,8 @@ typedef struct IN__EXPORTS
   /// \param desc The corresponding FunctionDesc object to add the debug information to.
   /// \param param The parameter that will be inserted.
   /// \param info An optional pointer to debug information describing the parameter.
-  int (*InsertModuleParam)(Environment* env, FunctionType* func, FunctionDesc* desc, varuint32 index, varsint7 param,
+  int (*InsertModuleParam)(void* env, FunctionType* func, FunctionDesc* desc, varuint32 index,
+                           varsint7 param,
                            DebugInfo* info);
 
   /// Removes a parameter from the given function type at the provided index. If the corresponding function body is
@@ -434,19 +438,19 @@ typedef struct IN__EXPORTS
   /// \param func The FunctionType object to remove the parameter from.
   /// \param desc The corresponding FunctionDesc object to remove the debug information from.
   /// \param index The index of the parameter that will be removed.
-  int (*RemoveModuleParam)(Environment* env, FunctionType* func, FunctionDesc* desc, varuint32 index);
+  int (*RemoveModuleParam)(void* env, FunctionType* func, FunctionDesc* desc, varuint32 index);
 
   /// Inserts and initializes a return value into the given function type at the provided index.
   /// \param env The environment associated with the given function.
   /// \param func The FunctionType object to insert the result value into.
   /// \param result The result that will be inserted.
-  int (*InsertModuleReturn)(Environment* env, FunctionType* func, varuint32 index, varsint7 result);
+  int (*InsertModuleReturn)(void* env, FunctionType* func, varuint32 index, varsint7 result);
 
   /// Removes a return value from the given function type at the provided index.
   /// \param env The environment associated with the given function.
   /// \param func The FunctionType object to remove the result value from.
   /// \param index The index of the result value that will be removed.
-  int (*RemoveModuleReturn)(Environment* env, FunctionType* func, varuint32 index);
+  int (*RemoveModuleReturn)(void* env, FunctionType* func, varuint32 index);
 } INExports;
 
 /// Statically linked function that loads the runtime stub, which then loads the actual runtime functions into exports.

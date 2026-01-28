@@ -78,7 +78,7 @@ namespace innative {
   const char* GetDefaultEmbedding(bool debug);
   size_t GetEmbeddingPath(uint8_t abi, uint8_t arch, bool debug, const char* name, char* out, size_t outsize);
   void DumpJITState(Environment* env);
-  int DefaultLog(const Environment* env, const char* f, ...);
+  int DefaultLog(const EnvironmentConfig* env, const char* f, ...);
 }
 
 #endif

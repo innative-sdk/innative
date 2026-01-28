@@ -350,7 +350,7 @@ IN_ERROR innative::LinkEnvironment(const Environment* env, const path& file)
         "/ERRORREPORT:QUEUE",
         "/INCREMENTAL:NO",
         "/NOLOGO",
-        //"/NODEFAULTLIB",
+        "/NODEFAULTLIB",
         /*"/MANIFESTUAC:level=asInvoker", "/MANIFEST:EMBED",*/ "/SUBSYSTEM:CONSOLE",
         "/VERBOSE",
         "/OPT:REF",

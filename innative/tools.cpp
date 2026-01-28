@@ -23,7 +23,7 @@
 using namespace innative;
 using namespace utility;
 
-int innative::DefaultLog(const Environment* env, const char* f, ...)
+int innative::DefaultLog([[maybe_unused]] EnvironmentConfig* env, const char* f, ...)
 {
   va_list args;
   va_start(args, f);
@@ -32,8 +32,17 @@ int innative::DefaultLog(const Environment* env, const char* f, ...)
   return len;
 }
 
-Environment* innative::CreateEnvironment(unsigned int modules, unsigned int maxthreads, const char* arg0)
+EnvironmentConfig innative::DefaultEnvironment() {
+  return EnvironmentConfig{
+    .flags = ENV_SANDBOX, .optimize = ENV_OPTIMIZE_O3, features = ENV_FEATURE_ALL,
+                            arch = CURRENT_ARCH, abi = CURRENT_ABI,
+    system = "",              loglevel = LOG_WARNING,     loghook = &DefaultLog
+  };
+}
+
+  IN_WASM_ENVIRONMENT* innative::CreateEnvironment(const EnvironmentConfig* config)
 {
+  return new IN_WASM_ENVIRONMENT(config, arg0)
   Environment* env = reinterpret_cast<Environment*>(calloc(1, sizeof(Environment)));
   if(env)
   {
@@ -398,7 +407,7 @@ IN_ERROR innative::AddCPUFeature(Environment* env, const char* feature)
   }
 
   return ERR_SUCCESS;
-}
+} 
 
 int innative::RegisterPrepend(Environment* env, const char* initfunc, const char* destroyfunc)
 {

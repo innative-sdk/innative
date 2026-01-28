@@ -8,14 +8,17 @@ list(APPEND wasi_SOURCES
     wasi.c
 )
 
+set(wasi_HEADERS "")
+
 if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
   string(REPLACE "/RTC1" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+  file(GLOB_RECURSE wasi_HEADERS "./*.h")
 endif()
 
 # add library and include directories
-add_library(innative-wasi STATIC ${wasi_SOURCES})
-add_library(innative-wasi-d STATIC ${wasi_SOURCES})
+add_library(innative-wasi STATIC ${wasi_SOURCES} ${wasi_HEADERS})
+add_library(innative-wasi-d STATIC ${wasi_SOURCES} ${wasi_HEADERS})
 
 set_property(TARGET innative-wasi PROPERTY C_STANDARD 17)
 set_property(TARGET innative-wasi-d PROPERTY C_STANDARD 17)

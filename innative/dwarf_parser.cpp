@@ -23,7 +23,7 @@ using namespace innative;
 __KHASH_IMPL(mapname, , const char*, size_t, 1, kh_str_hash_func, kh_str_hash_equal)
 __KHASH_IMPL(maptype, , SourceMapType*, size_t, 1, kh_type_hash, kh_type_equal)
 
-bool DWARFParser::error(llvm::StringRef Prefix, std::error_code EC)
+bool DWARFParser::error(struct IN_WASM_ENVIRONMENT* env, llvm::StringRef Prefix, std::error_code EC)
 {
   if(!EC)
     return true;
@@ -31,7 +31,7 @@ bool DWARFParser::error(llvm::StringRef Prefix, std::error_code EC)
   return false;
 }
 
-bool DWARFParser::handleArchive(StringRef Filename, Archive& Arch, HandlerFn HandleObj)
+bool DWARFParser::handleArchive(struct IN_WASM_ENVIRONMENT* env, StringRef Filename, Archive& Arch, HandlerFn HandleObj)
 {
   bool Result = true;
   Error Err   = Error::success();
@@ -874,8 +874,7 @@ bool DWARFParser::DumpSourceMap(DWARFContext& DICtx, size_t code_section_offset)
   return true;
 }
 
-DWARFParser::DWARFParser(struct IN_WASM_ENVIRONMENT* env, SourceMap* map) :
-  env(env),
+DWARFParser::DWARFParser(SourceMap* map) :
   map(map),
   n_names(map->n_names),
   n_types(map->n_innative_types),
@@ -896,12 +895,12 @@ DWARFParser::~DWARFParser()
   kh_destroy_maptype(maptype);
 }
 
-enum IN_ERROR DWARFParser::ParseDWARF(const char* obj, size_t len)
+enum IN_ERROR DWARFParser::ParseDWARF(struct IN_WASM_ENVIRONMENT* env, const char* obj, size_t len)
 {
   bool success = true;
   map->version = 3;
   if(!len)
-    success = handleFile(obj, &DWARFParser::DumpSourceMap);
+    success = handleFile(env, obj, &DWARFParser::DumpSourceMap);
   else
     success =
       handleBuffer("memorybuf", MemoryBufferRef(llvm::StringRef(obj, len), "memorybuf"), &DWARFParser::DumpSourceMap);
@@ -910,6 +909,7 @@ enum IN_ERROR DWARFParser::ParseDWARF(const char* obj, size_t len)
 
 enum IN_ERROR ParseDWARF(struct IN_WASM_ENVIRONMENT* env, SourceMap* map, const char* obj, size_t len)
 {
-  DWARFParser parser(env, map);
-  return parser.ParseDWARF(obj, len);
+  DWARFParser parser(map);
+  return parser.ParseDWARF(env, obj, len);
 }
+

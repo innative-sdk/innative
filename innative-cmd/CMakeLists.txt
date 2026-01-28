@@ -23,14 +23,17 @@ else()
   find_library(LIB_RT rt REQUIRED)
 endif()
 
+set(cmd_HEADERS "")
+
 if(MSVC)
   string(REGEX REPLACE "/EH[a-z]+" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  file(GLOB_RECURSE cmd_HEADERS "./*.h")
 else()
   string(REPLACE "-fexceptions" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 endif()
 
 # add library and include directories
-add_executable(innative-cmd ${cmd_SOURCES})
+add_executable(innative-cmd ${cmd_SOURCES} ${cmd_HEADERS})
 target_include_directories(innative-cmd PUBLIC ${CMAKE_SOURCE_DIR}/include)
 set_target_properties(innative-cmd PROPERTIES POSITION_INDEPENDENT_CODE OFF)
 
